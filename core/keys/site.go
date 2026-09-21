@@ -54,6 +54,11 @@ const (
 	BufferSoc                  = "bufferSoc"
 	BufferStartSoc             = "bufferStartSoc"
 
+	// custom: soc-based battery grid charging
+	BatterySocGridCharge      = "batterySocGridCharge"
+	BatterySocGridChargeStart = "batterySocGridChargeStart"
+	BatterySocGridChargeStop  = "batterySocGridChargeStop"
+
 	// grid settings
 	GridExportLimit = "gridExportLimit"
 

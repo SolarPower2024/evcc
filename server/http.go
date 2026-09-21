@@ -190,6 +190,10 @@ func (s *HTTPd) RegisterSiteHandlers(site site.API) {
 		"batterygridchargedelete":         {"DELETE", "/batterygridchargelimit", floatPtrHandler(site.SetBatteryGridChargeLimit, site.GetBatteryGridChargeLimit)},
 		"batterygriddischargelimit":       {"POST", "/batterygriddischargelimit/{value:-?[0-9.]+}", floatPtrHandler(site.SetBatteryGridDischargeLimit, site.GetBatteryGridDischargeLimit)},
 		"batterygriddischargelimitdelete": {"DELETE", "/batterygriddischargelimit", floatPtrHandler(site.SetBatteryGridDischargeLimit, site.GetBatteryGridDischargeLimit)},
+		// custom: soc-based grid charging, see core/site_lm.go
+		"batterysocgridcharge":      {"POST", "/batterysocgridcharge/{value:[01truefalse]+}", boolHandler(site.SetBatterySocGridCharge, site.GetBatterySocGridCharge)},
+		"batterysocgridchargestart": {"POST", "/batterysocgridchargestart/{value:[0-9.]+}", floatHandler(site.SetBatterySocGridChargeStart, site.GetBatterySocGridChargeStart)},
+		"batterysocgridchargestop":  {"POST", "/batterysocgridchargestop/{value:[0-9.]+}", floatHandler(site.SetBatterySocGridChargeStop, site.GetBatterySocGridChargeStop)},
 		"batterymode":                     {"POST", "/batterymode/{value:[a-z]+}", updateBatteryMode(site)},
 		"batterymodedelete":               {"DELETE", "/batterymode", updateBatteryMode(site)},
 		"prioritysoc":                     {"POST", "/prioritysoc/{value:[0-9.]+}", floatHandler(site.SetPrioritySoc, site.GetPrioritySoc)},

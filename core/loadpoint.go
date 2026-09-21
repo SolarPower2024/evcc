@@ -16,6 +16,7 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/coordinator"
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/planner"
@@ -107,6 +108,10 @@ type Loadpoint struct {
 	DefaultMode api.ChargeMode `mapstructure:"mode"`     // Default charge mode, used for disconnect
 	Title       string         `mapstructure:"title"`    // UI title
 	Priority    int            `mapstructure:"priority"` // Priority
+
+	// custom: load management shed priority, independent of the pv surplus
+	// priority above. Lower is shed first, see core/lm.
+	LmPrio int `mapstructure:"lmpriority"`
 
 	// from yaml, deprecated
 	GuardDuration_ time.Duration `mapstructure:"guardduration"` // ignored, present for compatibility
@@ -990,10 +995,11 @@ func (lp *Loadpoint) setLimit(current float64) error {
 
 	// apply circuit limits
 	if lp.circuit != nil {
-		currentLimit := lp.circuit.ValidateCurrent(lp.actualMaxChargeCurrent(), current)
+		// custom: lm adds priority-based shedding, see core/lm
+		currentLimit := lm.ValidateCurrent(lp, lp.circuit, lp.actualMaxChargeCurrent(), current)
 
 		activePhases := lp.ActivePhases()
-		powerLimit := lp.circuit.ValidatePower(lp.chargePower, currentToPower(current, activePhases))
+		powerLimit := lm.ValidatePower(lp, lp.circuit, lp.chargePower, currentToPower(current, activePhases))
 		currentLimitViaPower := powerToCurrent(powerLimit, activePhases)
 
 		limited := lp.roundedCurrent(min(currentLimit, currentLimitViaPower))
@@ -1456,7 +1462,8 @@ func (lp *Loadpoint) circuitAllowsPhases(phases int, minCurrent float64) bool {
 	}
 
 	minPower := currentToPower(minCurrent, phases)
-	powerLimit := lp.circuit.ValidatePower(lp.chargePower, minPower)
+	// custom: probe only, must not be recorded as demand
+	powerLimit := lm.PeekPower(lp, lp.circuit, lp.chargePower, minPower)
 	if powerLimit < minPower {
 		lp.log.DEBUG.Printf("available circuit power %.0fW < %.0fW min %dp power", powerLimit, minPower, phases)
 		return false
@@ -1609,7 +1616,8 @@ func (lp *Loadpoint) pvScalePhases(sitePower, minCurrent, maxCurrent float64, ma
 
 	// load management may cap the 1p current far below the theoretical maximum
 	if lp.circuit != nil {
-		maxCurrent = lp.circuit.ValidateCurrent(lp.actualMaxChargeCurrent(), maxCurrent)
+		// custom: probe only, must not be recorded as demand
+		maxCurrent = lm.PeekCurrent(lp, lp.circuit, lp.actualMaxChargeCurrent(), maxCurrent)
 	}
 
 	maxPhases := lp.MaxActivePhases()

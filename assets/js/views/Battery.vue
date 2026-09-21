@@ -37,6 +37,15 @@
 						<SmartCostLimit v-bind="smartCostLimitProps" />
 					</Card>
 
+					<BatterySocGridChargeCard
+						v-if="batteryControllable"
+						class="box-pull-out mt-4"
+						:enabled="socGridChargeEnabled"
+						:active="socGridChargeEnabled && !!state.batteryGridChargeActive"
+						:start-soc="state.batterySocGridChargeStart ?? 20"
+						:stop-soc="state.batterySocGridChargeStop ?? 80"
+					/>
+
 					<Card
 						v-if="gridDischargeVisible"
 						class="box-pull-out mt-4"
@@ -65,6 +74,7 @@ import SmartFeedInPriority from "../components/Tariff/SmartFeedInPriority.vue";
 import BatteryStatusCards from "../components/Battery/BatteryStatusCards.vue";
 import BatteryConfigCard from "../components/Battery/BatteryConfigCard.vue";
 import BatteryHistoryCard from "../components/Battery/BatteryHistoryCard.vue";
+import BatterySocGridChargeCard from "../components/Battery/BatterySocGridChargeCard.vue";
 import {
 	historyToSeries,
 	forecastToSeries,
@@ -84,6 +94,7 @@ export default defineComponent({
 		BatteryStatusCards,
 		BatteryConfigCard,
 		BatteryHistoryCard,
+		BatterySocGridChargeCard,
 	},
 	head() {
 		return { title: this.$t("batterySettings.modalTitle") };
@@ -139,6 +150,9 @@ export default defineComponent({
 		},
 		gridChargeLimit(): number | null {
 			return this.state.batteryGridChargeLimit ?? null;
+		},
+		socGridChargeEnabled(): boolean {
+			return !!this.state.batterySocGridCharge;
 		},
 		gridChargeVisible(): boolean {
 			return this.gridChargePossible || this.gridChargeLimit !== null;

@@ -66,6 +66,14 @@ type API interface {
 	// SetBatteryGridDischargeLimit sets the grid discharge (feed-in) limit
 	SetBatteryGridDischargeLimit(limit *float64) error
 
+	// custom: soc-based grid charging, see core/site_lm.go
+	GetBatterySocGridCharge() bool
+	SetBatterySocGridCharge(bool) error
+	GetBatterySocGridChargeStart() float64
+	SetBatterySocGridChargeStart(float64) error
+	GetBatterySocGridChargeStop() float64
+	SetBatterySocGridChargeStop(float64) error
+
 	// GetOptimizerChargingStrategy gets the optimizer grid charging strategy
 	GetOptimizerChargingStrategy() string
 	// SetOptimizerChargingStrategy sets the optimizer grid charging strategy

@@ -290,6 +290,12 @@ export interface State {
   batteryGridChargeLimit?: number | null;
   /** Home battery is currently charged from grid. */
   batteryGridChargeActive?: boolean;
+  /** Soc-based grid charging of the home battery is enabled. */
+  batterySocGridCharge?: boolean;
+  /** Soc in % at or below which soc-based grid charging starts. */
+  batterySocGridChargeStart?: number;
+  /** Soc in % at or above which soc-based grid charging stops. */
+  batterySocGridChargeStop?: number;
   /** Feed-in price limit for discharging the home battery to the grid (experimental). */
   batteryGridDischargeLimit?: number | null;
   /** Home battery is currently discharged to the grid. */

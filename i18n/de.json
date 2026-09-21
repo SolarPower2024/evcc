@@ -60,6 +60,13 @@
       "highest": "Höchststand ({value})",
       "lowest": "Tiefststand ({value})",
       "suggestion": "Vorschlag"
+    },
+    "socGridCharge": {
+      "active": "Netzladen läuft",
+      "enable": "Hausbatterie abhängig vom Ladestand aus dem Netz laden.",
+      "off": "Inaktiv",
+      "range": "Das Laden startet bei einem Ladestand von {start} oder darunter und stoppt, sobald {stop} erreicht ist.",
+      "waiting": "Wartet auf den Startladestand"
     }
   },
   "batterySettings": {
@@ -67,6 +74,7 @@
     "gridDischargeTab": "Netzentladen",
     "modalTitle": "Hausbatterie",
     "noBattery": "Keine Batterien konfiguriert.",
+    "socGridChargeTab": "Netzladen nach Ladestand",
     "usageTab": "Batterienutzung"
   },
   "colors": {

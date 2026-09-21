@@ -60,6 +60,13 @@
       "highest": "Highest ({value})",
       "lowest": "Lowest ({value})",
       "suggestion": "Suggestion"
+    },
+    "socGridCharge": {
+      "active": "Grid charging is running",
+      "enable": "Charge the home battery from the grid based on its state of charge.",
+      "off": "Inactive",
+      "range": "Charging starts at a state of charge of {start} or below and stops once {stop} is reached.",
+      "waiting": "Waiting for the start state of charge"
     }
   },
   "batterySettings": {
@@ -67,6 +74,7 @@
     "gridDischargeTab": "Grid discharging",
     "modalTitle": "Home Battery",
     "noBattery": "No batteries configured.",
+    "socGridChargeTab": "Grid charging by state of charge",
     "usageTab": "Battery usage"
   },
   "colors": {

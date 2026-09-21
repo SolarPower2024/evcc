@@ -31,7 +31,8 @@ func (site *Site) updateCircuits() {
 		return
 	}
 
-	if err := site.circuit.Update(site.loadpointsAsCircuitDevices()); err != nil {
+	// custom: circuitLoads adds the home battery, see core/site_lm.go
+	if err := site.circuit.Update(site.circuitLoads()); err != nil {
 		site.log.ERROR.Println(err)
 	}
 

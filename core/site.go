@@ -17,6 +17,7 @@ import (
 	"github.com/evcc-io/evcc/core/circuit"
 	"github.com/evcc-io/evcc/core/coordinator"
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/planner"
@@ -67,6 +68,10 @@ type Site struct {
 	ResidualPower float64      `mapstructure:"residualPower"` // PV meter only: household usage. Grid meter: household safety margin
 	Meters        MetersConfig `mapstructure:"meters"`        // Meter references
 	CurtailersRef []string     `mapstructure:"curtailers"`    // Curtailment device references
+
+	// custom: load management priorities and battery participation, see core/site_lm.go
+	LoadManagement lm.Config `mapstructure:"loadmanagement"`
+	loadMgmt       lmState
 
 	// meters
 	circuit        api.Circuit                // Circuit
@@ -508,6 +513,9 @@ func (site *Site) restoreSettings() error {
 	}
 	site.publish(keys.OptimizerChargingStrategy, site.GetOptimizerChargingStrategy())
 	site.publish(keys.OptimizerChargingStrategies, optimizerChargingStrategies)
+
+	// custom: load management, see core/site_lm.go
+	site.restoreLmSettings()
 
 	// drop legacy accumulator-based forecast settings (now stored via metrics collector)
 	settings.Delete("solarAccForecast")
@@ -1281,7 +1289,8 @@ func (site *Site) update(lp updater) {
 	rate := site.currentRate(consumption)
 
 	// update battery after reading meters to ensure that (modbus) connection is open
-	batteryGridChargeActive := site.batteryGridChargeActive(rate)
+	// custom: adds soc-based grid charging and the load management gate, see core/site_lm.go
+	batteryGridChargeActive := site.batteryGridChargeRequested(rate)
 	site.publish(keys.BatteryGridChargeActive, batteryGridChargeActive)
 
 	// grid discharge (feed-in arbitrage) uses the feed-in rate, not the grid rate
