@@ -39,10 +39,13 @@ type Config struct {
 }
 
 // PeakShaving configures the battery reserve used to cap the grid demand peak.
-// The limit and the reserve soc are runtime settings, not config - see
-// core/site_peakshaving.go.
+// The limit, the reserve soc and the target entity are runtime settings that
+// live in the ui, not here - see core/site_peakshaving.go. Everything below is
+// optional and only needed outside the Home Assistant add-on.
 type PeakShaving struct {
-	Set        *plugin.Config `mapstructure:"set"`        // number entity receiving the required battery power in W
+	URI        string         `mapstructure:"uri"`        // Home Assistant URI, empty = the add-on's supervisor connection
+	Insecure   bool           `mapstructure:"insecure"`   // allow self-signed certificates
+	Set        *plugin.Config `mapstructure:"set"`        // full plugin override, takes precedence over the ui entity
 	FreeValue  float64        `mapstructure:"freevalue"`  // written while above the reserve soc, 0 = default
 	Hysteresis float64        `mapstructure:"hysteresis"` // soc band in %, 0 = default
 }

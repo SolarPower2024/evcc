@@ -66,6 +66,7 @@
       "description": "Unterhalb von {reserve} wird die Batterie nur noch für Lastspitzen genutzt und deckt alles ab, was über {limit} Netzbezug hinausgeht. Darüber läuft sie im normalen Eigenverbrauch.",
       "enable": "Untere Batteriereserve für Lastspitzen zurückhalten.",
       "free": "unbegrenzt",
+      "noEntity": "Keine Zielentität hinterlegt. Trage sie unter Konfiguration → Lastspitzenmanagement ein, sonst lässt sich die Funktion nicht aktivieren.",
       "normal": "Eigenverbrauch, Reserve unberührt",
       "off": "Inaktiv",
       "shaving": "Reserve aktiv, kappt Lastspitzen",
@@ -837,6 +838,14 @@
         "C": "C (lädt)"
       }
     },
+    "peakshaving": {
+      "description": "Die Hausbatterie kann untere Ladestände für Lastspitzen zurückhalten. evcc berechnet die nötige Batterieleistung und schreibt sie laufend in eine Home-Assistant-Entität, aus der deine Automatisierung die Entladung steuert.",
+      "entityHelp": "Entität, in die der Sollwert in Watt geschrieben wird. Sie braucht Min 0, Max mindestens 10000 und Schrittweite 1.",
+      "entityInvalid": "Entität konnte nicht gesetzt werden.",
+      "entityLabel": "Zielentität",
+      "hint": "Schalter, Leistungsgrenze und Reserve-Ladestand stellst du unter Hausbatterie ein.",
+      "saved": "Gespeichert."
+    },
     "pv": {
       "titleAdd": "PV-Anlage hinzufügen",
       "titleEdit": "PV-Zähler bearbeiten"
@@ -883,6 +892,7 @@
       "integrations": "Integrationen",
       "loadpoints": "Ladepunkte & Heizungen",
       "meter": "PV & Batterie",
+      "peakshaving": "Lastspitzenmanagement",
       "services": "Dienste",
       "system": "System",
       "vehicles": "Fahrzeuge"

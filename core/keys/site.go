@@ -63,6 +63,8 @@ const (
 	PeakShaving          = "peakShaving"
 	PeakShavingLimit     = "peakShavingLimit"
 	PeakShavingReserve   = "peakShavingReserve"
+	PeakShavingEntity    = "peakShavingEntity"
+	PeakShavingActive    = "peakShavingActive"
 	PeakShavingPower     = "peakShavingPower"
 	PeakShavingWindowAvg = "peakShavingWindowAvg"
 

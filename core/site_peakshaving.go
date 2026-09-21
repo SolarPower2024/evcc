@@ -12,8 +12,11 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +24,8 @@ import (
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/db/settings"
+	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/homeassistant"
 )
 
 const (
@@ -40,6 +45,7 @@ type peakState struct {
 	enabled bool    // peak shaving switch
 	limit   float64 // grid peak limit in W
 	reserve float64 // soc below which the battery is reserved for peaks
+	entity  string  // Home Assistant number entity receiving the setpoint
 
 	shaving bool     // hysteresis state: below the reserve
 	written *float64 // last value written, nil until the first successful write
@@ -83,30 +89,94 @@ func (site *Site) restorePeakSettings() {
 		s.mu.Unlock()
 	}
 
-	if cfg := site.LoadManagement.PeakShaving.Set; cfg != nil {
-		set, err := cfg.FloatSetter(context.TODO(), "peakshaving")
-		if err != nil {
-			site.log.ERROR.Printf("peak shaving: output: %v", err)
-		} else {
-			s.mu.Lock()
-			s.set = set
-			s.mu.Unlock()
-		}
+	if v, err := settings.String(keys.PeakShavingEntity); err == nil {
+		s.mu.Lock()
+		s.entity = v
+		s.mu.Unlock()
+	}
+
+	if err := site.rebuildPeakSetter(); err != nil {
+		site.log.ERROR.Printf("peak shaving: %v", err)
 	}
 
 	site.publishPeakSettings()
+}
+
+// peakURI returns the Home Assistant endpoint. Running as an add-on, the
+// supervisor provides both the endpoint and the token, so nothing has to be
+// configured; elsewhere the uri has to come from the yaml config.
+func (site *Site) peakURI() (string, error) {
+	if uri := site.LoadManagement.PeakShaving.URI; uri != "" {
+		return uri, nil
+	}
+
+	if os.Getenv(homeassistant.SupervisorToken) != "" {
+		return homeassistant.SupervisorURI, nil
+	}
+
+	return "", errors.New("no Home Assistant connection: running outside the add-on requires site.loadmanagement.peakshaving.uri")
+}
+
+// rebuildPeakSetter resolves the output from the configured entity, or from the
+// full plugin config when one is given
+func (site *Site) rebuildPeakSetter() error {
+	s := site.peak()
+
+	// an explicit plugin config wins and is resolved once
+	if cfg := site.LoadManagement.PeakShaving.Set; cfg != nil {
+		set, err := cfg.FloatSetter(context.TODO(), "peakshaving")
+		if err != nil {
+			return fmt.Errorf("output: %w", err)
+		}
+
+		s.mu.Lock()
+		s.set = set
+		s.mu.Unlock()
+
+		return nil
+	}
+
+	s.mu.Lock()
+	entity := s.entity
+	s.mu.Unlock()
+
+	if entity == "" {
+		s.mu.Lock()
+		s.set = nil
+		s.mu.Unlock()
+
+		return nil
+	}
+
+	uri, err := site.peakURI()
+	if err != nil {
+		return err
+	}
+
+	conn, err := homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", site.LoadManagement.PeakShaving.Insecure)
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	s.set = func(val float64) error { return conn.CallNumberService(entity, val) }
+	s.written = nil // force a write with the new target
+	s.mu.Unlock()
+
+	return nil
 }
 
 func (site *Site) publishPeakSettings() {
 	s := site.peak()
 
 	s.mu.Lock()
-	enabled, limit, reserve := s.enabled, s.limit, s.reserve
+	enabled, limit, reserve, entity := s.enabled, s.limit, s.reserve, s.entity
 	s.mu.Unlock()
 
 	site.publish(keys.PeakShaving, enabled)
 	site.publish(keys.PeakShavingLimit, limit)
 	site.publish(keys.PeakShavingReserve, reserve)
+	site.publish(keys.PeakShavingEntity, entity)
 }
 
 // peakFreeValue returns the value signalling unrestricted discharge
@@ -147,6 +217,15 @@ func (site *Site) updatePeakShaving(state siteState) {
 	s.mu.Unlock()
 
 	if !enabled || set == nil || !site.batteryConfigured() {
+		// don't leave a stale reserve state behind: peakShavingActive gates grid
+		// charging and the battery mode, and must not keep doing so once peak
+		// shaving stopped running
+		s.mu.Lock()
+		s.shaving = false
+		s.mu.Unlock()
+
+		site.publish(keys.PeakShavingActive, false)
+
 		return
 	}
 
@@ -171,6 +250,10 @@ func (site *Site) updatePeakShaving(state siteState) {
 		value = peakSetpoint(state.gridPower, state.battery.Power, limit)
 	}
 
+	// published explicitly rather than left for the ui to infer from the value:
+	// a setpoint can legitimately equal the free value, e.g. a 15kW demand
+	// against a 5kW limit asks for exactly 10000W
+	site.publish(keys.PeakShavingActive, shaving)
 	site.publish(keys.PeakShavingPower, value)
 	site.writePeakValue(value)
 }
@@ -252,6 +335,53 @@ func (site *Site) updatePeakWindow(gridPower float64) {
 	site.publish(keys.PeakShavingWindowAvg, s.windowAvg)
 }
 
+// peakChargeAllowed reports whether grid-charging the battery would stay below
+// the peak limit.
+//
+// Blocking grid charging outright whenever the reserve is armed would deadlock:
+// below the reserve the battery could then only ever be refilled from pv, so an
+// empty battery would stay empty through the night and have nothing left to
+// shave the next peak with. What actually has to be prevented is grid charging
+// creating the peak itself, which is a question of power, not of soc.
+func (site *Site) peakChargeAllowed() bool {
+	s := site.peak()
+
+	s.mu.Lock()
+	enabled, limit := s.enabled, s.limit
+	s.mu.Unlock()
+
+	if !enabled {
+		return true
+	}
+
+	charge := site.lmBatteryChargePower()
+	if charge <= 0 {
+		// without a known charge power a peak cannot be ruled out
+		site.log.DEBUG.Println("battery grid charge: charge power unknown, not risking a peak")
+		return false
+	}
+
+	// the grid meter already reflects any ongoing charging, so add the battery
+	// power back to get the demand the charging would be added to. Same reason
+	// as in peakSetpoint: using the raw grid value would oscillate.
+	st := site.state()
+
+	if !peakChargeFits(st.gridPower, st.battery.Power, charge, limit) {
+		site.log.DEBUG.Printf("battery grid charge: %.0fW demand plus %.0fW charge exceeds the %.0fW peak limit",
+			st.gridPower+st.battery.Power, charge, limit)
+		return false
+	}
+
+	return true
+}
+
+// peakChargeFits reports whether adding chargePower to the current demand stays
+// within the limit. Like peakSetpoint it works on the demand rather than the raw
+// grid value, so an already running charge does not make the check flip.
+func peakChargeFits(gridPower, batteryPower, chargePower, limit float64) bool {
+	return gridPower+batteryPower+chargePower <= limit
+}
+
 // updateBatteryModePeakAware keeps the battery in normal mode while the reserve
 // is being held for peaks. Hold or charge would block the discharge controller,
 // and grid charging would create the very peak we are trying to cap.
@@ -293,13 +423,17 @@ func (site *Site) SetPeakShaving(val bool) error {
 		return ErrBatteryNotConfigured
 	}
 
-	if val && site.LoadManagement.PeakShaving.Set == nil {
-		return fmt.Errorf("peak shaving: no output entity configured, set site.loadmanagement.peakshaving.set")
+	s := site.peak()
+
+	s.mu.Lock()
+	configured := s.set != nil
+	s.mu.Unlock()
+
+	if val && !configured {
+		return errors.New("no target entity configured")
 	}
 
 	site.log.DEBUG.Println("set peak shaving:", val)
-
-	s := site.peak()
 
 	s.mu.Lock()
 	changed := s.enabled != val
@@ -317,6 +451,55 @@ func (site *Site) SetPeakShaving(val bool) error {
 		if !val {
 			site.writePeakValue(site.peakFreeValue())
 		}
+	}
+
+	return nil
+}
+
+func (site *Site) GetPeakShavingEntity() string {
+	s := site.peak()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.entity
+}
+
+// SetPeakShavingEntity sets the Home Assistant number entity receiving the
+// setpoint and rebuilds the connection
+func (site *Site) SetPeakShavingEntity(entity string) error {
+	if entity != "" && !strings.HasPrefix(entity, "number.") && !strings.HasPrefix(entity, "input_number.") {
+		return fmt.Errorf("must be a number or input_number entity: %s", entity)
+	}
+
+	s := site.peak()
+
+	s.mu.Lock()
+	changed := s.entity != entity
+	previous := s.entity
+	s.entity = entity
+	s.mu.Unlock()
+
+	if !changed {
+		return nil
+	}
+
+	if err := site.rebuildPeakSetter(); err != nil {
+		// keep the working target rather than leaving peak shaving mute
+		s.mu.Lock()
+		s.entity = previous
+		s.mu.Unlock()
+
+		return err
+	}
+
+	site.log.DEBUG.Println("set peak shaving entity:", entity)
+	settings.SetString(keys.PeakShavingEntity, entity)
+	site.publish(keys.PeakShavingEntity, entity)
+
+	// an empty target cannot do anything, so don't pretend it is running
+	if entity == "" {
+		return site.SetPeakShaving(false)
 	}
 
 	return nil

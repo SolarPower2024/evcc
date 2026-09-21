@@ -57,6 +57,46 @@ func TestPeakSetpointIsStable(t *testing.T) {
 	}
 }
 
+// TestPeakChargeFits covers the grid charge gate. Blocking grid charging for as
+// long as the reserve is armed would deadlock - the reserve could then only be
+// refilled from pv - so the gate asks whether charging would create a peak.
+func TestPeakChargeFits(t *testing.T) {
+	const (
+		limit  = 5000.0
+		charge = 3000.0
+	)
+
+	tc := []struct {
+		name                  string
+		gridPower, batteryPwr float64
+		want                  bool
+	}{
+		// the night case the deadlock used to break: low base load, so the
+		// reserve can be refilled even while peak shaving is armed
+		{"low base load at night", 500, 0, true},
+		{"exactly at the limit", 2000, 0, true},
+		{"one watt over", 2001, 0, false},
+		{"high base load", 4000, 0, false},
+		// an already running charge must not make the gate flip: the grid value
+		// contains it, the battery power takes it back out
+		{"already charging, still fits", 3500, -3000, true},
+		{"already charging, no longer fits", 7500, -3000, false},
+		// a discharging battery makes the grid value understate the demand, so
+		// the gate has to look past it
+		{"battery discharging, still fits", 0, 1000, true},
+		{"battery hiding a load that does not fit", 1000, 2000, false},
+		{"battery masking a high load", 2500, 3000, false},
+		// exporting leaves plenty of room
+		{"exporting to grid", -4000, 0, true},
+	}
+
+	for _, tc := range tc {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, peakChargeFits(tc.gridPower, tc.batteryPwr, charge, limit))
+		})
+	}
+}
+
 // TestPeakSetpointFollowsDemand verifies the setpoint tracks a changing load
 // while the battery is already discharging
 func TestPeakSetpointFollowsDemand(t *testing.T) {

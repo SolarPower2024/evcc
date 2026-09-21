@@ -66,6 +66,7 @@
       "description": "Below {reserve} the battery is used for demand peaks only and covers whatever exceeds {limit} of grid draw. Above it, it runs ordinary self-consumption.",
       "enable": "Hold the lower battery range back for demand peaks.",
       "free": "unrestricted",
+      "noEntity": "No target entity set. Configure it under Configuration → Peak load management, otherwise this cannot be switched on.",
       "normal": "Self-consumption, reserve untouched",
       "off": "Inactive",
       "shaving": "Reserve active, capping peaks",
@@ -837,6 +838,14 @@
         "C": "C (charging)"
       }
     },
+    "peakshaving": {
+      "description": "The home battery can hold its lower state of charge back for demand peaks. evcc computes the required battery power and keeps writing it to a Home Assistant entity your automation discharges from.",
+      "entityHelp": "Entity the setpoint is written to, in watts. It needs min 0, max at least 10000 and step 1.",
+      "entityInvalid": "Could not set the entity.",
+      "entityLabel": "Target entity",
+      "hint": "The switch, the peak limit and the reserve state of charge are on the battery page.",
+      "saved": "Saved."
+    },
     "pv": {
       "titleAdd": "Add Solar Meter",
       "titleEdit": "Edit Solar Meter"
@@ -883,6 +892,7 @@
       "integrations": "Integrations",
       "loadpoints": "Charging points & heaters",
       "meter": "Solar & battery",
+      "peakshaving": "Peak load management",
       "services": "Services",
       "system": "System",
       "vehicles": "Vehicles"

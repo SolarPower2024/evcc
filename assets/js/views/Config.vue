@@ -208,6 +208,11 @@
 					</div>
 				</ConfigSection>
 
+				<!-- custom: peak shaving target, see core/site_peakshaving.go -->
+				<ConfigSection v-bind="sectionProps('peakshaving')">
+					<PeakShavingConfig class="box-pull-out" />
+				</ConfigSection>
+
 				<ConfigSection v-bind="sectionProps('meters')">
 					<div class="p-0 config-list box-pull-out">
 						<MeterCard
@@ -588,6 +593,7 @@ import "@h2d2/shopicons/es/regular/powersupply";
 import "@h2d2/shopicons/es/regular/receivepayment";
 import "@h2d2/shopicons/es/regular/settings";
 import "@h2d2/shopicons/es/regular/car3";
+import "@h2d2/shopicons/es/regular/lightning"; // custom: peak shaving section
 import NewDeviceButton from "../components/Config/NewDeviceButton.vue";
 import api from "../api";
 import listDetail from "../mixins/listDetail";
@@ -615,6 +621,7 @@ import OcppModal from "../components/Config/OcppModal.vue";
 import OcppForwarderModal from "../components/Config/OcppForwarderModal.vue";
 import formatter from "../mixins/formatter";
 import GeneralConfig from "../components/Config/GeneralConfig.vue";
+import PeakShavingConfig from "../components/Config/PeakShavingConfig.vue";
 import HemsIcon from "../components/MaterialIcon/Hems.vue";
 import HemsModal from "../components/Config/HemsModal.vue";
 import ShmIcon from "../components/MaterialIcon/Shm.vue";
@@ -687,6 +694,7 @@ const SECTION_TITLES: Record<string, string> = {
 	consumers: "config.section.consumers",
 	grid: "config.section.grid",
 	"pv-battery": "config.section.meter",
+	peakshaving: "config.section.peakshaving", // custom
 	meters: "config.section.additionalMeter",
 	tariffs: "config.tariff.title",
 	integrations: "config.section.integrations",
@@ -729,6 +737,7 @@ export default defineComponent({
 		OcppModal,
 		OcppForwarderModal,
 		GeneralConfig,
+		PeakShavingConfig,
 		HemsIcon,
 		HemsModal,
 		ShmModal,
@@ -915,6 +924,12 @@ export default defineComponent({
 						this.pvMeters.some((m) => this.curtailmentBanner("meter", m.name)) ||
 						meterDisabled(pvAndBattery),
 				},
+				// custom: peak shaving target entity
+				{
+					slug: "peakshaving",
+					icon: "shopicon-regular-lightning",
+					subline: this.peakShavingEntity || undefined,
+				},
 				{
 					slug: "meters",
 					icon: markRaw(MeterIcon),
@@ -970,6 +985,10 @@ export default defineComponent({
 		},
 		siteTitle() {
 			return this.site?.title;
+		},
+		// custom: shown as the peak shaving section's subline
+		peakShavingEntity(): string {
+			return store.state.peakShavingEntity ?? "";
 		},
 		gridMeter() {
 			const name = this.site?.grid;

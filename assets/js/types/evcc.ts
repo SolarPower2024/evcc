@@ -302,8 +302,12 @@ export interface State {
   peakShavingLimit?: number;
   /** Soc in % below which the battery is reserved for demand peaks. */
   peakShavingReserve?: number;
+  /** Battery reserve is currently being held for peaks. */
+  peakShavingActive?: boolean;
   /** Battery power in W currently requested by peak shaving, or the free-discharge signal. */
   peakShavingPower?: number;
+  /** Home Assistant number entity receiving the peak shaving setpoint. */
+  peakShavingEntity?: string;
   /** Average grid power in W of the running 15 minute metering window. */
   peakShavingWindowAvg?: number;
   /** Feed-in price limit for discharging the home battery to the grid (experimental). */

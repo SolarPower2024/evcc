@@ -52,7 +52,9 @@
 						:limit="state.peakShavingLimit ?? 5000"
 						:reserve="state.peakShavingReserve ?? 30"
 						:power="state.peakShavingPower ?? 0"
+						:shaving="!!state.peakShavingActive"
 						:window-avg="state.peakShavingWindowAvg ?? 0"
+						:entity="state.peakShavingEntity ?? ''"
 					/>
 
 					<Card

@@ -44,6 +44,10 @@
 			</i18n-t>
 		</div>
 
+		<div v-if="!entity" class="alert alert-warning mt-3 mb-0 py-2 small">
+			{{ $t("battery.peakShaving.noEntity") }}
+		</div>
+
 		<hr class="my-3" />
 
 		<div class="d-flex justify-content-between">
@@ -84,7 +88,10 @@ export default defineComponent({
 		reserve: { type: Number, default: 30 },
 		power: { type: Number, default: 0 },
 		windowAvg: { type: Number, default: 0 },
-		freeValue: { type: Number, default: 10000 },
+		// reported by the backend, not inferred from power: a setpoint can
+		// legitimately equal the free-discharge value
+		shaving: Boolean,
+		entity: { type: String, default: "" },
 	},
 	data() {
 		return {
@@ -98,10 +105,6 @@ export default defineComponent({
 			return this.$t(
 				this.shaving ? "battery.peakShaving.shaving" : "battery.peakShaving.normal"
 			);
-		},
-		// the free value signals unrestricted discharge, anything else is a setpoint
-		shaving(): boolean {
-			return this.power !== this.freeValue;
 		},
 		overLimit(): boolean {
 			return this.windowAvg > this.limit;
