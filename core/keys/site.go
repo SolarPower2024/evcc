@@ -60,13 +60,16 @@ const (
 	BatterySocGridChargeStop  = "batterySocGridChargeStop"
 
 	// custom: battery peak shaving
-	PeakShaving          = "peakShaving"
-	PeakShavingLimit     = "peakShavingLimit"
-	PeakShavingReserve   = "peakShavingReserve"
-	PeakShavingEntity    = "peakShavingEntity"
-	PeakShavingActive    = "peakShavingActive"
-	PeakShavingPower     = "peakShavingPower"
-	PeakShavingWindowAvg = "peakShavingWindowAvg"
+	PeakShaving                     = "peakShaving"
+	PeakShavingLimit                = "peakShavingLimit"
+	PeakShavingReserve              = "peakShavingReserve"
+	PeakShavingEntity               = "peakShavingEntity"
+	PeakShavingActive               = "peakShavingActive"
+	PeakShavingChargePower          = "peakShavingChargePower"
+	PeakShavingChargePowerEffective = "peakShavingChargePowerEffective"
+	PeakShavingChargePowerSource    = "peakShavingChargePowerSource"
+	PeakShavingPower                = "peakShavingPower"
+	PeakShavingWindowAvg            = "peakShavingWindowAvg"
 
 	// grid settings
 	GridExportLimit = "gridExportLimit"

@@ -839,12 +839,23 @@
       }
     },
     "peakshaving": {
+      "chargePowerEffective": "Verwendet wird:",
+      "chargePowerHelp": "Leistung, die die Batterie beim Laden aus dem Netz zieht. 0 = aus der Batteriekonfiguration ableiten. Trag den realistischen Wert ein, nicht den vom Typenschild — ein zu hoher Wert sperrt das Netzladen unnötig.",
+      "chargePowerInvalid": "Wert konnte nicht gesetzt werden.",
+      "chargePowerLabel": "Erwartete Netzladeleistung",
+      "chargePowerUnknown": "nicht ermittelbar — das Netzladen bleibt deshalb gesperrt",
       "description": "Die Hausbatterie kann untere Ladestände für Lastspitzen zurückhalten. evcc berechnet die nötige Batterieleistung und schreibt sie laufend in eine Home-Assistant-Entität, aus der deine Automatisierung die Entladung steuert.",
       "entityHelp": "Entität, in die der Sollwert in Watt geschrieben wird. Sie braucht Min 0, Max mindestens 10000 und Schrittweite 1.",
       "entityInvalid": "Entität konnte nicht gesetzt werden.",
       "entityLabel": "Zielentität",
       "hint": "Schalter, Leistungsgrenze und Reserve-Ladestand stellst du unter Hausbatterie ein.",
-      "saved": "Gespeichert."
+      "saved": "Gespeichert.",
+      "source": {
+        "setting": "hier eingetragen",
+        "config": "aus evcc.yaml",
+        "meter": "aus der Batteriekonfiguration",
+        "unknown": "unbekannt"
+      }
     },
     "pv": {
       "titleAdd": "PV-Anlage hinzufügen",

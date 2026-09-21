@@ -302,6 +302,12 @@ export interface State {
   peakShavingLimit?: number;
   /** Soc in % below which the battery is reserved for demand peaks. */
   peakShavingReserve?: number;
+  /** Assumed grid charge power in W entered by the user, 0 = derived. */
+  peakShavingChargePower?: number;
+  /** Grid charge power in W actually used by the peak check, 0 = not determinable. */
+  peakShavingChargePowerEffective?: number;
+  /** Where the effective charge power came from: setting, config, meter or unknown. */
+  peakShavingChargePowerSource?: string;
   /** Battery reserve is currently being held for peaks. */
   peakShavingActive?: boolean;
   /** Battery power in W currently requested by peak shaving, or the free-discharge signal. */

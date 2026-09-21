@@ -42,10 +42,11 @@ type peakState struct {
 	once sync.Once
 	mu   sync.Mutex
 
-	enabled bool    // peak shaving switch
-	limit   float64 // grid peak limit in W
-	reserve float64 // soc below which the battery is reserved for peaks
-	entity  string  // Home Assistant number entity receiving the setpoint
+	enabled     bool    // peak shaving switch
+	limit       float64 // grid peak limit in W
+	reserve     float64 // soc below which the battery is reserved for peaks
+	entity      string  // Home Assistant number entity receiving the setpoint
+	chargePower float64 // assumed grid charge power in W, 0 = derive it
 
 	shaving bool     // hysteresis state: below the reserve
 	written *float64 // last value written, nil until the first successful write
@@ -92,6 +93,11 @@ func (site *Site) restorePeakSettings() {
 	if v, err := settings.String(keys.PeakShavingEntity); err == nil {
 		s.mu.Lock()
 		s.entity = v
+		s.mu.Unlock()
+	}
+	if v, err := settings.Float(keys.PeakShavingChargePower); err == nil {
+		s.mu.Lock()
+		s.chargePower = v
 		s.mu.Unlock()
 	}
 
@@ -170,13 +176,25 @@ func (site *Site) publishPeakSettings() {
 	s := site.peak()
 
 	s.mu.Lock()
-	enabled, limit, reserve, entity := s.enabled, s.limit, s.reserve, s.entity
+	enabled, limit, reserve, entity, charge := s.enabled, s.limit, s.reserve, s.entity, s.chargePower
 	s.mu.Unlock()
 
 	site.publish(keys.PeakShaving, enabled)
 	site.publish(keys.PeakShavingLimit, limit)
 	site.publish(keys.PeakShavingReserve, reserve)
 	site.publish(keys.PeakShavingEntity, entity)
+	site.publish(keys.PeakShavingChargePower, charge)
+
+	site.publishChargePower()
+}
+
+// publishChargePower reports the charge power actually in use and where it came
+// from, so the assumption the grid charge gate makes is visible in the ui
+func (site *Site) publishChargePower() {
+	effective, source := site.lmBatteryChargePower()
+
+	site.publish(keys.PeakShavingChargePowerEffective, effective)
+	site.publish(keys.PeakShavingChargePowerSource, source)
 }
 
 // peakFreeValue returns the value signalling unrestricted discharge
@@ -354,9 +372,10 @@ func (site *Site) peakChargeAllowed() bool {
 		return true
 	}
 
-	charge := site.lmBatteryChargePower()
+	charge, _ := site.lmBatteryChargePower()
 	if charge <= 0 {
-		// without a known charge power a peak cannot be ruled out
+		// without a known charge power a peak cannot be ruled out. The ui shows
+		// this as "not determinable" so it does not fail silently.
 		site.log.DEBUG.Println("battery grid charge: charge power unknown, not risking a peak")
 		return false
 	}
@@ -500,6 +519,40 @@ func (site *Site) SetPeakShavingEntity(entity string) error {
 	// an empty target cannot do anything, so don't pretend it is running
 	if entity == "" {
 		return site.SetPeakShaving(false)
+	}
+
+	return nil
+}
+
+// GetPeakShavingChargePower returns the assumed grid charge power, 0 = derived
+func (site *Site) GetPeakShavingChargePower() float64 {
+	s := site.peak()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.chargePower
+}
+
+// SetPeakShavingChargePower sets the assumed grid charge power in W. Zero falls
+// back to the yaml config and then to the battery meters' maxchargepower.
+func (site *Site) SetPeakShavingChargePower(power float64) error {
+	if power < 0 || power > maxPeakLimit {
+		return fmt.Errorf("charge power must be between 0 and %.0fW", maxPeakLimit)
+	}
+
+	s := site.peak()
+
+	s.mu.Lock()
+	changed := s.chargePower != power
+	s.chargePower = power
+	s.mu.Unlock()
+
+	if changed {
+		site.log.DEBUG.Println("set peak shaving charge power:", power)
+		settings.SetFloat(keys.PeakShavingChargePower, power)
+		site.publish(keys.PeakShavingChargePower, power)
+		site.publishChargePower()
 	}
 
 	return nil

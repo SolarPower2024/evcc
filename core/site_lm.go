@@ -183,11 +183,31 @@ func (site *Site) lmBatteryPhases() int {
 	return lm.DefaultPhases
 }
 
+// charge power sources, reported to the ui so the assumed value is not invisible
+const (
+	chargePowerSourceSetting = "setting" // entered in the ui
+	chargePowerSourceConfig  = "config"  // loadmanagement.battery.power in yaml
+	chargePowerSourceMeter   = "meter"   // the battery meters' maxchargepower
+	chargePowerSourceUnknown = "unknown" // nothing to go by
+)
+
 // lmBatteryChargePower returns the power the battery is expected to draw while
-// grid charging: the configured value, else the batteries' max charge power
-func (site *Site) lmBatteryChargePower() float64 {
+// grid charging, and where that number came from.
+//
+// It has to be an assumption: a battery driven by mode scripts is switched on or
+// off, so the draw can only be measured once charging already runs - while the
+// question "would charging create a peak" has to be answered before it starts.
+//
+// Note that a meter only reports its limits when both maxchargepower and
+// maxdischargepower are set; with just one of them the capability is absent and
+// this falls through to unknown.
+func (site *Site) lmBatteryChargePower() (float64, string) {
+	if p := site.GetPeakShavingChargePower(); p > 0 {
+		return p, chargePowerSourceSetting
+	}
+
 	if p := site.LoadManagement.Battery.Power; p > 0 {
-		return p
+		return p, chargePowerSourceConfig
 	}
 
 	var res float64
@@ -198,7 +218,11 @@ func (site *Site) lmBatteryChargePower() float64 {
 		}
 	}
 
-	return res
+	if res > 0 {
+		return res, chargePowerSourceMeter
+	}
+
+	return 0, chargePowerSourceUnknown
 }
 
 // circuitLoads returns the circuit participants: the loadpoints plus the home
@@ -224,13 +248,17 @@ func (site *Site) batteryCircuitAllows() bool {
 
 	s := site.lms()
 
-	want := site.lmBatteryChargePower()
+	want, _ := site.lmBatteryChargePower()
 	if want <= 0 {
-		// without an expected charge power there is nothing to check against
+		// Without an expected charge power there is nothing to check against.
+		// Refusing rather than waving it through: the battery was explicitly put
+		// on a circuit, so letting it draw an unknown amount is exactly what the
+		// circuit limit exists to prevent. Peak shaving refuses for the same
+		// reason, so both gates behave alike.
 		s.warnOnce.Do(func() {
-			site.log.WARN.Println("load management: battery grid charge power unknown, configure loadmanagement.battery.power or the battery's maxchargepower")
+			site.log.WARN.Println("load management: battery grid charge power unknown, set it under peak load management or configure the battery's maxchargepower - grid charging stays off until then")
 		})
-		return true
+		return false
 	}
 
 	s.mu.Lock()

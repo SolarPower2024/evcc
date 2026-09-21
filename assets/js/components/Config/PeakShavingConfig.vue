@@ -21,6 +21,32 @@
 		</div>
 		<div v-else class="form-text">{{ $t("config.peakshaving.entityHelp") }}</div>
 
+		<label class="form-label mt-4" for="peakShavingChargePower">
+			{{ $t("config.peakshaving.chargePowerLabel") }}
+		</label>
+		<div class="input-group">
+			<input
+				id="peakShavingChargePower"
+				v-model="chargePower"
+				type="number"
+				min="0"
+				step="100"
+				class="form-control"
+				:class="{ 'is-invalid': chargeError }"
+				placeholder="0"
+				data-testid="peakshaving-chargepower"
+				@change="saveChargePower"
+			/>
+			<span class="input-group-text">W</span>
+		</div>
+		<div v-if="chargeError" class="invalid-feedback d-block">{{ chargeError }}</div>
+		<div v-else class="form-text">{{ $t("config.peakshaving.chargePowerHelp") }}</div>
+
+		<div class="mt-2" :class="chargeUnknown ? 'text-danger' : 'text-muted'">
+			<strong>{{ $t("config.peakshaving.chargePowerEffective") }}</strong>
+			{{ effectiveText }}
+		</div>
+
 		<p class="text-muted mt-4 mb-0 small">{{ $t("config.peakshaving.hint") }}</p>
 	</div>
 </template>
@@ -29,27 +55,55 @@
 import { defineComponent } from "vue";
 import store from "@/store";
 import api from "@/api";
+import formatter from "@/mixins/formatter";
 
 // The peak shaving target entity. The switch, the peak limit and the reserve soc
 // are operating controls and live on the battery page instead.
 export default defineComponent({
 	name: "PeakShavingConfig",
+	mixins: [formatter],
 	data() {
 		return {
 			entity: "",
 			error: "",
 			saved: false,
+			chargePower: 0,
+			chargeError: "",
 		};
 	},
 	computed: {
 		configured(): string {
 			return store.state.peakShavingEntity ?? "";
 		},
+		configuredChargePower(): number {
+			return store.state.peakShavingChargePower ?? 0;
+		},
+		chargeUnknown(): boolean {
+			return (store.state.peakShavingChargePowerEffective ?? 0) <= 0;
+		},
+		// spells out the value the grid charge gate actually works with, and
+		// where it came from - it used to be invisible
+		effectiveText(): string {
+			if (this.chargeUnknown) {
+				return this.$t("config.peakshaving.chargePowerUnknown");
+			}
+			const w = this.fmtW(store.state.peakShavingChargePowerEffective ?? 0);
+			const source = this.$t(
+				`config.peakshaving.source.${store.state.peakShavingChargePowerSource ?? "unknown"}`
+			);
+			return `${w} (${source})`;
+		},
 	},
 	watch: {
 		configured: {
 			handler(v: string) {
 				this.entity = v;
+			},
+			immediate: true,
+		},
+		configuredChargePower: {
+			handler(v: number) {
+				this.chargePower = v;
 			},
 			immediate: true,
 		},
@@ -73,6 +127,20 @@ export default defineComponent({
 				this.error =
 					err?.response?.data?.error || this.$t("config.peakshaving.entityInvalid");
 				this.entity = this.configured;
+				console.error(err);
+			}
+		},
+		async saveChargePower() {
+			const value = Math.max(0, Math.round(Number(this.chargePower) || 0));
+			this.chargeError = "";
+
+			try {
+				await api.post(`peakshavingchargepower/${encodeURIComponent(value)}`);
+				this.chargePower = value;
+			} catch (err: any) {
+				this.chargeError =
+					err?.response?.data?.error || this.$t("config.peakshaving.chargePowerInvalid");
+				this.chargePower = this.configuredChargePower;
 				console.error(err);
 			}
 		},

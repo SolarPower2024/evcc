@@ -81,6 +81,8 @@ type API interface {
 	SetPeakShavingLimit(float64) error
 	GetPeakShavingEntity() string
 	SetPeakShavingEntity(string) error
+	GetPeakShavingChargePower() float64
+	SetPeakShavingChargePower(float64) error
 	GetPeakShavingReserve() float64
 	SetPeakShavingReserve(float64) error
 

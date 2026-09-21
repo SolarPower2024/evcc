@@ -200,6 +200,7 @@ func (s *HTTPd) RegisterSiteHandlers(site site.API) {
 		"peakshavingreserve":      {"POST", "/peakshavingreserve/{value:[0-9.]+}", floatHandler(site.SetPeakShavingReserve, site.GetPeakShavingReserve)},
 		"peakshavingentity":       {"POST", "/peakshavingentity/{value:[a-zA-Z0-9_.]+}", stringHandler(site.SetPeakShavingEntity, site.GetPeakShavingEntity)},
 		"peakshavingentitydelete": {"DELETE", "/peakshavingentity", stringHandler(site.SetPeakShavingEntity, site.GetPeakShavingEntity)},
+		"peakshavingchargepower":  {"POST", "/peakshavingchargepower/{value:[0-9.]+}", floatHandler(site.SetPeakShavingChargePower, site.GetPeakShavingChargePower)},
 		"batterymode":             {"POST", "/batterymode/{value:[a-z]+}", updateBatteryMode(site)},
 		"batterymodedelete":       {"DELETE", "/batterymode", updateBatteryMode(site)},
 		"prioritysoc":             {"POST", "/prioritysoc/{value:[0-9.]+}", floatHandler(site.SetPrioritySoc, site.GetPrioritySoc)},

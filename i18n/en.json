@@ -839,12 +839,23 @@
       }
     },
     "peakshaving": {
+      "chargePowerEffective": "In use:",
+      "chargePowerHelp": "Power the battery draws while charging from the grid. 0 derives it from the battery configuration. Enter the realistic figure rather than the nameplate one — too high a value blocks grid charging needlessly.",
+      "chargePowerInvalid": "Could not set the value.",
+      "chargePowerLabel": "Expected grid charge power",
+      "chargePowerUnknown": "not determinable — grid charging stays blocked",
       "description": "The home battery can hold its lower state of charge back for demand peaks. evcc computes the required battery power and keeps writing it to a Home Assistant entity your automation discharges from.",
       "entityHelp": "Entity the setpoint is written to, in watts. It needs min 0, max at least 10000 and step 1.",
       "entityInvalid": "Could not set the entity.",
       "entityLabel": "Target entity",
       "hint": "The switch, the peak limit and the reserve state of charge are on the battery page.",
-      "saved": "Saved."
+      "saved": "Saved.",
+      "source": {
+        "setting": "entered here",
+        "config": "from evcc.yaml",
+        "meter": "from the battery configuration",
+        "unknown": "unknown"
+      }
     },
     "pv": {
       "titleAdd": "Add Solar Meter",
