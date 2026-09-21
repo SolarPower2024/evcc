@@ -486,6 +486,8 @@
       "energyMeterHelp": "Additional meter if the charger doesn't have an integrated one.",
       "energyMeterLabel": "Energy meter",
       "estimateLabel": "Interpolate charge level between API updates",
+      "lmPriorityHelp": "Load shedding: when the circuit runs out of budget, the lowest priority is reduced first. Independent of the solar surplus priority. Takes effect after a restart.",
+      "lmPriorityLabel": "Load shedding priority",
       "maxCurrentHelp": "Must be greater than minimum current.",
       "maxCurrentLabel": "Maximum current",
       "maxTempHelp": "Must be greater than minimum temperature.",

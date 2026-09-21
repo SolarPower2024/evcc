@@ -324,6 +324,24 @@
 							/>
 						</FormRow>
 
+						<!-- custom: load management shed priority, see core/lm -->
+						<FormRow
+							v-if="showLmPriority"
+							id="loadpointParamLmPriority"
+							:label="$t('config.loadpoint.lmPriorityLabel')"
+							:help="$t('config.loadpoint.lmPriorityHelp')"
+						>
+							<PropertyField
+								id="loadpointParamLmPriority"
+								v-model="values.lmpriority"
+								type="Choice"
+								size="w-100"
+								class="me-2"
+								required
+								:choice="lmPriorityOptions"
+							/>
+						</FormRow>
+
 						<h6 v-if="!chargerIsSwitchDevice">
 							{{ $t("config.loadpoint.electricalTitle") }}
 							<small class="text-muted">{{
@@ -665,6 +683,7 @@ const defaultValues = {
 	minCurrent: 6,
 	maxCurrent: 16,
 	priority: 0,
+	lmpriority: 0, // custom: load management shed priority
 	defaultMode: "",
 	thresholds: {
 		enable: { delay: 1 * nsPerMin, threshold: 0 },
@@ -821,6 +840,21 @@ export default {
 			}[];
 			result[0]!.name = "0 (default)";
 			result[10]!.name = "10 (highest)";
+			return result;
+		},
+		// custom: only meaningful once the loadpoint takes part in load management,
+		// which requires a circuit
+		showLmPriority() {
+			return !!this.values.circuit;
+		},
+		lmPriorityOptions() {
+			const result = Array.from({ length: 11 }, (_, i) => ({ key: i, name: `${i}` })) as {
+				key?: number;
+				name: string;
+			}[];
+			result[0]!.name = "0 (default)";
+			result[1]!.name = "1 (shed first)";
+			result[10]!.name = "10 (shed last)";
 			return result;
 		},
 		minCurrentWarning() {

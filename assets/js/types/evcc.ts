@@ -514,6 +514,8 @@ export interface ConfigLoadpoint {
   title: string;
   defaultMode: string;
   priority: number;
+  /** Custom: load management shed priority, lower is shed first. */
+  lmpriority?: number;
   phasesConfigured: number;
   minCurrent: number;
   maxCurrent: number;

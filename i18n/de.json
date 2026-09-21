@@ -486,6 +486,8 @@
       "energyMeterHelp": "Zusätzlicher Zähler, wenn die Wallbox keinen integrierten hat.",
       "energyMeterLabel": "Energiezähler",
       "estimateLabel": "Ladestand zwischen API-Updates interpolieren",
+      "lmPriorityHelp": "Lastabwurf: Bei Überlastung des Stromkreises wird die niedrigste Priorität zuerst reduziert. Unabhängig von der Priorität für den PV-Überschuss. Wirkt erst nach einem Neustart.",
+      "lmPriorityLabel": "Lastabwurf-Priorität",
       "maxCurrentHelp": "Muss größer als der Mindeststrom sein.",
       "maxCurrentLabel": "Maximaler Strom",
       "maxTempHelp": "Muss größer als die Mindesttemperatur sein.",
