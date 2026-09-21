@@ -89,3 +89,24 @@ func (p *HomeAssistant) BoolSetter(param string) (func(bool) error, error) {
 		return p.conn.CallSwitchService(p.entity, enable)
 	}, nil
 }
+
+// custom: number setters, so a plugin can write to number/input_number entities.
+// The connection already speaks set_value; upstream only used it from the charger.
+
+var _ FloatSetter = (*HomeAssistant)(nil)
+
+// FloatSetter writes the value to the entity via its set_value service
+func (p *HomeAssistant) FloatSetter(param string) (func(float64) error, error) {
+	return func(val float64) error {
+		return p.conn.CallNumberService(p.entity, val)
+	}, nil
+}
+
+var _ IntSetter = (*HomeAssistant)(nil)
+
+// IntSetter writes the value to the entity via its set_value service
+func (p *HomeAssistant) IntSetter(param string) (func(int64) error, error) {
+	return func(val int64) error {
+		return p.conn.CallNumberService(p.entity, val)
+	}, nil
+}

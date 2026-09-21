@@ -296,6 +296,16 @@ export interface State {
   batterySocGridChargeStart?: number;
   /** Soc in % at or above which soc-based grid charging stops. */
   batterySocGridChargeStop?: number;
+  /** Battery peak shaving is enabled. */
+  peakShaving?: boolean;
+  /** Grid peak limit in W the battery reserve is used to stay below. */
+  peakShavingLimit?: number;
+  /** Soc in % below which the battery is reserved for demand peaks. */
+  peakShavingReserve?: number;
+  /** Battery power in W currently requested by peak shaving, or the free-discharge signal. */
+  peakShavingPower?: number;
+  /** Average grid power in W of the running 15 minute metering window. */
+  peakShavingWindowAvg?: number;
   /** Feed-in price limit for discharging the home battery to the grid (experimental). */
   batteryGridDischargeLimit?: number | null;
   /** Home battery is currently discharged to the grid. */

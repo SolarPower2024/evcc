@@ -46,6 +46,15 @@
 						:stop-soc="state.batterySocGridChargeStop ?? 80"
 					/>
 
+					<BatteryPeakShavingCard
+						class="box-pull-out mt-4"
+						:enabled="!!state.peakShaving"
+						:limit="state.peakShavingLimit ?? 5000"
+						:reserve="state.peakShavingReserve ?? 30"
+						:power="state.peakShavingPower ?? 0"
+						:window-avg="state.peakShavingWindowAvg ?? 0"
+					/>
+
 					<Card
 						v-if="gridDischargeVisible"
 						class="box-pull-out mt-4"
@@ -75,6 +84,7 @@ import BatteryStatusCards from "../components/Battery/BatteryStatusCards.vue";
 import BatteryConfigCard from "../components/Battery/BatteryConfigCard.vue";
 import BatteryHistoryCard from "../components/Battery/BatteryHistoryCard.vue";
 import BatterySocGridChargeCard from "../components/Battery/BatterySocGridChargeCard.vue";
+import BatteryPeakShavingCard from "../components/Battery/BatteryPeakShavingCard.vue";
 import {
 	historyToSeries,
 	forecastToSeries,
@@ -95,6 +105,7 @@ export default defineComponent({
 		BatteryConfigCard,
 		BatteryHistoryCard,
 		BatterySocGridChargeCard,
+		BatteryPeakShavingCard,
 	},
 	head() {
 		return { title: this.$t("batterySettings.modalTitle") };

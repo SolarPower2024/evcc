@@ -74,6 +74,14 @@ type API interface {
 	GetBatterySocGridChargeStop() float64
 	SetBatterySocGridChargeStop(float64) error
 
+	// custom: peak shaving, see core/site_peakshaving.go
+	GetPeakShaving() bool
+	SetPeakShaving(bool) error
+	GetPeakShavingLimit() float64
+	SetPeakShavingLimit(float64) error
+	GetPeakShavingReserve() float64
+	SetPeakShavingReserve(float64) error
+
 	// GetOptimizerChargingStrategy gets the optimizer grid charging strategy
 	GetOptimizerChargingStrategy() string
 	// SetOptimizerChargingStrategy sets the optimizer grid charging strategy

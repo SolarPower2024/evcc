@@ -194,6 +194,10 @@ func (s *HTTPd) RegisterSiteHandlers(site site.API) {
 		"batterysocgridcharge":      {"POST", "/batterysocgridcharge/{value:[01truefalse]+}", boolHandler(site.SetBatterySocGridCharge, site.GetBatterySocGridCharge)},
 		"batterysocgridchargestart": {"POST", "/batterysocgridchargestart/{value:[0-9.]+}", floatHandler(site.SetBatterySocGridChargeStart, site.GetBatterySocGridChargeStart)},
 		"batterysocgridchargestop":  {"POST", "/batterysocgridchargestop/{value:[0-9.]+}", floatHandler(site.SetBatterySocGridChargeStop, site.GetBatterySocGridChargeStop)},
+		// custom: peak shaving, see core/site_peakshaving.go
+		"peakshaving":        {"POST", "/peakshaving/{value:[01truefalse]+}", boolHandler(site.SetPeakShaving, site.GetPeakShaving)},
+		"peakshavinglimit":   {"POST", "/peakshavinglimit/{value:[0-9.]+}", floatHandler(site.SetPeakShavingLimit, site.GetPeakShavingLimit)},
+		"peakshavingreserve": {"POST", "/peakshavingreserve/{value:[0-9.]+}", floatHandler(site.SetPeakShavingReserve, site.GetPeakShavingReserve)},
 		"batterymode":                     {"POST", "/batterymode/{value:[a-z]+}", updateBatteryMode(site)},
 		"batterymodedelete":               {"DELETE", "/batterymode", updateBatteryMode(site)},
 		"prioritysoc":                     {"POST", "/prioritysoc/{value:[0-9.]+}", floatHandler(site.SetPrioritySoc, site.GetPrioritySoc)},

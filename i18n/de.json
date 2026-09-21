@@ -61,6 +61,16 @@
       "lowest": "Tiefststand ({value})",
       "suggestion": "Vorschlag"
     },
+    "peakShaving": {
+      "current": "Aktuelle Anforderung",
+      "description": "Unterhalb von {reserve} wird die Batterie nur noch für Lastspitzen genutzt und deckt alles ab, was über {limit} Netzbezug hinausgeht. Darüber läuft sie im normalen Eigenverbrauch.",
+      "enable": "Untere Batteriereserve für Lastspitzen zurückhalten.",
+      "free": "unbegrenzt",
+      "normal": "Eigenverbrauch, Reserve unberührt",
+      "off": "Inaktiv",
+      "shaving": "Reserve aktiv, kappt Lastspitzen",
+      "windowAvg": "Mittelwert im 15-Minuten-Fenster"
+    },
     "socGridCharge": {
       "active": "Netzladen läuft",
       "enable": "Hausbatterie abhängig vom Ladestand aus dem Netz laden.",
@@ -74,6 +84,7 @@
     "gridDischargeTab": "Netzentladen",
     "modalTitle": "Hausbatterie",
     "noBattery": "Keine Batterien konfiguriert.",
+    "peakShavingTab": "Lastspitzenkappung",
     "socGridChargeTab": "Netzladen nach Ladestand",
     "usageTab": "Batterienutzung"
   },

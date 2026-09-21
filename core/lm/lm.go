@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/plugin"
 )
 
 // Load is a participant in the priority-based load management.
@@ -32,9 +33,31 @@ type Load interface {
 
 // Config is the site's load management configuration
 type Config struct {
-	Timeout time.Duration `mapstructure:"timeout"` // unserved demand expiry, 0 = default
-	Battery Battery       `mapstructure:"battery"` // home battery participation
+	Timeout     time.Duration `mapstructure:"timeout"`     // unserved demand expiry, 0 = default
+	Battery     Battery       `mapstructure:"battery"`     // home battery participation
+	PeakShaving PeakShaving   `mapstructure:"peakshaving"` // demand charge peak shaving
 }
+
+// PeakShaving configures the battery reserve used to cap the grid demand peak.
+// The limit and the reserve soc are runtime settings, not config - see
+// core/site_peakshaving.go.
+type PeakShaving struct {
+	Set        *plugin.Config `mapstructure:"set"`        // number entity receiving the required battery power in W
+	FreeValue  float64        `mapstructure:"freevalue"`  // written while above the reserve soc, 0 = default
+	Hysteresis float64        `mapstructure:"hysteresis"` // soc band in %, 0 = default
+}
+
+const (
+	// DefaultFreeValue signals the discharge controller that the battery may be
+	// used without restriction, i.e. the soc is above the peak shaving reserve
+	DefaultFreeValue = 10000.0
+
+	// DefaultHysteresis keeps a fluctuating soc from flapping across the reserve
+	DefaultHysteresis = 2.0
+
+	// PeakWindow is the metering interval a demand charge is billed on
+	PeakWindow = 15 * time.Minute
+)
 
 // Battery configures the home battery as a load management participant
 type Battery struct {

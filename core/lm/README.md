@@ -108,14 +108,29 @@ Keep these in mind when merging a new evcc version:
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt` fields, `restoreLmSettings()` call, `batteryGridChargeRequested` |
+| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateBatteryModePeakAware` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
-| `core/loadpoint.go` | `lm` import, `LmPriority_` field, four `lm.Validate*`/`lm.Peek*` calls |
-| `core/keys/site.go` | three soc grid charge keys |
-| `core/site/api.go` | six soc grid charge getters/setters |
-| `server/http.go` | three routes |
-| `assets/js/views/Battery.vue` | mounts `BatterySocGridChargeCard` |
+| `core/loadpoint.go` | `lm` import, `LmPrio` field, four `lm.Validate*`/`lm.Peek*` calls |
+| `core/keys/site.go` | three soc grid charge keys, five peak shaving keys |
+| `core/site/api.go` | six soc grid charge and six peak shaving getters/setters |
+| `server/http.go` | six routes |
+| `plugin/homeassistant.go` | `FloatSetter`/`IntSetter`, so a plugin can write number entities |
+| `assets/js/components/Config/LoadpointModal.vue` | `lmpriority` form field |
+| `assets/js/views/Battery.vue` | mounts the two new cards |
 | `assets/js/types/evcc.ts`, `i18n/de.json`, `i18n/en.json` | state fields and texts |
 
-Everything else lives in `core/lm/`, `core/site_lm.go`, `core/loadpoint_lm.go`
-and `assets/js/components/Battery/BatterySocGridChargeCard.vue`.
+Everything else lives in `core/lm/`, `core/site_lm.go`, `core/site_peakshaving.go`,
+`core/loadpoint_lm.go` and the `BatterySocGridChargeCard.vue` /
+`BatteryPeakShavingCard.vue` components.
+
+## 4. Peak shaving
+
+See `core/site_peakshaving.go`. The battery's lower soc range is reserved for
+grid demand peaks; above the reserve the controller is told it may discharge
+freely. The setpoint is `max(0, gridPower + batteryPower - limit)` — the battery
+power is added back because the grid meter already reflects the controller's own
+output, and using it directly oscillates. `TestPeakSetpointIsStable` pins that
+down.
+
+While the reserve is held, the battery is forced into normal mode and grid
+charging is blocked, since charging from the grid would create the peak.

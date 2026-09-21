@@ -61,6 +61,16 @@
       "lowest": "Lowest ({value})",
       "suggestion": "Suggestion"
     },
+    "peakShaving": {
+      "current": "Current request",
+      "description": "Below {reserve} the battery is used for demand peaks only and covers whatever exceeds {limit} of grid draw. Above it, it runs ordinary self-consumption.",
+      "enable": "Hold the lower battery range back for demand peaks.",
+      "free": "unrestricted",
+      "normal": "Self-consumption, reserve untouched",
+      "off": "Inactive",
+      "shaving": "Reserve active, capping peaks",
+      "windowAvg": "Average of the 15 minute window"
+    },
     "socGridCharge": {
       "active": "Grid charging is running",
       "enable": "Charge the home battery from the grid based on its state of charge.",
@@ -74,6 +84,7 @@
     "gridDischargeTab": "Grid discharging",
     "modalTitle": "Home Battery",
     "noBattery": "No batteries configured.",
+    "peakShavingTab": "Peak shaving",
     "socGridChargeTab": "Grid charging by state of charge",
     "usageTab": "Battery usage"
   },

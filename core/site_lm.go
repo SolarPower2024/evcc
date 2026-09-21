@@ -279,6 +279,13 @@ func (site *Site) batteryGridChargeRequested(rate api.Rate) bool {
 		return false
 	}
 
+	// grid charging draws from the grid and would create the very peak that the
+	// reserve is being held for, see core/site_peakshaving.go
+	if site.peakShavingActive() {
+		site.log.DEBUG.Println("battery grid charge: blocked by peak shaving reserve")
+		return false
+	}
+
 	return site.batteryCircuitAllows()
 }
 

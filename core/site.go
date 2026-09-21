@@ -72,6 +72,7 @@ type Site struct {
 	// custom: load management priorities and battery participation, see core/site_lm.go
 	LoadManagement lm.Config `mapstructure:"loadmanagement"`
 	loadMgmt       lmState
+	peakShaving    peakState
 
 	// meters
 	circuit        api.Circuit                // Circuit
@@ -516,6 +517,7 @@ func (site *Site) restoreSettings() error {
 
 	// custom: load management, see core/site_lm.go
 	site.restoreLmSettings()
+	site.restorePeakSettings()
 
 	// drop legacy accumulator-based forecast settings (now stored via metrics collector)
 	settings.Delete("solarAccForecast")
@@ -1283,6 +1285,9 @@ func (site *Site) update(lp updater) {
 		go site.optimizerUpdateAsync(tariff.SlotDuration)
 
 		site.updatePower(lp, state, totalChargePower, consumption, feedin)
+
+		// custom: peak shaving, see core/site_peakshaving.go
+		site.updatePeakShaving(state)
 	}
 
 	// smart grid charging
@@ -1305,7 +1310,8 @@ func (site *Site) update(lp updater) {
 	site.publish(keys.BatteryGridDischargeActive, batteryGridDischargeActive)
 	site.publish(keys.BatteryGridDischargeActive, batteryGridDischargeActive)
 
-	site.updateBatteryMode(batteryGridChargeActive, batteryGridDischargeActive, rate)
+	// custom: peak shaving forces normal mode, see core/site_peakshaving.go
+	site.updateBatteryModePeakAware(batteryGridChargeActive, batteryGridDischargeActive, rate)
 
 	// re-evaluate against the updated loadpoint state
 	site.publishSuggestions()
