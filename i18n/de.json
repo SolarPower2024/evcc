@@ -401,6 +401,28 @@
       "titleAdd": "Netzzähler hinzufügen",
       "titleEdit": "Netzzähler bearbeiten"
     },
+    "gridcharge": {
+      "chargePowerEffective": "Verwendet wird:",
+      "chargePowerHelp": "Leistung, mit der die Batterie aus dem Netz lädt. Mit Entität ist sie die Obergrenze der Vorgabe, ohne Entität muss sie beim Einschalten komplett in den Stromkreis passen. 0 = aus der Batteriekonfiguration ableiten.",
+      "chargePowerLabel": "Erwartete Netzladeleistung",
+      "chargePowerMissing": "Ladeleistung fehlt",
+      "chargePowerUnknown": "nicht ermittelbar, das Netzladen bleibt deshalb gesperrt",
+      "description": "Legt fest, wie die Hausbatterie aus dem Netz geladen wird. Mit einer Entität für die Ladeleistung passt evcc die Leistung laufend so an, dass Peak-Limit und Stromkreis eingehalten werden. Ohne Entität wird das Netzladen nur ein- und ausgeschaltet.",
+      "entityHelp": "evcc schreibt hier die erlaubte Ladeleistung in Watt hinein, 0 = nicht laden. Sie braucht Min 0, Max mindestens die Netzladeleistung und Schrittweite 1. Leer lassen für Ein/Aus.",
+      "entityInvalid": "Entität konnte nicht gesetzt werden.",
+      "entityLabel": "Entität für die Ladeleistung",
+      "entryLabel": "Netzladen",
+      "modeDynamic": "Dynamisch",
+      "modeSwitched": "Ein/Aus",
+      "setpoint": "Aktuelle Vorgabe:",
+      "source": {
+        "setting": "hier eingetragen",
+        "config": "aus evcc.yaml",
+        "meter": "aus der Batteriekonfiguration",
+        "unknown": "unbekannt"
+      },
+      "title": "Netzladen"
+    },
     "hems": {
       "changeConfirm": "Bestehende Konfiguration wird gelöscht. Fortfahren?",
       "csv": {
@@ -451,6 +473,18 @@
       "v1Support": "Unterstützung für InfluxDB 1.x?",
       "v2Support": "Zurück zu InfluxDB 2.x"
     },
+    "lmpriorities": {
+      "battery": "Hausbatterie (Netzladen)",
+      "description": "Reicht die Leistung eines Stromkreises nicht für alle, wird die niedrigste Priorität zuerst reduziert oder abgeschaltet. Bei gleicher Priorität bekommt die Leistung, wer zuerst da ist. Änderungen wirken sofort.",
+      "entryLabel": "Prioritäten",
+      "first": "{priority} (zuerst abwerfen)",
+      "invalid": "Priorität konnte nicht gespeichert werden.",
+      "last": "{priority} (zuletzt abwerfen)",
+      "loads": "{count} Verbraucher",
+      "noLoads": "Keine Verbraucher im Lastmanagement. Ladepunkte erscheinen hier, sobald ihnen ein Stromkreis zugewiesen ist, die Batterie über den Punkt Batterie-Stromkreis.",
+      "none": "Keine Verbraucher",
+      "title": "Lastmanagement-Prioritäten"
+    },
     "loadpoint": {
       "addCharger": {
         "charging": "Wallbox hinzufügen",
@@ -498,8 +532,6 @@
       "energyMeterHelp": "Zusätzlicher Zähler, wenn die Wallbox keinen integrierten hat.",
       "energyMeterLabel": "Energiezähler",
       "estimateLabel": "Ladestand zwischen API-Updates interpolieren",
-      "lmPriorityHelp": "Lastabwurf: Bei Überlastung des Stromkreises wird die niedrigste Priorität zuerst reduziert. Unabhängig von der Priorität für den PV-Überschuss. Wirkt erst nach einem Neustart.",
-      "lmPriorityLabel": "Lastabwurf-Priorität",
       "maxCurrentHelp": "Muss größer als der Mindeststrom sein.",
       "maxCurrentLabel": "Maximaler Strom",
       "maxTempHelp": "Muss größer als die Mindesttemperatur sein.",
@@ -839,23 +871,24 @@
       }
     },
     "peakshaving": {
-      "chargePowerEffective": "Verwendet wird:",
-      "chargePowerHelp": "Leistung, die die Batterie beim Laden aus dem Netz zieht. 0 = aus der Batteriekonfiguration ableiten. Trag den realistischen Wert ein, nicht den vom Typenschild — ein zu hoher Wert sperrt das Netzladen unnötig.",
-      "chargePowerInvalid": "Wert konnte nicht gesetzt werden.",
-      "chargePowerLabel": "Erwartete Netzladeleistung",
-      "chargePowerUnknown": "nicht ermittelbar — das Netzladen bleibt deshalb gesperrt",
+      "circuitDescription": "Ordnet die Hausbatterie einem Stromkreis zu. Erst dadurch nimmt sie am Lastmanagement teil.",
+      "circuitEntryLabel": "Batterie-Stromkreis",
+      "circuitHelp": "Netzladen und Lastabwurf der Batterie richten sich dann nach der Leistungsgrenze dieses Stromkreises.",
+      "circuitInvalid": "Stromkreis konnte nicht gesetzt werden.",
+      "circuitLabel": "Stromkreis der Batterie",
+      "circuitNone": "Keiner — Batterie nicht im Lastmanagement",
+      "circuitNoneConfigured": "Es sind keine Stromkreise konfiguriert.",
+      "circuitNotAssigned": "Nicht zugeordnet",
+      "circuitTitle": "Batterie-Stromkreis",
+      "configured": "Konfiguriert",
       "description": "Die Hausbatterie kann untere Ladestände für Lastspitzen zurückhalten. evcc berechnet die nötige Batterieleistung und schreibt sie laufend in eine Home-Assistant-Entität, aus der deine Automatisierung die Entladung steuert.",
       "entityHelp": "Entität, in die der Sollwert in Watt geschrieben wird. Sie braucht Min 0, Max mindestens 10000 und Schrittweite 1.",
       "entityInvalid": "Entität konnte nicht gesetzt werden.",
-      "entityLabel": "Zielentität",
+      "entityLabel": "Entität für den Entlade-Sollwert",
+      "entryLabel": "Peak Shaving",
       "hint": "Schalter, Leistungsgrenze und Reserve-Ladestand stellst du unter Hausbatterie ein.",
-      "saved": "Gespeichert.",
-      "source": {
-        "setting": "hier eingetragen",
-        "config": "aus evcc.yaml",
-        "meter": "aus der Batteriekonfiguration",
-        "unknown": "unbekannt"
-      }
+      "notConfigured": "Nicht konfiguriert",
+      "title": "Peak Shaving"
     },
     "pv": {
       "titleAdd": "PV-Anlage hinzufügen",
@@ -903,7 +936,7 @@
       "integrations": "Integrationen",
       "loadpoints": "Ladepunkte & Heizungen",
       "meter": "PV & Batterie",
-      "peakshaving": "Lastspitzenmanagement",
+      "peakshaving": "Lastmanagement-Details",
       "services": "Dienste",
       "system": "System",
       "vehicles": "Fahrzeuge"
@@ -1416,6 +1449,7 @@
     "energyflow": {
       "battery": "Batterie",
       "batteryCharge": "Batterie laden",
+      "batteryChargeGrid": "Batterie laden (Netzladen)",
       "batteryChargeHold": "Batterie (Ladesperre)",
       "batteryDischarge": "Batterie entladen",
       "batteryDischargeHold": "Batterie (Entladesperre)",

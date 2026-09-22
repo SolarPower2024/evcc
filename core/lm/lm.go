@@ -2,10 +2,10 @@
 //
 // Upstream circuits serve requests first come, first served: whichever load asks
 // first gets the remaining budget. This package puts a priority in front of that
-// budget. A load whose request the circuit denies records the denied amount as
-// unserved demand; loads with a lower priority then have that amount withheld
-// from their own budget and give way on their next update, which frees the power
-// for the higher-priority load one cycle later.
+// budget. A load whose request the circuit caps records the increase it asked
+// for as unserved demand; loads with a lower priority then have that amount
+// withheld from their own budget and give way on their next update, which frees
+// the power for the higher-priority load one cycle later.
 //
 // Nothing happens while all loads on a circuit share the same priority, so the
 // behaviour is identical to upstream until priorities are actually configured.
@@ -93,8 +93,8 @@ const (
 type record struct {
 	circuit api.Circuit
 	prio    int
-	power   float64 // denied power in W
-	current float64 // denied current in A
+	power   float64 // unserved power in W
+	current float64 // unserved current in A
 	updated time.Time
 }
 
@@ -102,7 +102,32 @@ var (
 	mu      sync.Mutex
 	reg     = make(map[Load]*record)
 	timeout = DefaultTimeout
+	lookup  func(Load) (int, bool)
 )
+
+// SetPriorityLookup installs a lookup whose answer takes precedence over a
+// load's own LmPriority. The site uses it for the priorities set in the ui.
+func SetPriorityLookup(f func(Load) (int, bool)) {
+	mu.Lock()
+	defer mu.Unlock()
+	lookup = f
+}
+
+// Priority returns the effective shed priority of a load
+func Priority(l Load) int {
+	mu.Lock()
+	f := lookup
+	mu.Unlock()
+
+	// called without holding mu, the lookup may take locks of its own
+	if f != nil {
+		if prio, ok := f(l); ok {
+			return prio
+		}
+	}
+
+	return l.LmPriority()
+}
 
 // SetTimeout sets how long an unserved demand keeps reserving headroom
 func SetTimeout(d time.Duration) {
@@ -115,11 +140,21 @@ func SetTimeout(d time.Duration) {
 	timeout = d
 }
 
+// Forget drops a load's unserved demand. For a load that stops asking for power
+// without passing through ValidatePower again, whose reservation would otherwise
+// keep lower priority loads throttled until it expires.
+func Forget(l Load) {
+	mu.Lock()
+	defer mu.Unlock()
+	delete(reg, l)
+}
+
 // Reset drops all recorded demand. Intended for tests.
 func Reset() {
 	mu.Lock()
 	defer mu.Unlock()
 	clear(reg)
+	lookup = nil
 }
 
 // competes reports whether loads on the two circuits draw through a shared
@@ -196,7 +231,19 @@ func Reserved(l Load, c api.Circuit) (float64, float64) {
 	if c == nil || l == nil {
 		return 0, 0
 	}
-	return reserved(c, l, l.LmPriority())
+	return reserved(c, l, Priority(l))
+}
+
+// unmet returns what a load has to be left once the circuit capped its request:
+// the whole increase, not only the part that was capped. A load that switches
+// on in full or not at all, like a battery or a heater, takes nothing of a
+// partial budget, so lower priority loads must leave all of it free. Measured
+// without any reserve.
+func unmet(old, new, allowed float64) float64 {
+	if allowed >= new {
+		return 0
+	}
+	return max(0, new-old)
 }
 
 // ValidatePower caps a power request against the circuit while withholding the
@@ -207,9 +254,8 @@ func ValidatePower(l Load, c api.Circuit, old, new float64) float64 {
 		return new
 	}
 
-	// what the circuit itself denies, measured without any reserve
-	denied := max(0, new-c.ValidatePower(old, new))
-	remember(c, l, l.LmPriority(), &denied, nil)
+	need := unmet(old, new, c.ValidatePower(old, new))
+	remember(c, l, Priority(l), &need, nil)
 
 	return PeekPower(l, c, old, new)
 }
@@ -222,8 +268,8 @@ func ValidateCurrent(l Load, c api.Circuit, old, new float64) float64 {
 		return new
 	}
 
-	denied := max(0, new-c.ValidateCurrent(old, new))
-	remember(c, l, l.LmPriority(), nil, &denied)
+	need := unmet(old, new, c.ValidateCurrent(old, new))
+	remember(c, l, Priority(l), nil, &need)
 
 	return PeekCurrent(l, c, old, new)
 }
@@ -236,7 +282,7 @@ func PeekPower(l Load, c api.Circuit, old, new float64) float64 {
 		return new
 	}
 
-	power, _ := reserved(c, l, l.LmPriority())
+	power, _ := reserved(c, l, Priority(l))
 	if power <= 0 {
 		return c.ValidatePower(old, new)
 	}
@@ -256,7 +302,7 @@ func PeekCurrent(l Load, c api.Circuit, old, new float64) float64 {
 		return new
 	}
 
-	_, current := reserved(c, l, l.LmPriority())
+	_, current := reserved(c, l, Priority(l))
 	if current <= 0 {
 		return c.ValidateCurrent(old, new)
 	}

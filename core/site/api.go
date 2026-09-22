@@ -14,6 +14,8 @@ type Publisher interface {
 
 // API is the external site API
 type API interface {
+	CustomAPI // custom: this fork's additions, see api_custom.go
+
 	Publisher
 
 	Loadpoints() []loadpoint.API
@@ -65,26 +67,6 @@ type API interface {
 	GetBatteryGridDischargeLimit() *float64
 	// SetBatteryGridDischargeLimit sets the grid discharge (feed-in) limit
 	SetBatteryGridDischargeLimit(limit *float64) error
-
-	// custom: soc-based grid charging, see core/site_lm.go
-	GetBatterySocGridCharge() bool
-	SetBatterySocGridCharge(bool) error
-	GetBatterySocGridChargeStart() float64
-	SetBatterySocGridChargeStart(float64) error
-	GetBatterySocGridChargeStop() float64
-	SetBatterySocGridChargeStop(float64) error
-
-	// custom: peak shaving, see core/site_peakshaving.go
-	GetPeakShaving() bool
-	SetPeakShaving(bool) error
-	GetPeakShavingLimit() float64
-	SetPeakShavingLimit(float64) error
-	GetPeakShavingEntity() string
-	SetPeakShavingEntity(string) error
-	GetPeakShavingChargePower() float64
-	SetPeakShavingChargePower(float64) error
-	GetPeakShavingReserve() float64
-	SetPeakShavingReserve(float64) error
 
 	// GetOptimizerChargingStrategy gets the optimizer grid charging strategy
 	GetOptimizerChargingStrategy() string

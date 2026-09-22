@@ -401,6 +401,28 @@
       "titleAdd": "Add Grid Meter",
       "titleEdit": "Edit Grid Meter"
     },
+    "gridcharge": {
+      "chargePowerEffective": "In use:",
+      "chargePowerHelp": "Power the battery draws while charging from the grid. With an entity it caps the setpoint, without one it has to fit into the circuit in full when charging starts. 0 derives it from the battery configuration.",
+      "chargePowerLabel": "Expected grid charge power",
+      "chargePowerMissing": "Charge power missing",
+      "chargePowerUnknown": "not determinable, grid charging stays blocked",
+      "description": "Sets how the home battery charges from the grid. With an entity for the charge power, evcc keeps adjusting the power so that the peak limit and the circuit are respected. Without one, grid charging is only switched on and off.",
+      "entityHelp": "evcc writes the permitted charge power in watts here, 0 = do not charge. It needs min 0, max at least the grid charge power and step 1. Leave empty for on/off.",
+      "entityInvalid": "Could not set the entity.",
+      "entityLabel": "Charge power entity",
+      "entryLabel": "Grid charging",
+      "modeDynamic": "Dynamic",
+      "modeSwitched": "On/off",
+      "setpoint": "Current setpoint:",
+      "source": {
+        "setting": "entered here",
+        "config": "from evcc.yaml",
+        "meter": "from the battery configuration",
+        "unknown": "unknown"
+      },
+      "title": "Grid charging"
+    },
     "hems": {
       "changeConfirm": "Existing configuration will be deleted. Continue?",
       "csv": {
@@ -451,6 +473,18 @@
       "v1Support": "Need support for InfluxDB 1.x?",
       "v2Support": "Back to InfluxDB 2.x"
     },
+    "lmpriorities": {
+      "battery": "Home battery (grid charging)",
+      "description": "When a circuit cannot supply every load, the lowest priority is reduced or switched off first. Loads on the same priority are served first come, first served. Changes apply immediately.",
+      "entryLabel": "Priorities",
+      "first": "{priority} (shed first)",
+      "invalid": "Could not save the priority.",
+      "last": "{priority} (shed last)",
+      "loads": "Loads: {count}",
+      "noLoads": "No loads in load management. Loadpoints appear here once they are assigned to a circuit, the battery via Battery circuit.",
+      "none": "No loads",
+      "title": "Load management priorities"
+    },
     "loadpoint": {
       "addCharger": {
         "charging": "Add charger",
@@ -498,8 +532,6 @@
       "energyMeterHelp": "Additional meter if the charger doesn't have an integrated one.",
       "energyMeterLabel": "Energy meter",
       "estimateLabel": "Interpolate charge level between API updates",
-      "lmPriorityHelp": "Load shedding: when the circuit runs out of budget, the lowest priority is reduced first. Independent of the solar surplus priority. Takes effect after a restart.",
-      "lmPriorityLabel": "Load shedding priority",
       "maxCurrentHelp": "Must be greater than minimum current.",
       "maxCurrentLabel": "Maximum current",
       "maxTempHelp": "Must be greater than minimum temperature.",
@@ -839,23 +871,24 @@
       }
     },
     "peakshaving": {
-      "chargePowerEffective": "In use:",
-      "chargePowerHelp": "Power the battery draws while charging from the grid. 0 derives it from the battery configuration. Enter the realistic figure rather than the nameplate one — too high a value blocks grid charging needlessly.",
-      "chargePowerInvalid": "Could not set the value.",
-      "chargePowerLabel": "Expected grid charge power",
-      "chargePowerUnknown": "not determinable — grid charging stays blocked",
+      "circuitDescription": "Assigns the home battery to a circuit. Only then does it take part in load management.",
+      "circuitEntryLabel": "Battery circuit",
+      "circuitHelp": "The battery's grid charging and load shedding then follow this circuit's power limit.",
+      "circuitInvalid": "Could not set the circuit.",
+      "circuitLabel": "Battery circuit",
+      "circuitNone": "None — battery outside load management",
+      "circuitNoneConfigured": "No circuits are configured.",
+      "circuitNotAssigned": "Not assigned",
+      "circuitTitle": "Battery circuit",
+      "configured": "Configured",
       "description": "The home battery can hold its lower state of charge back for demand peaks. evcc computes the required battery power and keeps writing it to a Home Assistant entity your automation discharges from.",
       "entityHelp": "Entity the setpoint is written to, in watts. It needs min 0, max at least 10000 and step 1.",
       "entityInvalid": "Could not set the entity.",
-      "entityLabel": "Target entity",
+      "entityLabel": "Discharge setpoint entity",
+      "entryLabel": "Peak shaving",
       "hint": "The switch, the peak limit and the reserve state of charge are on the battery page.",
-      "saved": "Saved.",
-      "source": {
-        "setting": "entered here",
-        "config": "from evcc.yaml",
-        "meter": "from the battery configuration",
-        "unknown": "unknown"
-      }
+      "notConfigured": "Not configured",
+      "title": "Peak shaving"
     },
     "pv": {
       "titleAdd": "Add Solar Meter",
@@ -903,7 +936,7 @@
       "integrations": "Integrations",
       "loadpoints": "Charging points & heaters",
       "meter": "Solar & battery",
-      "peakshaving": "Peak load management",
+      "peakshaving": "Load management details",
       "services": "Services",
       "system": "System",
       "vehicles": "Vehicles"
@@ -1416,6 +1449,7 @@
     "energyflow": {
       "battery": "Battery",
       "batteryCharge": "Battery charging",
+      "batteryChargeGrid": "Battery charging (from grid)",
       "batteryChargeHold": "Battery (charge locked)",
       "batteryDischarge": "Battery discharging",
       "batteryDischargeHold": "Battery (discharge locked)",

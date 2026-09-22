@@ -421,9 +421,15 @@ export default defineComponent({
 			return this.chargePower(this.batteryPower);
 		},
 		batteryChargeLabel() {
-			return this.$t(
-				`main.energyflow.battery${this.batteryChargeHold ? "ChargeHold" : "Charge"}`
-			);
+			if (this.batteryChargeHold) {
+				return this.$t("main.energyflow.batteryChargeHold");
+			}
+			// custom: the existing "Netzladen: aktiv" subline only shows with a
+			// price limit set, so soc-based grid charging would go unmentioned
+			if (this.batteryGridChargeActive) {
+				return this.$t("main.energyflow.batteryChargeGrid");
+			}
+			return this.$t("main.energyflow.batteryCharge");
 		},
 		batteryDischargeLabel() {
 			return this.$t(

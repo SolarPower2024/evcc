@@ -150,6 +150,17 @@ export interface StatisticsData {
 /** Charging statistics, keyed by time period. */
 export type Statistics = Record<StatisticsPeriod, StatisticsData>;
 
+// custom: a load taking part in load management, see core/site_lm.go
+export interface LmPriority {
+  /** Config name, e.g. db:3, or "battery". */
+  name: string;
+  /** Loadpoint title, empty for the battery. */
+  title: string;
+  /** Shed priority 0-10, lower is shed first. */
+  priority: number;
+  battery?: boolean;
+}
+
 /**
  * Complete system state as returned by /api/state and pushed via websocket and MQTT.
  * This structure mirrors the internal UI state and carries no compatibility promise.
@@ -312,10 +323,18 @@ export interface State {
   peakShavingActive?: boolean;
   /** Battery power in W currently requested by peak shaving, or the free-discharge signal. */
   peakShavingPower?: number;
+  /** Circuit the battery draws from, links it into load management. */
+  peakShavingCircuit?: string;
   /** Home Assistant number entity receiving the peak shaving setpoint. */
   peakShavingEntity?: string;
   /** Average grid power in W of the running 15 minute metering window. */
   peakShavingWindowAvg?: number;
+  /** Home Assistant number entity receiving the grid charge power, empty = on/off charging. */
+  peakShavingChargeEntity?: string;
+  /** Grid charge power in W currently written to that entity, 0 = not charging. */
+  peakShavingChargeSetpoint?: number;
+  /** Loads taking part in load management with their shed priority, lower is shed first. */
+  lmPriorities?: LmPriority[];
   /** Feed-in price limit for discharging the home battery to the grid (experimental). */
   batteryGridDischargeLimit?: number | null;
   /** Home battery is currently discharged to the grid. */
@@ -534,8 +553,6 @@ export interface ConfigLoadpoint {
   title: string;
   defaultMode: string;
   priority: number;
-  /** Custom: load management shed priority, lower is shed first. */
-  lmpriority?: number;
   phasesConfigured: number;
   minCurrent: number;
   maxCurrent: number;

@@ -208,7 +208,7 @@
 					</div>
 				</ConfigSection>
 
-				<!-- custom: peak shaving target, see core/site_peakshaving.go -->
+				<!-- custom: load management details, see core/lm/README.md -->
 				<ConfigSection v-bind="sectionProps('peakshaving')">
 					<PeakShavingConfig class="box-pull-out" />
 				</ConfigSection>
@@ -564,6 +564,11 @@
 				<TelemetryModal :is-sponsor="isSponsor" :telemetry="telemetry" />
 				<OptimizerModal :is-sponsor="isSponsor" />
 				<McpModal />
+				<!-- custom: load management details, see core/lm/README.md -->
+				<PeakShavingModal />
+				<PeakShavingCircuitModal />
+				<LmPrioritiesModal />
+				<GridChargeModal />
 				<ExperimentalModal :experimental="experimental" />
 				<RemoteModal :remote="remote" :is-sponsor="isSponsor" :site-title="siteTitle" />
 				<TitleModal @changed="loadDirty" />
@@ -593,7 +598,7 @@ import "@h2d2/shopicons/es/regular/powersupply";
 import "@h2d2/shopicons/es/regular/receivepayment";
 import "@h2d2/shopicons/es/regular/settings";
 import "@h2d2/shopicons/es/regular/car3";
-import "@h2d2/shopicons/es/regular/lightning"; // custom: peak shaving section
+import "@h2d2/shopicons/es/regular/lightning"; // custom: load management details section
 import NewDeviceButton from "../components/Config/NewDeviceButton.vue";
 import api from "../api";
 import listDetail from "../mixins/listDetail";
@@ -622,6 +627,10 @@ import OcppForwarderModal from "../components/Config/OcppForwarderModal.vue";
 import formatter from "../mixins/formatter";
 import GeneralConfig from "../components/Config/GeneralConfig.vue";
 import PeakShavingConfig from "../components/Config/PeakShavingConfig.vue";
+import PeakShavingModal from "../components/Config/PeakShavingModal.vue";
+import PeakShavingCircuitModal from "../components/Config/PeakShavingCircuitModal.vue";
+import LmPrioritiesModal from "../components/Config/LmPrioritiesModal.vue";
+import GridChargeModal from "../components/Config/GridChargeModal.vue";
 import HemsIcon from "../components/MaterialIcon/Hems.vue";
 import HemsModal from "../components/Config/HemsModal.vue";
 import ShmIcon from "../components/MaterialIcon/Shm.vue";
@@ -738,6 +747,10 @@ export default defineComponent({
 		OcppForwarderModal,
 		GeneralConfig,
 		PeakShavingConfig,
+		PeakShavingModal,
+		PeakShavingCircuitModal,
+		LmPrioritiesModal,
+		GridChargeModal,
 		HemsIcon,
 		HemsModal,
 		ShmModal,
@@ -924,12 +937,8 @@ export default defineComponent({
 						this.pvMeters.some((m) => this.curtailmentBanner("meter", m.name)) ||
 						meterDisabled(pvAndBattery),
 				},
-				// custom: peak shaving target entity
-				{
-					slug: "peakshaving",
-					icon: "shopicon-regular-lightning",
-					subline: this.peakShavingEntity || undefined,
-				},
+				// custom: load management details
+				{ slug: "peakshaving", icon: "shopicon-regular-lightning" },
 				{
 					slug: "meters",
 					icon: markRaw(MeterIcon),
@@ -985,10 +994,6 @@ export default defineComponent({
 		},
 		siteTitle() {
 			return this.site?.title;
-		},
-		// custom: shown as the peak shaving section's subline
-		peakShavingEntity(): string {
-			return store.state.peakShavingEntity ?? "";
 		},
 		gridMeter() {
 			const name = this.site?.grid;

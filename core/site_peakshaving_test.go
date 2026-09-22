@@ -1,8 +1,12 @@
 package core
 
 import (
+	"errors"
 	"testing"
+	"time"
 
+	"github.com/evcc-io/evcc/core/lm"
+	"github.com/evcc-io/evcc/util"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -26,6 +30,8 @@ func TestPeakSetpoint(t *testing.T) {
 		// battery charging counts against the demand, not for it
 		{"charging from pv", 2000, -3000, 0},
 		{"charging pushes grid over the limit", 8000, -3000, 0},
+		// fractions are dropped, some number entities reject them
+		{"rounded to whole watts", 6234.6, 0, 1235},
 	}
 
 	for _, tc := range tc {
@@ -57,46 +63,6 @@ func TestPeakSetpointIsStable(t *testing.T) {
 	}
 }
 
-// TestPeakChargeFits covers the grid charge gate. Blocking grid charging for as
-// long as the reserve is armed would deadlock - the reserve could then only be
-// refilled from pv - so the gate asks whether charging would create a peak.
-func TestPeakChargeFits(t *testing.T) {
-	const (
-		limit  = 5000.0
-		charge = 3000.0
-	)
-
-	tc := []struct {
-		name                  string
-		gridPower, batteryPwr float64
-		want                  bool
-	}{
-		// the night case the deadlock used to break: low base load, so the
-		// reserve can be refilled even while peak shaving is armed
-		{"low base load at night", 500, 0, true},
-		{"exactly at the limit", 2000, 0, true},
-		{"one watt over", 2001, 0, false},
-		{"high base load", 4000, 0, false},
-		// an already running charge must not make the gate flip: the grid value
-		// contains it, the battery power takes it back out
-		{"already charging, still fits", 3500, -3000, true},
-		{"already charging, no longer fits", 7500, -3000, false},
-		// a discharging battery makes the grid value understate the demand, so
-		// the gate has to look past it
-		{"battery discharging, still fits", 0, 1000, true},
-		{"battery hiding a load that does not fit", 1000, 2000, false},
-		{"battery masking a high load", 2500, 3000, false},
-		// exporting leaves plenty of room
-		{"exporting to grid", -4000, 0, true},
-	}
-
-	for _, tc := range tc {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, peakChargeFits(tc.gridPower, tc.batteryPwr, charge, limit))
-		})
-	}
-}
-
 // TestPeakSetpointFollowsDemand verifies the setpoint tracks a changing load
 // while the battery is already discharging
 func TestPeakSetpointFollowsDemand(t *testing.T) {
@@ -113,4 +79,128 @@ func TestPeakSetpointFollowsDemand(t *testing.T) {
 	// ... and below the limit, the battery is released
 	setpoint = peakSetpoint(4000-1000, 1000, limit)
 	assert.Equal(t, 0.0, setpoint)
+}
+
+// TestPeakPausesGridCharge verifies that grid charging gives way to a running
+// demand peak, stays off for the hold-off, and is never blocked by the charge
+// power itself
+func TestPeakPausesGridCharge(t *testing.T) {
+	site := &Site{log: util.NewLogger("test")}
+
+	s := site.peak()
+	s.limit = 5000
+	s.set = func(float64) error { return nil }
+
+	// peak shaving off: nothing to give way to
+	s.demand = 8000
+	assert.False(t, site.peakPausesGridCharge())
+
+	s.enabled = true
+
+	// the charger alone may exceed the limit, only the demand without it counts
+	s.demand = 1000
+	assert.False(t, site.peakPausesGridCharge())
+
+	// a peak pauses charging ...
+	s.demand = 6000
+	assert.True(t, site.peakPausesGridCharge())
+
+	// ... and it stays paused for the hold-off after the peak is over
+	s.demand = 1000
+	assert.True(t, site.peakPausesGridCharge())
+
+	// once the hold-off has run out, charging may resume
+	s.chargePause = time.Now().Add(-time.Second)
+	assert.False(t, site.peakPausesGridCharge())
+}
+
+// TestPeakHandsBackWhenOff verifies that the free value is written while peak
+// shaving is off, retried after a failed write and not repeated once it landed
+func TestPeakHandsBackWhenOff(t *testing.T) {
+	site := &Site{log: util.NewLogger("test")}
+
+	var writes []float64
+	fail := true
+
+	s := site.peak()
+	s.set = func(v float64) error {
+		writes = append(writes, v)
+		if fail {
+			fail = false
+			return errors.New("home assistant restarting")
+		}
+		return nil
+	}
+
+	// a setpoint from the last shaving cycle is still in the entity
+	last := 3000.0
+	s.written = &last
+
+	site.updatePeakShaving(siteState{})
+	site.updatePeakShaving(siteState{})
+	site.updatePeakShaving(siteState{})
+
+	// first write fails, second lands, third is skipped
+	assert.Equal(t, []float64{lm.DefaultFreeValue, lm.DefaultFreeValue}, writes)
+}
+
+// TestBatteryChargeSetpoint verifies the controlled grid charge power: trimmed
+// to the room below the peak limit, zero below the minimum, and the full
+// expected power while peak shaving is off
+func TestBatteryChargeSetpoint(t *testing.T) {
+	site := &Site{log: util.NewLogger("test")}
+
+	s := site.peak()
+	s.limit = 5000
+	s.chargePower = 6250
+	s.set = func(float64) error { return nil }
+
+	tc := []struct {
+		name    string
+		enabled bool
+		demand  float64
+		want    float64
+	}{
+		{"peak shaving off, full power", false, 1000, 6250},
+		{"room below the limit", true, 1000, 4000},
+		{"plenty of room, capped at the charge power", true, -3000, 6250},
+		{"less than the minimum left", true, 4700, 0},
+		{"demand above the limit", true, 6000, 0},
+		{"fractions dropped", true, 1234.6, 3765},
+	}
+
+	for _, tc := range tc {
+		t.Run(tc.name, func(t *testing.T) {
+			s.enabled = tc.enabled
+			s.demand = tc.demand
+			assert.Equal(t, tc.want, site.batteryChargeSetpoint())
+		})
+	}
+
+	// without any charge power to go by, nothing is charged
+	s.chargePower = 0
+	s.enabled = false
+	assert.Equal(t, 0.0, site.batteryChargeSetpoint())
+}
+
+// TestChargeValueWrittenOnce verifies that the charge setpoint reaches the
+// entity only when it changes
+func TestChargeValueWrittenOnce(t *testing.T) {
+	site := &Site{log: util.NewLogger("test")}
+
+	var writes []float64
+
+	s := site.peak()
+	s.chargeSet = func(v float64) error {
+		writes = append(writes, v)
+		return nil
+	}
+
+	site.writeChargeValue(4000)
+	site.writeChargeValue(4000)
+	site.writeChargeValue(0)
+	site.writeChargeValue(0)
+
+	assert.Equal(t, []float64{4000, 0}, writes)
+	assert.True(t, site.chargePowerControlled())
 }

@@ -54,23 +54,6 @@ const (
 	BufferSoc                  = "bufferSoc"
 	BufferStartSoc             = "bufferStartSoc"
 
-	// custom: soc-based battery grid charging
-	BatterySocGridCharge      = "batterySocGridCharge"
-	BatterySocGridChargeStart = "batterySocGridChargeStart"
-	BatterySocGridChargeStop  = "batterySocGridChargeStop"
-
-	// custom: battery peak shaving
-	PeakShaving                     = "peakShaving"
-	PeakShavingLimit                = "peakShavingLimit"
-	PeakShavingReserve              = "peakShavingReserve"
-	PeakShavingEntity               = "peakShavingEntity"
-	PeakShavingActive               = "peakShavingActive"
-	PeakShavingChargePower          = "peakShavingChargePower"
-	PeakShavingChargePowerEffective = "peakShavingChargePowerEffective"
-	PeakShavingChargePowerSource    = "peakShavingChargePowerSource"
-	PeakShavingPower                = "peakShavingPower"
-	PeakShavingWindowAvg            = "peakShavingWindowAvg"
-
 	// grid settings
 	GridExportLimit = "gridExportLimit"
 

@@ -7,7 +7,8 @@ package core
 //     counts against circuit limits and is shed when the budget runs out
 //  2. soc-based grid charging: a switch plus a start and a stop soc, independent
 //     of the price-based grid charge limit
-//  3. priority-based shedding across all circuit loads, see package core/lm
+//  3. priority-based shedding across all circuit loads, with the priorities set
+//     in the ui, see package core/lm
 //
 // Upstream touch points are core/site.go (config and state field, restore call,
 // batteryGridChargeRequested), core/site_circuits.go (circuitLoads) and
@@ -15,12 +16,15 @@ package core
 
 import (
 	"fmt"
+	"maps"
+	"math"
 	"sync"
 	"time"
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm"
+	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/config"
 )
@@ -41,10 +45,12 @@ type lmState struct {
 	socChargeStop    float64 // stop grid charging at or above this soc
 	socChargeRunning bool    // hysteresis state between start and stop
 
-	batteryShedUntil time.Time   // battery grid charge hold-off after a shed
-	batteryCircuit   api.Circuit // resolved from config
-	batteryLoad      *batteryLoad
-	batteryResolved  bool
+	prios map[string]int // shed priorities set in the ui, by load name
+
+	batteryShedUntil  time.Time   // battery grid charge hold-off after a shed
+	batteryCircuit    api.Circuit // resolved from the assignment
+	batteryCircuitRef string      // what batteryCircuit was resolved from
+	batteryLoad       *batteryLoad
 }
 
 // lms returns the load management state, applying defaults on first use
@@ -75,10 +81,27 @@ func (site *Site) restoreLmSettings() {
 		s.socChargeEnabled = v
 		s.mu.Unlock()
 	}
+	if v, err := settings.Bool(keys.BatterySocGridChargeRunning); err == nil {
+		s.mu.Lock()
+		s.socChargeRunning = v
+		s.mu.Unlock()
+	}
+
+	var prios map[string]int
+	if err := settings.Json(keys.LmPriorities, &prios); err == nil {
+		s.mu.Lock()
+		s.prios = prios
+		s.mu.Unlock()
+	}
 
 	lm.SetTimeout(site.LoadManagement.Timeout)
+	lm.SetPriorityLookup(site.lmPriorityLookup)
 
 	site.publishLmSettings()
+
+	// the priorities are published by restorePeakSettings, which runs next: the
+	// list includes the battery once it is on a circuit, and that assignment is a
+	// peak shaving setting
 }
 
 // publishLmSettings publishes the soc grid charge settings to the ui
@@ -151,7 +174,12 @@ func (site *Site) lmBattery() *batteryLoad {
 // lmBatteryCircuit returns the circuit the home battery draws from, nil when the
 // battery is not part of load management
 func (site *Site) lmBatteryCircuit() api.Circuit {
-	ref := site.LoadManagement.Battery.CircuitRef
+	// the ui setting wins; the yaml key stays for setups configured that way
+	ref := site.GetPeakShavingCircuit()
+	if ref == "" {
+		ref = site.LoadManagement.Battery.CircuitRef
+	}
+
 	if ref == "" {
 		return nil
 	}
@@ -161,9 +189,11 @@ func (site *Site) lmBatteryCircuit() api.Circuit {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// circuits are configured before the site, so resolve on first use
-	if !s.batteryResolved {
-		s.batteryResolved = true
+	// circuits are configured before the site, so resolve on first use - and
+	// again whenever the assignment changes
+	if s.batteryCircuitRef != ref {
+		s.batteryCircuitRef = ref
+		s.batteryCircuit = nil
 
 		if dev, err := config.Circuits().ByName(ref); err == nil {
 			s.batteryCircuit = dev.Instance()
@@ -173,6 +203,14 @@ func (site *Site) lmBatteryCircuit() api.Circuit {
 	}
 
 	return s.batteryCircuit
+}
+
+// lmHoldOff is how long battery grid charging stays off after it had to give way
+func (site *Site) lmHoldOff() time.Duration {
+	if d := site.LoadManagement.Battery.HoldOff; d > 0 {
+		return d
+	}
+	return lm.DefaultHoldOff
 }
 
 // lmBatteryPhases returns the phase count used for the battery's current accounting
@@ -278,10 +316,7 @@ func (site *Site) batteryCircuitAllows() bool {
 		return true
 	}
 
-	holdOff := site.LoadManagement.Battery.HoldOff
-	if holdOff <= 0 {
-		holdOff = lm.DefaultHoldOff
-	}
+	holdOff := site.lmHoldOff()
 
 	s.mu.Lock()
 	s.batteryShedUntil = time.Now().Add(holdOff)
@@ -297,23 +332,64 @@ func (site *Site) batteryCircuitAllows() bool {
 //
 
 // batteryGridChargeRequested reports whether the battery should be grid-charged.
-// It combines the upstream price-based limit with the soc-based switch and gates
-// both on the available load management headroom.
+// It combines the upstream price-based limit with the soc-based switch. Both give
+// way to a running demand peak and are gated on the circuit headroom.
 func (site *Site) batteryGridChargeRequested(rate api.Rate) bool {
 	// evaluated unconditionally so the hysteresis keeps tracking the soc
 	socActive := site.batterySocChargeActive()
 
-	if !socActive && !site.batteryGridChargeActive(rate) {
+	// a running demand peak needs the battery for shaving, not charging
+	if !socActive && !site.batteryGridChargeActive(rate) || site.peakPausesGridCharge() {
+		// release what the battery had reserved on the circuit, lower priority
+		// loads would otherwise stay throttled until the reservation expires
+		lm.Forget(site.lmBattery())
+		site.writeChargeValue(0)
 		return false
 	}
 
-	// grid charging must not create the very peak the reserve is held for,
-	// see core/site_peakshaving.go
-	if !site.peakChargeAllowed() {
-		return false
+	if !site.chargePowerControlled() {
+		return site.batteryCircuitAllows()
 	}
 
-	return site.batteryCircuitAllows()
+	power := site.batteryChargeSetpoint()
+	site.writeChargeValue(power)
+
+	return power > 0
+}
+
+// minGridChargePower is the smallest grid charge setpoint worth switching the
+// battery into charge mode for
+const minGridChargePower = 500.0
+
+// batteryChargeSetpoint returns the grid charge power for a battery whose charge
+// power is set through an entity: the expected charge power, trimmed to what fits
+// below the peak limit and within the circuit. Zero when less than the minimum
+// is left.
+func (site *Site) batteryChargeSetpoint() float64 {
+	power, _ := site.lmBatteryChargePower()
+	if power <= 0 {
+		site.lms().warnOnce.Do(func() {
+			site.log.WARN.Println("load management: battery grid charge power unknown, set it under peak load management or configure the battery's maxchargepower - grid charging stays off until then")
+		})
+		return 0
+	}
+
+	if headroom, ok := site.peakChargeHeadroom(); ok {
+		power = min(power, headroom)
+	}
+
+	// records what the circuit denies, so loads below the battery give way
+	if c := site.lmBatteryCircuit(); c != nil {
+		bat := site.lmBattery()
+		power = min(power, lm.ValidatePower(bat, c, bat.GetChargePower(), power))
+	}
+
+	power = math.Floor(power)
+	if power < minGridChargePower {
+		return 0
+	}
+
+	return power
 }
 
 // batterySocChargeActive implements soc-based grid charging: charging starts at
@@ -329,28 +405,44 @@ func (site *Site) batterySocChargeActive() bool {
 	s := site.lms()
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if !s.socChargeEnabled {
-		s.socChargeRunning = false
-		return false
-	}
+	running := s.socChargeRunning
 
 	switch {
+	case !s.socChargeEnabled:
+		running = false
+
 	case s.socChargeStop > 0 && soc >= s.socChargeStop:
-		if s.socChargeRunning {
+		if running {
 			site.log.DEBUG.Printf("battery soc grid charge: stop soc reached (%.0f%% >= %.0f%%)", soc, s.socChargeStop)
 		}
-		s.socChargeRunning = false
+		running = false
 
 	case soc <= s.socChargeStart:
-		if !s.socChargeRunning {
+		if !running {
 			site.log.DEBUG.Printf("battery soc grid charge: start soc reached (%.0f%% <= %.0f%%)", soc, s.socChargeStart)
 		}
-		s.socChargeRunning = true
+		running = true
 	}
+	s.mu.Unlock()
 
-	return s.socChargeRunning
+	site.setSocChargeRunning(running)
+
+	return running
+}
+
+// setSocChargeRunning updates the hysteresis state and persists it, so that a
+// restart halfway between start and stop soc carries on charging
+func (site *Site) setSocChargeRunning(running bool) {
+	s := site.lms()
+
+	s.mu.Lock()
+	changed := s.socChargeRunning != running
+	s.socChargeRunning = running
+	s.mu.Unlock()
+
+	if changed {
+		settings.SetBool(keys.BatterySocGridChargeRunning, running)
+	}
 }
 
 //
@@ -380,10 +472,11 @@ func (site *Site) SetBatterySocGridCharge(val bool) error {
 	s.mu.Lock()
 	changed := s.socChargeEnabled != val
 	s.socChargeEnabled = val
-	if !val {
-		s.socChargeRunning = false
-	}
 	s.mu.Unlock()
+
+	if !val {
+		site.setSocChargeRunning(false)
+	}
 
 	if changed {
 		settings.SetBool(keys.BatterySocGridCharge, val)
@@ -471,6 +564,124 @@ func (site *Site) SetBatterySocGridChargeStop(soc float64) error {
 		settings.SetFloat(keys.BatterySocGridChargeStop, soc)
 		site.publish(keys.BatterySocGridChargeStop, soc)
 	}
+
+	return nil
+}
+
+//
+// shed priorities
+//
+
+const (
+	lmBatteryName = "battery" // name the battery's priority is stored under
+	lmMaxPriority = 10
+)
+
+// lmPriority is a load's shed priority as published to the ui
+type lmPriority struct {
+	Name     string `json:"name"`
+	Title    string `json:"title"`
+	Priority int    `json:"priority"`
+	Battery  bool   `json:"battery,omitempty"`
+}
+
+// lmLoadName returns the name a load's priority is stored under: the loadpoint's
+// config name, e.g. db:3, or lmBatteryName. Empty for an unknown load.
+func (site *Site) lmLoadName(l lm.Load) string {
+	switch l := l.(type) {
+	case *batteryLoad:
+		return lmBatteryName
+
+	case *Loadpoint:
+		for _, dev := range config.Loadpoints().Devices() {
+			if dev.Instance() == loadpoint.API(l) {
+				return dev.Config().Name
+			}
+		}
+	}
+
+	return ""
+}
+
+// lmPriorityLookup returns the priority set in the ui. Loads without one keep
+// their own: the loadpoint's lmpriority or the yaml battery priority.
+func (site *Site) lmPriorityLookup(l lm.Load) (int, bool) {
+	name := site.lmLoadName(l)
+	if name == "" {
+		return 0, false
+	}
+
+	s := site.lms()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	prio, ok := s.prios[name]
+	return prio, ok
+}
+
+// lmPriorities returns the loads that take part in load management, i.e. that
+// are on a circuit, with their effective priority
+func (site *Site) lmPriorities() []lmPriority {
+	res := make([]lmPriority, 0)
+
+	if site.lmBatteryCircuit() != nil {
+		res = append(res, lmPriority{
+			Name:     lmBatteryName,
+			Priority: lm.Priority(site.lmBattery()),
+			Battery:  true,
+		})
+	}
+
+	for _, dev := range config.Loadpoints().Devices() {
+		lp, ok := dev.Instance().(*Loadpoint)
+		if !ok || lp.GetCircuit() == nil {
+			continue
+		}
+
+		res = append(res, lmPriority{
+			Name:     dev.Config().Name,
+			Title:    lp.GetTitle(),
+			Priority: lm.Priority(lp),
+		})
+	}
+
+	return res
+}
+
+func (site *Site) publishLmPriorities() {
+	site.publish(keys.LmPriorities, site.lmPriorities())
+}
+
+// SetLmPriority sets a load's shed priority, lower is shed first
+func (site *Site) SetLmPriority(name string, prio int) error {
+	if prio < 0 || prio > lmMaxPriority {
+		return fmt.Errorf("priority must be between 0 and %d", lmMaxPriority)
+	}
+
+	if name != lmBatteryName {
+		if _, err := config.Loadpoints().ByName(name); err != nil {
+			return fmt.Errorf("unknown loadpoint: %s", name)
+		}
+	}
+
+	s := site.lms()
+
+	s.mu.Lock()
+	if s.prios == nil {
+		s.prios = make(map[string]int)
+	}
+	s.prios[name] = prio
+	prios := maps.Clone(s.prios)
+	s.mu.Unlock()
+
+	site.log.DEBUG.Printf("set load management priority: %s = %d", name, prio)
+
+	if err := settings.SetJson(keys.LmPriorities, prios); err != nil {
+		return err
+	}
+
+	site.publishLmPriorities()
 
 	return nil
 }

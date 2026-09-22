@@ -5,9 +5,15 @@ until configured, so an unconfigured installation behaves exactly like upstream.
 
 ## 1. Priority-based shedding
 
-Upstream circuits serve requests first come, first served. `lmpriority` on a
-loadpoint puts an order on that: **lower is shed first**, the default `0` puts
-every load on the same level.
+Upstream circuits serve requests first come, first served. A shed priority puts
+an order on that: **lower is shed first**, the default `0` puts every load on
+the same level.
+
+The priorities are set in the ui under *Lastspitzenmanagement →
+Lastmanagement-Prioritäten*, for every loadpoint on a circuit and for the home
+battery once it is assigned to one. They apply immediately and are stored as
+the `lmPriorities` setting. The yaml keys below are only the fallback for loads
+without a ui value:
 
 ```yaml
 loadpoints:
@@ -110,18 +116,18 @@ Keep these in mind when merging a new evcc version:
 | --- | --- |
 | `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateBatteryModePeakAware` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
-| `core/loadpoint.go` | `lm` import, `LmPrio` field, four `lm.Validate*`/`lm.Peek*` calls |
-| `core/keys/site.go` | three soc grid charge keys, five peak shaving keys |
-| `core/site/api.go` | six soc grid charge and six peak shaving getters/setters |
-| `server/http.go` | six routes |
+| `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), four `lm.Validate*`/`lm.Peek*` calls |
+| `core/site/api.go` | embeds `CustomAPI`, one line |
+| `server/http.go` | merges `customSiteRoutes`, one loop |
 | `plugin/homeassistant.go` | `FloatSetter`/`IntSetter`, so a plugin can write number entities |
-| `assets/js/components/Config/LoadpointModal.vue` | `lmpriority` form field |
 | `assets/js/views/Battery.vue` | mounts the two new cards |
+| `assets/js/views/Config.vue` | peak shaving section and its three modals |
+| `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
 | `assets/js/types/evcc.ts`, `i18n/de.json`, `i18n/en.json` | state fields and texts |
 
-Everything else lives in `core/lm/`, `core/site_lm.go`, `core/site_peakshaving.go`,
-`core/loadpoint_lm.go` and the `BatterySocGridChargeCard.vue` /
-`BatteryPeakShavingCard.vue` components.
+Everything else lives in files of its own: `core/lm/`, `core/site_lm.go`,
+`core/site_peakshaving.go`, `core/loadpoint_lm.go`, `core/keys/site_custom.go`,
+`core/site/api_custom.go`, `server/http_custom.go` and the new Vue components.
 
 ## 4. Peak shaving
 

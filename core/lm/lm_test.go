@@ -180,3 +180,76 @@ func TestCurrentReserveIsSeparate(t *testing.T) {
 	// ... while the unconfigured power limit stays unreserved
 	assert.Equal(t, 11000.0, lm.ValidatePower(wallbox, c, 11000, 11000))
 }
+
+// TestPriorityLookupOverrides verifies that a priority set via the lookup wins
+// over the load's own, and that loads the lookup does not know keep theirs
+func TestPriorityLookupOverrides(t *testing.T) {
+	lm.Reset()
+	defer lm.Reset()
+
+	wallbox := &testLoad{title: "wallbox", prio: 5}
+	heater := &testLoad{title: "heater", prio: 3}
+
+	lm.SetPriorityLookup(func(l lm.Load) (int, bool) {
+		if l == lm.Load(wallbox) {
+			return 1, true
+		}
+		return 0, false
+	})
+
+	assert.Equal(t, 1, lm.Priority(wallbox))
+	assert.Equal(t, 3, lm.Priority(heater))
+
+	// the overridden priority is what shedding acts on: the heater now outranks
+	// the wallbox, although by their own priorities it would be the other way round
+	wallbox.power = 11000
+	c := newCircuit(t, 11000, wallbox)
+	heater.circuit = c
+
+	assert.Equal(t, 0.0, lm.ValidatePower(heater, c, 0, 2000))
+	assert.Equal(t, 9000.0, lm.ValidatePower(wallbox, c, 11000, 11000))
+}
+
+// TestForgetReleasesReservation verifies that a load which stopped asking for
+// power no longer throttles loads below it
+func TestForgetReleasesReservation(t *testing.T) {
+	lm.Reset()
+
+	wallbox := &testLoad{title: "wallbox", prio: 1, power: 11000}
+	c := newCircuit(t, 11000, wallbox)
+
+	battery := &testLoad{title: "battery", prio: 5, circuit: c}
+
+	// the denied battery reserves 5000W, the wallbox has to give way
+	assert.Equal(t, 0.0, lm.ValidatePower(battery, c, 0, 5000))
+	assert.Equal(t, 6000.0, lm.ValidatePower(wallbox, c, 11000, 11000))
+
+	// once the battery no longer wants to charge, the wallbox gets it all back
+	lm.Forget(battery)
+	assert.Equal(t, 11000.0, lm.ValidatePower(wallbox, c, 11000, 11000))
+}
+
+// TestOnOffLoadGetsItsWholeNeed is the regression test for a higher-priority
+// load that can only switch on in full, such as a heater or the battery. With
+// 2000W free it takes nothing of a 3000W need, so the lower-priority wallbox has
+// to leave the whole 3000W free, not just the 1000W that were missing.
+func TestOnOffLoadGetsItsWholeNeed(t *testing.T) {
+	lm.Reset()
+
+	wallbox := &testLoad{title: "wallbox", prio: 1, power: 9000}
+	c := newCircuit(t, 11000, wallbox)
+
+	heater := &testLoad{title: "heater", prio: 5, circuit: c}
+
+	// all or nothing: capped below its need, the heater stays off
+	assert.Less(t, lm.ValidatePower(heater, c, 0, 3000), 3000.0)
+
+	// the wallbox makes room for the full 3000W
+	allowed := lm.ValidatePower(wallbox, c, 9000, 9000)
+	assert.Equal(t, 8000.0, allowed)
+
+	// next cycle the heater fits
+	wallbox.power = allowed
+	require.NoError(t, c.Update([]api.CircuitLoad{wallbox, heater}))
+	assert.Equal(t, 3000.0, lm.ValidatePower(heater, c, 0, 3000))
+}

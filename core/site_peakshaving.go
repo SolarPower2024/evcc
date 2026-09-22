@@ -25,6 +25,7 @@ import (
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/config"
 	"github.com/evcc-io/evcc/util/homeassistant"
 )
 
@@ -47,11 +48,22 @@ type peakState struct {
 	reserve     float64 // soc below which the battery is reserved for peaks
 	entity      string  // Home Assistant number entity receiving the setpoint
 	chargePower float64 // assumed grid charge power in W, 0 = derive it
+	circuit     string  // circuit the battery draws from, empty = fall back to yaml
 
 	shaving bool     // hysteresis state: below the reserve
 	written *float64 // last value written, nil until the first successful write
 
+	demand      float64   // grid demand without the battery in W, from the last cycle
+	chargePause time.Time // grid charging gives way to peak shaving until then
+
 	set func(float64) error // resolved from config
+
+	// grid charge power control: the battery charges at a power evcc writes to
+	// this entity, sized to stay below the peak limit and within the circuit
+	chargeEntity   string
+	chargeSet      func(float64) error
+	chargeWritten  *float64
+	chargeSetpoint float64 // last computed setpoint in W, 0 = not charging
 
 	// current metering window, for the 15 minute average
 	windowStart time.Time
@@ -100,12 +112,26 @@ func (site *Site) restorePeakSettings() {
 		s.chargePower = v
 		s.mu.Unlock()
 	}
+	if v, err := settings.String(keys.PeakShavingCircuit); err == nil {
+		s.mu.Lock()
+		s.circuit = v
+		s.mu.Unlock()
+	}
+	if v, err := settings.String(keys.PeakShavingChargeEntity); err == nil {
+		s.mu.Lock()
+		s.chargeEntity = v
+		s.mu.Unlock()
+	}
 
 	if err := site.rebuildPeakSetter(); err != nil {
 		site.log.ERROR.Printf("peak shaving: %v", err)
 	}
+	if err := site.rebuildChargeSetter(); err != nil {
+		site.log.ERROR.Printf("grid charge power: %v", err)
+	}
 
 	site.publishPeakSettings()
+	site.publishLmPriorities()
 }
 
 // peakURI returns the Home Assistant endpoint. Running as an add-on, the
@@ -154,29 +180,65 @@ func (site *Site) rebuildPeakSetter() error {
 		return nil
 	}
 
-	uri, err := site.peakURI()
-	if err != nil {
-		return err
-	}
-
-	conn, err := homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", site.LoadManagement.PeakShaving.Insecure)
+	set, err := site.numberSetter(entity)
 	if err != nil {
 		return err
 	}
 
 	s.mu.Lock()
-	s.set = func(val float64) error { return conn.CallNumberService(entity, val) }
+	s.set = set
 	s.written = nil // force a write with the new target
 	s.mu.Unlock()
 
 	return nil
 }
 
+// rebuildChargeSetter resolves the grid charge power output from its entity
+func (site *Site) rebuildChargeSetter() error {
+	s := site.peak()
+
+	s.mu.Lock()
+	entity := s.chargeEntity
+	s.mu.Unlock()
+
+	var set func(float64) error
+
+	if entity != "" {
+		var err error
+		if set, err = site.numberSetter(entity); err != nil {
+			return err
+		}
+	}
+
+	s.mu.Lock()
+	s.chargeSet = set
+	s.chargeWritten = nil // force a write with the new target
+	s.mu.Unlock()
+
+	return nil
+}
+
+// numberSetter returns a setter writing to a Home Assistant number entity
+func (site *Site) numberSetter(entity string) (func(float64) error, error) {
+	uri, err := site.peakURI()
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", site.LoadManagement.PeakShaving.Insecure)
+	if err != nil {
+		return nil, err
+	}
+
+	return func(val float64) error { return conn.CallNumberService(entity, val) }, nil
+}
+
 func (site *Site) publishPeakSettings() {
 	s := site.peak()
 
 	s.mu.Lock()
-	enabled, limit, reserve, entity, charge := s.enabled, s.limit, s.reserve, s.entity, s.chargePower
+	enabled, limit, reserve, entity, charge, circuit := s.enabled, s.limit, s.reserve, s.entity, s.chargePower, s.circuit
+	chargeEntity := s.chargeEntity
 	s.mu.Unlock()
 
 	site.publish(keys.PeakShaving, enabled)
@@ -184,6 +246,8 @@ func (site *Site) publishPeakSettings() {
 	site.publish(keys.PeakShavingReserve, reserve)
 	site.publish(keys.PeakShavingEntity, entity)
 	site.publish(keys.PeakShavingChargePower, charge)
+	site.publish(keys.PeakShavingCircuit, circuit)
+	site.publish(keys.PeakShavingChargeEntity, chargeEntity)
 
 	site.publishChargePower()
 }
@@ -213,7 +277,8 @@ func (site *Site) peakHysteresis() float64 {
 }
 
 // peakShavingActive reports whether the battery is currently held back for peaks.
-// Used to keep the battery in normal mode and to block grid charging.
+// Used to keep the battery in normal mode so the discharge controller is not
+// blocked, see updateBatteryModePeakAware.
 func (site *Site) peakShavingActive() bool {
 	s := site.peak()
 
@@ -232,6 +297,8 @@ func (site *Site) updatePeakShaving(state siteState) {
 
 	s.mu.Lock()
 	enabled, limit, reserve, set := s.enabled, s.limit, s.reserve, s.set
+	// read by peakPausesGridCharge later in the same cycle
+	s.demand = state.gridPower + state.battery.Power
 	s.mu.Unlock()
 
 	if !enabled || set == nil || !site.batteryConfigured() {
@@ -243,6 +310,10 @@ func (site *Site) updatePeakShaving(state siteState) {
 		s.mu.Unlock()
 
 		site.publish(keys.PeakShavingActive, false)
+
+		// keep handing control back: the write when switching off may have
+		// failed or raced a setpoint write. Unchanged values are skipped.
+		site.writePeakValue(site.peakFreeValue())
 
 		return
 	}
@@ -264,7 +335,14 @@ func (site *Site) updatePeakShaving(state siteState) {
 
 	value := site.peakFreeValue()
 
-	if shaving {
+	switch {
+	// no discharging while the battery charges from the grid. A peak pauses the
+	// charging in this same cycle, see peakPausesGridCharge, so the value then
+	// falls through to the regular one right away.
+	case site.GetBatteryMode() == api.BatteryCharge && state.gridPower+state.battery.Power <= limit:
+		value = 0
+
+	case shaving:
 		value = peakSetpoint(state.gridPower, state.battery.Power, limit)
 	}
 
@@ -286,9 +364,10 @@ func (site *Site) updatePeakShaving(state siteState) {
 // battery power back recovers the demand as it would be without the battery,
 // which is a fixed quantity the setpoint can be derived from. evcc counts
 // discharging as positive and charging as negative, so both directions are
-// handled by the same sum.
+// handled by the same sum. Whole watts are plenty, and some number entities
+// reject fractions.
 func peakSetpoint(gridPower, batteryPower, limit float64) float64 {
-	return math.Max(0, gridPower+batteryPower-limit)
+	return math.Max(0, math.Round(gridPower+batteryPower-limit))
 }
 
 // writePeakValue writes the setpoint, skipping unchanged values
@@ -296,29 +375,57 @@ func (site *Site) writePeakValue(value float64) {
 	s := site.peak()
 
 	s.mu.Lock()
-	unchanged := s.written != nil && *s.written == value
 	set := s.set
 	s.mu.Unlock()
 
-	if unchanged || set == nil {
+	site.writeOutput("peak shaving", set, &s.written, value)
+}
+
+// writeChargeValue writes the grid charge power setpoint, skipping unchanged values
+func (site *Site) writeChargeValue(value float64) {
+	s := site.peak()
+
+	s.mu.Lock()
+	set := s.chargeSet
+	s.chargeSetpoint = value
+	s.mu.Unlock()
+
+	site.publish(keys.PeakShavingChargeSetpoint, value)
+	site.writeOutput("grid charge power", set, &s.chargeWritten, value)
+}
+
+// writeOutput writes a value through set unless it is the last one written.
+// last points into peakState and is guarded by its mutex. A failed write clears
+// it, so the next cycle retries.
+func (site *Site) writeOutput(name string, set func(float64) error, last **float64, value float64) {
+	if set == nil {
+		return
+	}
+
+	s := site.peak()
+
+	s.mu.Lock()
+	unchanged := *last != nil && **last == value
+	s.mu.Unlock()
+
+	if unchanged {
 		return
 	}
 
 	if err := set(value); err != nil {
-		site.log.ERROR.Printf("peak shaving: write %.0fW: %v", value, err)
+		site.log.ERROR.Printf("%s: write %.0fW: %v", name, value, err)
 
-		// invalidate so the next cycle retries
 		s.mu.Lock()
-		s.written = nil
+		*last = nil
 		s.mu.Unlock()
 
 		return
 	}
 
-	site.log.DEBUG.Printf("peak shaving: %.0fW", value)
+	site.log.DEBUG.Printf("%s: %.0fW", name, value)
 
 	s.mu.Lock()
-	s.written = &value
+	*last = &value
 	s.mu.Unlock()
 }
 
@@ -353,59 +460,61 @@ func (site *Site) updatePeakWindow(gridPower float64) {
 	site.publish(keys.PeakShavingWindowAvg, s.windowAvg)
 }
 
-// peakChargeAllowed reports whether grid-charging the battery would stay below
-// the peak limit.
+// peakPausesGridCharge reports whether grid charging has to give way to peak
+// shaving. While the demand without the battery is above the peak limit, the
+// battery is needed to cover it, and charging it from the grid at the same time
+// would only add to the peak.
 //
-// Blocking grid charging outright whenever the reserve is armed would deadlock:
-// below the reserve the battery could then only ever be refilled from pv, so an
-// empty battery would stay empty through the night and have nothing left to
-// shave the next peak with. What actually has to be prevented is grid charging
-// creating the peak itself, which is a question of power, not of soc.
-func (site *Site) peakChargeAllowed() bool {
+// The charge power itself is deliberately not counted against the peak limit:
+// the charger alone may well draw more than the limit, and whether it fits is
+// the circuit's call, see batteryCircuitAllows. After a peak, charging stays
+// off for the hold-off, so a demand hovering around the limit does not flip
+// the battery between charging and discharging every cycle.
+func (site *Site) peakPausesGridCharge() bool {
 	s := site.peak()
 
 	s.mu.Lock()
-	enabled, limit := s.enabled, s.limit
-	s.mu.Unlock()
+	defer s.mu.Unlock()
 
-	if !enabled {
+	if !s.enabled || s.set == nil {
+		return false
+	}
+
+	now := time.Now()
+
+	if s.demand > s.limit {
+		if !now.Before(s.chargePause) {
+			site.log.DEBUG.Printf("battery grid charge: paused, demand %.0fW exceeds the %.0fW peak limit", s.demand, s.limit)
+		}
+		s.chargePause = now.Add(site.lmHoldOff())
 		return true
 	}
 
-	charge, _ := site.lmBatteryChargePower()
-	if charge <= 0 {
-		// without a known charge power a peak cannot be ruled out. The ui shows
-		// this as "not determinable" so it does not fail silently.
-		site.log.DEBUG.Println("battery grid charge: charge power unknown, not risking a peak")
-		return false
-	}
-
-	// the grid meter already reflects any ongoing charging, so add the battery
-	// power back to get the demand the charging would be added to. Same reason
-	// as in peakSetpoint: using the raw grid value would oscillate.
-	st := site.state()
-
-	if !peakChargeFits(st.gridPower, st.battery.Power, charge, limit) {
-		site.log.DEBUG.Printf("battery grid charge: %.0fW demand plus %.0fW charge exceeds the %.0fW peak limit",
-			st.gridPower+st.battery.Power, charge, limit)
-		return false
-	}
-
-	return true
+	return now.Before(s.chargePause)
 }
 
-// peakChargeFits reports whether adding chargePower to the current demand stays
-// within the limit. Like peakSetpoint it works on the demand rather than the raw
-// grid value, so an already running charge does not make the check flip.
-func peakChargeFits(gridPower, batteryPower, chargePower, limit float64) bool {
-	return gridPower+batteryPower+chargePower <= limit
+// peakChargeHeadroom returns how much grid charge power fits below the peak
+// limit on top of the current demand. ok is false while peak shaving is off,
+// there is no limit to fit under then.
+func (site *Site) peakChargeHeadroom() (headroom float64, ok bool) {
+	s := site.peak()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.enabled || s.set == nil {
+		return 0, false
+	}
+
+	return max(0, s.limit-s.demand), true
 }
 
 // updateBatteryModePeakAware keeps the battery in normal mode while the reserve
-// is being held for peaks. Hold or charge would block the discharge controller,
-// and grid charging would create the very peak we are trying to cap.
+// is being held for peaks, as hold would block the discharge controller. Grid
+// charging is the exception: it has already been cleared against both the
+// circuit and a running peak, see batteryGridChargeRequested.
 func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rate api.Rate) {
-	if !site.peakShavingActive() {
+	if gridCharge || !site.peakShavingActive() {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)
 		return
 	}
@@ -524,6 +633,62 @@ func (site *Site) SetPeakShavingEntity(entity string) error {
 	return nil
 }
 
+// GetPeakShavingChargeEntity returns the entity receiving the grid charge power
+func (site *Site) GetPeakShavingChargeEntity() string {
+	s := site.peak()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.chargeEntity
+}
+
+// SetPeakShavingChargeEntity sets the Home Assistant number entity receiving the
+// grid charge power. With it, grid charging is throttled to stay below the peak
+// limit instead of being switched off; empty returns to on/off charging.
+func (site *Site) SetPeakShavingChargeEntity(entity string) error {
+	if entity != "" && !strings.HasPrefix(entity, "number.") && !strings.HasPrefix(entity, "input_number.") {
+		return fmt.Errorf("must be a number or input_number entity: %s", entity)
+	}
+
+	s := site.peak()
+
+	s.mu.Lock()
+	changed := s.chargeEntity != entity
+	previous := s.chargeEntity
+	s.chargeEntity = entity
+	s.mu.Unlock()
+
+	if !changed {
+		return nil
+	}
+
+	if err := site.rebuildChargeSetter(); err != nil {
+		s.mu.Lock()
+		s.chargeEntity = previous
+		s.mu.Unlock()
+
+		return err
+	}
+
+	site.log.DEBUG.Println("set grid charge power entity:", entity)
+	settings.SetString(keys.PeakShavingChargeEntity, entity)
+	site.publish(keys.PeakShavingChargeEntity, entity)
+
+	return nil
+}
+
+// chargePowerControlled reports whether the grid charge power is set through an
+// entity rather than charging being switched on or off
+func (site *Site) chargePowerControlled() bool {
+	s := site.peak()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.chargeSet != nil
+}
+
 // GetPeakShavingChargePower returns the assumed grid charge power, 0 = derived
 func (site *Site) GetPeakShavingChargePower() float64 {
 	s := site.peak()
@@ -553,6 +718,45 @@ func (site *Site) SetPeakShavingChargePower(power float64) error {
 		settings.SetFloat(keys.PeakShavingChargePower, power)
 		site.publish(keys.PeakShavingChargePower, power)
 		site.publishChargePower()
+	}
+
+	return nil
+}
+
+// GetPeakShavingCircuit returns the circuit the battery draws from
+func (site *Site) GetPeakShavingCircuit() string {
+	s := site.peak()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.circuit
+}
+
+// SetPeakShavingCircuit assigns the battery to a circuit. That link is what
+// makes the battery take part in load management and what the grid charge gate
+// checks against; an empty value falls back to the yaml config.
+func (site *Site) SetPeakShavingCircuit(name string) error {
+	if name != "" {
+		if _, err := config.Circuits().ByName(name); err != nil {
+			return fmt.Errorf("unknown circuit: %s", name)
+		}
+	}
+
+	s := site.peak()
+
+	s.mu.Lock()
+	changed := s.circuit != name
+	s.circuit = name
+	s.mu.Unlock()
+
+	if changed {
+		site.log.DEBUG.Println("set peak shaving circuit:", name)
+		settings.SetString(keys.PeakShavingCircuit, name)
+		site.publish(keys.PeakShavingCircuit, name)
+
+		// the battery only appears among the priorities once it is on a circuit
+		site.publishLmPriorities()
 	}
 
 	return nil

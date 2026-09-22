@@ -26,7 +26,7 @@
 						id="batteryPeakShavingReserve"
 						:options="reserveOptions"
 						:selected="selectedReserve"
-						:label="fmtSoc(selectedReserve)"
+						:label="socText(selectedReserve)"
 						nowrap
 						@change="changeReserve"
 					/>
@@ -36,13 +36,15 @@
 						id="batteryPeakShavingLimit"
 						:options="limitOptions"
 						:selected="selectedLimit"
-						:label="fmtLimit(selectedLimit)"
+						:label="peakLimitText(selectedLimit)"
 						nowrap
 						@change="changeLimit"
 					/>
 				</template>
 			</i18n-t>
 		</div>
+
+		<div v-if="error" class="alert alert-danger mt-3 mb-0 py-2 small">{{ error }}</div>
 
 		<div v-if="!entity" class="alert alert-warning mt-3 mb-0 py-2 small">
 			{{ $t("battery.peakShaving.noEntity") }}
@@ -53,7 +55,7 @@
 		<div class="d-flex justify-content-between">
 			<span class="text-muted">{{ $t("battery.peakShaving.windowAvg") }}</span>
 			<span class="fw-bold" :class="{ 'text-danger': overLimit }">
-				{{ fmtWatt(windowAvg) }}
+				{{ windowAvgText }}
 			</span>
 		</div>
 		<div class="d-flex justify-content-between mt-1">
@@ -71,13 +73,18 @@ import api from "@/api";
 import Card from "../Helper/Card.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
 
-// peak limit range, set and shown in kW while everything else stays in watts
-const minLimit = 2000;
-const maxLimit = 20000;
-const step = 500;
+// peak limit range, picked in 0.5 kW steps but sent and stored in watts
+const MIN_LIMIT = 2000;
+const MAX_LIMIT = 20000;
+const LIMIT_STEP = 500;
 
 // Peak shaving: hold the battery's lower soc range back and spend it only on
 // grid demand above the peak limit, which is what a demand charge is billed on.
+//
+// Careful with method names here: the formatter mixin carries a `fmtLimit` data
+// property, and data shadows methods on the instance. A method of that name is
+// silently replaced by the number and only blows up at render time, taking the
+// whole <i18n-t> subtree - both selects included - down with it.
 export default defineComponent({
 	name: "BatteryPeakShavingCard",
 	components: { Card, InlineSocSelect },
@@ -97,6 +104,7 @@ export default defineComponent({
 		return {
 			selectedLimit: 5000,
 			selectedReserve: 30,
+			error: "",
 		};
 	},
 	computed: {
@@ -109,22 +117,24 @@ export default defineComponent({
 		overLimit(): boolean {
 			return this.windowAvg > this.limit;
 		},
+		windowAvgText(): string {
+			return this.fmtW(this.windowAvg);
+		},
 		currentLabel(): string {
 			if (!this.enabled) return "—";
-			return this.shaving ? this.fmtWatt(this.power) : this.$t("battery.peakShaving.free");
+			return this.shaving ? this.fmtW(this.power) : this.$t("battery.peakShaving.free");
 		},
-		// 2 to 20 kW in 0.5 kW steps
 		limitOptions() {
 			const options = [];
-			for (let w = maxLimit; w >= minLimit; w -= step) {
-				options.push({ value: w, name: this.fmtLimit(w) });
+			for (let w = MAX_LIMIT; w >= MIN_LIMIT; w -= LIMIT_STEP) {
+				options.push({ value: w, name: this.peakLimitText(w) });
 			}
 			return options;
 		},
 		reserveOptions() {
 			const options = [];
 			for (let i = 95; i >= 5; i -= 5) {
-				options.push({ value: i, name: this.fmtSoc(i) });
+				options.push({ value: i, name: this.socText(i) });
 			}
 			return options;
 		},
@@ -146,44 +156,52 @@ export default defineComponent({
 	methods: {
 		async changeEnabled(e: Event) {
 			const target = e.target as HTMLInputElement;
+			this.error = "";
 			try {
 				await api.post(`peakshaving/${target.checked}`);
-			} catch (err) {
+			} catch (err: any) {
 				target.checked = this.enabled; // revert to stay in sync with state
+				this.error = this.apiError(err);
 				console.error(err);
 			}
 		},
 		async changeLimit($event: Event) {
-			const w = parseInt(($event.target as HTMLInputElement).value, 10);
+			const value = parseInt(($event.target as HTMLInputElement).value, 10);
 			const previous = this.selectedLimit;
-			this.selectedLimit = w;
+			this.selectedLimit = value;
+			this.error = "";
+
 			try {
-				await api.post(`peakshavinglimit/${encodeURIComponent(w)}`);
-			} catch (err) {
+				await api.post(`peakshavinglimit/${encodeURIComponent(value)}`);
+			} catch (err: any) {
 				this.selectedLimit = previous;
+				this.error = this.apiError(err);
 				console.error(err);
 			}
 		},
 		async changeReserve($event: Event) {
-			const soc = parseInt(($event.target as HTMLInputElement).value, 10);
+			const value = parseInt(($event.target as HTMLInputElement).value, 10);
 			const previous = this.selectedReserve;
-			this.selectedReserve = soc;
+			this.selectedReserve = value;
+			this.error = "";
+
 			try {
-				await api.post(`peakshavingreserve/${encodeURIComponent(soc)}`);
-			} catch (err) {
+				await api.post(`peakshavingreserve/${encodeURIComponent(value)}`);
+			} catch (err: any) {
 				this.selectedReserve = previous;
+				this.error = this.apiError(err);
 				console.error(err);
 			}
 		},
-		fmtSoc(soc: number) {
+		socText(soc: number): string {
 			return this.fmtPercentage(soc);
 		},
-		// the limit is set and shown in kW, everything else stays in watts
-		fmtLimit(w: number) {
-			return `${this.fmtNumber(w / 1000, 1)} kW`;
+		// shown in kW, stored in watts
+		peakLimitText(watt: number): string {
+			return `${this.fmtNumber(watt / 1000, 1)} kW`;
 		},
-		fmtWatt(w: number) {
-			return this.fmtW(w);
+		apiError(err: any): string {
+			return err?.response?.data?.error || err?.message || "error";
 		},
 	},
 });
