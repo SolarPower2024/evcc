@@ -995,18 +995,8 @@ func (lp *Loadpoint) setLimit(current float64) error {
 
 	// apply circuit limits
 	if lp.circuit != nil {
-		// custom: lm adds priority-based shedding, see core/lm
-		currentLimit := lm.ValidateCurrent(lp, lp.circuit, lp.actualMaxChargeCurrent(), current)
-
-		activePhases := lp.ActivePhases()
-		powerLimit := lm.ValidatePower(lp, lp.circuit, lp.chargePower, currentToPower(current, activePhases))
-		currentLimitViaPower := powerToCurrent(powerLimit, activePhases)
-
-		limited := lp.roundedCurrent(min(currentLimit, currentLimitViaPower))
-		if minCurrent := lp.effectiveMinCurrent(); limited < minCurrent && current >= minCurrent {
-			lp.log.DEBUG.Printf("circuit limit %.3gA below min current %.3gA", limited, minCurrent)
-		}
-		current = limited
+		// custom: priority-based shedding and on/off switch devices, see core/loadpoint_lm.go
+		current = lp.lmLimit(current)
 	}
 
 	// https://github.com/evcc-io/evcc/issues/16309

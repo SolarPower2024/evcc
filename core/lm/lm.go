@@ -7,11 +7,16 @@
 // withheld from their own budget and give way on their next update, which frees
 // the power for the higher-priority load one cycle later.
 //
+// An overload works the other way round: a load keeps what it draws as long as
+// the loads below it draw enough to cover the excess, so shedding starts at the
+// bottom rather than with whichever load evcc happens to update first.
+//
 // Nothing happens while all loads on a circuit share the same priority, so the
 // behaviour is identical to upstream until priorities are actually configured.
 package lm
 
 import (
+	"math"
 	"sync"
 	"time"
 
@@ -29,6 +34,10 @@ type Load interface {
 	// distribution: the load that should get surplus first is not necessarily
 	// the one that should keep power when the fuse is the constraint.
 	LmPriority() int
+
+	// what the load draws right now, i.e. what shedding it would free
+	GetChargePower() float64
+	GetMaxPhaseCurrent() float64
 }
 
 // Config is the site's load management configuration
@@ -204,22 +213,96 @@ func remember(c api.Circuit, l Load, prio int, power, current *float64) {
 	}
 }
 
-// reserved returns the power and current that must be left to loads with a
-// higher priority than prio and are hence unavailable to the calling load
-func reserved(c api.Circuit, self Load, prio int) (float64, float64) {
+// entry is a registered load with its record, copied out of the registry
+type entry struct {
+	load Load
+	record
+}
+
+// snapshot returns the live records. Taken under the lock so that the loads'
+// own methods can be called afterwards without holding it.
+func snapshot() []entry {
 	mu.Lock()
 	defer mu.Unlock()
 
-	var power, current float64
 	now := time.Now()
+	res := make([]entry, 0, len(reg))
 
 	for l, r := range reg {
-		if l == self || r.prio <= prio || now.Sub(r.updated) > timeout || !competes(c, r.circuit) {
+		if now.Sub(r.updated) <= timeout {
+			res = append(res, entry{l, *r})
+		}
+	}
+
+	return res
+}
+
+// below returns what the loads with a priority below prio draw on circuits
+// competing with c, i.e. what shedding them could free. The calling load's own
+// draw is passed in rather than queried, as it may hold its own lock.
+func below(entries []entry, c api.Circuit, prio int, self Load, selfPower, selfCurrent float64) (float64, float64) {
+	var power, current float64
+
+	for _, e := range entries {
+		if e.prio >= prio || !competes(c, e.circuit) {
 			continue
 		}
 
-		power += r.power
-		current += r.current
+		if e.load == self {
+			power += selfPower
+			current += selfCurrent
+			continue
+		}
+
+		power += e.load.GetChargePower()
+		current += e.load.GetMaxPhaseCurrent()
+	}
+
+	return power, current
+}
+
+// headroom returns the power and current still free on the circuit, the
+// tightest level of its parent chain. Unlimited levels do not count.
+func headroom(c api.Circuit) (float64, float64) {
+	power, current := math.Inf(1), math.Inf(1)
+
+	for ; c != nil; c = c.GetParent() {
+		if m := c.GetMaxPower(); m > 0 {
+			power = min(power, m-c.GetChargePower())
+		}
+		if m := c.GetMaxCurrent(); m > 0 {
+			current = min(current, m-c.GetMaxPhaseCurrent())
+		}
+	}
+
+	return power, current
+}
+
+// reserved returns the power and current that must be left to loads with a
+// higher priority than prio and are hence unavailable to the calling load.
+//
+// A reservation only counts while it can be met: the free headroom plus what
+// the loads below the reserving one draw has to cover it. Otherwise shedding
+// them would not let it run anyway, and the power would just sit idle.
+func reserved(c api.Circuit, self Load, prio int, selfPower, selfCurrent float64) (float64, float64) {
+	entries := snapshot()
+
+	var power, current float64
+
+	for _, e := range entries {
+		if e.load == self || e.prio <= prio || !competes(c, e.circuit) {
+			continue
+		}
+
+		freePower, freeCurrent := headroom(e.circuit)
+		lowerPower, lowerCurrent := below(entries, e.circuit, e.prio, self, selfPower, selfCurrent)
+
+		if e.power > 0 && freePower+lowerPower >= e.power {
+			power += e.power
+		}
+		if e.current > 0 && freeCurrent+lowerCurrent >= e.current {
+			current += e.current
+		}
 	}
 
 	return power, current
@@ -231,7 +314,7 @@ func Reserved(l Load, c api.Circuit) (float64, float64) {
 	if c == nil || l == nil {
 		return 0, 0
 	}
-	return reserved(c, l, Priority(l))
+	return reserved(c, l, Priority(l), l.GetChargePower(), l.GetMaxPhaseCurrent())
 }
 
 // unmet returns what a load has to be left once the circuit capped its request:
@@ -282,10 +365,8 @@ func PeekPower(l Load, c api.Circuit, old, new float64) float64 {
 		return new
 	}
 
-	power, _ := reserved(c, l, Priority(l))
-	if power <= 0 {
-		return c.ValidatePower(old, new)
-	}
+	prio := Priority(l)
+	reserve, _ := reserved(c, l, prio, old, 0)
 
 	// ValidatePower caps at old + (maxPower - circuit power). Lowering old by the
 	// reserve therefore caps at old + (maxPower - circuit power - reserve), which
@@ -293,7 +374,15 @@ func PeekPower(l Load, c api.Circuit, old, new float64) float64 {
 	// every level of the parent chain, which over-reserves on nested circuits
 	// whose limit is not the binding one - erring towards less power for the
 	// lower-priority load.
-	return c.ValidatePower(old-power, new)
+	res := c.ValidatePower(old-reserve, new)
+
+	// cutting into what the load draws right now: the loads below it go first
+	if keep := min(old, new); res < keep {
+		lower, _ := below(snapshot(), c, prio, l, old, 0)
+		res = max(res, min(keep, c.ValidatePower(old-reserve+lower, keep)))
+	}
+
+	return res
 }
 
 // PeekCurrent caps a current request like ValidateCurrent but records no demand
@@ -302,10 +391,16 @@ func PeekCurrent(l Load, c api.Circuit, old, new float64) float64 {
 		return new
 	}
 
-	_, current := reserved(c, l, Priority(l))
-	if current <= 0 {
-		return c.ValidateCurrent(old, new)
+	prio := Priority(l)
+	_, reserve := reserved(c, l, prio, 0, old)
+
+	res := c.ValidateCurrent(old-reserve, new)
+
+	// cutting into what the load draws right now: the loads below it go first
+	if keep := min(old, new); res < keep {
+		_, lower := below(snapshot(), c, prio, l, 0, old)
+		res = max(res, min(keep, c.ValidateCurrent(old-reserve+lower, keep)))
 	}
 
-	return c.ValidateCurrent(old-current, new)
+	return res
 }

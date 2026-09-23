@@ -116,7 +116,9 @@ Keep these in mind when merging a new evcc version:
 | --- | --- |
 | `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateBatteryModePeakAware` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
-| `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), four `lm.Validate*`/`lm.Peek*` calls |
+| `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `lmLimit` hook in `setLimit`, two `lm.Peek*` probes |
+| `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
+| `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `core/site/api.go` | embeds `CustomAPI`, one line |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `plugin/homeassistant.go` | `FloatSetter`/`IntSetter`, so a plugin can write number entities |
@@ -126,7 +128,7 @@ Keep these in mind when merging a new evcc version:
 | `assets/js/types/evcc.ts`, `i18n/de.json`, `i18n/en.json` | state fields and texts |
 
 Everything else lives in files of its own: `core/lm/`, `core/site_lm.go`,
-`core/site_peakshaving.go`, `core/loadpoint_lm.go`, `core/keys/site_custom.go`,
+`core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
 `core/site/api_custom.go`, `server/http_custom.go` and the new Vue components.
 
 ## 4. Peak shaving

@@ -18,8 +18,9 @@ func init() {
 
 type SwitchSocket struct {
 	implement.Caps
-	enable  func(bool) error
-	enabled func() (bool, error)
+	enable     func(bool) error
+	enabled    func() (bool, error)
+	ratedPower float64 // custom: see switchsocket_lm.go
 	*switchSocket
 }
 
@@ -33,6 +34,7 @@ func NewSwitchSocketFromConfig(ctx context.Context, other map[string]any) (api.C
 		Soc                     *plugin.Config
 		measurement.Temperature `mapstructure:",squash"` // optional, for heating devices
 		StandbyPower            float64
+		RatedPower              float64 // custom: power drawn when on, see switchsocket_lm.go
 	}
 
 	if err := util.DecodeOther(other, &cc); err != nil {
@@ -54,6 +56,11 @@ func NewSwitchSocketFromConfig(ctx context.Context, other map[string]any) (api.C
 		return nil, err
 	}
 
+	// custom: a configured power stands in for a missing measurement
+	if power == nil && cc.RatedPower > 0 {
+		cc.StandbyPower = -cc.RatedPower
+	}
+
 	// standbypower < 0 ensures that power is never used by the switch socket if not present
 	if power == nil && cc.StandbyPower >= 0 {
 		return nil, errors.New("missing either power or negative standbypower")
@@ -63,6 +70,7 @@ func NewSwitchSocketFromConfig(ctx context.Context, other map[string]any) (api.C
 		Caps:         implement.New(),
 		enabled:      enabled,
 		enable:       enable,
+		ratedPower:   cc.RatedPower,
 		switchSocket: NewSwitchSocket(&cc.embed, enabled, power, cc.StandbyPower),
 	}
 
