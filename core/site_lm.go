@@ -48,6 +48,7 @@ type lmState struct {
 	prios map[string]int // shed priorities set in the ui, by load name
 
 	batteryShedUntil  time.Time   // battery grid charge hold-off after a shed
+	feedInTried       time.Time   // last feed-in finalization attempt, see site_feedin.go
 	batteryCircuit    api.Circuit // resolved from the assignment
 	batteryCircuitRef string      // what batteryCircuit was resolved from
 	batteryLoad       *batteryLoad

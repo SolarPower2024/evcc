@@ -1,0 +1,45 @@
+template: oemag
+link: https://www.oem-ag.at/de/marktpreis/
+products:
+  - brand: OeMAG
+    description:
+      de: Marktpreis (Einspeisung)
+      en: Market price (feed-in)
+requirements:
+  evcc: ["skiptest"]
+  description:
+    de: |
+      Einspeisevergütung zum OeMAG-Marktpreis. Die OeMAG veröffentlicht den Preis eines Monats erst im Folgemonat. Bis dahin gilt der zuletzt veröffentlichte Wert als laufender Einspeisepreis.
+      Am Stichtag wird der dann veröffentlichte Wert als endgültiger Preis des Vormonats übernommen: Die gespeicherten Einspeisepreise des Vormonats und die Preise der Ladevorgänge des Vormonats (Solaranteil) werden einmalig neu berechnet.
+    en: |
+      Feed-in compensation at the OeMAG market price. OeMAG publishes a month's price only in the following month. Until then the latest published value is used as the running feed-in price.
+      On the finalize day the value published then becomes the final price of the previous month: the stored feed-in rates of the previous month and the prices of its charging sessions (solar share) are recalculated once.
+group: price
+countries: ["AT"]
+params:
+  - name: finalizeday
+    type: int
+    default: 15
+    description:
+      de: Stichtag Neuberechnung
+      en: Finalize day
+    help:
+      de: Tag im Monat (1 bis 28), ab dem der veröffentlichte Preis als endgültiger Preis des Vormonats gilt und der Vormonat neu berechnet wird. Jeder Monat wird nur einmal neu berechnet.
+      en: Day of the month (1 to 28) from which the published price is the final price of the previous month and the previous month is recalculated. Each month is recalculated only once.
+  - name: uri
+    advanced: true
+    default: https://raw.githubusercontent.com/chrsbrmr/oemag-marktpreis/refs/heads/main/preis.json
+    description:
+      de: Datenquelle
+      en: Data source
+    help:
+      de: JSON mit dem Feld oemag_marktpreis in EUR/kWh
+      en: JSON with the field oemag_marktpreis in EUR/kWh
+  - preset: tariff-base
+render: |
+  type: oemag
+  finalizeday: {{ .finalizeday }}
+  {{- if .uri }}
+  uri: {{ .uri }}
+  {{- end }}
+  {{ include "base" . }}

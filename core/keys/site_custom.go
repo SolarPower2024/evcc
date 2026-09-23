@@ -26,4 +26,7 @@ const (
 
 	// load management shed priorities
 	LmPriorities = "lmPriorities"
+
+	// last month whose feed-in price was finalized, YYYY-MM, see core/site_feedin.go
+	FeedInFinalized = "feedInFinalized"
 )
