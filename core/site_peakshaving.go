@@ -50,8 +50,8 @@ type peakState struct {
 	chargePower float64 // assumed grid charge power in W, 0 = derive it
 	circuit     string  // circuit the battery draws from, empty = fall back to yaml
 
-	shaving bool     // hysteresis state: below the reserve
-	written *float64 // last value written, nil until the first successful write
+	shaving    bool // hysteresis state: below the reserve
+	handedBack bool // free value written since the last setpoint, nothing more to send while off
 
 	demand      float64   // grid demand without the battery in W, from the last cycle
 	chargePause time.Time // grid charging gives way to peak shaving until then
@@ -62,7 +62,6 @@ type peakState struct {
 	// this entity, sized to stay below the peak limit and within the circuit
 	chargeEntity   string
 	chargeSet      func(float64) error
-	chargeWritten  *float64
 	chargeSetpoint float64 // last computed setpoint in W, 0 = not charging
 
 	// current metering window, for the 15 minute average
@@ -163,6 +162,7 @@ func (site *Site) rebuildPeakSetter() error {
 
 		s.mu.Lock()
 		s.set = set
+		s.handedBack = false
 		s.mu.Unlock()
 
 		return nil
@@ -187,7 +187,7 @@ func (site *Site) rebuildPeakSetter() error {
 
 	s.mu.Lock()
 	s.set = set
-	s.written = nil // force a write with the new target
+	s.handedBack = false // the new target gets the free value too
 	s.mu.Unlock()
 
 	return nil
@@ -212,7 +212,6 @@ func (site *Site) rebuildChargeSetter() error {
 
 	s.mu.Lock()
 	s.chargeSet = set
-	s.chargeWritten = nil // force a write with the new target
 	s.mu.Unlock()
 
 	return nil
@@ -311,9 +310,8 @@ func (site *Site) updatePeakShaving(state siteState) {
 
 		site.publish(keys.PeakShavingActive, false)
 
-		// keep handing control back: the write when switching off may have
-		// failed or raced a setpoint write. Unchanged values are skipped.
-		site.writePeakValue(site.peakFreeValue())
+		// hand control back once, retried until the write lands
+		site.handBackPeak()
 
 		return
 	}
@@ -352,6 +350,12 @@ func (site *Site) updatePeakShaving(state siteState) {
 	site.publish(keys.PeakShavingActive, shaving)
 	site.publish(keys.PeakShavingPower, value)
 	site.writePeakValue(value)
+
+	// also covers a setpoint written while switching off, which then gets
+	// replaced by the free value in the next cycle
+	s.mu.Lock()
+	s.handedBack = false
+	s.mu.Unlock()
 }
 
 // peakSetpoint returns the battery power needed to keep the grid draw at or
@@ -370,18 +374,36 @@ func peakSetpoint(gridPower, batteryPower, limit float64) float64 {
 	return math.Max(0, math.Round(gridPower+batteryPower-limit))
 }
 
-// writePeakValue writes the setpoint, skipping unchanged values
-func (site *Site) writePeakValue(value float64) {
+// writePeakValue writes the setpoint
+func (site *Site) writePeakValue(value float64) bool {
 	s := site.peak()
 
 	s.mu.Lock()
 	set := s.set
 	s.mu.Unlock()
 
-	site.writeOutput("peak shaving", set, &s.written, value)
+	return site.writeOutput("peak shaving", set, value)
 }
 
-// writeChargeValue writes the grid charge power setpoint, skipping unchanged values
+// handBackPeak writes the free value unless it is already in the entity. While
+// peak shaving is off nothing else is sent, a single write is enough.
+func (site *Site) handBackPeak() {
+	s := site.peak()
+
+	s.mu.Lock()
+	done := s.handedBack
+	s.mu.Unlock()
+
+	if done || !site.writePeakValue(site.peakFreeValue()) {
+		return
+	}
+
+	s.mu.Lock()
+	s.handedBack = true
+	s.mu.Unlock()
+}
+
+// writeChargeValue writes the grid charge power setpoint
 func (site *Site) writeChargeValue(value float64) {
 	s := site.peak()
 
@@ -391,42 +413,26 @@ func (site *Site) writeChargeValue(value float64) {
 	s.mu.Unlock()
 
 	site.publish(keys.PeakShavingChargeSetpoint, value)
-	site.writeOutput("grid charge power", set, &s.chargeWritten, value)
+	site.writeOutput("grid charge power", set, value)
 }
 
-// writeOutput writes a value through set unless it is the last one written.
-// last points into peakState and is guarded by its mutex. A failed write clears
-// it, so the next cycle retries.
-func (site *Site) writeOutput(name string, set func(float64) error, last **float64, value float64) {
+// writeOutput writes a value through set and reports whether it landed. It is
+// called every cycle and writes even an unchanged value, so an entity changed by
+// hand, by an automation or by a Home Assistant restart is corrected in the next
+// cycle.
+func (site *Site) writeOutput(name string, set func(float64) error, value float64) bool {
 	if set == nil {
-		return
-	}
-
-	s := site.peak()
-
-	s.mu.Lock()
-	unchanged := *last != nil && **last == value
-	s.mu.Unlock()
-
-	if unchanged {
-		return
+		return false
 	}
 
 	if err := set(value); err != nil {
 		site.log.ERROR.Printf("%s: write %.0fW: %v", name, value, err)
-
-		s.mu.Lock()
-		*last = nil
-		s.mu.Unlock()
-
-		return
+		return false
 	}
 
 	site.log.DEBUG.Printf("%s: %.0fW", name, value)
 
-	s.mu.Lock()
-	*last = &value
-	s.mu.Unlock()
+	return true
 }
 
 // updatePeakWindow tracks the average grid power of the running 15 minute
@@ -568,6 +574,7 @@ func (site *Site) SetPeakShaving(val bool) error {
 	s.enabled = val
 	if !val {
 		s.shaving = false
+		s.handedBack = false
 	}
 	s.mu.Unlock()
 
@@ -577,7 +584,7 @@ func (site *Site) SetPeakShaving(val bool) error {
 
 		// hand control back when switching off
 		if !val {
-			site.writePeakValue(site.peakFreeValue())
+			site.handBackPeak()
 		}
 	}
 

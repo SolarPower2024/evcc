@@ -8,6 +8,7 @@ import (
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/util"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestPeakSetpoint covers the sign handling and the clamp
@@ -114,15 +115,17 @@ func TestPeakPausesGridCharge(t *testing.T) {
 	assert.False(t, site.peakPausesGridCharge())
 }
 
-// TestPeakHandsBackWhenOff verifies that the free value is written while peak
-// shaving is off, retried after a failed write and not repeated once it landed
+// TestPeakHandsBackWhenOff verifies that the free value is written once while
+// peak shaving is off, retried after a failed write, and written once more after
+// peak shaving ran again
 func TestPeakHandsBackWhenOff(t *testing.T) {
-	site := &Site{log: util.NewLogger("test")}
+	sc := newScenario(t)
 
 	var writes []float64
 	fail := true
 
-	s := site.peak()
+	s := sc.site.peak()
+	s.enabled = false
 	s.set = func(v float64) error {
 		writes = append(writes, v)
 		if fail {
@@ -132,16 +135,27 @@ func TestPeakHandsBackWhenOff(t *testing.T) {
 		return nil
 	}
 
-	// a setpoint from the last shaving cycle is still in the entity
-	last := 3000.0
-	s.written = &last
+	sc.cycle(50, 1000, 0)
+	sc.cycle(50, 1000, 0)
+	sc.cycle(50, 1000, 0)
+	sc.cycle(50, 1000, 0)
 
-	site.updatePeakShaving(siteState{})
-	site.updatePeakShaving(siteState{})
-	site.updatePeakShaving(siteState{})
-
-	// first write fails, second lands, third is skipped
+	// first write fails, second lands, then nothing more is sent
 	assert.Equal(t, []float64{lm.DefaultFreeValue, lm.DefaultFreeValue}, writes)
+
+	// peak shaving runs below the reserve and writes its setpoint every cycle
+	writes = nil
+	require.NoError(t, sc.site.SetPeakShaving(true))
+	sc.cycle(20, 7000, 0)
+	sc.cycle(20, 7000, 0)
+	assert.Equal(t, []float64{2000, 2000}, writes)
+
+	// switching off hands back right away, the following cycles send nothing
+	writes = nil
+	require.NoError(t, sc.site.SetPeakShaving(false))
+	sc.cycle(20, 7000, 0)
+	sc.cycle(20, 7000, 0)
+	assert.Equal(t, []float64{lm.DefaultFreeValue}, writes)
 }
 
 // TestBatteryChargeSetpoint verifies the controlled grid charge power: trimmed
@@ -183,9 +197,9 @@ func TestBatteryChargeSetpoint(t *testing.T) {
 	assert.Equal(t, 0.0, site.batteryChargeSetpoint())
 }
 
-// TestChargeValueWrittenOnce verifies that the charge setpoint reaches the
-// entity only when it changes
-func TestChargeValueWrittenOnce(t *testing.T) {
+// TestChargeValueWrittenEveryCycle verifies that the charge setpoint reaches the
+// entity every time, also when unchanged
+func TestChargeValueWrittenEveryCycle(t *testing.T) {
 	site := &Site{log: util.NewLogger("test")}
 
 	var writes []float64
@@ -201,6 +215,28 @@ func TestChargeValueWrittenOnce(t *testing.T) {
 	site.writeChargeValue(0)
 	site.writeChargeValue(0)
 
-	assert.Equal(t, []float64{4000, 0}, writes)
+	assert.Equal(t, []float64{4000, 4000, 0, 0}, writes)
 	assert.True(t, site.chargePowerControlled())
+}
+
+// TestPeakValueWrittenEveryCycle replays the log of a peak shaving run with
+// constant values: 8160W grid, 6250W battery, soc below the reserve. The
+// unchanged setpoints have to be written in every cycle, so a value changed in
+// Home Assistant does not stick.
+func TestPeakValueWrittenEveryCycle(t *testing.T) {
+	sc := newScenario(t)
+
+	var writes, charges []float64
+
+	s := sc.site.peak()
+	s.limit = 10000
+	s.set = func(v float64) error { writes = append(writes, v); return nil }
+	s.chargeSet = func(v float64) error { charges = append(charges, v); return nil }
+
+	for range 3 {
+		sc.cycle(20, 8160, 6250)
+	}
+
+	assert.Equal(t, []float64{4410, 4410, 4410}, writes)
+	assert.Equal(t, []float64{0, 0, 0}, charges, "the peak pauses grid charging")
 }
