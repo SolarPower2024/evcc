@@ -158,12 +158,15 @@ func Forget(l Load) {
 	delete(reg, l)
 }
 
-// Reset drops all recorded demand. Intended for tests.
+// Reset drops all recorded demand, shed guards and status. Intended for tests.
 func Reset() {
 	mu.Lock()
-	defer mu.Unlock()
 	clear(reg)
 	lookup = nil
+	mu.Unlock()
+
+	resetGuard()
+	resetStatus()
 }
 
 // competes reports whether loads on the two circuits draw through a shared

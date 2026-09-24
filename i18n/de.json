@@ -86,6 +86,10 @@
     "modalTitle": "Hausbatterie",
     "noBattery": "Keine Batterien konfiguriert.",
     "peakShavingTab": "Lastspitzenkappung",
+    "profiles": {
+      "failed": "Profil „{name}“ nicht vollständig angewendet: {error}",
+      "title": "Profil"
+    },
     "socGridChargeTab": "Netzladen nach Ladestand",
     "usageTab": "Batterienutzung"
   },
@@ -338,6 +342,33 @@
       "titleAdd": "Zusätzlichen Zähler hinzufügen",
       "titleEdit": "Zusätzlichen Zähler bearbeiten"
     },
+    "feedinfinal": {
+      "applied": "Angewendet",
+      "counts": "{slots} Werte, {sessions} Ladungen",
+      "countsLabel": "Neu berechnet",
+      "description": "Die OeMAG veröffentlicht den Marktpreis eines Monats erst im Folgemonat. Am {day}. wird der dann veröffentlichte Wert als endgültiger Preis des Vormonats übernommen: Die gespeicherten Einspeisepreise und die Preise der Ladevorgänge (Solaranteil) dieses Monats werden einmal neu berechnet.",
+      "doneMessage": "{month} wurde neu berechnet.",
+      "edit": "Auswählen",
+      "invalidPrice": "Bitte einen Preis zwischen 0 und 100 ct/kWh eingeben.",
+      "lastLabel": "Endgültig",
+      "market": "Marktpreis",
+      "month": "Monat",
+      "monthsLabel": "Berechnete Monate",
+      "nextLabel": "Nächste Neuberechnung",
+      "none": "Noch kein Monat",
+      "nonePublished": "noch keiner",
+      "priceHelp": "Marktpreis wie von der OeMAG veröffentlicht. Die im Tarif eingestellten Aufschläge und Steuern werden wie bei der automatischen Berechnung angewendet.",
+      "priceLabel": "Marktpreis",
+      "published": "Zuletzt veröffentlicht:",
+      "recalcHelp": "Zum Beispiel wenn der Wert am Stichtag falsch war. Überschreibt die gespeicherten Einspeisepreise des Monats und die Preise seiner Ladevorgänge (Solaranteil).",
+      "recalcTitle": "Monat neu berechnen",
+      "recalculate": "Neu berechnen",
+      "show": "Monate anzeigen",
+      "source": "Art",
+      "sourceAuto": "automatisch",
+      "sourceManual": "von Hand",
+      "title": "OeMAG-Abrechnung"
+    },
     "form": {
       "danger": "Achtung",
       "deprecated": "veraltet",
@@ -473,6 +504,25 @@
       "v1Support": "Unterstützung für InfluxDB 1.x?",
       "v2Support": "Zurück zu InfluxDB 2.x"
     },
+    "lmadvanced": {
+      "description": "Feineinstellungen für Peak Shaving, Netzladen und die Prioritäten. Die Standardwerte passen für die meisten Anlagen.",
+      "entryLabel": "Erweitert",
+      "freeValueHelp": "Wert, der in die Peak-Shaving-Entität geschrieben wird, solange die Batterie frei entladen darf (über der Reserve oder Peak Shaving aus). Standard {std} W.",
+      "freeValueLabel": "Freigabewert",
+      "holdOffHelp": "So lange bleibt das Netzladen aus, nachdem es wegen einer Spitze oder dem Stromkreis abgebrochen wurde. Verhindert, dass die Batterie zwischen Laden und Entladen hin und her springt. Standard {std} min.",
+      "holdOffLabel": "Wartezeit nach Netzlade-Abbruch",
+      "hysteresisHelp": "Der Ladestand muss um diesen Wert über die Reserve steigen, bevor Peak Shaving die Reserve wieder freigibt. Verhindert ständiges Umschalten um die Reserve herum. Standard {std} %.",
+      "hysteresisLabel": "Hysterese der Reserve",
+      "invalid": "{label}: bitte einen Wert von {min} bis {max} eingeben.",
+      "phases1": "1 Phase",
+      "phases3": "3 Phasen",
+      "phasesHelp": "Über wie viele Phasen die Batterie beim Netzladen Strom bezieht. Wird nur für Stromkreise mit Stromgrenze (A) gebraucht.",
+      "phasesLabel": "Phasen der Batterie",
+      "status": "Hysterese {hysteresis} %, Wartezeit {holdOff} min",
+      "timeoutHelp": "So lange hält ein wartender Verbraucher höherer Priorität die Leistung für sich frei, ohne sich erneut zu melden. Standard {std} min.",
+      "timeoutLabel": "Ablaufzeit der Reservierung",
+      "title": "Erweiterte Einstellungen"
+    },
     "lmpriorities": {
       "battery": "Hausbatterie (Netzladen)",
       "description": "Reicht die Leistung eines Stromkreises nicht für alle, wird die niedrigste Priorität zuerst reduziert oder abgeschaltet. Bei gleicher Priorität bekommt die Leistung, wer zuerst da ist. Änderungen wirken sofort.",
@@ -484,6 +534,63 @@
       "noLoads": "Keine Verbraucher im Lastmanagement. Ladepunkte erscheinen hier, sobald ihnen ein Stromkreis zugewiesen ist, die Batterie über den Punkt Batterie-Stromkreis.",
       "none": "Keine Verbraucher",
       "title": "Lastmanagement-Prioritäten"
+    },
+    "lmprofiles": {
+      "active": "Aktiv",
+      "back": "Zurück",
+      "confirmDelete": "Profil „{name}“ löschen?",
+      "count": "{count} Profile",
+      "delete": "Löschen",
+      "description": "Profile fassen Einstellungen zusammen, zum Beispiel für Sommer und Winter. Gewechselt wird im Reiter Batterie.",
+      "edit": "Bearbeiten",
+      "entryLabel": "Profile",
+      "field": {
+        "bufferSoc": "Batterie als Ladepuffer ab (0 = aus)",
+        "bufferStartSoc": "Laden starten ab (0 = aus)",
+        "dischargeControl": "Entladen bei Schnell und Geplant sperren",
+        "gridCharge": "Netzladen nach SoC",
+        "gridChargeStart": "Start-SoC",
+        "gridChargeStop": "Stopp-SoC",
+        "peakLimit": "Peak-Grenze",
+        "peakReserve": "Reserve-SoC",
+        "peakShaving": "Lastspitzenkappung",
+        "prioritySoc": "Überschuss zuerst in die Batterie bis",
+        "solarShare": "Sonnenanteil · {title}"
+      },
+      "group": {
+        "battery": "Batterienutzung",
+        "gridCharge": "Netzladen",
+        "peakShaving": "Lastspitzenkappung",
+        "wallbox": "Wallbox"
+      },
+      "hint": "Nicht angehakte Werte bleiben beim Wechsel unverändert.",
+      "icon": "Symbol",
+      "inactive": "Inaktiv",
+      "missingValue": "Bitte für jeden angehakten Wert eine Zahl eingeben.",
+      "name": "Name",
+      "new": "Neues Profil",
+      "no": "Nein",
+      "none": "Keine",
+      "off": "Aus",
+      "on": "Ein",
+      "takeCurrent": "Aktuelle Werte übernehmen",
+      "title": "Profile",
+      "unchanged": "nicht ändern",
+      "valueCount": "{count} Werte",
+      "yes": "Ja"
+    },
+    "lmshedguard": {
+      "description": "Muss das Lastmanagement einen geschützten Ladepunkt abschalten, bleibt er danach für die eingestellte Zeit aus, auch wenn die Leistung schon vorher wieder reicht. So schaltet zum Beispiel ein Heizstab nicht im Takt der schwankenden Last ein und aus. Ein Ladepunkt, der mangels Leistung gar nicht erst starten konnte, wird nicht gesperrt.",
+      "entryLabel": "Abwurfschutz",
+      "invalid": "Abwurfschutz konnte nicht gespeichert werden.",
+      "invalidMinutes": "Bitte eine ganze Zahl von 0 bis {max} Minuten eingeben.",
+      "loadpointsLabel": "Geschützte Ladepunkte",
+      "minutesHelp": "Wie lange ein geschützter Ladepunkt nach dem Abwurf aus bleibt. 0 schaltet den Schutz aus.",
+      "minutesLabel": "Sperrzeit nach Abwurf",
+      "noLoadpoints": "Keine Ladepunkte im Lastmanagement. Ladepunkte erscheinen hier, sobald ihnen ein Stromkreis zugewiesen ist.",
+      "off": "Aus",
+      "status": "{minutes} min, {count} Ladepunkte",
+      "title": "Abwurfschutz"
     },
     "loadpoint": {
       "addCharger": {
@@ -1364,6 +1471,53 @@
     "timezone": "Zeitzone",
     "title": "Problem melden",
     "version": "Version"
+  },
+  "lmoverview": {
+    "battery": "Hausbatterie (Netzladen)",
+    "blockedCircuit": "Stromkreis · bis {time}",
+    "description": "Was das Lastmanagement gerade tut.",
+    "event": {
+      "gridChargeDenied": "Netzladen gesperrt · Stromkreis erlaubt {allowed} von {wanted}",
+      "gridChargePaused": "Netzladen pausiert · Bedarf {demand} über Peak-Grenze {limit}",
+      "peak": "Peak abgefangen · Bedarf {demand}, Grenze {limit}",
+      "shed": "{load} abgeworfen · Stromkreis bei {power}",
+      "shedGuard": "{load} abgeworfen · Stromkreis bei {power}, {minutes} min gesperrt",
+      "throttled": "{load} gedrosselt {requested} → {allowed}"
+    },
+    "events": "Letzte Ereignisse",
+    "gridCharge": "Netzladen Batterie",
+    "loads": "Verbraucher · höchste Priorität zuerst",
+    "menu": "Lastmanagement",
+    "noEvents": "Noch keine Ereignisse seit dem Start.",
+    "noLoads": "Keine Verbraucher im Lastmanagement.",
+    "overall": {
+      "limited": "Begrenzt",
+      "normal": "Normal",
+      "overload": "Überlast"
+    },
+    "pausedPeak": "Peak · wieder ab {time}",
+    "peak": "Peak Shaving · 15-min-Mittel",
+    "peakFree": "Über der Reserve · frei",
+    "peakOff": "Aus",
+    "peakReserve": "Reserve aktiv · Soll {setpoint}",
+    "priority": "Prio {priority}",
+    "protected": "Abwurfschutz",
+    "setpoint": "Soll {power}",
+    "state": {
+      "blocked": "Gesperrt",
+      "off": "Aus",
+      "paused": "Pausiert",
+      "running": "Läuft"
+    },
+    "stateDetail": {
+      "blocked": "Gesperrt · bis {time}",
+      "charging": "Lädt · Soll {power}",
+      "paused": "Pausiert · Peak bis {time}",
+      "shed": "Abgeworfen · gesperrt bis {time}",
+      "throttled": "Gedrosselt · {allowed} von {requested}",
+      "waiting": "Wartet · braucht {requested}, {allowed} frei"
+    },
+    "title": "Lastmanagement"
   },
   "log": {
     "areaLabel": "Nach Bereich filtern",

@@ -15,6 +15,13 @@
 		/>
 
 		<GeneralConfigEntry
+			test-id="lmshedguard-entry"
+			:label="$t('config.lmshedguard.entryLabel')"
+			:text="shedGuardStatus"
+			@edit="openModal('lmshedguard')"
+		/>
+
+		<GeneralConfigEntry
 			test-id="gridcharge-entry"
 			:label="$t('config.gridcharge.entryLabel')"
 			:text="gridChargeStatus"
@@ -28,6 +35,20 @@
 			:text="peakShavingStatus"
 			@edit="openModal('peakshaving')"
 		/>
+
+		<GeneralConfigEntry
+			test-id="lmprofiles-entry"
+			:label="$t('config.lmprofiles.entryLabel')"
+			:text="profilesStatus"
+			@edit="openModal('lmprofiles')"
+		/>
+
+		<GeneralConfigEntry
+			test-id="lmadvanced-entry"
+			:label="$t('config.lmadvanced.entryLabel')"
+			:text="advancedStatus"
+			@edit="openModal('lmadvanced')"
+		/>
 	</div>
 </template>
 
@@ -38,8 +59,8 @@ import { openModal } from "@/configModal";
 import GeneralConfigEntry from "./GeneralConfigEntry.vue";
 
 // Entry rows of the load management details. The settings themselves are in
-// PeakShavingCircuitModal, LmPrioritiesModal, GridChargeModal and
-// PeakShavingModal. The switches, the peak limit and the soc values live on the
+// PeakShavingCircuitModal, LmPrioritiesModal, LmShedGuardModal, GridChargeModal,
+// PeakShavingModal, LmProfilesModal and LmAdvancedModal. The switches, the peak limit and the soc values live on the
 // battery page.
 export default defineComponent({
 	name: "PeakShavingConfig",
@@ -60,6 +81,31 @@ export default defineComponent({
 				return this.$t("config.lmpriorities.none");
 			}
 			return this.$t("config.lmpriorities.loads", { count });
+		},
+		shedGuardStatus(): string {
+			const minutes = store.state.lmShedGuard ?? 0;
+			const count = store.state.lmShedProtected?.length ?? 0;
+			if (!minutes || !count) {
+				return this.$t("config.lmshedguard.off");
+			}
+			return this.$t("config.lmshedguard.status", { minutes, count });
+		},
+		profilesStatus(): string {
+			const count = store.state.lmProfiles?.length ?? 0;
+			if (!count) {
+				return this.$t("config.lmprofiles.none");
+			}
+			return this.$t("config.lmprofiles.count", { count });
+		},
+		advancedStatus(): string {
+			const adv = store.state.lmAdvanced;
+			if (!adv) {
+				return "";
+			}
+			return this.$t("config.lmadvanced.status", {
+				hysteresis: adv.hysteresis,
+				holdOff: adv.holdOff,
+			});
 		},
 		dynamicCharge(): boolean {
 			return !!store.state.peakShavingChargeEntity;

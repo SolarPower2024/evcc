@@ -5,6 +5,7 @@ package core
 
 import (
 	"sync"
+	"time"
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/lm"
@@ -24,35 +25,78 @@ func (lp *Loadpoint) LmPriority() int {
 }
 
 // lmLimit caps the requested current against the loadpoint's circuit, with the
-// priorities of package lm on top
+// priorities of package lm on top. A protected loadpoint that had to be shed
+// stays off for the guard time set in the ui.
 func (lp *Loadpoint) lmLimit(current float64) float64 {
-	if lp.chargerHasFeature(api.SwitchDevice) {
-		return lp.lmSwitchLimit(current)
+	now := lp.clock.Now()
+
+	if lm.Guarded(lp, now) > 0 {
+		// asking for nothing while held off, lower priority loads may use the power
+		lm.Forget(lp)
+		return 0
 	}
 
+	var limited, requested, allowed float64
+	var shed bool
+
+	switchDevice := lp.chargerHasFeature(api.SwitchDevice)
+	if switchDevice {
+		limited, requested, allowed = lp.lmSwitchLimit(current)
+		shed = current > 0 && limited == 0
+	} else {
+		limited, requested, allowed = lp.lmCurrentLimit(current)
+		minCurrent := lp.effectiveMinCurrent()
+		shed = current >= minCurrent && limited < minCurrent
+	}
+
+	// for the overview in the ui, see core/site_lm_status.go
+	running := lp.enabled && !shed
+	if lm.Record(lp, requested, allowed, running, now) && !switchDevice {
+		lm.AddEvent(lm.Event{At: now, Type: lm.EventThrottled, Load: lp.GetTitle(), A: requested, B: allowed})
+	}
+
+	// only switching off a running load counts, not one that could not start
+	if shed && lp.enabled {
+		d := lm.Shed(lp, now)
+		if d > 0 {
+			lp.log.INFO.Printf("shed by load management, stays off for %s", d.Round(time.Second))
+		}
+		lm.AddEvent(lm.Event{At: now, Type: lm.EventShed, Load: lp.GetTitle(), A: d.Minutes(), B: lp.circuit.GetChargePower()})
+	}
+
+	return limited
+}
+
+// lmCurrentLimit caps a current controlled loadpoint. It also returns the power
+// requested and allowed.
+func (lp *Loadpoint) lmCurrentLimit(current float64) (limited, requested, allowed float64) {
 	currentLimit := lm.ValidateCurrent(lp, lp.circuit, lp.actualMaxChargeCurrent(), current)
 
 	activePhases := lp.ActivePhases()
-	powerLimit := lm.ValidatePower(lp, lp.circuit, lp.chargePower, currentToPower(current, activePhases))
+	requested = currentToPower(current, activePhases)
+	powerLimit := lm.ValidatePower(lp, lp.circuit, lp.chargePower, requested)
 	currentLimitViaPower := powerToCurrent(powerLimit, activePhases)
 
-	limited := lp.roundedCurrent(min(currentLimit, currentLimitViaPower))
+	limited = lp.roundedCurrent(min(currentLimit, currentLimitViaPower))
 	if minCurrent := lp.effectiveMinCurrent(); limited < minCurrent && current >= minCurrent {
 		lp.log.DEBUG.Printf("circuit limit %.3gA below min current %.3gA", limited, minCurrent)
 	}
 
-	return limited
+	allowed = min(powerLimit, currentToPower(currentLimit, activePhases))
+
+	return limited, requested, allowed
 }
 
 // lmSwitchLimit handles a switch device, which draws its full power or nothing:
 // its current cannot be limited, so a partial budget is no budget. Upstream
 // would switch a 3 kW heater on with 1.6 kW to spare because 1.6 kW is still
 // above the minimum current, and the circuit then stays overloaded.
-func (lp *Loadpoint) lmSwitchLimit(current float64) float64 {
+// It also returns the power requested and allowed.
+func (lp *Loadpoint) lmSwitchLimit(current float64) (limited, requested, allowed float64) {
 	if current <= 0 {
 		// staying off asks for nothing, which also clears an earlier demand
 		lm.ValidatePower(lp, lp.circuit, lp.chargePower, 0)
-		return current
+		return current, 0, 0
 	}
 
 	need := lp.lmSwitchPower()
@@ -62,10 +106,10 @@ func (lp *Loadpoint) lmSwitchLimit(current float64) float64 {
 		if lp.enabled {
 			lp.log.DEBUG.Printf("circuit allows %.0fW, switch needs %.0fW: off", allowed, need)
 		}
-		return 0
+		return 0, need, allowed
 	}
 
-	return current
+	return current, need, need
 }
 
 // ratedPower is implemented by switch devices with a configured power

@@ -12,10 +12,16 @@ package core
 //   - the price of the charging sessions started in that month, whose solar
 //     share is valued at the feed-in price
 //
-// Each month is finalized exactly once, even if the source changes its value
-// later: the value on the finalize day is the one that counts.
+// Each month is finalized automatically exactly once, even if the source changes
+// its value later: the value on the finalize day is the one that counts. A month
+// can be recalculated by hand from the ui, with a corrected price if need be.
+// The finalized months are kept as a history the ui shows.
 
 import (
+	"cmp"
+	"errors"
+	"fmt"
+	"slices"
 	"time"
 
 	"github.com/evcc-io/evcc/api"
@@ -24,14 +30,38 @@ import (
 	"github.com/evcc-io/evcc/core/session"
 	"github.com/evcc-io/evcc/db"
 	"github.com/evcc-io/evcc/db/settings"
+	"github.com/evcc-io/evcc/tariff"
 	"gorm.io/gorm"
 )
 
 // finalFeedIn is a feed-in tariff whose price for a month is published after it
 type finalFeedIn interface {
 	FinalizeDay() int
-	FinalPrice(ts time.Time) (float64, error)
+	MarketPrice() (float64, error)
+	TotalPrice(market float64, ts time.Time) float64
 }
+
+// feedInMonth is a finalized month as kept in the history
+type feedInMonth struct {
+	Month    string    `json:"month"`    // YYYY-MM
+	Market   float64   `json:"market"`   // market price in EUR/kWh, 0 = unknown
+	Price    float64   `json:"price"`    // feed-in rate applied, with charges and tax
+	Slots    int       `json:"slots"`    // 15 minute rates recalculated
+	Sessions int       `json:"sessions"` // charging sessions recalculated
+	Skipped  int       `json:"skipped"`  // sessions without stored rates
+	At       time.Time `json:"at"`
+	Manual   bool      `json:"manual,omitempty"`
+}
+
+// feedInState is what the ui shows in the feed-in tariff's card
+type feedInState struct {
+	FinalizeDay int           `json:"finalizeDay"`
+	Market      float64       `json:"market"` // latest published market price, 0 = none yet
+	Months      []feedInMonth `json:"months"`
+}
+
+// feedInHistoryLength is how many months the history keeps
+const feedInHistoryLength = 24
 
 // feedInFinalizer returns the tariff's final price capability, looking through
 // the wrappers evcc puts around tariffs: one for rates coarser than a slot, one
@@ -64,6 +94,13 @@ func (site *Site) updateFeedInFinalization() {
 		return
 	}
 
+	site.lms().feedInOnce.Do(site.backfillFeedInHistory)
+
+	// the ui shows the latest market price, which changes a few times a month
+	if site.feedInMarketChanged(f) {
+		site.publishFeedIn(f)
+	}
+
 	now := time.Now()
 	done, _ := settings.String(keys.FeedInFinalized)
 
@@ -85,17 +122,157 @@ func (site *Site) updateFeedInFinalization() {
 		return
 	}
 
-	res, err := finalizeFeedIn(db.Instance, from, to, f.FinalPrice)
+	market, err := f.MarketPrice()
 	if err != nil {
 		site.log.ERROR.Printf("feed-in %s: %v", month, err)
 		return
 	}
 
-	settings.SetString(keys.FeedInFinalized, month)
-	site.publish(keys.FeedInFinalized, month)
+	if err := site.finalizeFeedInMonth(f, month, from, to, market, false); err != nil {
+		site.log.ERROR.Printf("feed-in %s: %v", month, err)
+	}
+}
+
+// finalizeFeedInMonth recalculates a month at the given market price and
+// records it in the history
+func (site *Site) finalizeFeedInMonth(f finalFeedIn, month string, from, to time.Time, market float64, manual bool) error {
+	res, err := finalizeFeedIn(db.Instance, from, to, func(ts time.Time) (float64, error) {
+		return f.TotalPrice(market, ts), nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// the automatic finalization skips a month recalculated by hand
+	if done, _ := settings.String(keys.FeedInFinalized); done < month {
+		settings.SetString(keys.FeedInFinalized, month)
+	}
+
+	site.recordFeedInMonth(feedInMonth{
+		Month:    month,
+		Market:   market,
+		Price:    res.price,
+		Slots:    res.slots,
+		Sessions: res.sessions,
+		Skipped:  res.skipped,
+		At:       time.Now(),
+		Manual:   manual,
+	})
+	site.publishFeedIn(f)
 
 	site.log.INFO.Printf("feed-in %s finalized at %.5f/kWh: %d rate slots and %d charging sessions recalculated, %d sessions without stored rates left as they were",
 		month, res.price, res.slots, res.sessions, res.skipped)
+
+	return nil
+}
+
+// feedInHistory returns the finalized months, newest first
+func feedInHistory() []feedInMonth {
+	var res []feedInMonth
+	_ = settings.Json(keys.FeedInHistory, &res)
+	return res
+}
+
+// recordFeedInMonth adds a month to the history, replacing an earlier entry
+func (site *Site) recordFeedInMonth(m feedInMonth) {
+	months := slices.DeleteFunc(feedInHistory(), func(e feedInMonth) bool { return e.Month == m.Month })
+	months = append(months, m)
+
+	// YYYY-MM sorts in date order
+	slices.SortFunc(months, func(a, b feedInMonth) int { return cmp.Compare(b.Month, a.Month) })
+	if len(months) > feedInHistoryLength {
+		months = months[:feedInHistoryLength]
+	}
+
+	if err := settings.SetJson(keys.FeedInHistory, months); err != nil {
+		site.log.ERROR.Printf("feed-in history: %v", err)
+	}
+}
+
+// backfillFeedInHistory adds a month finalized before the history existed, with
+// the rate its slots hold now
+func (site *Site) backfillFeedInHistory() {
+	done, err := settings.String(keys.FeedInFinalized)
+	if err != nil || done == "" {
+		return
+	}
+
+	if slices.ContainsFunc(feedInHistory(), func(m feedInMonth) bool { return m.Month == done }) {
+		return
+	}
+
+	from, err := time.ParseInLocation("2006-01", done, time.Local)
+	if err != nil {
+		return
+	}
+
+	m := feedInMonth{Month: done}
+	if avg, ok, err := metrics.FeedInAverage(db.Instance, from, from.AddDate(0, 1, 0)); err == nil && ok {
+		m.Price = avg
+	}
+
+	site.recordFeedInMonth(m)
+}
+
+// feedInMarketChanged reports whether the market price differs from the one
+// last published, or none was published yet
+func (site *Site) feedInMarketChanged(f finalFeedIn) bool {
+	market, _ := f.MarketPrice()
+
+	s := site.lms()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.feedInMarket != nil && *s.feedInMarket == market {
+		return false
+	}
+	s.feedInMarket = &market
+
+	return true
+}
+
+func (site *Site) publishFeedIn(f finalFeedIn) {
+	market, _ := f.MarketPrice()
+
+	months := feedInHistory()
+	if months == nil {
+		months = []feedInMonth{}
+	}
+
+	site.publish(keys.FeedInFinal, feedInState{
+		FinalizeDay: f.FinalizeDay(),
+		Market:      market,
+		Months:      months,
+	})
+}
+
+// FinalizeFeedIn recalculates a past month at the given market price in EUR/kWh:
+// for a price that was wrong on the finalize day, or a month not finalized yet
+func (site *Site) FinalizeFeedIn(month string, market float64) error {
+	f, ok := feedInFinalizer(site.GetTariff(api.TariffUsageFeedIn))
+	if !ok {
+		return errors.New("the feed-in tariff has no final price")
+	}
+	if db.Instance == nil {
+		return errors.New("no database")
+	}
+
+	if err := tariff.ValidMarketPrice(market); err != nil {
+		return err
+	}
+
+	from, err := time.ParseInLocation("2006-01", month, time.Local)
+	if err != nil {
+		return fmt.Errorf("invalid month: %s", month)
+	}
+
+	now := time.Now()
+	if !from.Before(time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local)) {
+		return fmt.Errorf("month is not over yet: %s", month)
+	}
+
+	return site.finalizeFeedInMonth(f, month, from, from.AddDate(0, 1, 0), market, true)
 }
 
 // feedInDue returns the month to finalize at now: the previous one, once the

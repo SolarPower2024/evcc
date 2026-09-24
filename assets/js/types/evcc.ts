@@ -161,6 +161,96 @@ export interface LmPriority {
   battery?: boolean;
 }
 
+// custom: advanced load management settings, see core/site_lm_advanced.go
+export interface LmAdvanced {
+  /** Peak reserve soc band in %. */
+  hysteresis: number;
+  /** Setpoint signalling free discharge in W. */
+  freeValue: number;
+  /** Battery grid charge hold-off in minutes. */
+  holdOff: number;
+  /** Unserved demand expiry in minutes. */
+  timeout: number;
+  /** Battery phases for current accounting. */
+  phases: number;
+}
+
+// custom: a battery profile, see core/lm/profile. Values left out are not changed.
+export interface LmProfile {
+  id: string;
+  name: string;
+  icon?: string;
+  gridCharge?: boolean;
+  gridChargeStart?: number;
+  gridChargeStop?: number;
+  prioritySoc?: number;
+  bufferSoc?: number;
+  bufferStartSoc?: number;
+  dischargeControl?: boolean;
+  peakShaving?: boolean;
+  peakReserve?: number;
+  /** In W. */
+  peakLimit?: number;
+  /** Solar share in % by loadpoint name. */
+  solarShare?: Record<string, number>;
+}
+
+// custom: load management overview, see core/site_lm_status.go
+export interface LmLoadStatus {
+  name: string;
+  title: string;
+  battery?: boolean;
+  priority: number;
+  /** Protected by the shed guard. */
+  protected?: boolean;
+  /** Drawn now in W. */
+  power: number;
+  state: "running" | "throttled" | "shed" | "waiting" | "paused" | "off";
+  /** Asked for in W. */
+  requested?: number;
+  /** Allowed in W. */
+  allowed?: number;
+  /** Shed or paused until. */
+  until?: string;
+}
+
+export interface LmEvent {
+  at: string;
+  type: "shed" | "throttled" | "gridChargePaused" | "gridChargeDenied" | "peak";
+  load?: string;
+  a: number;
+  b: number;
+}
+
+export interface LmStatus {
+  loads: LmLoadStatus[];
+  /** Newest first. */
+  events: LmEvent[];
+}
+
+// custom: a finalized feed-in month, see core/site_feedin.go
+export interface FeedInMonth {
+  /** YYYY-MM. */
+  month: string;
+  /** Market price in EUR/kWh, 0 = unknown. */
+  market: number;
+  /** Feed-in rate applied in EUR/kWh, with charges and tax. */
+  price: number;
+  slots: number;
+  sessions: number;
+  skipped: number;
+  at: string;
+  manual?: boolean;
+}
+
+export interface FeedInFinal {
+  finalizeDay: number;
+  /** Latest published market price in EUR/kWh, 0 = none yet. */
+  market: number;
+  /** Newest first. */
+  months: FeedInMonth[];
+}
+
 /**
  * Complete system state as returned by /api/state and pushed via websocket and MQTT.
  * This structure mirrors the internal UI state and carries no compatibility promise.
@@ -335,6 +425,22 @@ export interface State {
   peakShavingChargeSetpoint?: number;
   /** Loads taking part in load management with their shed priority, lower is shed first. */
   lmPriorities?: LmPriority[];
+  /** Minutes a protected loadpoint stays off after load management shed it, 0 = off. */
+  lmShedGuard?: number;
+  /** Config names of the loadpoints the shed guard protects. */
+  lmShedProtected?: string[];
+  /** Advanced load management settings in effect. */
+  lmAdvanced?: LmAdvanced;
+  /** OeMAG finalization: finalize day, published market price and finalized months. */
+  feedInFinal?: FeedInFinal;
+  /** Load management overview, only while circuits are configured. */
+  lmStatus?: LmStatus;
+  /** Battery profiles. */
+  lmProfiles?: LmProfile[];
+  /** Id of the profile applied last, empty = none. */
+  lmProfileActive?: string;
+  /** Loadpoints a profile can set the solar share of, heating devices left out. */
+  lmProfileWallboxes?: { name: string; title: string; solarShare: number }[];
   /** Feed-in price limit for discharging the home battery to the grid (experimental). */
   batteryGridDischargeLimit?: number | null;
   /** Home battery is currently discharged to the grid. */

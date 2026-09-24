@@ -154,12 +154,22 @@ func (t *Oemag) FinalizeDay() int {
 	return t.finalizeDay
 }
 
-// FinalPrice returns the published price as the feed-in rate at ts, with the
-// configured charges and tax applied like for the running rates
-func (t *Oemag) FinalPrice(ts time.Time) (float64, error) {
+// MarketPrice returns the latest published market price in EUR/kWh, from the
+// finalize day on the final price of the previous month
+func (t *Oemag) MarketPrice() (float64, error) {
 	var price float64
-	if err := t.data.GetFunc(func(v float64) { price = v }); err != nil {
-		return 0, err
-	}
-	return t.totalPrice(price, ts), nil
+	err := t.data.GetFunc(func(v float64) { price = v })
+	return price, err
+}
+
+// TotalPrice returns a market price as the feed-in rate at ts, with the
+// configured charges and tax applied like for the running rates
+func (t *Oemag) TotalPrice(market float64, ts time.Time) float64 {
+	return t.totalPrice(market, ts)
+}
+
+// ValidMarketPrice checks a market price entered by hand like a published one
+func ValidMarketPrice(price float64) error {
+	_, err := validOemagPrice(oemagPrice{Price: &price, Unit: "EUR/kWh"})
+	return err
 }

@@ -568,6 +568,10 @@
 				<PeakShavingModal />
 				<PeakShavingCircuitModal />
 				<LmPrioritiesModal />
+				<LmShedGuardModal />
+				<LmAdvancedModal />
+				<LmProfilesModal />
+				<FeedInFinalModal />
 				<GridChargeModal />
 				<ExperimentalModal :experimental="experimental" />
 				<RemoteModal :remote="remote" :is-sponsor="isSponsor" :site-title="siteTitle" />
@@ -630,6 +634,10 @@ import PeakShavingConfig from "../components/Config/PeakShavingConfig.vue";
 import PeakShavingModal from "../components/Config/PeakShavingModal.vue";
 import PeakShavingCircuitModal from "../components/Config/PeakShavingCircuitModal.vue";
 import LmPrioritiesModal from "../components/Config/LmPrioritiesModal.vue";
+import LmShedGuardModal from "../components/Config/LmShedGuardModal.vue";
+import LmAdvancedModal from "../components/Config/LmAdvancedModal.vue";
+import LmProfilesModal from "../components/Config/LmProfilesModal.vue";
+import FeedInFinalModal from "../components/Config/FeedInFinalModal.vue";
 import GridChargeModal from "../components/Config/GridChargeModal.vue";
 import HemsIcon from "../components/MaterialIcon/Hems.vue";
 import HemsModal from "../components/Config/HemsModal.vue";
@@ -750,6 +758,10 @@ export default defineComponent({
 		PeakShavingModal,
 		PeakShavingCircuitModal,
 		LmPrioritiesModal,
+		LmShedGuardModal,
+		LmAdvancedModal,
+		LmProfilesModal,
+		FeedInFinalModal,
 		GridChargeModal,
 		HemsIcon,
 		HemsModal,

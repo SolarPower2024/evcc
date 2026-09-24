@@ -51,6 +51,7 @@ type peakState struct {
 	circuit     string  // circuit the battery draws from, empty = fall back to yaml
 
 	shaving    bool // hysteresis state: below the reserve
+	covering   bool // covering a peak right now, for the event log
 	handedBack bool // free value written since the last setpoint, nothing more to send while off
 
 	demand      float64   // grid demand without the battery in W, from the last cycle
@@ -262,6 +263,9 @@ func (site *Site) publishChargePower() {
 
 // peakFreeValue returns the value signalling unrestricted discharge
 func (site *Site) peakFreeValue() float64 {
+	if v := site.advanced().FreeValue; v != nil {
+		return *v
+	}
 	if v := site.LoadManagement.PeakShaving.FreeValue; v > 0 {
 		return v
 	}
@@ -269,6 +273,9 @@ func (site *Site) peakFreeValue() float64 {
 }
 
 func (site *Site) peakHysteresis() float64 {
+	if v := site.advanced().Hysteresis; v != nil {
+		return *v
+	}
 	if v := site.LoadManagement.PeakShaving.Hysteresis; v > 0 {
 		return v
 	}
@@ -306,6 +313,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 		// shaving stopped running
 		s.mu.Lock()
 		s.shaving = false
+		s.covering = false
 		s.mu.Unlock()
 
 		site.publish(keys.PeakShavingActive, false)
@@ -342,6 +350,17 @@ func (site *Site) updatePeakShaving(state siteState) {
 
 	case shaving:
 		value = peakSetpoint(state.gridPower, state.battery.Power, limit)
+	}
+
+	// log the start of a peak, not every cycle of it
+	s.mu.Lock()
+	covering := shaving && value > 0
+	started := covering && !s.covering
+	s.covering = covering
+	s.mu.Unlock()
+
+	if started {
+		lm.AddEvent(lm.Event{At: time.Now(), Type: lm.EventPeak, A: state.gridPower + state.battery.Power, B: limit})
 	}
 
 	// published explicitly rather than left for the ui to infer from the value:
@@ -491,6 +510,7 @@ func (site *Site) peakPausesGridCharge() bool {
 	if s.demand > s.limit {
 		if !now.Before(s.chargePause) {
 			site.log.DEBUG.Printf("battery grid charge: paused, demand %.0fW exceeds the %.0fW peak limit", s.demand, s.limit)
+			lm.AddEvent(lm.Event{At: now, Type: lm.EventGridChargePaused, A: s.demand, B: s.limit})
 		}
 		s.chargePause = now.Add(site.lmHoldOff())
 		return true
@@ -520,6 +540,10 @@ func (site *Site) peakChargeHeadroom() (headroom float64, ok bool) {
 // charging is the exception: it has already been cleared against both the
 // circuit and a running peak, see batteryGridChargeRequested.
 func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rate api.Rate) {
+	// the last hook of the cycle: everything the overview shows is decided now
+	defer site.publishLmStatus(gridCharge)
+	defer site.publishLmWallboxes()
+
 	if gridCharge || !site.peakShavingActive() {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)
 		return

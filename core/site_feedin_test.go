@@ -5,10 +5,13 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/session"
 	"github.com/evcc-io/evcc/db"
+	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/tariff"
+	"github.com/evcc-io/evcc/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -159,8 +162,9 @@ func TestFeedInFinalizerUnwraps(t *testing.T) {
 
 type finalTariff struct{ api.Tariff }
 
-func (finalTariff) FinalizeDay() int                      { return 15 }
-func (finalTariff) FinalPrice(time.Time) (float64, error) { return 0.09, nil }
+func (finalTariff) FinalizeDay() int                               { return 15 }
+func (finalTariff) MarketPrice() (float64, error)                  { return 0.09, nil }
+func (finalTariff) TotalPrice(market float64, _ time.Time) float64 { return market - 0.01 }
 
 type wrappedTariff struct{ t api.Tariff }
 
@@ -180,4 +184,58 @@ func TestFinalizeFeedInWithoutSessions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.slots)
 	assert.Equal(t, 0, res.sessions)
+}
+
+// TestFeedInHistory: every finalization is recorded, a recalculation by hand
+// replaces the month's entry and keeps the automatic one from running again
+func TestFeedInHistory(t *testing.T) {
+	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	settings.SetJson(keys.FeedInHistory, []feedInMonth{})
+	settings.SetString(keys.FeedInFinalized, "")
+
+	site := &Site{log: util.NewLogger("test")}
+	f := &finalTariff{}
+
+	jul := time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local)
+	aug := jul.AddDate(0, 1, 0)
+
+	provisional := 0.07
+	require.NoError(t, metrics.PersistTariffs(aug.AddDate(0, 0, 9), nil, &provisional, nil, nil))
+
+	// automatic, at the published 9 ct minus 1 ct charges
+	require.NoError(t, site.finalizeFeedInMonth(f, "2026-08", aug, aug.AddDate(0, 1, 0), 0.09, false))
+	// july by hand
+	require.NoError(t, site.finalizeFeedInMonth(f, "2026-07", jul, aug, 0.085, true))
+
+	months := feedInHistory()
+	require.Len(t, months, 2)
+	assert.Equal(t, "2026-08", months[0].Month, "newest first")
+	assert.InDelta(t, 0.08, months[0].Price, 1e-9)
+	assert.Equal(t, 1, months[0].Slots)
+	assert.False(t, months[0].Manual)
+	assert.True(t, months[1].Manual)
+
+	done, _ := settings.String(keys.FeedInFinalized)
+	assert.Equal(t, "2026-08", done, "an older month by hand does not move it back")
+
+	// august corrected by hand: the entry is replaced, the slot holds the new rate
+	require.NoError(t, site.finalizeFeedInMonth(f, "2026-08", aug, aug.AddDate(0, 1, 0), 0.095, true))
+	months = feedInHistory()
+	require.Len(t, months, 2)
+	assert.InDelta(t, 0.085, months[0].Price, 1e-9)
+	assert.True(t, months[0].Manual)
+
+	avg, ok, err := metrics.FeedInAverage(db.Instance, aug, aug.AddDate(0, 1, 0))
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.InDelta(t, 0.085, avg, 1e-9)
+
+	// a month finalized before the history existed is taken over once
+	settings.SetJson(keys.FeedInHistory, []feedInMonth{})
+	site.backfillFeedInHistory()
+	site.backfillFeedInHistory()
+	months = feedInHistory()
+	require.Len(t, months, 1)
+	assert.Equal(t, "2026-08", months[0].Month)
+	assert.InDelta(t, 0.085, months[0].Price, 1e-9, "the rate the slots hold")
 }

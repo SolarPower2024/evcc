@@ -46,9 +46,10 @@ func TestOemag(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0.08997, r.Value)
 
-	p, err := o.FinalPrice(time.Now())
+	p, err := o.MarketPrice()
 	require.NoError(t, err)
 	assert.Equal(t, 0.08997, p)
+	assert.Equal(t, 0.08997, o.TotalPrice(p, time.Now()))
 }
 
 func TestOemagChargesAndTax(t *testing.T) {
@@ -62,9 +63,11 @@ func TestOemagChargesAndTax(t *testing.T) {
 	o := tt.(*Oemag)
 	assert.Equal(t, 20, o.FinalizeDay())
 
-	p, err := o.FinalPrice(time.Now())
+	p, err := o.MarketPrice()
 	require.NoError(t, err)
-	assert.InDelta(t, 0.07997, p, 1e-9, "final price with the same charges as the running rate")
+	assert.Equal(t, 0.08997, p, "the market price as published")
+	assert.InDelta(t, 0.07997, o.TotalPrice(p, time.Now()), 1e-9, "final price with the same charges as the running rate")
+	assert.InDelta(t, 0.08, o.TotalPrice(0.09, time.Now()), 1e-9, "a price entered by hand gets them too")
 }
 
 func TestOemagRejects(t *testing.T) {
@@ -83,6 +86,10 @@ func TestOemagRejects(t *testing.T) {
 			assert.Error(t, err)
 		})
 	}
+
+	assert.NoError(t, ValidMarketPrice(0.08997))
+	assert.Error(t, ValidMarketPrice(8.997), "cent instead of euro")
+	assert.Error(t, ValidMarketPrice(0))
 
 	for _, day := range []int{0, 29, 31} {
 		_, err := NewOemagFromConfig(map[string]any{"uri": oemagServer(t, oemagSample), "finalizeday": day})

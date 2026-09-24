@@ -47,8 +47,18 @@ type lmState struct {
 
 	prios map[string]int // shed priorities set in the ui, by load name
 
+	guardMinutes int             // shed guard, see site_lm_guard.go
+	guarded      map[string]bool // loadpoints the shed guard protects, by name
+
+	// advanced settings, see site_lm_advanced.go. Own lock: they are read while
+	// the peak shaving state is locked.
+	advMu sync.Mutex
+	adv   lmAdvanced
+
 	batteryShedUntil  time.Time   // battery grid charge hold-off after a shed
 	feedInTried       time.Time   // last feed-in finalization attempt, see site_feedin.go
+	feedInOnce        sync.Once   // feed-in history backfilled
+	feedInMarket      *float64    // market price last published
 	batteryCircuit    api.Circuit // resolved from the assignment
 	batteryCircuitRef string      // what batteryCircuit was resolved from
 	batteryLoad       *batteryLoad
@@ -95,8 +105,11 @@ func (site *Site) restoreLmSettings() {
 		s.mu.Unlock()
 	}
 
-	lm.SetTimeout(site.LoadManagement.Timeout)
 	lm.SetPriorityLookup(site.lmPriorityLookup)
+
+	site.restoreLmGuard()
+	site.restoreLmAdvanced()
+	site.publishLmProfiles()
 
 	site.publishLmSettings()
 
@@ -208,6 +221,9 @@ func (site *Site) lmBatteryCircuit() api.Circuit {
 
 // lmHoldOff is how long battery grid charging stays off after it had to give way
 func (site *Site) lmHoldOff() time.Duration {
+	if v := site.advanced().HoldOff; v != nil {
+		return time.Duration(*v) * time.Minute
+	}
 	if d := site.LoadManagement.Battery.HoldOff; d > 0 {
 		return d
 	}
@@ -216,6 +232,9 @@ func (site *Site) lmHoldOff() time.Duration {
 
 // lmBatteryPhases returns the phase count used for the battery's current accounting
 func (site *Site) lmBatteryPhases() int {
+	if v := site.advanced().Phases; v != nil {
+		return int(*v)
+	}
 	if p := site.LoadManagement.Battery.Phases; p > 0 {
 		return p
 	}
@@ -324,6 +343,7 @@ func (site *Site) batteryCircuitAllows() bool {
 	s.mu.Unlock()
 
 	site.log.DEBUG.Printf("battery grid charge: load management allows %.0fW of %.0fW, holding off for %s", allowed, want, holdOff)
+	lm.AddEvent(lm.Event{At: time.Now(), Type: lm.EventGridChargeDenied, A: allowed, B: want})
 
 	return false
 }

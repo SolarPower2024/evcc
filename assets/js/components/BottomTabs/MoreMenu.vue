@@ -68,6 +68,16 @@
 		>
 			{{ $t("main.vehicleSettings.menu") }}
 		</button>
+		<!-- custom: load management overview, see core/site_lm_status.go -->
+		<button
+			v-if="hasLoadManagement"
+			type="button"
+			class="dropdown-item"
+			data-testid="more-lm-overview"
+			@click="openModalById('lmOverviewModal')"
+		>
+			{{ $t("lmoverview.menu") }}
+		</button>
 		<router-link class="dropdown-item" to="/config" active-class="active">
 			<span v-if="showConfigBadge" class="circle-badge me-1" :class="badgeClass"></span>
 			{{ $t("config.main.title") }}
@@ -97,6 +107,7 @@ import {
 	isNewVersionUnacknowledged,
 } from "@/utils/version";
 import settings from "@/settings";
+import store from "@/store";
 import { isUserConfigError } from "@/utils/fatal";
 import { defineComponent, type PropType } from "vue";
 import type { FatalError, Sponsor, AuthProviders, Vehicle } from "@/types/evcc";
@@ -167,6 +178,9 @@ export default defineComponent({
 		hasVehicles() {
 			return Object.keys(this.vehicles).length > 0;
 		},
+		hasLoadManagement() {
+			return !!store.state?.lmStatus;
+		},
 	},
 	methods: {
 		handleAuthRequired() {
@@ -195,6 +209,9 @@ export default defineComponent({
 				document.getElementById("vehicleSettingsModal") as HTMLElement
 			);
 			modal.show();
+		},
+		openModalById(id: string) {
+			Modal.getOrCreateInstance(document.getElementById(id) as HTMLElement).show();
 		},
 		openNativeSettings() {
 			sendToApp({ type: "settings" });

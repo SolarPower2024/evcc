@@ -27,6 +27,23 @@ const (
 	// load management shed priorities
 	LmPriorities = "lmPriorities"
 
+	// load management shed guard: minutes a shed loadpoint stays off, and which
+	LmShedGuard     = "lmShedGuard"
+	LmShedProtected = "lmShedProtected"
+
+	// advanced load management settings, see core/site_lm_advanced.go
+	LmAdvanced = "lmAdvanced"
+
+	// load management overview: every load's state and the event log, see core/site_lm_status.go
+	LmStatus = "lmStatus"
+
+	// battery profiles, see core/site_lm_profiles.go
+	LmProfiles         = "lmProfiles"
+	LmProfileActive    = "lmProfileActive"
+	LmProfileWallboxes = "lmProfileWallboxes" // loadpoints a profile can set the solar share of
+
 	// last month whose feed-in price was finalized, YYYY-MM, see core/site_feedin.go
 	FeedInFinalized = "feedInFinalized"
+	FeedInHistory   = "feedInHistory" // finalized months, see core/site_feedin.go
+	FeedInFinal     = "feedInFinal"   // published: finalize day, market price and history
 )

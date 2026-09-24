@@ -4,6 +4,9 @@
 		<div class="row">
 			<main class="col-12">
 				<template v-if="batteryAvailable">
+					<!-- custom: battery profiles, see core/site_lm_profiles.go -->
+					<BatteryProfileCard v-if="state.lmProfiles?.length" class="mb-4 box-pull-out" />
+
 					<BatteryStatusCards
 						class="mb-4 box-pull-out"
 						:battery="state.battery"
@@ -87,6 +90,7 @@ import BatteryConfigCard from "../components/Battery/BatteryConfigCard.vue";
 import BatteryHistoryCard from "../components/Battery/BatteryHistoryCard.vue";
 import BatterySocGridChargeCard from "../components/Battery/BatterySocGridChargeCard.vue";
 import BatteryPeakShavingCard from "../components/Battery/BatteryPeakShavingCard.vue";
+import BatteryProfileCard from "../components/Battery/BatteryProfileCard.vue";
 import {
 	historyToSeries,
 	forecastToSeries,
@@ -108,6 +112,7 @@ export default defineComponent({
 		BatteryHistoryCard,
 		BatterySocGridChargeCard,
 		BatteryPeakShavingCard,
+		BatteryProfileCard,
 	},
 	head() {
 		return { title: this.$t("batterySettings.modalTitle") };

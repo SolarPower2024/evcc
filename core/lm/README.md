@@ -122,16 +122,76 @@ Keep these in mind when merging a new evcc version:
 | `core/site/api.go` | embeds `CustomAPI`, one line |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `plugin/homeassistant.go` | `FloatSetter`/`IntSetter`, so a plugin can write number entities |
-| `assets/js/views/Battery.vue` | mounts the two new cards |
-| `assets/js/views/Config.vue` | peak shaving section and its three modals |
+| `assets/js/views/Battery.vue` | mounts the new cards, profile selection on top |
+| `assets/js/views/Config.vue` | load management details section and its modals, OeMAG modal |
+| `assets/js/views/App.vue` | mounts the load management overview |
+| `assets/js/components/BottomTabs/MoreMenu.vue` | "Lastmanagement" entry opening the overview |
+| `assets/js/components/Config/TariffCard.vue` | OeMAG summary in the feed-in card |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
 | `assets/js/types/evcc.ts`, `i18n/de.json`, `i18n/en.json` | state fields and texts |
 
-Everything else lives in files of its own: `core/lm/`, `core/site_lm.go`,
+Everything else lives in files of its own: `core/lm/`, `core/site_lm.go`, `core/site_lm_guard.go`,
+`core/site_lm_advanced.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `assets/js/components/LoadManagement/`,
 `core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
 `core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`,
 `tariff/oemag.go`, `tariff/wrapper_custom.go`, `templates/definition/tariff/oemag.yaml` and the new Vue
 components.
+
+## Shed guard
+
+A loadpoint that load management had to switch off can be held off for a set
+time, so a heater does not flap while the demand hovers around the limit. The
+minutes (0 = off, up to 120) and the protected loadpoints are set under
+Lastmanagement-Details → Abwurfschutz:
+
+```
+POST /api/lmshedguard/{minutes}
+POST /api/lmshedprotect/{loadpoint}/{true|false}
+```
+
+Only switching off a running load counts as a shed: a switch that loses its
+whole budget, or a wallbox pushed below its minimum current. A load that could
+not start for lack of power is not held off. While held off, the loadpoint asks
+for nothing, so lower priority loads may use the power. Changing the minutes or
+the protection applies to a running guard right away. The guard is in
+`core/lm/guard.go`, applied in `lmLimit` (`core/loadpoint_lm.go`), the settings
+in `core/site_lm_guard.go`.
+
+## Advanced settings
+
+Hysteresis, free value, grid charge hold-off, reservation expiry and battery
+phases are set under Lastmanagement-Details → Erweitert
+(`POST /api/lmadvanced/{name}/{value}`). A value set there overrides the yaml
+value, which overrides the default. See `core/site_lm_advanced.go`.
+
+## Battery profiles
+
+Named sets of settings, e.g. summer and winter, set up under
+Lastmanagement-Details → Profile and picked on the battery page. A profile can
+hold soc grid charging (on/off, start, stop), battery usage (priority, buffer and
+buffer start soc, discharge lock in fast and planned charging), peak shaving
+(on/off, reserve, limit) and the solar share of each wallbox. Values not ticked
+are left alone. Applying goes through the regular setters; priority, buffer and
+buffer start soc are checked as a combination first and then set bottom up,
+since evcc checks each against the other two. The type is in
+`core/lm/profile` (no dependencies, so the site api can use it), the rest in
+`core/site_lm_profiles.go`.
+
+```
+POST   /api/lmprofile             create or update, json body
+DELETE /api/lmprofile/{id}
+POST   /api/lmprofile/{id}/apply
+```
+
+## Overview
+
+Mehr → Lastmanagement shows what load management is doing: circuit load, peak
+shaving, battery grid charging, every load with its state (running, throttled,
+shed and held off until, waiting with what it needs and what is free, paused)
+and the last 20 events. `core/lm/status.go` records each load's last request
+and the events, `core/site_lm_status.go` publishes `lmStatus` at the end of
+every cycle (from `updateBatteryModePeakAware`). Nothing in there feeds back
+into the decisions.
 
 ## 4. Peak shaving
 

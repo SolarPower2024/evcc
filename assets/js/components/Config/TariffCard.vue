@@ -15,6 +15,10 @@
 		</template>
 		<template #tags>
 			<DeviceTags :tags="tags" :currency="currency" />
+			<!-- custom: OeMAG finalization, see core/site_feedin.go -->
+			<FeedInFinalSummary
+				v-if="tariffType === 'feedIn' && tariff.config?.template === 'oemag'"
+			/>
 		</template>
 	</DeviceCard>
 </template>
@@ -30,6 +34,7 @@ import { type PropType } from "vue";
 import type { TariffType, CURRENCY } from "@/types/evcc";
 import DeviceCard from "./DeviceCard.vue";
 import DeviceTags from "./DeviceTags.vue";
+import FeedInFinalSummary from "./FeedInFinalSummary.vue";
 
 type ConfigTariff = {
 	id: number;
@@ -46,6 +51,7 @@ export default {
 	components: {
 		DeviceCard,
 		DeviceTags,
+		FeedInFinalSummary,
 	},
 	props: {
 		tariff: { type: Object as PropType<ConfigTariff>, required: true },

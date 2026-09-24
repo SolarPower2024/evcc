@@ -10,6 +10,7 @@
 
 		<GlobalSettingsModal v-bind="globalSettingsProps" />
 		<VehicleSettingsModal :vehicles="vehicleList" :loadpoints="state.uiLoadpoints" />
+		<LmOverviewModal />
 		<AboutModal v-bind="aboutModalProps" />
 		<HelpModal :custom-email="custom.email" />
 		<PasswordModal />
@@ -23,6 +24,7 @@ import store from "../store";
 import BottomTabBar from "../components/BottomTabs/Bar.vue";
 import GlobalSettingsModal from "../components/GlobalSettings/GlobalSettingsModal.vue";
 import VehicleSettingsModal from "../components/Vehicles/SettingsModal.vue";
+import LmOverviewModal from "../components/LoadManagement/OverviewModal.vue";
 import OfflineIndicator from "../components/Footer/OfflineIndicator.vue";
 import PasswordModal from "../components/Auth/PasswordModal.vue";
 import LoginModal from "../components/Auth/LoginModal.vue";
@@ -49,6 +51,7 @@ export default defineComponent({
 		BottomTabBar,
 		GlobalSettingsModal,
 		VehicleSettingsModal,
+		LmOverviewModal,
 		HelpModal,
 		PasswordModal,
 		LoginModal,

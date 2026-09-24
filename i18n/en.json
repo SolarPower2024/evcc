@@ -86,6 +86,10 @@
     "modalTitle": "Home Battery",
     "noBattery": "No batteries configured.",
     "peakShavingTab": "Peak shaving",
+    "profiles": {
+      "failed": "Profile “{name}” not fully applied: {error}",
+      "title": "Profile"
+    },
     "socGridChargeTab": "Grid charging by state of charge",
     "usageTab": "Battery usage"
   },
@@ -338,6 +342,33 @@
       "titleAdd": "Add Additional Meter",
       "titleEdit": "Edit Additional Meter"
     },
+    "feedinfinal": {
+      "applied": "Applied",
+      "counts": "{slots} rates, {sessions} sessions",
+      "countsLabel": "Recalculated",
+      "description": "OeMAG publishes a month's market price only in the following month. On day {day}, the value published then becomes the final price of the previous month: its stored feed-in rates and the prices of its charging sessions (solar share) are recalculated once.",
+      "doneMessage": "{month} recalculated.",
+      "edit": "Select",
+      "invalidPrice": "Enter a price between 0 and 100 ct/kWh.",
+      "lastLabel": "Final",
+      "market": "Market price",
+      "month": "Month",
+      "monthsLabel": "Finalized months",
+      "nextLabel": "Next recalculation",
+      "none": "No month yet",
+      "nonePublished": "none yet",
+      "priceHelp": "Market price as published by OeMAG. The charges and tax set in the tariff are applied like in the automatic recalculation.",
+      "priceLabel": "Market price",
+      "published": "Last published:",
+      "recalcHelp": "For example when the value on the finalize day was wrong. Overwrites the month's stored feed-in rates and the prices of its charging sessions (solar share).",
+      "recalcTitle": "Recalculate month",
+      "recalculate": "Recalculate",
+      "show": "Show months",
+      "source": "Type",
+      "sourceAuto": "automatic",
+      "sourceManual": "by hand",
+      "title": "OeMAG settlement"
+    },
     "form": {
       "danger": "Danger",
       "deprecated": "deprecated",
@@ -473,6 +504,25 @@
       "v1Support": "Need support for InfluxDB 1.x?",
       "v2Support": "Back to InfluxDB 2.x"
     },
+    "lmadvanced": {
+      "description": "Fine tuning for peak shaving, grid charging and the priorities. The defaults suit most installations.",
+      "entryLabel": "Advanced",
+      "freeValueHelp": "Value written to the peak shaving entity while the battery may discharge freely (above the reserve or peak shaving off). Default {std} W.",
+      "freeValueLabel": "Free discharge value",
+      "holdOffHelp": "How long grid charging stays off after a peak or the circuit stopped it. Keeps the battery from flipping between charging and discharging. Default {std} min.",
+      "holdOffLabel": "Hold-off after grid charging stopped",
+      "hysteresisHelp": "The soc has to rise this far above the reserve before peak shaving releases the reserve again. Keeps it from switching back and forth around the reserve. Default {std} %.",
+      "hysteresisLabel": "Reserve hysteresis",
+      "invalid": "{label}: enter a value from {min} to {max}.",
+      "phases1": "1 phase",
+      "phases3": "3 phases",
+      "phasesHelp": "How many phases the battery draws on while grid charging. Only needed for circuits with a current limit (A).",
+      "phasesLabel": "Battery phases",
+      "status": "Hysteresis {hysteresis} %, hold-off {holdOff} min",
+      "timeoutHelp": "How long a waiting higher priority load keeps power reserved without asking again. Default {std} min.",
+      "timeoutLabel": "Reservation expiry",
+      "title": "Advanced settings"
+    },
     "lmpriorities": {
       "battery": "Home battery (grid charging)",
       "description": "When a circuit cannot supply every load, the lowest priority is reduced or switched off first. Loads on the same priority are served first come, first served. Changes apply immediately.",
@@ -484,6 +534,63 @@
       "noLoads": "No loads in load management. Loadpoints appear here once they are assigned to a circuit, the battery via Battery circuit.",
       "none": "No loads",
       "title": "Load management priorities"
+    },
+    "lmprofiles": {
+      "active": "Active",
+      "back": "Back",
+      "confirmDelete": "Delete profile “{name}”?",
+      "count": "Profiles: {count}",
+      "delete": "Delete",
+      "description": "Profiles combine settings, for example for summer and winter. You switch between them on the battery page.",
+      "edit": "Edit",
+      "entryLabel": "Profiles",
+      "field": {
+        "bufferSoc": "Battery supports charging from (0 = off)",
+        "bufferStartSoc": "Start charging from (0 = off)",
+        "dischargeControl": "Block discharging in fast and planned charging",
+        "gridCharge": "Soc based grid charging",
+        "gridChargeStart": "Start soc",
+        "gridChargeStop": "Stop soc",
+        "peakLimit": "Peak limit",
+        "peakReserve": "Reserve soc",
+        "peakShaving": "Peak shaving",
+        "prioritySoc": "Surplus goes to the battery first up to",
+        "solarShare": "Solar share · {title}"
+      },
+      "group": {
+        "battery": "Battery usage",
+        "gridCharge": "Grid charging",
+        "peakShaving": "Peak shaving",
+        "wallbox": "Wallbox"
+      },
+      "hint": "Values not ticked stay as they are when switching.",
+      "icon": "Icon",
+      "inactive": "Inactive",
+      "missingValue": "Enter a number for every ticked value.",
+      "name": "Name",
+      "new": "New profile",
+      "no": "No",
+      "none": "None",
+      "off": "Off",
+      "on": "On",
+      "takeCurrent": "Take current values",
+      "title": "Profiles",
+      "unchanged": "unchanged",
+      "valueCount": "Values: {count}",
+      "yes": "Yes"
+    },
+    "lmshedguard": {
+      "description": "When load management has to switch off a protected loadpoint, it stays off for the set time, even if the power is back earlier. This keeps a heater, for example, from switching on and off with a fluctuating load. A loadpoint that could not start for lack of power is not held off.",
+      "entryLabel": "Shed guard",
+      "invalid": "Could not save the shed guard.",
+      "invalidMinutes": "Please enter a whole number from 0 to {max} minutes.",
+      "loadpointsLabel": "Protected loadpoints",
+      "minutesHelp": "How long a protected loadpoint stays off after it was shed. 0 turns the guard off.",
+      "minutesLabel": "Hold-off after shedding",
+      "noLoadpoints": "No loadpoints in load management. Loadpoints appear here once they are assigned to a circuit.",
+      "off": "Off",
+      "status": "{minutes} min, loadpoints: {count}",
+      "title": "Shed guard"
     },
     "loadpoint": {
       "addCharger": {
@@ -1364,6 +1471,53 @@
     "timezone": "Timezone",
     "title": "Report a problem",
     "version": "Version"
+  },
+  "lmoverview": {
+    "battery": "Home battery (grid charging)",
+    "blockedCircuit": "Circuit · until {time}",
+    "description": "What load management is doing right now.",
+    "event": {
+      "gridChargeDenied": "Grid charging blocked · circuit allows {allowed} of {wanted}",
+      "gridChargePaused": "Grid charging paused · demand {demand} above peak limit {limit}",
+      "peak": "Peak covered · demand {demand}, limit {limit}",
+      "shed": "{load} shed · circuit at {power}",
+      "shedGuard": "{load} shed · circuit at {power}, held off {minutes} min",
+      "throttled": "{load} throttled {requested} → {allowed}"
+    },
+    "events": "Recent events",
+    "gridCharge": "Battery grid charging",
+    "loads": "Loads · highest priority first",
+    "menu": "Load management",
+    "noEvents": "No events since the start.",
+    "noLoads": "No loads in load management.",
+    "overall": {
+      "limited": "Limited",
+      "normal": "Normal",
+      "overload": "Overload"
+    },
+    "pausedPeak": "Peak · resumes at {time}",
+    "peak": "Peak shaving · 15 min average",
+    "peakFree": "Above the reserve · free",
+    "peakOff": "Off",
+    "peakReserve": "Reserve active · setpoint {setpoint}",
+    "priority": "Prio {priority}",
+    "protected": "Shed guard",
+    "setpoint": "Setpoint {power}",
+    "state": {
+      "blocked": "Blocked",
+      "off": "Off",
+      "paused": "Paused",
+      "running": "Running"
+    },
+    "stateDetail": {
+      "blocked": "Blocked · until {time}",
+      "charging": "Charging · setpoint {power}",
+      "paused": "Paused · peak until {time}",
+      "shed": "Shed · held off until {time}",
+      "throttled": "Throttled · {allowed} of {requested}",
+      "waiting": "Waiting · needs {requested}, {allowed} free"
+    },
+    "title": "Load management"
   },
   "log": {
     "areaLabel": "Filter by area",
