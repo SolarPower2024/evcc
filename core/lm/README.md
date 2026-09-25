@@ -159,8 +159,8 @@ in `core/site_lm_guard.go`.
 
 ## Advanced settings
 
-Hysteresis, free value, grid charge hold-off, reservation expiry and battery
-phases are set under Lastmanagement-Details → Erweitert
+Hysteresis, free value, grid charge hold-off, reservation expiry, battery
+phases and the peak budget's freeze minute and cap are set under Lastmanagement-Details → Erweitert
 (`POST /api/lmadvanced/{name}/{value}`). A value set there overrides the yaml
 value, which overrides the default. See `core/site_lm_advanced.go`.
 
@@ -197,10 +197,26 @@ into the decisions.
 
 See `core/site_peakshaving.go`. The battery's lower soc range is reserved for
 grid demand peaks; above the reserve the controller is told it may discharge
-freely. The setpoint is `max(0, gridPower + batteryPower - limit)` — the battery
+freely. The setpoint is `max(0, gridPower + batteryPower - allowed)`. The battery
 power is added back because the grid meter already reflects the controller's own
 output, and using it directly oscillates. `TestPeakSetpointIsStable` pins that
 down.
+
+The limit applies to the average of the clock-aligned 15 minute window, which is
+what the demand charge is billed on. `allowed` is the grid power that keeps the
+window's average at the limit: `(limit × 15 min − energy drawn so far) / time
+left`. Energy left unused earlier allows more, so a short spike is only covered
+when the window as a whole would end above the limit. Three bounds:
+
+- `allowed` is at most `cap × limit` (default 2).
+- From the freeze minute on (default 12) it no longer grows, only falls: a
+  meter clock off by a few seconds could otherwise move a large late draw into
+  the next window.
+- The last cycle of a window reaches into the next one, so the time left is at
+  least 30s, filled up with the next window's budget.
+
+What evcc did not see, after a start or a gap over 2 minutes at a window
+boundary, counts at the limit.
 
 While the reserve is held, the battery is forced into normal mode and grid
 charging is blocked, since charging from the grid would create the peak.

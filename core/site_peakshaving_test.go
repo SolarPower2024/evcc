@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/util"
 	"github.com/stretchr/testify/assert"
@@ -239,4 +240,142 @@ func TestPeakValueWrittenEveryCycle(t *testing.T) {
 
 	assert.Equal(t, []float64{4410, 4410, 4410}, writes)
 	assert.Equal(t, []float64{0, 0, 0}, charges, "the peak pauses grid charging")
+}
+
+// TestPeakAllowed covers the budget of the 15 minute window
+func TestPeakAllowed(t *testing.T) {
+	const limit = 5000.0
+	window := lm.PeakWindow.Seconds()
+
+	tc := []struct {
+		name    string
+		usedWs  float64
+		elapsed time.Duration
+		want    float64
+	}{
+		{"window start", 0, 0, 5000},
+		{"on track", limit * 300, 5 * time.Minute, 5000},
+		{"nothing drawn for 5 minutes", 0, 5 * time.Minute, 7500},
+		{"10kW for 5 minutes", 10000 * 300, 5 * time.Minute, 2500},
+		{"budget spent", limit * window, 10 * time.Minute, 0},
+		{"overspent", limit * window * 2, 10 * time.Minute, 0},
+		// the last cycle reaches into the next window, which starts on track
+		{"on track, 10s left", limit * 890, 890 * time.Second, 5000},
+		{"budget spent, 10s left", limit * window, 890 * time.Second, limit * 20 / 30},
+	}
+
+	for _, tc := range tc {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.InDelta(t, tc.want, peakAllowed(limit, tc.usedWs, tc.elapsed), 0.001)
+		})
+	}
+}
+
+// peakWindowSite returns a site with a mock clock at the given minute of a window
+func peakWindowSite(t *testing.T, minute int) (*Site, *clock.Mock) {
+	t.Helper()
+	lm.Reset()
+	t.Cleanup(lm.Reset)
+
+	clk := clock.NewMock()
+	clk.Set(time.Date(2026, 9, 25, 10, minute, 0, 0, time.UTC))
+
+	site := &Site{log: util.NewLogger("test")}
+	site.peakShaving.clock = clk
+	site.peak().limit = 5000
+
+	return site, clk
+}
+
+// sample runs the window update every 30s for the given duration
+func sample(site *Site, clk *clock.Mock, grid float64, d time.Duration) {
+	for end := clk.Now().Add(d); clk.Now().Before(end); {
+		clk.Add(30 * time.Second)
+		site.updatePeakWindow(grid)
+	}
+}
+
+// TestPeakWindowBudget verifies that energy not drawn earlier in the window
+// allows more later, and the limits on that
+func TestPeakWindowBudget(t *testing.T) {
+	site, clk := peakWindowSite(t, 0)
+	s := site.peak()
+
+	site.updatePeakWindow(0)
+	assert.Equal(t, 5000.0, s.allowed)
+
+	// 5 minutes without drawing anything
+	sample(site, clk, 0, 5*time.Minute)
+	assert.InDelta(t, 7500, s.allowed, 0.001)
+
+	// a 9kW spike needs only what exceeds the allowed power
+	assert.Equal(t, 1500.0, peakSetpoint(9000, 0, s.allowed))
+
+	// drawing exactly the allowed power keeps it where it is
+	sample(site, clk, 7500, 2*time.Minute)
+	assert.InDelta(t, 7500, s.allowed, 0.001)
+
+	// the cap: 10 minutes without drawing would allow 15kW, at most 2 x 5kW
+	site, clk = peakWindowSite(t, 0)
+	s = site.peak()
+	site.updatePeakWindow(0)
+	sample(site, clk, 0, 10*time.Minute)
+	assert.Equal(t, 10000.0, s.allowed)
+}
+
+// TestPeakWindowFreeze verifies that from the freeze minute on the allowed
+// power no longer grows but still falls
+func TestPeakWindowFreeze(t *testing.T) {
+	site, clk := peakWindowSite(t, 0)
+	s := site.peak()
+	require.NoError(t, site.SetLmAdvanced("peakCap", 10))
+
+	site.updatePeakWindow(0)
+	sample(site, clk, 0, 12*time.Minute)
+	assert.InDelta(t, 25000, s.allowed, 0.001, "12 minutes unused leave 75kWmin for 3 minutes")
+
+	// without the freeze it would be 37.5kW one minute later
+	sample(site, clk, 0, time.Minute)
+	assert.InDelta(t, 25000, s.allowed, 0.001)
+
+	// 40kW for a minute would leave 35kW for the last minute, still capped by the freeze
+	sample(site, clk, 40000, time.Minute)
+	assert.InDelta(t, 25000, s.allowed, 0.001)
+
+	// drawing more than allowed still lowers it: 60kW for 30s leaves 10kW for the last 30s
+	sample(site, clk, 60000, 30*time.Second)
+	assert.InDelta(t, 10000, s.allowed, 0.001)
+
+	// a new window starts on track again
+	sample(site, clk, 5000, time.Minute)
+	assert.Equal(t, 5000.0, s.allowed)
+}
+
+// TestPeakWindowUnmetered verifies that the part of a window evcc did not see
+// counts at the limit, and that a sample from the previous window carries over
+func TestPeakWindowUnmetered(t *testing.T) {
+	// evcc started 5 minutes into the window: nothing is known to be left over
+	site, clk := peakWindowSite(t, 5)
+	s := site.peak()
+	site.updatePeakWindow(0)
+	assert.Equal(t, 5000.0, s.allowed)
+
+	sample(site, clk, 0, 5*time.Minute)
+	assert.InDelta(t, 10000, s.allowed, 0.001, "5 unused minutes for the last 5")
+
+	// crossing into the next window, the 30s since the boundary are metered
+	clk.Set(time.Date(2026, 9, 25, 10, 14, 50, 0, time.UTC))
+	site.updatePeakWindow(0)
+	clk.Set(time.Date(2026, 9, 25, 10, 15, 20, 0, time.UTC))
+	site.updatePeakWindow(6000)
+
+	assert.Equal(t, time.Date(2026, 9, 25, 10, 15, 0, 0, time.UTC), s.meteredFrom)
+	assert.InDelta(t, 6000*20, s.windowWs, 0.001)
+	assert.InDelta(t, 6000, s.windowAvg, 0.001)
+
+	// after a longer gap the next window is not metered from its start
+	clk.Set(time.Date(2026, 9, 25, 10, 33, 0, 0, time.UTC))
+	site.updatePeakWindow(0)
+	assert.Equal(t, clk.Now(), s.meteredFrom)
+	assert.Equal(t, 5000.0, s.allowed)
 }

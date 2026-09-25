@@ -21,6 +21,8 @@ const (
 	PeakShavingCircuit              = "peakShavingCircuit"
 	PeakShavingPower                = "peakShavingPower"
 	PeakShavingWindowAvg            = "peakShavingWindowAvg"
+	PeakShavingAllowed              = "peakShavingAllowed"        // grid power allowed for the rest of the window
+	PeakShavingWindowEnd            = "peakShavingWindowEnd"      // end of the running window
 	PeakShavingChargeEntity         = "peakShavingChargeEntity"   // grid charge power target
 	PeakShavingChargeSetpoint       = "peakShavingChargeSetpoint" // grid charge power written, 0 = not charging
 

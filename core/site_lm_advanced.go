@@ -21,6 +21,8 @@ type lmAdvanced struct {
 	HoldOff    *float64 `json:"holdOff,omitempty"`    // battery grid charge hold-off in minutes
 	Timeout    *float64 `json:"timeout,omitempty"`    // unserved demand expiry in minutes
 	Phases     *float64 `json:"phases,omitempty"`     // battery phases for current accounting
+	PeakFreeze *float64 `json:"peakFreeze,omitempty"` // minute of the window from which the peak budget no longer grows
+	PeakCap    *float64 `json:"peakCap,omitempty"`    // allowed grid power at most this multiple of the peak limit
 }
 
 // lmAdvancedState is what the ui shows: the values in effect
@@ -30,6 +32,8 @@ type lmAdvancedState struct {
 	HoldOff    float64 `json:"holdOff"`
 	Timeout    float64 `json:"timeout"`
 	Phases     int     `json:"phases"`
+	PeakFreeze float64 `json:"peakFreeze"`
+	PeakCap    float64 `json:"peakCap"`
 }
 
 // lmAdvancedLimit is a setting's valid range
@@ -44,6 +48,8 @@ var lmAdvancedLimits = map[string]lmAdvancedLimit{
 	"holdOff":    {1, 60, true},
 	"timeout":    {1, 60, true},
 	"phases":     {1, 3, true},
+	"peakFreeze": {1, 14, true},
+	"peakCap":    {1, 10, false},
 }
 
 // restoreLmAdvanced restores the persisted advanced settings
@@ -79,6 +85,8 @@ func (site *Site) publishLmAdvanced() {
 		HoldOff:    site.lmHoldOff().Minutes(),
 		Timeout:    site.lmTimeout().Minutes(),
 		Phases:     site.lmBatteryPhases(),
+		PeakFreeze: site.peakFreeze().Minutes(),
+		PeakCap:    site.peakCap(),
 	})
 }
 
@@ -121,6 +129,10 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 		s.adv.Timeout = &v
 	case "phases":
 		s.adv.Phases = &v
+	case "peakFreeze":
+		s.adv.PeakFreeze = &v
+	case "peakCap":
+		s.adv.PeakCap = &v
 	}
 	adv := s.adv
 	s.advMu.Unlock()

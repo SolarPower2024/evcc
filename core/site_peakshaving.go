@@ -7,6 +7,11 @@ package core
 // discharge freely. Below it, the battery is only allowed to cover what exceeds
 // the peak limit, so the reserve is spent on demand peaks rather than base load.
 //
+// The limit applies to the average of the clock-aligned 15 minute window, which is
+// what the demand charge is billed on, not to the momentary grid power: energy
+// not drawn earlier in the window may be drawn later, so a short spike is only
+// covered when the window as a whole would end above the limit.
+//
 // evcc only computes the setpoint and writes it to a number entity; the actual
 // discharge is done by the Home Assistant automation reading that entity.
 
@@ -20,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm"
@@ -36,12 +42,28 @@ const (
 	minPeakLimit  = 2000.0 // W
 	maxPeakLimit  = 20000.0
 	peakLimitStep = 500.0
+
+	// a setpoint stays in place for a whole cycle, at the end of a window it
+	// reaches into the next one
+	peakCycle = 30 * time.Second
+
+	// a sample older than this does not carry over into a new window
+	peakMaxGap = 2 * time.Minute
+
+	// from this minute of the window on the allowed power no longer grows: close
+	// to the end, a clock off by a few seconds could move a large draw into the
+	// next window
+	defaultPeakFreeze = 12 * time.Minute
+
+	// the allowed power is at most this multiple of the limit
+	defaultPeakCap = 2.0
 )
 
 // peakState is the runtime state of peak shaving
 type peakState struct {
-	once sync.Once
-	mu   sync.Mutex
+	once  sync.Once
+	mu    sync.Mutex
+	clock clock.Clock
 
 	enabled     bool    // peak shaving switch
 	limit       float64 // grid peak limit in W
@@ -67,9 +89,13 @@ type peakState struct {
 
 	// current metering window, for the 15 minute average
 	windowStart time.Time
-	windowWs    float64 // accumulated grid energy in Ws
+	meteredFrom time.Time // start of metering in this window, later than windowStart after a restart
+	windowWs    float64   // accumulated grid energy in Ws
 	lastSample  time.Time
 	windowAvg   float64 // average grid power of the running window in W
+	allowed     float64 // grid power that keeps the window average at the limit in W
+	frozen      float64 // allowed power at the freeze minute
+	isFrozen    bool
 }
 
 // peak returns the peak shaving state, applying defaults on first use
@@ -77,6 +103,9 @@ func (site *Site) peak() *peakState {
 	site.peakShaving.once.Do(func() {
 		site.peakShaving.limit = defaultPeakLimit
 		site.peakShaving.reserve = defaultPeakReserve
+		if site.peakShaving.clock == nil {
+			site.peakShaving.clock = clock.New()
+		}
 	})
 	return &site.peakShaving
 }
@@ -272,6 +301,23 @@ func (site *Site) peakFreeValue() float64 {
 	return lm.DefaultFreeValue
 }
 
+// peakFreeze returns the minute of the window from which the allowed power no
+// longer grows
+func (site *Site) peakFreeze() time.Duration {
+	if v := site.advanced().PeakFreeze; v != nil {
+		return time.Duration(*v) * time.Minute
+	}
+	return defaultPeakFreeze
+}
+
+// peakCap returns the maximum allowed power as a multiple of the limit
+func (site *Site) peakCap() float64 {
+	if v := site.advanced().PeakCap; v != nil {
+		return *v
+	}
+	return defaultPeakCap
+}
+
 func (site *Site) peakHysteresis() float64 {
 	if v := site.advanced().Hysteresis; v != nil {
 		return *v
@@ -302,7 +348,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 	site.updatePeakWindow(state.gridPower)
 
 	s.mu.Lock()
-	enabled, limit, reserve, set := s.enabled, s.limit, s.reserve, s.set
+	enabled, limit, reserve, set, allowed := s.enabled, s.limit, s.reserve, s.set, s.allowed
 	// read by peakPausesGridCharge later in the same cycle
 	s.demand = state.gridPower + state.battery.Power
 	s.mu.Unlock()
@@ -349,7 +395,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 		value = 0
 
 	case shaving:
-		value = peakSetpoint(state.gridPower, state.battery.Power, limit)
+		value = peakSetpoint(state.gridPower, state.battery.Power, allowed)
 	}
 
 	// log the start of a peak, not every cycle of it
@@ -360,7 +406,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 	s.mu.Unlock()
 
 	if started {
-		lm.AddEvent(lm.Event{At: time.Now(), Type: lm.EventPeak, A: state.gridPower + state.battery.Power, B: limit})
+		lm.AddEvent(lm.Event{At: s.clock.Now(), Type: lm.EventPeak, A: state.gridPower + state.battery.Power, B: limit})
 	}
 
 	// published explicitly rather than left for the ui to infer from the value:
@@ -378,7 +424,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 }
 
 // peakSetpoint returns the battery power needed to keep the grid draw at or
-// below the limit.
+// below the allowed power, see peakAllowed.
 //
 // It deliberately does not use the grid power on its own. The grid meter already
 // reflects whatever the battery is doing, so feeding that back would make the
@@ -389,8 +435,26 @@ func (site *Site) updatePeakShaving(state siteState) {
 // discharging as positive and charging as negative, so both directions are
 // handled by the same sum. Whole watts are plenty, and some number entities
 // reject fractions.
-func peakSetpoint(gridPower, batteryPower, limit float64) float64 {
-	return math.Max(0, math.Round(gridPower+batteryPower-limit))
+func peakSetpoint(gridPower, batteryPower, allowed float64) float64 {
+	return math.Max(0, math.Round(gridPower+batteryPower-allowed))
+}
+
+// peakAllowed returns the grid power that may be drawn for the rest of the window
+// with the window average still ending at the limit. Energy left unused earlier
+// allows more, energy drawn above the limit allows less, down to nothing once the
+// window's budget is spent.
+func peakAllowed(limit, usedWs float64, elapsed time.Duration) float64 {
+	budget := limit*lm.PeakWindow.Seconds() - usedWs
+	remaining := lm.PeakWindow - elapsed
+
+	// the part of the cycle reaching into the next window gets that window's
+	// budget, rather than squeezing this window's rest into a few seconds
+	if remaining < peakCycle {
+		budget += limit * (peakCycle - remaining).Seconds()
+		remaining = peakCycle
+	}
+
+	return max(0, budget/remaining.Seconds())
 }
 
 // writePeakValue writes the setpoint
@@ -454,14 +518,19 @@ func (site *Site) writeOutput(name string, set func(float64) error, value float6
 	return true
 }
 
-// updatePeakWindow tracks the average grid power of the running 15 minute
-// metering window, which is what a demand charge is billed on
+// updatePeakWindow tracks the grid energy of the running 15 minute metering
+// window, which is what a demand charge is billed on, and the grid power allowed
+// for the rest of it
 func (site *Site) updatePeakWindow(gridPower float64) {
 	s := site.peak()
-	now := time.Now()
+	now := s.clock.Now()
+	freeze, capFactor := site.peakFreeze(), site.peakCap()
 
 	// clock-aligned windows, matching how the meter registers them
 	start := now.Truncate(lm.PeakWindow)
+
+	// only the import direction contributes to the demand peak
+	imported := math.Max(0, gridPower)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -469,20 +538,43 @@ func (site *Site) updatePeakWindow(gridPower float64) {
 	if !s.windowStart.Equal(start) {
 		s.windowStart = start
 		s.windowWs = 0
-		s.lastSample = now
+		s.meteredFrom = now
+		s.isFrozen = false
+
+		// a sample from the previous window carries over, the part since the
+		// boundary is metered like any other interval
+		if !s.lastSample.IsZero() && now.Sub(s.lastSample) <= peakMaxGap {
+			s.meteredFrom = start
+			s.lastSample = start
+		} else {
+			s.lastSample = now
+		}
 	}
 
-	if !s.lastSample.IsZero() {
-		// only the import direction contributes to the demand peak
-		s.windowWs += math.Max(0, gridPower) * now.Sub(s.lastSample).Seconds()
-	}
+	s.windowWs += imported * now.Sub(s.lastSample).Seconds()
 	s.lastSample = now
 
-	if elapsed := now.Sub(start).Seconds(); elapsed > 0 {
-		s.windowAvg = s.windowWs / elapsed
+	if metered := now.Sub(s.meteredFrom).Seconds(); metered > 0 {
+		s.windowAvg = s.windowWs / metered
 	}
 
+	// what evcc did not see, after a start or a gap, is counted at the limit:
+	// assuming less could spend a budget that was already used
+	used := s.windowWs + s.limit*s.meteredFrom.Sub(start).Seconds()
+	elapsed := now.Sub(start)
+	allowed := min(peakAllowed(s.limit, used, elapsed), s.limit*capFactor)
+
+	if elapsed >= freeze {
+		if !s.isFrozen {
+			s.frozen, s.isFrozen = allowed, true
+		}
+		allowed = min(allowed, s.frozen)
+	}
+	s.allowed = allowed
+
 	site.publish(keys.PeakShavingWindowAvg, s.windowAvg)
+	site.publish(keys.PeakShavingAllowed, s.allowed)
+	site.publish(keys.PeakShavingWindowEnd, start.Add(lm.PeakWindow))
 }
 
 // peakPausesGridCharge reports whether grid charging has to give way to peak
@@ -505,7 +597,7 @@ func (site *Site) peakPausesGridCharge() bool {
 		return false
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 
 	if s.demand > s.limit {
 		if !now.Before(s.chargePause) {
