@@ -1908,6 +1908,7 @@
     "description": "Höchste Viertelstunde je Monat, mit und ohne Batterie.",
     "empty": "Noch keine vollständige Viertelstunde erfasst.",
     "interventions": "Eingriffe",
+    "interventionsCount": "{count} Eingriffe",
     "menu": "Peak Shaving",
     "month": "Monat",
     "title": "Peak Shaving",

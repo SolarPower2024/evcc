@@ -1908,6 +1908,7 @@
     "description": "Highest quarter hour per month, with and without the battery.",
     "empty": "No complete quarter hour recorded yet.",
     "interventions": "Interventions",
+    "interventionsCount": "{count} interventions",
     "menu": "Peak Shaving",
     "month": "Month",
     "title": "Peak Shaving",

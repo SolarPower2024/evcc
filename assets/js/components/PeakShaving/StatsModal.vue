@@ -44,12 +44,20 @@
 								<th>{{ $t("peakstats.month") }}</th>
 								<th class="text-end">{{ $t("peakstats.withBattery") }}</th>
 								<th class="text-end">{{ $t("peakstats.withoutBattery") }}</th>
-								<th class="text-end">{{ $t("peakstats.interventions") }}</th>
 							</tr>
 						</thead>
 						<tbody>
 							<tr v-for="m in months" :key="m.month" data-testid="peak-stats-month">
-								<td class="text-nowrap">{{ monthName(m.month) }}</td>
+								<td class="text-nowrap">
+									{{ monthName(m.month) }}
+									<div class="evcc-gray small">
+										{{
+											$t("peakstats.interventionsCount", {
+												count: m.interventions,
+											})
+										}}
+									</div>
+								</td>
 								<td class="text-end text-nowrap">
 									{{ power(m.peak, m.peakAt) }}
 									<div class="evcc-gray small">{{ when(m.peakAt) }}</div>
@@ -58,7 +66,6 @@
 									{{ power(m.demand, m.demandAt) }}
 									<div class="evcc-gray small">{{ when(m.demandAt) }}</div>
 								</td>
-								<td class="text-end">{{ m.interventions }}</td>
 							</tr>
 						</tbody>
 					</table>
