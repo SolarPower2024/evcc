@@ -41,6 +41,8 @@ type CustomAPI interface {
 	SetPeakShavingEntity(string) error
 	GetPeakShavingChargeEntity() string
 	SetPeakShavingChargeEntity(string) error
+	GetPeakShavingEnergyEntity() string
+	SetPeakShavingEnergyEntity(string) error
 	GetPeakShavingChargePower() float64
 	SetPeakShavingChargePower(float64) error
 	GetPeakShavingCircuit() string

@@ -379,3 +379,100 @@ func TestPeakWindowUnmetered(t *testing.T) {
 	assert.Equal(t, clk.Now(), s.meteredFrom)
 	assert.Equal(t, 5000.0, s.allowed)
 }
+
+// energyStep advances the clock by 30s and updates the window with the grid
+// power and the grid meter's counter, nil = meter without counter
+func energyStep(site *Site, clk *clock.Mock, grid float64, meter *float64) {
+	clk.Add(30 * time.Second)
+	site.setPeakGridEnergy(meter)
+	site.updatePeakWindow(grid)
+}
+
+func kWh(v float64) *float64 { return &v }
+
+// TestPeakWindowSources verifies the order of the energy sources: grid meter,
+// Home Assistant sensor, grid power
+func TestPeakWindowSources(t *testing.T) {
+	site, clk := peakWindowSite(t, 0)
+	s := site.peak()
+
+	var entityReads int
+	entity := 50.0
+	s.energyGet = func() (float64, error) { entityReads++; return entity, nil }
+
+	// the grid meter's counter wins: 0.05kWh in 30s is 6kW, whatever the power says
+	energyStep(site, clk, 0, kWh(100))
+	energyStep(site, clk, 0, kWh(100.05))
+	assert.InDelta(t, 180000, s.windowWs, 0.001)
+	assert.Equal(t, peakSourceMeter, s.source)
+	assert.Zero(t, entityReads, "the sensor is not read while the meter has a counter")
+
+	// without a meter counter the sensor is used, the first reading is a baseline
+	// and the interval in between comes from the grid power
+	energyStep(site, clk, 1000, nil)
+	assert.InDelta(t, 180000+30000, s.windowWs, 0.001)
+	entity = 50.025
+	energyStep(site, clk, 0, nil)
+	assert.InDelta(t, 210000+90000, s.windowWs, 0.001)
+	assert.Equal(t, peakSourceEntity, s.source)
+
+	// a failed read falls back to the grid power for that interval, the next
+	// reading is a new baseline so nothing is counted twice
+	s.energyGet = func() (float64, error) { return 0, errors.New("unavailable") }
+	energyStep(site, clk, 2000, nil)
+	assert.InDelta(t, 300000+60000, s.windowWs, 0.001)
+	assert.Equal(t, peakSourcePower, s.source)
+
+	s.energyGet = func() (float64, error) { return 50.2, nil }
+	energyStep(site, clk, 2000, nil)
+	assert.InDelta(t, 360000+60000, s.windowWs, 0.001)
+
+	// a counter going backwards is reset or replaced, the grid power fills in
+	s.energyGet = func() (float64, error) { return 1, nil }
+	energyStep(site, clk, 4000, nil)
+	assert.InDelta(t, 420000+120000, s.windowWs, 0.001)
+}
+
+// TestPeakWindowLateCounter verifies that a counter updating less often than
+// evcc samples is followed, and that one which stopped is replaced by the grid
+// power for the rest of the window
+func TestPeakWindowLateCounter(t *testing.T) {
+	site, clk := peakWindowSite(t, 0)
+	s := site.peak()
+
+	// the counter moves every 90s only, by 0.15kWh = 6kW
+	energyStep(site, clk, 6000, kWh(10))
+	energyStep(site, clk, 6000, kWh(10))
+	energyStep(site, clk, 6000, kWh(10))
+	assert.Zero(t, s.windowWs, "a late counter is not replaced right away")
+	energyStep(site, clk, 6000, kWh(10.15))
+	assert.InDelta(t, 540000, s.windowWs, 0.001)
+
+	// it stops: after 2 minutes the grid power takes over, including what was
+	// drawn while it stood still
+	for range 4 {
+		energyStep(site, clk, 6000, kWh(10.15))
+	}
+	assert.False(t, s.stale)
+	assert.InDelta(t, 540000, s.windowWs, 0.001)
+
+	energyStep(site, clk, 6000, kWh(10.15))
+	assert.True(t, s.stale)
+	assert.InDelta(t, 540000+5*180000, s.windowWs, 0.001)
+
+	// its catching up later is not counted a second time
+	energyStep(site, clk, 6000, kWh(10.5))
+	assert.InDelta(t, 540000+6*180000, s.windowWs, 0.001)
+
+	// the next window tries the counter again
+	clk.Set(time.Date(2026, 9, 25, 10, 14, 50, 0, time.UTC))
+	site.setPeakGridEnergy(kWh(11))
+	site.updatePeakWindow(6000)
+	energyStep(site, clk, 0, kWh(11.05))
+	assert.False(t, s.stale)
+	assert.Zero(t, s.windowWs, "the step across the boundary may hold the backlog, the grid power counts")
+
+	energyStep(site, clk, 0, kWh(11.1))
+	assert.InDelta(t, 180000, s.windowWs, 0.001)
+	assert.Equal(t, peakSourceMeter, s.source)
+}

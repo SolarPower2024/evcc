@@ -10,7 +10,9 @@ package core
 // The limit applies to the average of the clock-aligned 15 minute window, which is
 // what the demand charge is billed on, not to the momentary grid power: energy
 // not drawn earlier in the window may be drawn later, so a short spike is only
-// covered when the window as a whole would end above the limit.
+// covered when the window as a whole would end above the limit. The energy drawn
+// comes from the grid meter's import counter, else from a Home Assistant energy
+// sensor, else from the grid power of each cycle.
 //
 // evcc only computes the setpoint and writes it to a number entity; the actual
 // discharge is done by the Home Assistant automation reading that entity.
@@ -57,6 +59,17 @@ const (
 
 	// the allowed power is at most this multiple of the limit
 	defaultPeakCap = 2.0
+
+	// an energy counter standing still while the grid power says this much was
+	// drawn over peakMaxGap has stopped updating
+	peakStaleWs = 20 * 3600.0 // 20Wh
+)
+
+// where the energy drawn in the window comes from
+const (
+	peakSourceMeter  = "meter"  // grid meter's import counter
+	peakSourceEntity = "entity" // Home Assistant energy sensor
+	peakSourcePower  = "power"  // grid power of each cycle
 )
 
 // peakState is the runtime state of peak shaving
@@ -96,6 +109,17 @@ type peakState struct {
 	allowed     float64 // grid power that keeps the window average at the limit in W
 	frozen      float64 // allowed power at the freeze minute
 	isFrozen    bool
+
+	// energy counters for the window, in the order they are used
+	gridEnergy   *float64                // grid meter import in kWh, from this cycle
+	energyEntity string                  // Home Assistant energy sensor
+	energyGet    func() (float64, error) // resolved from energyEntity, kWh
+
+	source       string    // source of the last sample
+	lastEnergy   float64   // counter at the last sample in kWh, valid if source is a counter
+	unmovedWs    float64   // drawn according to the grid power while the counter stood still
+	unmovedSince time.Time // the counter has not moved since
+	stale        bool      // counter stopped updating, grid power used for the rest of the window
 }
 
 // peak returns the peak shaving state, applying defaults on first use
@@ -151,12 +175,20 @@ func (site *Site) restorePeakSettings() {
 		s.chargeEntity = v
 		s.mu.Unlock()
 	}
+	if v, err := settings.String(keys.PeakShavingEnergyEntity); err == nil {
+		s.mu.Lock()
+		s.energyEntity = v
+		s.mu.Unlock()
+	}
 
 	if err := site.rebuildPeakSetter(); err != nil {
 		site.log.ERROR.Printf("peak shaving: %v", err)
 	}
 	if err := site.rebuildChargeSetter(); err != nil {
 		site.log.ERROR.Printf("grid charge power: %v", err)
+	}
+	if err := site.rebuildEnergyGetter(); err != nil {
+		site.log.ERROR.Printf("peak shaving energy: %v", err)
 	}
 
 	site.publishPeakSettings()
@@ -247,14 +279,43 @@ func (site *Site) rebuildChargeSetter() error {
 	return nil
 }
 
-// numberSetter returns a setter writing to a Home Assistant number entity
-func (site *Site) numberSetter(entity string) (func(float64) error, error) {
+// rebuildEnergyGetter resolves the energy sensor
+func (site *Site) rebuildEnergyGetter() error {
+	s := site.peak()
+
+	s.mu.Lock()
+	entity := s.energyEntity
+	s.mu.Unlock()
+
+	var get func() (float64, error)
+
+	if entity != "" {
+		conn, err := site.haConnection()
+		if err != nil {
+			return err
+		}
+		get = func() (float64, error) { return conn.GetFloatState(entity) }
+	}
+
+	s.mu.Lock()
+	s.energyGet = get
+	s.mu.Unlock()
+
+	return nil
+}
+
+func (site *Site) haConnection() (*homeassistant.Connection, error) {
 	uri, err := site.peakURI()
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", site.LoadManagement.PeakShaving.Insecure)
+	return homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", site.LoadManagement.PeakShaving.Insecure)
+}
+
+// numberSetter returns a setter writing to a Home Assistant number entity
+func (site *Site) numberSetter(entity string) (func(float64) error, error) {
+	conn, err := site.haConnection()
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +328,7 @@ func (site *Site) publishPeakSettings() {
 
 	s.mu.Lock()
 	enabled, limit, reserve, entity, charge, circuit := s.enabled, s.limit, s.reserve, s.entity, s.chargePower, s.circuit
-	chargeEntity := s.chargeEntity
+	chargeEntity, energyEntity := s.chargeEntity, s.energyEntity
 	s.mu.Unlock()
 
 	site.publish(keys.PeakShaving, enabled)
@@ -277,6 +338,7 @@ func (site *Site) publishPeakSettings() {
 	site.publish(keys.PeakShavingChargePower, charge)
 	site.publish(keys.PeakShavingCircuit, circuit)
 	site.publish(keys.PeakShavingChargeEntity, chargeEntity)
+	site.publish(keys.PeakShavingEnergyEntity, energyEntity)
 
 	site.publishChargePower()
 }
@@ -518,11 +580,87 @@ func (site *Site) writeOutput(name string, set func(float64) error, value float6
 	return true
 }
 
+// peakEnergy returns the grid import counter in kWh and where it came from: the
+// grid meter, else the Home Assistant sensor. Without either, the source is the
+// grid power.
+func (site *Site) peakEnergy() (float64, string) {
+	s := site.peak()
+
+	s.mu.Lock()
+	meter, get, entity := s.gridEnergy, s.energyGet, s.energyEntity
+	s.gridEnergy = nil // only valid for the cycle it was read in
+	s.mu.Unlock()
+
+	if meter != nil {
+		return *meter, peakSourceMeter
+	}
+
+	if get != nil {
+		v, err := get()
+		if err == nil {
+			return v, peakSourceEntity
+		}
+		site.log.WARN.Printf("peak shaving: energy %s: %v, using the grid power", entity, err)
+	}
+
+	return 0, peakSourcePower
+}
+
+// setPeakGridEnergy takes the grid meter's import counter of this cycle, nil if
+// the meter has none
+func (site *Site) setPeakGridEnergy(kWh *float64) {
+	s := site.peak()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.gridEnergy = kWh
+}
+
+// drawn returns the energy drawn since the last sample in Ws. A counter is used
+// when it was read now and last time from the same source, the grid power fills
+// in otherwise. Must be called with the lock held.
+func (s *peakState) drawn(now time.Time, imported, energy float64, source string) float64 {
+	powerWs := imported * now.Sub(s.lastSample).Seconds()
+
+	if source == peakSourcePower || source != s.source || s.stale {
+		return powerWs
+	}
+
+	switch d := (energy - s.lastEnergy) * 3600e3; {
+	case d < 0:
+		// counter reset or replaced
+		return powerWs
+
+	case d > 0:
+		s.unmovedWs, s.unmovedSince = 0, time.Time{}
+		return d
+	}
+
+	// the counter stands still: nothing drawn, or it is late and catches up
+	// with its next step. If it does not, the grid power takes over.
+	if powerWs == 0 {
+		return 0
+	}
+	if s.unmovedSince.IsZero() {
+		s.unmovedSince = s.lastSample
+	}
+	s.unmovedWs += powerWs
+
+	if s.unmovedWs < peakStaleWs || now.Sub(s.unmovedSince) <= peakMaxGap {
+		return 0
+	}
+
+	s.stale = true
+	return s.unmovedWs
+}
+
 // updatePeakWindow tracks the grid energy of the running 15 minute metering
 // window, which is what a demand charge is billed on, and the grid power allowed
 // for the rest of it
 func (site *Site) updatePeakWindow(gridPower float64) {
 	s := site.peak()
+	energy, source := site.peakEnergy()
 	now := s.clock.Now()
 	freeze, capFactor := site.peakFreeze(), site.peakCap()
 
@@ -535,24 +673,40 @@ func (site *Site) updatePeakWindow(gridPower float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.windowStart.Equal(start) {
-		s.windowStart = start
-		s.windowWs = 0
-		s.meteredFrom = now
-		s.isFrozen = false
+	var drawn float64
+	if !s.lastSample.IsZero() {
+		wasStale := s.stale
+		drawn = s.drawn(now, imported, energy, source)
 
-		// a sample from the previous window carries over, the part since the
-		// boundary is metered like any other interval
-		if !s.lastSample.IsZero() && now.Sub(s.lastSample) <= peakMaxGap {
-			s.meteredFrom = start
-			s.lastSample = start
-		} else {
-			s.lastSample = now
+		if s.stale && !wasStale {
+			site.log.WARN.Printf("peak shaving: the %s energy counter stopped updating, using the grid power until the window ends", source)
 		}
 	}
 
-	s.windowWs += imported * now.Sub(s.lastSample).Seconds()
+	if !s.windowStart.Equal(start) {
+		// a sample from the previous window carries over: the part of the
+		// interval since the boundary is metered, the rest was the last window's
+		if !s.lastSample.IsZero() && s.lastSample.Before(start) && now.Sub(s.lastSample) <= peakMaxGap {
+			s.meteredFrom = start
+			s.windowWs = drawn * now.Sub(start).Seconds() / now.Sub(s.lastSample).Seconds()
+		} else {
+			s.meteredFrom = now
+			s.windowWs = 0
+		}
+
+		s.windowStart = start
+		s.isFrozen = false
+		s.stale = false
+		s.unmovedWs, s.unmovedSince = 0, time.Time{}
+	} else {
+		s.windowWs += drawn
+	}
+
 	s.lastSample = now
+	s.source, s.lastEnergy = source, energy
+	if s.stale {
+		source = peakSourcePower
+	}
 
 	if metered := now.Sub(s.meteredFrom).Seconds(); metered > 0 {
 		s.windowAvg = s.windowWs / metered
@@ -574,6 +728,7 @@ func (site *Site) updatePeakWindow(gridPower float64) {
 
 	site.publish(keys.PeakShavingWindowAvg, s.windowAvg)
 	site.publish(keys.PeakShavingAllowed, s.allowed)
+	site.publish(keys.PeakShavingSource, source)
 	site.publish(keys.PeakShavingWindowEnd, start.Add(lm.PeakWindow))
 }
 
@@ -797,6 +952,65 @@ func (site *Site) SetPeakShavingChargeEntity(entity string) error {
 	site.log.DEBUG.Println("set grid charge power entity:", entity)
 	settings.SetString(keys.PeakShavingChargeEntity, entity)
 	site.publish(keys.PeakShavingChargeEntity, entity)
+
+	return nil
+}
+
+// GetPeakShavingEnergyEntity returns the Home Assistant energy sensor the window
+// is metered with when the grid meter has no import counter
+func (site *Site) GetPeakShavingEnergyEntity() string {
+	s := site.peak()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.energyEntity
+}
+
+// SetPeakShavingEnergyEntity sets the Home Assistant energy sensor, a counter of
+// the grid import in kWh or Wh. Empty returns to the grid power.
+func (site *Site) SetPeakShavingEnergyEntity(entity string) error {
+	if entity != "" {
+		if !strings.HasPrefix(entity, "sensor.") && !strings.HasPrefix(entity, "input_number.") {
+			return fmt.Errorf("must be a sensor or input_number entity: %s", entity)
+		}
+
+		conn, err := site.haConnection()
+		if err != nil {
+			return err
+		}
+		state, err := conn.GetState(entity)
+		if err != nil {
+			return fmt.Errorf("%s: %w", entity, err)
+		}
+		if unit := state.Attributes.UnitOfMeasurement; unit != "kWh" && unit != "Wh" {
+			return fmt.Errorf("%s must be an energy counter in kWh or Wh, not %q", entity, unit)
+		}
+	}
+
+	s := site.peak()
+
+	s.mu.Lock()
+	changed := s.energyEntity != entity
+	previous := s.energyEntity
+	s.energyEntity = entity
+	s.mu.Unlock()
+
+	if !changed {
+		return nil
+	}
+
+	if err := site.rebuildEnergyGetter(); err != nil {
+		s.mu.Lock()
+		s.energyEntity = previous
+		s.mu.Unlock()
+
+		return err
+	}
+
+	site.log.DEBUG.Println("set peak shaving energy entity:", entity)
+	settings.SetString(keys.PeakShavingEnergyEntity, entity)
+	site.publish(keys.PeakShavingEnergyEntity, entity)
 
 	return nil
 }

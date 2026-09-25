@@ -218,5 +218,18 @@ when the window as a whole would end above the limit. Three bounds:
 What evcc did not see, after a start or a gap over 2 minutes at a window
 boundary, counts at the limit.
 
+The energy drawn in the window comes from, in this order:
+
+1. the grid meter's import counter, when the meter has one
+2. a Home Assistant energy sensor (kWh or Wh), set under Lastmanagement-Details
+   → Peak Shaving (`POST /api/peakshavingenergyentity/{entity}`)
+3. the grid power of each cycle
+
+A counter reading that fails, or goes backwards, is replaced by the grid power
+for that interval. A counter that stands still is taken as late at first; once
+the grid power says more than 20Wh were drawn over more than 2 minutes, the
+grid power is used for the rest of the window. `peakShavingSource` shows which
+one is in use.
+
 While the reserve is held, the battery is forced into normal mode and grid
 charging is blocked, since charging from the grid would create the peak.

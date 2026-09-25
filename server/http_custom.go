@@ -51,6 +51,8 @@ func customSiteRoutes(site site.API) map[string]route {
 		"peakshavingentitydelete":       {"DELETE", "/peakshavingentity", stringHandler(site.SetPeakShavingEntity, site.GetPeakShavingEntity)},
 		"peakshavingchargeentity":       {"POST", "/peakshavingchargeentity/{value:[a-zA-Z0-9_.]+}", stringHandler(site.SetPeakShavingChargeEntity, site.GetPeakShavingChargeEntity)},
 		"peakshavingchargeentitydelete": {"DELETE", "/peakshavingchargeentity", stringHandler(site.SetPeakShavingChargeEntity, site.GetPeakShavingChargeEntity)},
+		"peakshavingenergyentity":       {"POST", "/peakshavingenergyentity/{value:[a-zA-Z0-9_.]+}", stringHandler(site.SetPeakShavingEnergyEntity, site.GetPeakShavingEnergyEntity)},
+		"peakshavingenergyentitydelete": {"DELETE", "/peakshavingenergyentity", stringHandler(site.SetPeakShavingEnergyEntity, site.GetPeakShavingEnergyEntity)},
 		"peakshavingchargepower":        {"POST", "/peakshavingchargepower/{value:[0-9.]+}", floatHandler(site.SetPeakShavingChargePower, site.GetPeakShavingChargePower)},
 		"peakshavingcircuit":            {"POST", "/peakshavingcircuit/{value:" + namePattern + "}", stringHandler(site.SetPeakShavingCircuit, site.GetPeakShavingCircuit)},
 		"peakshavingcircuitdelete":      {"DELETE", "/peakshavingcircuit", stringHandler(site.SetPeakShavingCircuit, site.GetPeakShavingCircuit)},

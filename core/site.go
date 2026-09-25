@@ -1082,6 +1082,9 @@ func (site *Site) updateGridMeter() error {
 		c.AddEnergy(mm.Energy, mm.ReturnEnergy, mm.Power)
 	}
 
+	// custom: the import counter meters the peak shaving window
+	site.setPeakGridEnergy(mm.Energy)
+
 	site.publish(keys.Grid, mm)
 
 	return nil
