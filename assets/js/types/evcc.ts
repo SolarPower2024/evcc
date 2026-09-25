@@ -177,6 +177,8 @@ export interface LmAdvanced {
   peakFreeze: number;
   /** Allowed grid draw at most this multiple of the peak limit. */
   peakCap: number;
+  /** Cycles after which a load ignoring its limit is no longer counted on, 0 = off. */
+  followCycles: number;
 }
 
 // custom: a battery profile, see core/lm/profile. Values left out are not changed.

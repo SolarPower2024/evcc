@@ -27,7 +27,9 @@
 						class="form-control"
 						:data-testid="`lmadvanced-${field.name}`"
 					/>
-					<span class="input-group-text">{{ field.unit }}</span>
+					<span class="input-group-text">{{
+						field.unitKey ? $t(field.unitKey) : field.unit
+					}}</span>
 				</div>
 			</FormRow>
 
@@ -89,6 +91,14 @@ const FIELDS = [
 	{ name: "timeout", unit: "min", min: 1, max: 60, integer: true, default: 10 },
 	{ name: "peakFreeze", unit: "min", min: 1, max: 14, integer: true, default: 12 },
 	{ name: "peakCap", unit: "×", min: 1, max: 10, integer: false, default: 2 },
+	{
+		name: "followCycles",
+		unitKey: "config.lmadvanced.cycles",
+		min: 0,
+		max: 20,
+		integer: true,
+		default: 3,
+	},
 ];
 
 // Advanced load management settings. Each value overrides the default; the

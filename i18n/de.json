@@ -503,8 +503,11 @@
       "v2Support": "Zurück zu InfluxDB 2.x"
     },
     "lmadvanced": {
+      "cycles": "Zyklen",
       "description": "Die Standardwerte passen für die meisten Anlagen.",
       "entryLabel": "Erweitert",
+      "followCyclesHelp": "Zieht ein reduzierter Verbraucher bei Überlast so viele Zyklen mehr als erlaubt, wird stattdessen der Nächste in der Prioritätenreihe gedrosselt. 0 = aus. Standard {std}.",
+      "followCyclesLabel": "Vorgabe ignoriert nach",
       "freeValueHelp": "Wird in die Peak-Shaving-Entität geschrieben, solange die Batterie frei entladen darf. Standard {std} W.",
       "freeValueLabel": "Freigabewert",
       "holdOffHelp": "So lange bleibt das Netzladen aus, nachdem eine Spitze oder der Stromkreis es gestoppt hat. Standard {std} min.",
@@ -1480,6 +1483,7 @@
     "event": {
       "gridChargeDenied": "Netzladen gesperrt · Stromkreis erlaubt {allowed} von {wanted}",
       "gridChargePaused": "Netzladen pausiert · Bedarf {demand} über Peak-Grenze {limit}",
+      "notFollowing": "{load} folgt der Vorgabe nicht · {power} statt {allowed}",
       "peak": "Peak abgefangen · Bedarf {demand}, Grenze {limit}",
       "shed": "{load} abgeworfen · Stromkreis bei {power}",
       "shedGuard": "{load} abgeworfen · Stromkreis bei {power}, {minutes} min gesperrt",

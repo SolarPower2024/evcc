@@ -270,6 +270,12 @@ export default {
 					});
 				case "peak":
 					return this.$t("lmoverview.event.peak", { demand: kw(e.a), limit: kw(e.b) });
+				case "notFollowing":
+					return this.$t("lmoverview.event.notFollowing", {
+						load: e.load === "battery" ? this.$t("lmoverview.battery") : e.load,
+						power: kw(e.a),
+						allowed: kw(e.b),
+					});
 			}
 			return e.type;
 		},

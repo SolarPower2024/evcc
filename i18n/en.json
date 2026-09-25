@@ -503,8 +503,11 @@
       "v2Support": "Back to InfluxDB 2.x"
     },
     "lmadvanced": {
+      "cycles": "cycles",
       "description": "The defaults suit most installations.",
       "entryLabel": "Advanced",
+      "followCyclesHelp": "If a reduced load draws more than allowed for this many cycles during an overload, the next load up the priority order is cut instead. 0 = off. Default {std}.",
+      "followCyclesLabel": "Limit ignored after",
       "freeValueHelp": "Written to the peak shaving entity while the battery may discharge freely. Default {std} W.",
       "freeValueLabel": "Free discharge value",
       "holdOffHelp": "Grid charging stays off this long after a peak or the circuit stopped it. Default {std} min.",
@@ -1480,6 +1483,7 @@
     "event": {
       "gridChargeDenied": "Grid charging blocked · circuit allows {allowed} of {wanted}",
       "gridChargePaused": "Grid charging paused · demand {demand} above peak limit {limit}",
+      "notFollowing": "{load} ignores its limit · {power} instead of {allowed}",
       "peak": "Peak covered · demand {demand}, limit {limit}",
       "shed": "{load} shed · circuit at {power}",
       "shedGuard": "{load} shed · circuit at {power}, held off {minutes} min",
