@@ -1904,6 +1904,16 @@
     "titleUpdate": "Administrator Passwort ändern",
     "updatePassword": "Passwort ändern"
   },
+  "peakstats": {
+    "description": "Höchste Viertelstunde je Monat, mit und ohne Batterie.",
+    "empty": "Noch keine vollständige Viertelstunde erfasst.",
+    "interventions": "Eingriffe",
+    "menu": "Peak Shaving",
+    "month": "Monat",
+    "title": "Peak Shaving",
+    "withBattery": "Mit Batterie",
+    "withoutBattery": "Ohne Batterie"
+  },
   "session": {
     "addOdometer": "Wert eintragen",
     "addedRange": "Geladene Reichweite",

@@ -1904,6 +1904,16 @@
     "titleUpdate": "Update Administrator Password",
     "updatePassword": "Update password"
   },
+  "peakstats": {
+    "description": "Highest quarter hour per month, with and without the battery.",
+    "empty": "No complete quarter hour recorded yet.",
+    "interventions": "Interventions",
+    "menu": "Peak Shaving",
+    "month": "Month",
+    "title": "Peak Shaving",
+    "withBattery": "With battery",
+    "withoutBattery": "Without battery"
+  },
   "session": {
     "addOdometer": "Add value",
     "addedRange": "Added range",

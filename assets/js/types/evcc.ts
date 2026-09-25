@@ -195,6 +195,20 @@ export interface LmProfile {
   solarShare?: Record<string, number>;
 }
 
+// custom: one month of peak statistics, see core/site_peak_stats.go
+export interface PeakMonth {
+  /** YYYY-MM */
+  month: string;
+  /** Highest quarter hour average of the grid draw in W. */
+  peak: number;
+  peakAt: string;
+  /** The same without the battery. */
+  demand: number;
+  demandAt: string;
+  /** Peaks the battery covered. */
+  interventions: number;
+}
+
 // custom: load management overview, see core/site_lm_status.go
 export interface LmLoadStatus {
   name: string;
@@ -427,6 +441,8 @@ export interface State {
   peakShavingSource?: "meter" | "entity" | "power";
   /** Home Assistant grid import counter, used when the grid meter has none. */
   peakShavingEnergyEntity?: string;
+  /** Monthly peak statistics, newest first. */
+  peakMonths?: PeakMonth[];
   /** Home Assistant number entity receiving the grid charge power, empty = on/off charging. */
   peakShavingChargeEntity?: string;
   /** Grid charge power in W currently written to that entity, 0 = not charging. */

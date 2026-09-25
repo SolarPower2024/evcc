@@ -78,6 +78,16 @@
 		>
 			{{ $t("lmoverview.menu") }}
 		</button>
+		<!-- custom: monthly peak statistics, see core/site_peak_stats.go -->
+		<button
+			v-if="hasPeakShaving"
+			type="button"
+			class="dropdown-item"
+			data-testid="more-peak-stats"
+			@click="openModalById('peakStatsModal')"
+		>
+			{{ $t("peakstats.menu") }}
+		</button>
 		<router-link class="dropdown-item" to="/config" active-class="active">
 			<span v-if="showConfigBadge" class="circle-badge me-1" :class="badgeClass"></span>
 			{{ $t("config.main.title") }}
@@ -180,6 +190,9 @@ export default defineComponent({
 		},
 		hasLoadManagement() {
 			return !!store.state?.lmStatus;
+		},
+		hasPeakShaving() {
+			return !!store.state?.peakShavingEntity || !!store.state?.peakMonths?.length;
 		},
 	},
 	methods: {
