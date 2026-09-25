@@ -12,7 +12,7 @@ package core
 //
 // Upstream touch points are core/site.go (config and state field, restore call,
 // batteryGridChargeRequested), core/site_circuits.go (circuitLoads) and
-// core/loadpoint.go (the four circuit validation calls).
+// core/loadpoint.go (the circuit checks in setLimit and the two probes).
 
 import (
 	"fmt"

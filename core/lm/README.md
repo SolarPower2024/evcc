@@ -108,29 +108,49 @@ price-based grid charging, so a Home Assistant battery triggers its `modeCharge`
 script as usual. The battery's own `maxsoc` still applies on top as a hard
 ceiling.
 
+## Maintenance rules
+
+Every fork feature follows these, so that taking in a new evcc version stays cheap:
+
+1. **Inputs, not overrides.** Feed our settings into upstream mechanisms (circuit
+   checks, optimizer request, planner, regular setters) instead of overwriting
+   upstream decisions afterwards. An unavoidable override stays in one named hook
+   with the reason next to it. The only one today: `updateBatteryModePeakAware`
+   keeps the battery in normal mode below the peak reserve.
+2. **Upstream first.** Check whether evcc has the capability or an open PR for it.
+   When upstream ships an equivalent, switch to it and remove ours.
+3. **Own files, few hooks.** Logic lives in own files. Upstream files only get
+   `// custom:` hook lines, all listed below. Upstream logic is called, not copied.
+4. **Contract tests.** Each hook has a test pinning the upstream behaviour it
+   relies on, and that the fork is inert while its features are off:
+   `TestForkInertWhenUnused`, `TestSetLimitUsesLmCircuit`,
+   `TestEqualPrioritiesAreUpstream`, `TestPeakReserveKeepsExternalMode`,
+   `TestFinalizeFeedIn` (upstream session and metrics models).
+
 ## Upstream touch points
 
 Keep these in mind when merging a new evcc version:
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateFeedInFinalization`, `updateBatteryModePeakAware` |
+| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateFeedInFinalization`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
 | `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes |
 | `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `core/site/api.go` | embeds `CustomAPI`, one line |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
-| `assets/js/views/Battery.vue` | mounts the new cards, profile selection on top |
+| `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
 | `assets/js/views/Config.vue` | load management details section and its modals, OeMAG modal |
-| `assets/js/views/App.vue` | mounts the load management overview |
-| `assets/js/components/BottomTabs/MoreMenu.vue` | "Lastmanagement" entry opening the overview |
+| `assets/js/views/App.vue` | mounts the load management overview and the peak statistics |
+| `assets/js/components/BottomTabs/MoreMenu.vue` | "Lastmanagement" and "Peak Shaving" entries |
 | `assets/js/components/Config/TariffCard.vue` | OeMAG summary in the feed-in card |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
 | `assets/js/types/evcc.ts`, `i18n/de.json`, `i18n/en.json` | state fields and texts |
 
 Everything else lives in files of its own: `core/lm/`, `core/site_lm.go`, `core/site_lm_guard.go`,
-`core/site_lm_advanced.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `assets/js/components/LoadManagement/`,
+`core/site_lm_advanced.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
+`core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
 `core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
 `core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`,
 `tariff/oemag.go`, `tariff/wrapper_custom.go`, `templates/definition/tariff/oemag.yaml` and the new Vue
