@@ -437,15 +437,12 @@
       "chargePowerEffective": "Verwendet wird:",
       "chargePowerHelp": "Mit Entität die Obergrenze der Vorgabe, ohne muss sie beim Einschalten ganz in den Stromkreis passen. 0 = aus der Batteriekonfiguration.",
       "chargePowerLabel": "Erwartete Netzladeleistung",
-      "chargePowerMissing": "Ladeleistung fehlt",
       "chargePowerUnknown": "nicht ermittelbar, Netzladen bleibt gesperrt",
       "description": "Mit Entität für die Ladeleistung regelt evcc sie laufend unter Peak-Grenze und Stromkreis, ohne wird nur ein- und ausgeschaltet.",
       "entityHelp": "Erhält die erlaubte Ladeleistung in W, 0 = nicht laden. Braucht Min 0, Max ≥ Netzladeleistung, Schritt 1. Leer = Ein/Aus.",
       "entityInvalid": "Entität konnte nicht gesetzt werden.",
       "entityLabel": "Entität für die Ladeleistung",
       "entryLabel": "Netzladen",
-      "modeDynamic": "Dynamisch",
-      "modeSwitched": "Ein/Aus",
       "setpoint": "Aktuelle Vorgabe:",
       "source": {
         "setting": "hier eingetragen",
@@ -523,7 +520,6 @@
       "phases3": "3 Phasen",
       "phasesHelp": "Nur für Stromkreise mit Stromgrenze (A) nötig.",
       "phasesLabel": "Phasen der Batterie",
-      "status": "Hysterese {hysteresis} %, Wartezeit {holdOff} min",
       "timeoutHelp": "So lange hält ein wartender Verbraucher höherer Priorität Leistung frei. Standard {std} min.",
       "timeoutLabel": "Ablaufzeit der Reservierung",
       "title": "Erweiterte Einstellungen"
@@ -535,16 +531,13 @@
       "first": "{priority} (zuerst abwerfen)",
       "invalid": "Priorität konnte nicht gespeichert werden.",
       "last": "{priority} (zuletzt abwerfen)",
-      "loads": "{count} Verbraucher",
       "noLoads": "Keine Verbraucher im Lastmanagement. Ladepunkte erscheinen mit zugewiesenem Stromkreis, die Batterie über Batterie-Stromkreis.",
-      "none": "Keine Verbraucher",
       "title": "Lastmanagement-Prioritäten"
     },
     "lmprofiles": {
       "active": "Aktiv",
       "back": "Zurück",
       "confirmDelete": "Profil „{name}“ löschen?",
-      "count": "{count} Profile",
       "delete": "Löschen",
       "description": "Zum Beispiel für Sommer und Winter. Gewechselt wird im Reiter Batterie.",
       "edit": "Bearbeiten",
@@ -593,8 +586,6 @@
       "minutesHelp": "0 = Schutz aus.",
       "minutesLabel": "Sperrzeit nach Abwurf",
       "noLoadpoints": "Keine Ladepunkte im Lastmanagement. Sie erscheinen, sobald ihnen ein Stromkreis zugewiesen ist.",
-      "off": "Aus",
-      "status": "{minutes} min, {count} Ladepunkte",
       "title": "Abwurfschutz"
     },
     "loadpoint": {
@@ -990,9 +981,7 @@
       "circuitLabel": "Stromkreis der Batterie",
       "circuitNone": "Keiner — Batterie nicht im Lastmanagement",
       "circuitNoneConfigured": "Es sind keine Stromkreise konfiguriert.",
-      "circuitNotAssigned": "Nicht zugeordnet",
       "circuitTitle": "Batterie-Stromkreis",
-      "configured": "Konfiguriert",
       "description": "evcc schreibt die zum Kappen nötige Entladeleistung laufend in eine Home-Assistant-Entität, deine Automation steuert damit die Batterie.",
       "energyEntityHelp": "Zählerstand Netzbezug in kWh oder Wh. Nur nötig, wenn der Netzzähler in evcc keinen Energiezähler liefert.",
       "energyEntityLabel": "Energiezähler Netzbezug",
@@ -1001,7 +990,6 @@
       "entityLabel": "Entität für den Entlade-Sollwert",
       "entryLabel": "Peak Shaving",
       "hint": "Schalter, Peak-Grenze und Reserve stellst du im Reiter Batterie ein.",
-      "notConfigured": "Nicht konfiguriert",
       "source": {
         "entity": "Energiezähler aus Home Assistant",
         "meter": "Energiezähler des Netzzählers",

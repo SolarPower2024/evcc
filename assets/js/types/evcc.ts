@@ -173,6 +173,10 @@ export interface LmAdvanced {
   timeout: number;
   /** Battery phases for current accounting. */
   phases: number;
+  /** Minute of the quarter hour from which the peak budget no longer grows. */
+  peakFreeze: number;
+  /** Allowed grid draw at most this multiple of the peak limit. */
+  peakCap: number;
 }
 
 // custom: a battery profile, see core/lm/profile. Values left out are not changed.

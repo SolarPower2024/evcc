@@ -437,15 +437,12 @@
       "chargePowerEffective": "In use:",
       "chargePowerHelp": "With an entity the cap of the setpoint, without one it must fit the circuit completely when switched on. 0 = from the battery config.",
       "chargePowerLabel": "Expected grid charge power",
-      "chargePowerMissing": "Charge power missing",
       "chargePowerUnknown": "unknown, grid charging stays blocked",
       "description": "With a charge power entity, evcc keeps adjusting it below peak limit and circuit, without one charging is only switched on and off.",
       "entityHelp": "Receives the allowed charge power in W, 0 = don't charge. Needs min 0, max ≥ grid charge power, step 1. Empty = on/off.",
       "entityInvalid": "Could not set the entity.",
       "entityLabel": "Charge power entity",
       "entryLabel": "Grid charging",
-      "modeDynamic": "Dynamic",
-      "modeSwitched": "On/off",
       "setpoint": "Current setpoint:",
       "source": {
         "setting": "entered here",
@@ -523,7 +520,6 @@
       "phases3": "3 phases",
       "phasesHelp": "Only needed for circuits with a current limit (A).",
       "phasesLabel": "Battery phases",
-      "status": "Hysteresis {hysteresis} %, hold-off {holdOff} min",
       "timeoutHelp": "How long a waiting higher priority load keeps power reserved. Default {std} min.",
       "timeoutLabel": "Reservation expiry",
       "title": "Advanced settings"
@@ -535,16 +531,13 @@
       "first": "{priority} (shed first)",
       "invalid": "Could not save the priority.",
       "last": "{priority} (shed last)",
-      "loads": "Loads: {count}",
       "noLoads": "No loads in load management. Loadpoints appear once assigned to a circuit, the battery via Battery circuit.",
-      "none": "No loads",
       "title": "Load management priorities"
     },
     "lmprofiles": {
       "active": "Active",
       "back": "Back",
       "confirmDelete": "Delete profile “{name}”?",
-      "count": "Profiles: {count}",
       "delete": "Delete",
       "description": "E.g. for summer and winter. Switched on the battery page.",
       "edit": "Edit",
@@ -593,8 +586,6 @@
       "minutesHelp": "0 = protection off.",
       "minutesLabel": "Hold-off after shedding",
       "noLoadpoints": "No loadpoints in load management. They appear once assigned to a circuit.",
-      "off": "Off",
-      "status": "{minutes} min, loadpoints: {count}",
       "title": "Shed guard"
     },
     "loadpoint": {
@@ -990,9 +981,7 @@
       "circuitLabel": "Battery circuit",
       "circuitNone": "None — battery outside load management",
       "circuitNoneConfigured": "No circuits are configured.",
-      "circuitNotAssigned": "Not assigned",
       "circuitTitle": "Battery circuit",
-      "configured": "Configured",
       "description": "evcc keeps writing the discharge power needed for peak shaving to a Home Assistant entity, your automation drives the battery with it.",
       "energyEntityHelp": "Grid import counter in kWh or Wh. Only needed when the grid meter in evcc has no energy counter.",
       "energyEntityLabel": "Grid import energy counter",
@@ -1001,7 +990,6 @@
       "entityLabel": "Discharge setpoint entity",
       "entryLabel": "Peak shaving",
       "hint": "Switch, peak limit and reserve are set on the battery page.",
-      "notConfigured": "Not configured",
       "source": {
         "entity": "energy counter from Home Assistant",
         "meter": "energy counter of the grid meter",

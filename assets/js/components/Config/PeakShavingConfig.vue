@@ -1,152 +1,102 @@
 <template>
-	<div class="group round-box p-4">
-		<GeneralConfigEntry
-			test-id="peakshaving-circuit-entry"
-			:label="$t('config.peakshaving.circuitEntryLabel')"
-			:text="circuitStatus"
+	<div class="p-0 config-list">
+		<DeviceCard
+			:title="$t('config.peakshaving.circuitEntryLabel')"
+			editable
+			data-testid="peakshaving-circuit-entry"
 			@edit="openModal('peakshavingcircuit')"
-		/>
+		>
+			<template #icon><CircuitsIcon /></template>
+		</DeviceCard>
 
-		<GeneralConfigEntry
-			test-id="lmpriorities-entry"
-			:label="$t('config.lmpriorities.entryLabel')"
-			:text="prioritiesStatus"
+		<DeviceCard
+			:title="$t('config.lmpriorities.entryLabel')"
+			editable
+			data-testid="lmpriorities-entry"
 			@edit="openModal('lmpriorities')"
-		/>
+		>
+			<template #icon><shopicon-regular-checklist></shopicon-regular-checklist></template>
+		</DeviceCard>
 
-		<GeneralConfigEntry
-			test-id="lmshedguard-entry"
-			:label="$t('config.lmshedguard.entryLabel')"
-			:text="shedGuardStatus"
+		<DeviceCard
+			:title="$t('config.lmshedguard.entryLabel')"
+			editable
+			data-testid="lmshedguard-entry"
 			@edit="openModal('lmshedguard')"
-		/>
+		>
+			<template #icon><shopicon-regular-shield></shopicon-regular-shield></template>
+		</DeviceCard>
 
-		<GeneralConfigEntry
-			test-id="gridcharge-entry"
-			:label="$t('config.gridcharge.entryLabel')"
-			:text="gridChargeStatus"
-			:text-class="gridChargeStatusClass"
+		<DeviceCard
+			:title="$t('config.gridcharge.entryLabel')"
+			editable
+			:error="chargePowerMissing"
+			data-testid="gridcharge-entry"
 			@edit="openModal('gridcharge')"
-		/>
+		>
+			<template #icon
+				><shopicon-regular-batterycharge></shopicon-regular-batterycharge
+			></template>
+		</DeviceCard>
 
-		<GeneralConfigEntry
-			test-id="peakshaving-entry"
-			:label="$t('config.peakshaving.entryLabel')"
-			:text="peakShavingStatus"
+		<DeviceCard
+			:title="$t('config.peakshaving.entryLabel')"
+			editable
+			data-testid="peakshaving-entry"
 			@edit="openModal('peakshaving')"
-		/>
+		>
+			<template #icon><shopicon-regular-lightning></shopicon-regular-lightning></template>
+		</DeviceCard>
 
-		<GeneralConfigEntry
-			test-id="lmprofiles-entry"
-			:label="$t('config.lmprofiles.entryLabel')"
-			:text="profilesStatus"
+		<DeviceCard
+			:title="$t('config.lmprofiles.entryLabel')"
+			editable
+			data-testid="lmprofiles-entry"
 			@edit="openModal('lmprofiles')"
-		/>
+		>
+			<template #icon><shopicon-regular-cloudsun></shopicon-regular-cloudsun></template>
+		</DeviceCard>
 
-		<GeneralConfigEntry
-			test-id="lmadvanced-entry"
-			:label="$t('config.lmadvanced.entryLabel')"
-			:text="advancedStatus"
+		<DeviceCard
+			:title="$t('config.lmadvanced.entryLabel')"
+			editable
+			data-testid="lmadvanced-entry"
 			@edit="openModal('lmadvanced')"
-		/>
+		>
+			<template #icon><shopicon-regular-settings></shopicon-regular-settings></template>
+		</DeviceCard>
 	</div>
 </template>
 
 <script lang="ts">
+import "@h2d2/shopicons/es/regular/checklist";
+import "@h2d2/shopicons/es/regular/shield";
+import "@h2d2/shopicons/es/regular/batterycharge";
+import "@h2d2/shopicons/es/regular/lightning";
+import "@h2d2/shopicons/es/regular/cloudsun";
+import "@h2d2/shopicons/es/regular/settings";
 import { defineComponent } from "vue";
 import store from "@/store";
 import { openModal } from "@/configModal";
-import GeneralConfigEntry from "./GeneralConfigEntry.vue";
+import DeviceCard from "./DeviceCard.vue";
+import CircuitsIcon from "../MaterialIcon/Circuits.vue";
 
-// Entry rows of the load management details. The settings themselves are in
-// PeakShavingCircuitModal, LmPrioritiesModal, LmShedGuardModal, GridChargeModal,
-// PeakShavingModal, LmProfilesModal and LmAdvancedModal. The switches, the peak limit and the soc values live on the
-// battery page.
+// Tiles of the load management details, laid out like the services. The settings
+// themselves are in PeakShavingCircuitModal, LmPrioritiesModal, LmShedGuardModal,
+// GridChargeModal, PeakShavingModal, LmProfilesModal and LmAdvancedModal. The
+// switches, the peak limit and the soc values live on the battery page.
 export default defineComponent({
 	name: "PeakShavingConfig",
-	components: { GeneralConfigEntry },
+	components: { DeviceCard, CircuitsIcon },
 	computed: {
-		circuit(): string {
-			return store.state.peakShavingCircuit ?? "";
-		},
-		circuitStatus(): string {
-			if (!this.circuit) {
-				return this.$t("config.peakshaving.circuitNotAssigned");
-			}
-			return store.state.circuits?.[this.circuit]?.title || this.circuit;
-		},
-		prioritiesStatus(): string {
-			const count = store.state.lmPriorities?.length ?? 0;
-			if (!count) {
-				return this.$t("config.lmpriorities.none");
-			}
-			return this.$t("config.lmpriorities.loads", { count });
-		},
-		shedGuardStatus(): string {
-			const minutes = store.state.lmShedGuard ?? 0;
-			const count = store.state.lmShedProtected?.length ?? 0;
-			if (!minutes || !count) {
-				return this.$t("config.lmshedguard.off");
-			}
-			return this.$t("config.lmshedguard.status", { minutes, count });
-		},
-		profilesStatus(): string {
-			const count = store.state.lmProfiles?.length ?? 0;
-			if (!count) {
-				return this.$t("config.lmprofiles.none");
-			}
-			return this.$t("config.lmprofiles.count", { count });
-		},
-		advancedStatus(): string {
-			const adv = store.state.lmAdvanced;
-			if (!adv) {
-				return "";
-			}
-			return this.$t("config.lmadvanced.status", {
-				hysteresis: adv.hysteresis,
-				holdOff: adv.holdOff,
-			});
-		},
-		dynamicCharge(): boolean {
-			return !!store.state.peakShavingChargeEntity;
-		},
 		// the charge power only matters once something checks against it: the
 		// circuit, or the dynamic setpoint it caps. Grid charging stays off without it.
 		chargePowerMissing(): boolean {
-			const needed = !!this.circuit || this.dynamicCharge;
+			const needed =
+				!!store.state.peakShavingCircuit || !!store.state.peakShavingChargeEntity;
 			return needed && (store.state.peakShavingChargePowerEffective ?? 0) <= 0;
-		},
-		gridChargeStatus(): string {
-			if (this.chargePowerMissing) {
-				return this.$t("config.gridcharge.chargePowerMissing");
-			}
-			return this.$t(
-				this.dynamicCharge
-					? "config.gridcharge.modeDynamic"
-					: "config.gridcharge.modeSwitched"
-			);
-		},
-		gridChargeStatusClass(): string {
-			return this.chargePowerMissing ? "text-danger" : "";
-		},
-		peakShavingStatus(): string {
-			return this.$t(
-				store.state.peakShavingEntity
-					? "config.peakshaving.configured"
-					: "config.peakshaving.notConfigured"
-			);
 		},
 	},
 	methods: { openModal },
 });
 </script>
-
-<style scoped>
-.group {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
-	grid-gap: 2rem 5rem;
-	margin-bottom: 5rem;
-	align-items: start;
-}
-</style>
