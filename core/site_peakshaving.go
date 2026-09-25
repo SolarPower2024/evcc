@@ -802,16 +802,18 @@ func (site *Site) peakChargeHeadroom() (headroom float64, ok bool) {
 }
 
 // updateBatteryModePeakAware keeps the battery in normal mode while the reserve
-// is being held for peaks, as hold would block the discharge controller. Grid
-// charging is the exception: it has already been cleared against both the
-// circuit and a running peak, see batteryGridChargeRequested.
+// is being held for peaks, as hold would block the discharge controller. This is
+// the one place the fork overrides upstream's battery mode, and only below the
+// reserve: grid charging has already been cleared against both the circuit and a
+// running peak (see batteryGridChargeRequested), and a mode set from outside
+// through the api stays the caller's decision.
 func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rate api.Rate) {
 	// the last hook of the cycle: everything the overview shows is decided now
 	defer site.publishLmStatus(gridCharge)
 	defer site.publishLmWallboxes()
 	defer site.checkLmFollowing()
 
-	if gridCharge || !site.peakShavingActive() {
+	if gridCharge || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)
 		return
 	}

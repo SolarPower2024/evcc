@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
+	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/util"
 	"github.com/stretchr/testify/assert"
@@ -475,4 +476,24 @@ func TestPeakWindowLateCounter(t *testing.T) {
 	energyStep(site, clk, 0, kWh(11.1))
 	assert.InDelta(t, 180000, s.windowWs, 0.001)
 	assert.Equal(t, peakSourceMeter, s.source)
+}
+
+// TestPeakReserveKeepsExternalMode: below the reserve peak shaving keeps the
+// battery in normal mode, but a mode set from outside through the api is left
+// to upstream, which applies it
+func TestPeakReserveKeepsExternalMode(t *testing.T) {
+	sc := newScenario(t)
+	sc.site.lms().socChargeEnabled = false
+
+	// below the reserve, hold (e.g. from discharge control) gives way to normal
+	sc.site.SetBatteryMode(api.BatteryHold)
+	sc.cycle(25, 3000, 0)
+	assert.Equal(t, api.BatteryNormal, sc.mode())
+
+	// an external mode wins
+	sc.site.Lock()
+	sc.site.batteryModeExternal = api.BatteryHold
+	sc.site.Unlock()
+	sc.cycle(25, 3000, 0)
+	assert.Equal(t, api.BatteryHold, sc.mode())
 }
