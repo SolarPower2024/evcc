@@ -116,7 +116,7 @@ Keep these in mind when merging a new evcc version:
 | --- | --- |
 | `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateFeedInFinalization`, `updateBatteryModePeakAware` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
-| `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `lmLimit` hook in `setLimit`, two `lm.Peek*` probes |
+| `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes |
 | `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `core/site/api.go` | embeds `CustomAPI`, one line |
@@ -154,7 +154,7 @@ whole budget, or a wallbox pushed below its minimum current. A load that could
 not start for lack of power is not held off. While held off, the loadpoint asks
 for nothing, so lower priority loads may use the power. Changing the minutes or
 the protection applies to a running guard right away. The guard is in
-`core/lm/guard.go`, applied in `lmLimit` (`core/loadpoint_lm.go`), the settings
+`core/lm/guard.go`, applied in `lmCircuit` (`core/loadpoint_lm.go`), the settings
 in `core/site_lm_guard.go`.
 
 ## Advanced settings

@@ -296,3 +296,79 @@ func TestLmStatusWallboxThrottled(t *testing.T) {
 		assert.Equal(t, 9000.0, ev[0].B)
 	}
 }
+
+// lmLimit runs the circuit check of setLimit, without switching the charger.
+// TestSetLimitUsesLmCircuit pins that setLimit gives the same result.
+func (lp *Loadpoint) lmLimit(current float64) float64 {
+	circuit := lp.lmCircuit()
+
+	currentLimit := circuit.ValidateCurrent(lp.actualMaxChargeCurrent(), current)
+	activePhases := lp.ActivePhases()
+	powerLimit := circuit.ValidatePower(lp.chargePower, currentToPower(current, activePhases))
+	limited := lp.roundedCurrent(min(currentLimit, powerToCurrent(powerLimit, activePhases)))
+
+	circuit.done(current, limited)
+	return limited
+}
+
+// fakeCharger switches without talking to a device
+type fakeCharger struct {
+	enabled  bool
+	current  int64
+	features []api.Feature
+	rated    float64
+}
+
+func (c *fakeCharger) Status() (api.ChargeStatus, error) { return api.StatusC, nil }
+func (c *fakeCharger) Enabled() (bool, error)            { return c.enabled, nil }
+func (c *fakeCharger) Enable(v bool) error               { c.enabled = v; return nil }
+func (c *fakeCharger) MaxCurrent(v int64) error          { c.current = v; return nil }
+func (c *fakeCharger) Features() []api.Feature           { return c.features }
+func (c *fakeCharger) RatedPower() float64               { return c.rated }
+
+// TestSetLimitUsesLmCircuit is the contract with upstream's setLimit: its circuit
+// check goes through lmCircuit, so priorities, switch devices and the shed guard
+// apply to the real control path
+func TestSetLimitUsesLmCircuit(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		charger  *fakeCharger
+		phases   int
+		grid     float64 // circuit power with the loadpoint off
+		wantOn   bool
+		wantAmps int64
+	}{
+		{"switch fits", &fakeCharger{features: []api.Feature{api.SwitchDevice}, rated: 3000}, 1, 6000, true, 16},
+		// upstream alone would switch on with 1.6 kW to spare, above the minimum current
+		{"switch does not fit", &fakeCharger{features: []api.Feature{api.SwitchDevice}, rated: 3000}, 1, 8410, false, 0},
+		{"wallbox throttled to what fits", &fakeCharger{}, 3, 1000, true, 13},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lm.Reset()
+			Voltage = 230
+
+			m := &lmMeter{power: tc.grid}
+			c, err := circuit.New(util.NewLogger("test"), "main", 0, 10000, m, 0)
+			require.NoError(t, err)
+			require.NoError(t, c.Update(nil))
+
+			lp := NewLoadpoint(util.NewLogger("lp"), nil)
+			lp.clock = clock.NewMock()
+			lp.wakeUpTimer = NewTimer()
+			lp.circuit = c
+			lp.charger = tc.charger
+			lp.phases = tc.phases
+			lp.minCurrent, lp.maxCurrent = 6, 16
+
+			require.NoError(t, lp.setLimit(16))
+			assert.Equal(t, tc.wantOn, tc.charger.enabled)
+			if tc.wantOn {
+				assert.Equal(t, tc.wantAmps, tc.charger.current)
+			}
+
+			d, ok := lm.LastDecision(lp)
+			require.True(t, ok, "the decision is recorded for the overview")
+			assert.Positive(t, d.Requested)
+		})
+	}
+}
