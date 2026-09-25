@@ -39,6 +39,9 @@
 						<span class="tile-unit">/ {{ fmtW(peak.limit) }}</span>
 					</div>
 					<div class="tile-sub">{{ peak.text }}</div>
+					<div v-if="peak.allowed" class="tile-sub" data-testid="lm-peak-allowed">
+						{{ peak.allowed }}
+					</div>
 				</div>
 
 				<div v-if="battery" class="tile" data-testid="lm-gridcharge">
@@ -140,10 +143,19 @@ export default {
 						})
 					: this.$t("lmoverview.peakFree");
 			}
+			const end = this.state.peakShavingWindowEnd;
+			const allowed =
+				this.state.peakShaving && end
+					? this.$t("lmoverview.peakAllowed", {
+							power: this.fmtW(this.state.peakShavingAllowed || 0),
+							time: this.fmtHourMinute(new Date(end)),
+						})
+					: "";
 			return {
 				avg: this.state.peakShavingWindowAvg || 0,
 				limit: this.state.peakShavingLimit || 0,
 				text,
+				allowed,
 			};
 		},
 		loads() {

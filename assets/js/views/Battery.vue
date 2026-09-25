@@ -57,6 +57,8 @@
 						:power="state.peakShavingPower ?? 0"
 						:shaving="!!state.peakShavingActive"
 						:window-avg="state.peakShavingWindowAvg ?? 0"
+						:allowed="state.peakShavingAllowed ?? 0"
+						:window-end="state.peakShavingWindowEnd ?? ''"
 						:entity="state.peakShavingEntity ?? ''"
 					/>
 

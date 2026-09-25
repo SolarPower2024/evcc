@@ -87,6 +87,8 @@ const FIELDS = [
 	{ name: "freeValue", unit: "W", min: 1, max: 100000, integer: true, default: 10000 },
 	{ name: "holdOff", unit: "min", min: 1, max: 60, integer: true, default: 5 },
 	{ name: "timeout", unit: "min", min: 1, max: 60, integer: true, default: 10 },
+	{ name: "peakFreeze", unit: "min", min: 1, max: 14, integer: true, default: 12 },
+	{ name: "peakCap", unit: "×", min: 1, max: 10, integer: false, default: 2 },
 ];
 
 // Advanced load management settings. Each value overrides the default; the

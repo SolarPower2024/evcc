@@ -62,8 +62,9 @@
       "suggestion": "Vorschlag"
     },
     "peakShaving": {
+      "allowed": "Erlaubter Netzbezug bis {time}",
       "current": "Aktuelle Anforderung",
-      "description": "Unterhalb von {reserve} wird die Batterie nur noch für Lastspitzen genutzt und deckt alles ab, was über {limit} Netzbezug hinausgeht. Darüber läuft sie im normalen Eigenverbrauch.",
+      "description": "Unterhalb von {reserve} wird die Batterie nur noch für Lastspitzen genutzt: Sie deckt ab, was den Netzbezug im 15-Minuten-Mittel über {limit} bringen würde. Darüber läuft sie im normalen Eigenverbrauch.",
       "enable": "Untere Batteriereserve für Lastspitzen zurückhalten.",
       "free": "unbegrenzt",
       "noEntity": "Keine Zielentität hinterlegt. Trage sie unter Konfiguration → Lastspitzenmanagement ein, sonst lässt sich die Funktion nicht aktivieren.",
@@ -514,6 +515,10 @@
       "hysteresisHelp": "Der Ladestand muss um diesen Wert über die Reserve steigen, bevor Peak Shaving die Reserve wieder freigibt. Verhindert ständiges Umschalten um die Reserve herum. Standard {std} %.",
       "hysteresisLabel": "Hysterese der Reserve",
       "invalid": "{label}: bitte einen Wert von {min} bis {max} eingeben.",
+      "peakCapHelp": "Wurde in einer Viertelstunde wenig bezogen, ist danach mehr erlaubt. Höchstens aber dieses Vielfache der Peak-Grenze. Standard {std}.",
+      "peakCapLabel": "Obergrenze erlaubter Netzbezug",
+      "peakFreezeHelp": "Ab dieser Minute der Viertelstunde steigt der erlaubte Netzbezug nicht mehr, er kann nur noch sinken. Schützt davor, dass wegen leicht abweichender Uhren ein großer Bezug kurz vor Schluss in die nächste Viertelstunde fällt. Standard Minute {std}.",
+      "peakFreezeLabel": "Budget einfrieren ab Minute",
       "phases1": "1 Phase",
       "phases3": "3 Phasen",
       "phasesHelp": "Über wie viele Phasen die Batterie beim Netzladen Strom bezieht. Wird nur für Stromkreise mit Stromgrenze (A) gebraucht.",
@@ -989,12 +994,20 @@
       "circuitTitle": "Batterie-Stromkreis",
       "configured": "Konfiguriert",
       "description": "Die Hausbatterie kann untere Ladestände für Lastspitzen zurückhalten. evcc berechnet die nötige Batterieleistung und schreibt sie laufend in eine Home-Assistant-Entität, aus der deine Automatisierung die Entladung steuert.",
+      "energyEntityHelp": "Zählerstand des Netzbezugs in kWh oder Wh, zum Beispiel vom Smart Meter. Nur nötig, wenn der Netzzähler in evcc keinen Energiezähler liefert. Ohne beides wird aus der Leistung gerechnet, die evcc nur alle 10 bis 30 Sekunden sieht.",
+      "energyEntityLabel": "Energiezähler Netzbezug",
       "entityHelp": "Entität, in die der Sollwert in Watt geschrieben wird. Sie braucht Min 0, Max mindestens 10000 und Schrittweite 1.",
       "entityInvalid": "Entität konnte nicht gesetzt werden.",
       "entityLabel": "Entität für den Entlade-Sollwert",
       "entryLabel": "Peak Shaving",
       "hint": "Schalter, Leistungsgrenze und Reserve-Ladestand stellst du unter Hausbatterie ein.",
       "notConfigured": "Nicht konfiguriert",
+      "source": {
+        "entity": "Energiezähler aus Home Assistant",
+        "meter": "Energiezähler des Netzzählers",
+        "power": "Netzleistung (alle 10 bis 30 Sekunden)"
+      },
+      "sourceLabel": "15-Minuten-Mittel gemessen mit",
       "title": "Peak Shaving"
     },
     "pv": {
@@ -1497,6 +1510,7 @@
     },
     "pausedPeak": "Peak · wieder ab {time}",
     "peak": "Peak Shaving · 15-min-Mittel",
+    "peakAllowed": "Erlaubt {power} bis {time}",
     "peakFree": "Über der Reserve · frei",
     "peakOff": "Aus",
     "peakReserve": "Reserve aktiv · Soll {setpoint}",

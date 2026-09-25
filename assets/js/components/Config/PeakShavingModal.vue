@@ -26,6 +26,27 @@
 				/>
 			</FormRow>
 
+			<FormRow
+				id="peakShavingEnergyEntity"
+				:label="$t('config.peakshaving.energyEntityLabel')"
+				:help="$t('config.peakshaving.energyEntityHelp')"
+				optional
+			>
+				<input
+					id="peakShavingEnergyEntity"
+					v-model="energyEntity"
+					type="text"
+					class="form-control"
+					placeholder="sensor.grid_import_energy"
+					data-testid="peakshaving-energy-entity"
+				/>
+			</FormRow>
+
+			<p class="small mb-0" data-testid="peakshaving-source">
+				{{ $t("config.peakshaving.sourceLabel") }}:
+				<strong>{{ sourceText }}</strong>
+			</p>
+
 			<p class="text-muted mt-3 small">{{ $t("config.peakshaving.hint") }}</p>
 
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
@@ -61,8 +82,9 @@ import FormRow from "./FormRow.vue";
 import store from "@/store";
 import api from "@/api";
 
-// Target entity for the peak shaving discharge setpoint. The switch, the peak
-// limit and the reserve soc are operating controls and live on the battery page.
+// Target entity for the peak shaving discharge setpoint and the energy sensor
+// metering the 15 minute window. The switch, the peak limit and the reserve soc
+// are operating controls and live on the battery page.
 export default {
 	name: "PeakShavingModal",
 	components: { FormRow, GenericModal },
@@ -73,20 +95,35 @@ export default {
 			error: "",
 			entity: "",
 			initialEntity: "",
+			energyEntity: "",
+			initialEnergyEntity: "",
 		};
 	},
 	computed: {
-		changed() {
+		entityChanged() {
 			return this.entity.trim() !== this.initialEntity;
+		},
+		energyEntityChanged() {
+			return this.energyEntity.trim() !== this.initialEnergyEntity;
+		},
+		changed() {
+			return this.entityChanged || this.energyEntityChanged;
+		},
+		sourceText() {
+			const source = store?.state?.peakShavingSource || "power";
+			return this.$t(`config.peakshaving.source.${source}`);
 		},
 	},
 	methods: {
 		reset() {
 			const entity = store?.state?.peakShavingEntity || "";
+			const energyEntity = store?.state?.peakShavingEnergyEntity || "";
 			this.saving = false;
 			this.error = "";
 			this.entity = entity;
 			this.initialEntity = entity;
+			this.energyEntity = energyEntity;
+			this.initialEnergyEntity = energyEntity;
 		},
 		open() {
 			this.reset();
@@ -97,10 +134,24 @@ export default {
 
 			try {
 				const entity = this.entity.trim();
-				if (entity) {
-					await api.post(`peakshavingentity/${encodeURIComponent(entity)}`);
-				} else {
-					await api.delete("peakshavingentity");
+				if (this.entityChanged) {
+					if (entity) {
+						await api.post(`peakshavingentity/${encodeURIComponent(entity)}`);
+					} else {
+						await api.delete("peakshavingentity");
+					}
+					this.initialEntity = entity;
+				}
+
+				const energyEntity = this.energyEntity.trim();
+				if (this.energyEntityChanged) {
+					if (energyEntity) {
+						await api.post(
+							`peakshavingenergyentity/${encodeURIComponent(energyEntity)}`
+						);
+					} else {
+						await api.delete("peakshavingenergyentity");
+					}
 				}
 
 				this.$emit("changed");

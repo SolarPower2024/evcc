@@ -419,6 +419,14 @@ export interface State {
   peakShavingEntity?: string;
   /** Average grid power in W of the running 15 minute metering window. */
   peakShavingWindowAvg?: number;
+  /** Grid power that keeps the window's average at the limit, in W. */
+  peakShavingAllowed?: number;
+  /** End of the running 15 minute window. */
+  peakShavingWindowEnd?: string;
+  /** Where the window's energy comes from. */
+  peakShavingSource?: "meter" | "entity" | "power";
+  /** Home Assistant grid import counter, used when the grid meter has none. */
+  peakShavingEnergyEntity?: string;
   /** Home Assistant number entity receiving the grid charge power, empty = on/off charging. */
   peakShavingChargeEntity?: string;
   /** Grid charge power in W currently written to that entity, 0 = not charging. */

@@ -58,6 +58,12 @@
 				{{ windowAvgText }}
 			</span>
 		</div>
+		<div v-if="enabled" class="d-flex justify-content-between mt-1">
+			<span class="text-muted">{{ allowedLabel }}</span>
+			<span class="fw-bold" data-testid="battery-peak-shaving-allowed">
+				{{ allowedText }}
+			</span>
+		</div>
 		<div class="d-flex justify-content-between mt-1">
 			<span class="text-muted">{{ $t("battery.peakShaving.current") }}</span>
 			<span class="fw-bold">{{ currentLabel }}</span>
@@ -95,6 +101,9 @@ export default defineComponent({
 		reserve: { type: Number, default: 30 },
 		power: { type: Number, default: 0 },
 		windowAvg: { type: Number, default: 0 },
+		// grid power that keeps the window's average at the limit, until windowEnd
+		allowed: { type: Number, default: 0 },
+		windowEnd: { type: String, default: "" },
 		// reported by the backend, not inferred from power: a setpoint can
 		// legitimately equal the free-discharge value
 		shaving: Boolean,
@@ -119,6 +128,13 @@ export default defineComponent({
 		},
 		windowAvgText(): string {
 			return this.fmtW(this.windowAvg);
+		},
+		allowedLabel(): string {
+			const time = this.windowEnd ? this.fmtHourMinute(new Date(this.windowEnd)) : "–";
+			return this.$t("battery.peakShaving.allowed", { time });
+		},
+		allowedText(): string {
+			return this.fmtW(this.allowed);
 		},
 		currentLabel(): string {
 			if (!this.enabled) return "—";

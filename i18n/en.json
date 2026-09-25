@@ -62,8 +62,9 @@
       "suggestion": "Suggestion"
     },
     "peakShaving": {
+      "allowed": "Grid draw allowed until {time}",
       "current": "Current request",
-      "description": "Below {reserve} the battery is used for demand peaks only and covers whatever exceeds {limit} of grid draw. Above it, it runs ordinary self-consumption.",
+      "description": "Below {reserve}, the battery is only used for demand peaks: it covers what would take the 15 minute average of the grid draw above {limit}. Above that, it runs normal self-consumption.",
       "enable": "Hold the lower battery range back for demand peaks.",
       "free": "unrestricted",
       "noEntity": "No target entity set. Configure it under Configuration → Peak load management, otherwise this cannot be switched on.",
@@ -514,6 +515,10 @@
       "hysteresisHelp": "The soc has to rise this far above the reserve before peak shaving releases the reserve again. Keeps it from switching back and forth around the reserve. Default {std} %.",
       "hysteresisLabel": "Reserve hysteresis",
       "invalid": "{label}: enter a value from {min} to {max}.",
+      "peakCapHelp": "Drawing little early in a quarter hour allows more later, but at most this multiple of the peak limit. Default {std}.",
+      "peakCapLabel": "Cap on the allowed grid draw",
+      "peakFreezeHelp": "From this minute of the quarter hour on, the allowed grid draw no longer grows, it can only fall. Keeps a large draw just before the end from landing in the next quarter hour when the clocks differ slightly. Default minute {std}.",
+      "peakFreezeLabel": "Freeze the budget from minute",
       "phases1": "1 phase",
       "phases3": "3 phases",
       "phasesHelp": "How many phases the battery draws on while grid charging. Only needed for circuits with a current limit (A).",
@@ -989,12 +994,20 @@
       "circuitTitle": "Battery circuit",
       "configured": "Configured",
       "description": "The home battery can hold its lower state of charge back for demand peaks. evcc computes the required battery power and keeps writing it to a Home Assistant entity your automation discharges from.",
+      "energyEntityHelp": "Grid import counter in kWh or Wh, e.g. from the smart meter. Only needed when the grid meter in evcc has no energy counter. Without either, the power is used, which evcc only sees every 10 to 30 seconds.",
+      "energyEntityLabel": "Grid import energy counter",
       "entityHelp": "Entity the setpoint is written to, in watts. It needs min 0, max at least 10000 and step 1.",
       "entityInvalid": "Could not set the entity.",
       "entityLabel": "Discharge setpoint entity",
       "entryLabel": "Peak shaving",
       "hint": "The switch, the peak limit and the reserve state of charge are on the battery page.",
       "notConfigured": "Not configured",
+      "source": {
+        "entity": "energy counter from Home Assistant",
+        "meter": "energy counter of the grid meter",
+        "power": "grid power (every 10 to 30 seconds)"
+      },
+      "sourceLabel": "15 minute average metered with",
       "title": "Peak shaving"
     },
     "pv": {
@@ -1497,6 +1510,7 @@
     },
     "pausedPeak": "Peak · resumes at {time}",
     "peak": "Peak shaving · 15 min average",
+    "peakAllowed": "Allowed {power} until {time}",
     "peakFree": "Above the reserve · free",
     "peakOff": "Off",
     "peakReserve": "Reserve active · setpoint {setpoint}",
