@@ -365,17 +365,35 @@ func (site *Site) batteryGridChargeRequested(rate api.Rate) bool {
 		// loads would otherwise stay throttled until the reservation expires
 		lm.Forget(site.lmBattery())
 		site.writeChargeValue(0)
+		site.recordBatteryLimit(0, 0)
 		return false
 	}
 
+	want, _ := site.lmBatteryChargePower()
+
 	if !site.chargePowerControlled() {
-		return site.batteryCircuitAllows()
+		ok := site.batteryCircuitAllows()
+
+		var allowed float64
+		if ok {
+			allowed = want
+		}
+		site.recordBatteryLimit(want, allowed)
+
+		return ok
 	}
 
 	power := site.batteryChargeSetpoint()
 	site.writeChargeValue(power)
+	site.recordBatteryLimit(want, power)
 
 	return power > 0
+}
+
+// recordBatteryLimit keeps what the battery may grid-charge with, which load
+// management compares with what it draws, see core/lm/follow.go
+func (site *Site) recordBatteryLimit(requested, allowed float64) {
+	lm.Record(site.lmBattery(), requested, allowed, allowed > 0, time.Now())
 }
 
 // minGridChargePower is the smallest grid charge setpoint worth switching the

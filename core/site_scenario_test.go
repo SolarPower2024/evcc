@@ -83,6 +83,7 @@ func newScenario(t *testing.T) *scenario {
 	s.set = func(v float64) error { sc.peak = &v; return nil }
 
 	lm.SetPriorityLookup(site.lmPriorityLookup)
+	lm.SetFollowCycles(site.lmFollowCycles)
 
 	return sc
 }

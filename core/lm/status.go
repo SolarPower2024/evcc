@@ -25,6 +25,7 @@ const (
 	EventGridChargePaused = "gridChargePaused" // a peak paused battery grid charging, A = demand, B = peak limit
 	EventGridChargeDenied = "gridChargeDenied" // the circuit denied battery grid charging, A = allowed, B = wanted
 	EventPeak             = "peak"             // the battery started to cover a peak, A = demand, B = peak limit
+	EventNotFollowing     = "notFollowing"     // a load keeps drawing more than allowed, A = power, B = allowed
 )
 
 // Event is an entry of the load management log

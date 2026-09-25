@@ -167,6 +167,7 @@ func Reset() {
 
 	resetGuard()
 	resetStatus()
+	resetFollowing()
 }
 
 // competes reports whether loads on the two circuits draw through a shared
@@ -254,6 +255,11 @@ func below(entries []entry, c api.Circuit, prio int, self Load, selfPower, selfC
 		if e.load == self {
 			power += selfPower
 			current += selfCurrent
+			continue
+		}
+
+		// a load not following its limit would not give way either
+		if ignored(e.load) {
 			continue
 		}
 

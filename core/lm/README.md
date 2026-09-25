@@ -160,9 +160,21 @@ in `core/site_lm_guard.go`.
 ## Advanced settings
 
 Hysteresis, free value, grid charge hold-off, reservation expiry, battery
-phases and the peak budget's freeze minute and cap are set under Lastmanagement-Details → Erweitert
+phases, the peak budget's freeze minute and cap and the cycles for loads not
+following their limit are set under Lastmanagement-Details → Erweitert
 (`POST /api/lmadvanced/{name}/{value}`). A value set there overrides the yaml
 value, which overrides the default. See `core/site_lm_advanced.go`.
+
+## Loads not following their limit
+
+In an overload a load keeps its power while the loads below it could free the
+excess. That only works if they give way. Each cycle `lm.CheckFollowing` compares
+what every load draws with what it was last allowed (`lm.Record`, for the battery
+its grid charge limit). A load above its limit (tolerance 300W or 10%) on an
+overloaded circuit counts a cycle; after the set cycles (Erweitert, default 3,
+0 = off) it is no longer counted on, so the next load up the priority order is
+cut. It is counted on again once it draws what it was allowed. See
+`core/lm/follow.go` and `core/site_lm_follow.go`.
 
 ## Battery profiles
 

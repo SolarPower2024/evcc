@@ -23,17 +23,20 @@ type lmAdvanced struct {
 	Phases     *float64 `json:"phases,omitempty"`     // battery phases for current accounting
 	PeakFreeze *float64 `json:"peakFreeze,omitempty"` // minute of the window from which the peak budget no longer grows
 	PeakCap    *float64 `json:"peakCap,omitempty"`    // allowed grid power at most this multiple of the peak limit
+	// cycles after which a load not following its limit is no longer counted on, 0 = never
+	FollowCycles *float64 `json:"followCycles,omitempty"`
 }
 
 // lmAdvancedState is what the ui shows: the values in effect
 type lmAdvancedState struct {
-	Hysteresis float64 `json:"hysteresis"`
-	FreeValue  float64 `json:"freeValue"`
-	HoldOff    float64 `json:"holdOff"`
-	Timeout    float64 `json:"timeout"`
-	Phases     int     `json:"phases"`
-	PeakFreeze float64 `json:"peakFreeze"`
-	PeakCap    float64 `json:"peakCap"`
+	Hysteresis   float64 `json:"hysteresis"`
+	FreeValue    float64 `json:"freeValue"`
+	HoldOff      float64 `json:"holdOff"`
+	Timeout      float64 `json:"timeout"`
+	Phases       int     `json:"phases"`
+	PeakFreeze   float64 `json:"peakFreeze"`
+	PeakCap      float64 `json:"peakCap"`
+	FollowCycles int     `json:"followCycles"`
 }
 
 // lmAdvancedLimit is a setting's valid range
@@ -43,13 +46,14 @@ type lmAdvancedLimit struct {
 }
 
 var lmAdvancedLimits = map[string]lmAdvancedLimit{
-	"hysteresis": {0, 20, false},
-	"freeValue":  {1, 100000, true},
-	"holdOff":    {1, 60, true},
-	"timeout":    {1, 60, true},
-	"phases":     {1, 3, true},
-	"peakFreeze": {1, 14, true},
-	"peakCap":    {1, 10, false},
+	"hysteresis":   {0, 20, false},
+	"freeValue":    {1, 100000, true},
+	"holdOff":      {1, 60, true},
+	"timeout":      {1, 60, true},
+	"phases":       {1, 3, true},
+	"peakFreeze":   {1, 14, true},
+	"peakCap":      {1, 10, false},
+	"followCycles": {0, 20, true},
 }
 
 // restoreLmAdvanced restores the persisted advanced settings
@@ -64,6 +68,7 @@ func (site *Site) restoreLmAdvanced() {
 	}
 
 	lm.SetTimeout(site.lmTimeout())
+	lm.SetFollowCycles(site.lmFollowCycles)
 
 	site.publishLmAdvanced()
 }
@@ -80,13 +85,14 @@ func (site *Site) advanced() lmAdvanced {
 
 func (site *Site) publishLmAdvanced() {
 	site.publish(keys.LmAdvanced, lmAdvancedState{
-		Hysteresis: site.peakHysteresis(),
-		FreeValue:  site.peakFreeValue(),
-		HoldOff:    site.lmHoldOff().Minutes(),
-		Timeout:    site.lmTimeout().Minutes(),
-		Phases:     site.lmBatteryPhases(),
-		PeakFreeze: site.peakFreeze().Minutes(),
-		PeakCap:    site.peakCap(),
+		Hysteresis:   site.peakHysteresis(),
+		FreeValue:    site.peakFreeValue(),
+		HoldOff:      site.lmHoldOff().Minutes(),
+		Timeout:      site.lmTimeout().Minutes(),
+		Phases:       site.lmBatteryPhases(),
+		PeakFreeze:   site.peakFreeze().Minutes(),
+		PeakCap:      site.peakCap(),
+		FollowCycles: site.lmFollowCycles(),
 	})
 }
 
@@ -133,6 +139,8 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 		s.adv.PeakFreeze = &v
 	case "peakCap":
 		s.adv.PeakCap = &v
+	case "followCycles":
+		s.adv.FollowCycles = &v
 	}
 	adv := s.adv
 	s.advMu.Unlock()

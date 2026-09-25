@@ -809,6 +809,7 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 	// the last hook of the cycle: everything the overview shows is decided now
 	defer site.publishLmStatus(gridCharge)
 	defer site.publishLmWallboxes()
+	defer site.checkLmFollowing()
 
 	if gridCharge || !site.peakShavingActive() {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)
