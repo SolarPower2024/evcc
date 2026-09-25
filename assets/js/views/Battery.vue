@@ -4,9 +4,6 @@
 		<div class="row">
 			<main class="col-12">
 				<template v-if="batteryAvailable">
-					<!-- custom: battery profiles, see core/site_lm_profiles.go -->
-					<BatteryProfileCard v-if="state.lmProfiles?.length" class="mb-4 box-pull-out" />
-
 					<BatteryStatusCards
 						class="mb-4 box-pull-out"
 						:battery="state.battery"
@@ -70,6 +67,9 @@
 					>
 						<SmartFeedInPriority v-bind="smartFeedInPriorityProps" />
 					</Card>
+
+					<!-- custom: battery profiles, see core/site_lm_profiles.go -->
+					<BatteryProfileCard v-if="state.lmProfiles?.length" class="box-pull-out mt-4" />
 				</template>
 				<p v-else class="my-4 text-muted">{{ $t("batterySettings.noBattery") }}</p>
 			</main>
