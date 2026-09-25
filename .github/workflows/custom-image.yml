@@ -9,12 +9,12 @@
 # Tag a release to publish a version the addon can pin:
 #   git tag v0.315.0-lm1 && git push origin v0.315.0-lm1
 # That produces ghcr.io/<owner>/evcc-custom:0.315.0-lm1, which is what belongs
-# in the addon's config.yaml. Pushes to the branch only move :latest.
+# in the addon's config.yaml. Pushes to the branch build nothing, a version is
+# only built when it is tagged (or started by hand).
 name: Custom image
 
 on:
   push:
-    branches: [loadmanagement]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -53,7 +53,6 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=sha,format=short
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/loadmanagement' }}
 
       - uses: docker/build-push-action@v7
         with:
