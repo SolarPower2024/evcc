@@ -104,6 +104,7 @@ type peakState struct {
 	windowStart time.Time
 	meteredFrom time.Time // start of metering in this window, later than windowStart after a restart
 	windowWs    float64   // accumulated grid energy in Ws
+	demandWs    float64   // the same without the battery
 	lastSample  time.Time
 	windowAvg   float64 // average grid power of the running window in W
 	allowed     float64 // grid power that keeps the window average at the limit in W
@@ -120,6 +121,9 @@ type peakState struct {
 	unmovedWs    float64   // drawn according to the grid power while the counter stood still
 	unmovedSince time.Time // the counter has not moved since
 	stale        bool      // counter stopped updating, grid power used for the rest of the window
+
+	months      []peakMonth // statistics, newest first, see site_peak_stats.go
+	monthsDirty bool
 }
 
 // peak returns the peak shaving state, applying defaults on first use
@@ -191,6 +195,7 @@ func (site *Site) restorePeakSettings() {
 		site.log.ERROR.Printf("peak shaving energy: %v", err)
 	}
 
+	site.restorePeakMonths()
 	site.publishPeakSettings()
 	site.publishLmPriorities()
 }
@@ -406,8 +411,9 @@ func (site *Site) peakShavingActive() bool {
 // limit and writes it to the configured number entity. Called once per cycle.
 func (site *Site) updatePeakShaving(state siteState) {
 	s := site.peak()
+	defer site.savePeakMonths()
 
-	site.updatePeakWindow(state.gridPower)
+	site.updatePeakWindow(state.gridPower, state.battery.Power)
 
 	s.mu.Lock()
 	enabled, limit, reserve, set, allowed := s.enabled, s.limit, s.reserve, s.set, s.allowed
@@ -465,6 +471,9 @@ func (site *Site) updatePeakShaving(state siteState) {
 	covering := shaving && value > 0
 	started := covering && !s.covering
 	s.covering = covering
+	if started {
+		s.recordPeakIntervention(s.clock.Now())
+	}
 	s.mu.Unlock()
 
 	if started {
@@ -657,8 +666,9 @@ func (s *peakState) drawn(now time.Time, imported, energy float64, source string
 
 // updatePeakWindow tracks the grid energy of the running 15 minute metering
 // window, which is what a demand charge is billed on, and the grid power allowed
-// for the rest of it
-func (site *Site) updatePeakWindow(gridPower float64) {
+// for the rest of it. A completed window goes into the monthly statistics, with
+// the battery power added back for the demand without it.
+func (site *Site) updatePeakWindow(gridPower, batteryPower float64) {
 	s := site.peak()
 	energy, source := site.peakEnergy()
 	now := s.clock.Now()
@@ -673,10 +683,11 @@ func (site *Site) updatePeakWindow(gridPower float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var drawn float64
+	var drawn, demand float64
 	if !s.lastSample.IsZero() {
 		wasStale := s.stale
 		drawn = s.drawn(now, imported, energy, source)
+		demand = max(0, drawn+batteryPower*now.Sub(s.lastSample).Seconds())
 
 		if s.stale && !wasStale {
 			site.log.WARN.Printf("peak shaving: the %s energy counter stopped updating, using the grid power until the window ends", source)
@@ -687,11 +698,18 @@ func (site *Site) updatePeakWindow(gridPower float64) {
 		// a sample from the previous window carries over: the part of the
 		// interval since the boundary is metered, the rest was the last window's
 		if !s.lastSample.IsZero() && s.lastSample.Before(start) && now.Sub(s.lastSample) <= peakMaxGap {
+			after := now.Sub(start).Seconds() / now.Sub(s.lastSample).Seconds()
+
+			// only a window metered from its start counts for the statistics
+			if s.meteredFrom.Equal(s.windowStart) && !s.windowStart.IsZero() {
+				s.recordPeakWindow(s.windowStart, s.windowWs+drawn*(1-after), s.demandWs+demand*(1-after))
+			}
+
 			s.meteredFrom = start
-			s.windowWs = drawn * now.Sub(start).Seconds() / now.Sub(s.lastSample).Seconds()
+			s.windowWs, s.demandWs = drawn*after, demand*after
 		} else {
 			s.meteredFrom = now
-			s.windowWs = 0
+			s.windowWs, s.demandWs = 0, 0
 		}
 
 		s.windowStart = start
@@ -700,6 +718,7 @@ func (site *Site) updatePeakWindow(gridPower float64) {
 		s.unmovedWs, s.unmovedSince = 0, time.Time{}
 	} else {
 		s.windowWs += drawn
+		s.demandWs += demand
 	}
 
 	s.lastSample = now

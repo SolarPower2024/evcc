@@ -291,7 +291,7 @@ func peakWindowSite(t *testing.T, minute int) (*Site, *clock.Mock) {
 func sample(site *Site, clk *clock.Mock, grid float64, d time.Duration) {
 	for end := clk.Now().Add(d); clk.Now().Before(end); {
 		clk.Add(30 * time.Second)
-		site.updatePeakWindow(grid)
+		site.updatePeakWindow(grid, 0)
 	}
 }
 
@@ -301,7 +301,7 @@ func TestPeakWindowBudget(t *testing.T) {
 	site, clk := peakWindowSite(t, 0)
 	s := site.peak()
 
-	site.updatePeakWindow(0)
+	site.updatePeakWindow(0, 0)
 	assert.Equal(t, 5000.0, s.allowed)
 
 	// 5 minutes without drawing anything
@@ -318,7 +318,7 @@ func TestPeakWindowBudget(t *testing.T) {
 	// the cap: 10 minutes without drawing would allow 15kW, at most 2 x 5kW
 	site, clk = peakWindowSite(t, 0)
 	s = site.peak()
-	site.updatePeakWindow(0)
+	site.updatePeakWindow(0, 0)
 	sample(site, clk, 0, 10*time.Minute)
 	assert.Equal(t, 10000.0, s.allowed)
 }
@@ -330,7 +330,7 @@ func TestPeakWindowFreeze(t *testing.T) {
 	s := site.peak()
 	require.NoError(t, site.SetLmAdvanced("peakCap", 10))
 
-	site.updatePeakWindow(0)
+	site.updatePeakWindow(0, 0)
 	sample(site, clk, 0, 12*time.Minute)
 	assert.InDelta(t, 25000, s.allowed, 0.001, "12 minutes unused leave 75kWmin for 3 minutes")
 
@@ -357,7 +357,7 @@ func TestPeakWindowUnmetered(t *testing.T) {
 	// evcc started 5 minutes into the window: nothing is known to be left over
 	site, clk := peakWindowSite(t, 5)
 	s := site.peak()
-	site.updatePeakWindow(0)
+	site.updatePeakWindow(0, 0)
 	assert.Equal(t, 5000.0, s.allowed)
 
 	sample(site, clk, 0, 5*time.Minute)
@@ -365,9 +365,9 @@ func TestPeakWindowUnmetered(t *testing.T) {
 
 	// crossing into the next window, the 30s since the boundary are metered
 	clk.Set(time.Date(2026, 9, 25, 10, 14, 50, 0, time.UTC))
-	site.updatePeakWindow(0)
+	site.updatePeakWindow(0, 0)
 	clk.Set(time.Date(2026, 9, 25, 10, 15, 20, 0, time.UTC))
-	site.updatePeakWindow(6000)
+	site.updatePeakWindow(6000, 0)
 
 	assert.Equal(t, time.Date(2026, 9, 25, 10, 15, 0, 0, time.UTC), s.meteredFrom)
 	assert.InDelta(t, 6000*20, s.windowWs, 0.001)
@@ -375,7 +375,7 @@ func TestPeakWindowUnmetered(t *testing.T) {
 
 	// after a longer gap the next window is not metered from its start
 	clk.Set(time.Date(2026, 9, 25, 10, 33, 0, 0, time.UTC))
-	site.updatePeakWindow(0)
+	site.updatePeakWindow(0, 0)
 	assert.Equal(t, clk.Now(), s.meteredFrom)
 	assert.Equal(t, 5000.0, s.allowed)
 }
@@ -385,7 +385,7 @@ func TestPeakWindowUnmetered(t *testing.T) {
 func energyStep(site *Site, clk *clock.Mock, grid float64, meter *float64) {
 	clk.Add(30 * time.Second)
 	site.setPeakGridEnergy(meter)
-	site.updatePeakWindow(grid)
+	site.updatePeakWindow(grid, 0)
 }
 
 func kWh(v float64) *float64 { return &v }
@@ -467,7 +467,7 @@ func TestPeakWindowLateCounter(t *testing.T) {
 	// the next window tries the counter again
 	clk.Set(time.Date(2026, 9, 25, 10, 14, 50, 0, time.UTC))
 	site.setPeakGridEnergy(kWh(11))
-	site.updatePeakWindow(6000)
+	site.updatePeakWindow(6000, 0)
 	energyStep(site, clk, 0, kWh(11.05))
 	assert.False(t, s.stale)
 	assert.Zero(t, s.windowWs, "the step across the boundary may hold the backlog, the grid power counts")

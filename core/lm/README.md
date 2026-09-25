@@ -193,6 +193,14 @@ and the events, `core/site_lm_status.go` publishes `lmStatus` at the end of
 every cycle (from `updateBatteryModePeakAware`). Nothing in there feeds back
 into the decisions.
 
+## Peak statistics
+
+Mehr → Peak Shaving shows, per month, the highest quarter hour average with the
+battery (grid draw) and without it (grid draw plus battery power, charging
+counts negative), and how often the battery started covering a peak. Only
+quarter hours metered from their start count. Kept for 24 months in
+`peakMonths`, see `core/site_peak_stats.go`.
+
 ## 4. Peak shaving
 
 See `core/site_peakshaving.go`. The battery's lower soc range is reserved for

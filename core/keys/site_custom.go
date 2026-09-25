@@ -25,6 +25,7 @@ const (
 	PeakShavingWindowEnd            = "peakShavingWindowEnd"      // end of the running window
 	PeakShavingSource               = "peakShavingSource"         // where the window's energy comes from: meter, entity or power
 	PeakShavingEnergyEntity         = "peakShavingEnergyEntity"   // Home Assistant grid import counter
+	PeakMonths                      = "peakMonths"                // monthly peak statistics
 	PeakShavingChargeEntity         = "peakShavingChargeEntity"   // grid charge power target
 	PeakShavingChargeSetpoint       = "peakShavingChargeSetpoint" // grid charge power written, 0 = not charging
 
