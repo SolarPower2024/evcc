@@ -121,7 +121,6 @@ Keep these in mind when merging a new evcc version:
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `core/site/api.go` | embeds `CustomAPI`, one line |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
-| `plugin/homeassistant.go` | `FloatSetter`/`IntSetter`, so a plugin can write number entities |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection on top |
 | `assets/js/views/Config.vue` | load management details section and its modals, OeMAG modal |
 | `assets/js/views/App.vue` | mounts the load management overview |
