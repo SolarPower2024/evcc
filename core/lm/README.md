@@ -9,34 +9,22 @@ Upstream circuits serve requests first come, first served. A shed priority puts
 an order on that: **lower is shed first**, the default `0` puts every load on
 the same level.
 
-The priorities are set in the ui under *Lastspitzenmanagement →
-Lastmanagement-Prioritäten*, for every loadpoint on a circuit and for the home
-battery once it is assigned to one. They apply immediately and are stored as
-the `lmPriorities` setting. The yaml keys below are only the fallback for loads
-without a ui value:
+One priority ranks everything: a loadpoint's regular (upstream) `priority`
+decides pv surplus, the planner sharing circuit capacity and shedding alike, so
+the planner never plans a loadpoint first that load management then sheds
+first. The battery has no upstream priority; it keeps a value of its own on the
+same 0-10 scale.
 
-```yaml
-loadpoints:
-  - title: Wallbox
-    charger: wallbox
-    circuit: main
-    priority: 5 # pv surplus goes here first (upstream, unchanged)
-    lmpriority: 1 # ... but this is the first load to be reduced
+All of them are set in the ui under *Lastmanagement-Details → Prioritäten*, for
+every loadpoint on a circuit and for the home battery once it is assigned to
+one. A loadpoint's value there is its regular priority (also editable in the
+loadpoint settings), the battery's is stored in the `lmPriorities` setting,
+with `loadmanagement.battery.priority` in yaml as fallback.
 
-  - title: Heizstab
-    charger: ha-switch-heater
-    circuit: main
-    lmpriority: 2
-
-  - title: Wärmepumpe
-    charger: ha-switch-heatpump
-    circuit: main
-    lmpriority: 5 # keeps its power the longest
-```
-
-`lmpriority` is deliberately separate from `priority`: the load that should get
-pv surplus first is usually not the one that should keep power when the fuse is
-the constraint.
+Earlier the loadpoints had a separate `lmpriority`. Those values (from the ui,
+else a non-zero yaml `lmpriority`) are taken over into the loadpoints'
+priority once, logged, see `core/site_lm_priority.go`. That changes the pv
+surplus order accordingly.
 
 ### How it works
 
@@ -133,7 +121,7 @@ Keep these in mind when merging a new evcc version:
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateFeedInFinalization`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
+| `core/site.go` | `setLedger` in `Boot` (planner ledger, evcc PR 34044), `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateFeedInFinalization`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
 | `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes |
 | `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
@@ -152,9 +140,24 @@ Everything else lives in files of its own: `core/lm/`, `core/site_lm.go`, `core/
 `core/site_lm_advanced.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
 `core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
 `core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
-`core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`,
+`core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`, `core/site_lm_priority.go`, `core/site_lm_planner.go`,
 `tariff/oemag.go`, `tariff/wrapper_custom.go`, `templates/definition/tariff/oemag.yaml` and the new Vue
 components.
+
+## Planner
+
+With the planner sharing circuit capacity (evcc PR 34044, not released yet;
+until then this builds on the branch `preview/planner-ledger`), plans are made
+around the reservations of higher ranked loadpoints. Two inputs are added to
+its ledger every cycle, see `core/site_lm_planner.go`:
+
+- the battery while it grid charges, for the running slot, ranked by its
+  priority: lower ranked plans go around it
+- while peak shaving is on, the part of the site circuit above the peak limit,
+  ranked above everything: plans stay within the limit
+
+Both are released as soon as they no longer apply. Without circuits, battery
+circuit and peak shaving the ledger holds nothing of ours.
 
 ## Shed guard
 

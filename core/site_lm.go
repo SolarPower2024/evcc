@@ -25,6 +25,7 @@ import (
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/loadpoint"
+	"github.com/evcc-io/evcc/core/planner"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/config"
 )
@@ -55,12 +56,13 @@ type lmState struct {
 	advMu sync.Mutex
 	adv   lmAdvanced
 
-	batteryShedUntil  time.Time   // battery grid charge hold-off after a shed
-	feedInTried       time.Time   // last feed-in finalization attempt, see site_feedin.go
-	feedInOnce        sync.Once   // feed-in history backfilled
-	feedInMarket      *float64    // market price last published
-	batteryCircuit    api.Circuit // resolved from the assignment
-	batteryCircuitRef string      // what batteryCircuit was resolved from
+	batteryShedUntil  time.Time       // battery grid charge hold-off after a shed
+	feedInTried       time.Time       // last feed-in finalization attempt, see site_feedin.go
+	feedInOnce        sync.Once       // feed-in history backfilled
+	feedInMarket      *float64        // market price last published
+	ledger            *planner.Ledger // planner's circuit ledger, see site_lm_planner.go
+	batteryCircuit    api.Circuit     // resolved from the assignment
+	batteryCircuitRef string          // what batteryCircuit was resolved from
 	batteryLoad       *batteryLoad
 }
 
@@ -106,6 +108,7 @@ func (site *Site) restoreLmSettings() {
 	}
 
 	lm.SetPriorityLookup(site.lmPriorityLookup)
+	site.unifyLmPriorities()
 
 	site.restoreLmGuard()
 	site.restoreLmAdvanced()
@@ -642,11 +645,12 @@ func (site *Site) lmLoadName(l lm.Load) string {
 	return ""
 }
 
-// lmPriorityLookup returns the priority set in the ui. Loads without one keep
-// their own: the loadpoint's lmpriority or the yaml battery priority.
+// lmPriorityLookup returns the battery's priority set in the ui. Loadpoints use
+// their upstream priority, see site_lm_planner.go; a battery without a ui value
+// keeps the yaml one.
 func (site *Site) lmPriorityLookup(l lm.Load) (int, bool) {
 	name := site.lmLoadName(l)
-	if name == "" {
+	if name != lmBatteryName {
 		return 0, false
 	}
 
@@ -692,16 +696,27 @@ func (site *Site) publishLmPriorities() {
 	site.publish(keys.LmPriorities, site.lmPriorities())
 }
 
-// SetLmPriority sets a load's shed priority, lower is shed first
+// SetLmPriority sets a load's priority, lower is shed first. For a loadpoint
+// that is its upstream priority, which also ranks pv surplus and plans.
 func (site *Site) SetLmPriority(name string, prio int) error {
 	if prio < 0 || prio > lmMaxPriority {
 		return fmt.Errorf("priority must be between 0 and %d", lmMaxPriority)
 	}
 
 	if name != lmBatteryName {
-		if _, err := config.Loadpoints().ByName(name); err != nil {
+		dev, err := config.Loadpoints().ByName(name)
+		if err != nil {
 			return fmt.Errorf("unknown loadpoint: %s", name)
 		}
+		lp, ok := dev.Instance().(*Loadpoint)
+		if !ok {
+			return fmt.Errorf("unknown loadpoint: %s", name)
+		}
+
+		lp.SetPriority(prio)
+		site.publishLmPriorities()
+
+		return nil
 	}
 
 	s := site.lms()

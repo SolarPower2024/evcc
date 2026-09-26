@@ -529,7 +529,7 @@
     },
     "lmpriorities": {
       "battery": "Home battery (grid charging)",
-      "description": "When power runs short, the lowest priority is throttled or switched off first. With equal priority, first come first served.",
+      "description": "If power runs short, the lowest priority is reduced or switched off first, on equal priority first come first served. For loadpoints this is their regular priority, it also ranks pv surplus and the planner. The battery has a value of its own.",
       "entryLabel": "Priorities",
       "first": "{priority} (shed first)",
       "invalid": "Could not save the priority.",
