@@ -13,15 +13,13 @@ import (
 
 var _ lm.Load = (*Loadpoint)(nil)
 
-// LmPriority returns the loadpoint's load management shed priority, configured
-// as `lmpriority`. Lower is shed first, the default 0 puts every loadpoint on
-// the same level, which is upstream's first come, first served behaviour.
-//
-// This is deliberately not the loadpoint's `priority`: that one distributes pv
-// surplus, where the answer to "who goes first" is usually the opposite of what
-// it should be when a fuse forces a load to be dropped.
+// LmPriority returns the loadpoint's load management shed priority: its upstream
+// priority, which also ranks pv surplus and the planner, see
+// core/site_lm_planner.go. Lower is shed first, equal priorities are upstream's
+// first come, first served behaviour. The yaml `lmpriority` is only taken over
+// once into the priority.
 func (lp *Loadpoint) LmPriority() int {
-	return lp.LmPrio
+	return lp.EffectivePriority()
 }
 
 // lmCircuit is the loadpoint's circuit as setLimit sees it. setLimit keeps

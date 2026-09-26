@@ -545,7 +545,7 @@
     },
     "lmpriorities": {
       "battery": "Hausbatterie (Netzladen)",
-      "description": "Reicht die Leistung nicht, wird die niedrigste Priorität zuerst gedrosselt oder abgeschaltet. Bei gleicher Priorität zählt, wer zuerst da ist.",
+      "description": "Reicht die Leistung nicht, wird die niedrigste Priorität zuerst gedrosselt oder abgeschaltet, bei gleicher zählt, wer zuerst da ist. Bei Ladepunkten ist es ihre normale Priorität, sie gilt auch für PV-Überschuss und Planer. Die Batterie hat einen eigenen Wert.",
       "entryLabel": "Prioritäten",
       "first": "{priority} (zuerst abwerfen)",
       "invalid": "Priorität konnte nicht gespeichert werden.",
