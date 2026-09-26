@@ -8,6 +8,7 @@ package metrics
 // export minus EEG, clamped at zero.
 
 import (
+	"errors"
 	"time"
 
 	"github.com/evcc-io/evcc/db"
@@ -42,17 +43,18 @@ func PersistEegPrice(ts time.Time, price float64) error {
 	}).Error
 }
 
-// FeedInSplit is the export of one period, split by feed-in tariff. Revenue only
-// covers slots with a known price.
+// FeedInSplit is the export of one bucket, split by feed-in tariff. Revenue
+// only covers slots with a known price.
 type FeedInSplit struct {
-	Period          string  `json:"period"` // YYYY-MM or YYYY-MM-DD
-	Export          float64 `json:"export"` // kWh, grid meter
-	Eeg             float64 `json:"eeg"`    // kWh, EEG counter
-	Standard        float64 `json:"standard"`
-	EegRevenue      float64 `json:"eegRevenue"`
-	StandardRevenue float64 `json:"standardRevenue"`
-	EegPriced       float64 `json:"eegPriced"` // kWh with a known EEG price
-	StandardPriced  float64 `json:"standardPriced"`
+	Start           time.Time `json:"start"`
+	End             time.Time `json:"end"`
+	Export          float64   `json:"export"`   // kWh, grid meter
+	Eeg             float64   `json:"eeg"`      // kWh, EEG counter
+	Standard        float64   `json:"standard"` // kWh, export minus EEG
+	EegRevenue      float64   `json:"eegRevenue"`
+	StandardRevenue float64   `json:"standardRevenue"`
+	EegPriced       float64   `json:"eegPriced"` // kWh with a known EEG price
+	StandardPriced  float64   `json:"standardPriced"`
 }
 
 type feedInSlot struct {
@@ -73,10 +75,31 @@ func splitSlot(export float64, eeg *float64) (float64, float64) {
 	return e, max(0, export-e)
 }
 
-// QueryFeedInSplit returns the export in [from,to) per month ("month") or per
-// day ("day") in the location of from, oldest first. Periods without export and
+// bucketStart is the start of the bucket holding ts in local time, like the
+// energy history's buckets
+func bucketStart(ts time.Time, aggregate string) time.Time {
+	ts = ts.Local()
+	switch aggregate {
+	case "hour":
+		return time.Date(ts.Year(), ts.Month(), ts.Day(), ts.Hour(), 0, 0, 0, time.Local)
+	case "day":
+		return time.Date(ts.Year(), ts.Month(), ts.Day(), 0, 0, 0, 0, time.Local)
+	case "month":
+		return time.Date(ts.Year(), ts.Month(), 1, 0, 0, 0, 0, time.Local)
+	default:
+		return ts
+	}
+}
+
+// QueryFeedInSplit returns the export in [from,to) per bucket of the energy
+// history (15m, hour, day, month), oldest first. Buckets without export and
 // without EEG energy are left out.
 func QueryFeedInSplit(from, to time.Time, aggregate string) ([]FeedInSplit, error) {
+	addDuration, ok := aggregateDurations[aggregate]
+	if !ok {
+		return nil, errors.New("invalid aggregate value")
+	}
+
 	var slots []feedInSlot
 
 	err := db.Instance.Raw(`
@@ -95,38 +118,33 @@ func QueryFeedInSplit(from, to time.Time, aggregate string) ([]FeedInSplit, erro
 		return nil, err
 	}
 
-	layout := "2006-01"
-	if aggregate == "day" {
-		layout = time.DateOnly
-	}
-
 	var res []FeedInSplit
 	for _, s := range slots {
-		period := time.Unix(s.Ts, 0).In(from.Location()).Format(layout)
-		if len(res) == 0 || res[len(res)-1].Period != period {
-			res = append(res, FeedInSplit{Period: period})
+		start := bucketStart(time.Unix(s.Ts, 0), aggregate)
+		if len(res) == 0 || !res[len(res)-1].Start.Equal(start) {
+			res = append(res, FeedInSplit{Start: start, End: addDuration(start)})
 		}
-		p := &res[len(res)-1]
+		b := &res[len(res)-1]
 
 		eeg, standard := splitSlot(s.Export, s.Eeg)
-		p.Export += s.Export
-		p.Eeg += eeg
-		p.Standard += standard
+		b.Export += s.Export
+		b.Eeg += eeg
+		b.Standard += standard
 
 		if s.Price != nil {
-			p.EegRevenue += eeg * *s.Price
-			p.EegPriced += eeg
+			b.EegRevenue += eeg * *s.Price
+			b.EegPriced += eeg
 		}
 		if s.FeedIn != nil {
-			p.StandardRevenue += standard * *s.FeedIn
-			p.StandardPriced += standard
+			b.StandardRevenue += standard * *s.FeedIn
+			b.StandardPriced += standard
 		}
 	}
 
-	var out []FeedInSplit
-	for _, p := range res {
-		if p.Export > 0 || p.Eeg > 0 {
-			out = append(out, p)
+	out := make([]FeedInSplit, 0, len(res))
+	for _, b := range res {
+		if b.Export > 0 || b.Eeg > 0 {
+			out = append(out, b)
 		}
 	}
 

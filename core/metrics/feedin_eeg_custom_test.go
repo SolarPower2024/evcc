@@ -19,6 +19,9 @@ func TestQueryFeedInSplit(t *testing.T) {
 	require.NoError(t, err)
 
 	loc := time.UTC
+	local := time.Local
+	time.Local = loc
+	t.Cleanup(func() { time.Local = local })
 	slot := func(month time.Month, n int) time.Time {
 		return time.Date(2026, month, 10, 12, 0, 0, 0, loc).Add(time.Duration(n) * 15 * time.Minute)
 	}
@@ -56,14 +59,15 @@ func TestQueryFeedInSplit(t *testing.T) {
 	require.Len(t, res, 2)
 
 	aug := res[0]
-	require.Equal(t, "2026-08", aug.Period)
+	require.Equal(t, time.Date(2026, 8, 1, 0, 0, 0, 0, loc), aug.Start)
+	require.Equal(t, time.Date(2026, 9, 1, 0, 0, 0, 0, loc), aug.End)
 	require.InDelta(t, 2, aug.Export, 1e-9)
 	require.InDelta(t, 0, aug.Eeg, 1e-9)
 	require.InDelta(t, 2, aug.Standard, 1e-9)
 	require.InDelta(t, 0.16, aug.StandardRevenue, 1e-9)
 
 	sep := res[1]
-	require.Equal(t, "2026-09", sep.Period)
+	require.Equal(t, time.Date(2026, 9, 1, 0, 0, 0, 0, loc), sep.Start)
 	require.InDelta(t, 6, sep.Export, 1e-9)
 	require.InDelta(t, 1+1.5+0.5+0.2, sep.Eeg, 1e-9)
 	require.InDelta(t, 2+0+1.5+0, sep.Standard, 1e-9)
@@ -76,7 +80,17 @@ func TestQueryFeedInSplit(t *testing.T) {
 	res, err = QueryFeedInSplit(time.Date(2026, 9, 1, 0, 0, 0, 0, loc), time.Date(2026, 10, 1, 0, 0, 0, 0, loc), "day")
 	require.NoError(t, err)
 	require.Len(t, res, 1)
-	require.Equal(t, "2026-09-10", res[0].Period)
+	require.Equal(t, time.Date(2026, 9, 10, 0, 0, 0, 0, loc), res[0].Start)
+
+	// per slot, the slot without export and with EEG energy stays
+	res, err = QueryFeedInSplit(slot(9, 0), slot(9, 4), "15m")
+	require.NoError(t, err)
+	require.Len(t, res, 4)
+	require.Equal(t, slot(9, 3), res[3].Start)
+	require.InDelta(t, 0.2, res[3].Eeg, 1e-9)
+
+	_, err = QueryFeedInSplit(slot(9, 0), slot(9, 4), "week")
+	require.Error(t, err)
 }
 
 func TestPersistFeedInEegPrice(t *testing.T) {

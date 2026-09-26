@@ -6,6 +6,8 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/evcc-io/evcc/core/lm/profile"
 	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/site"
+	"github.com/evcc-io/evcc/db"
 	"github.com/gorilla/mux"
 )
 
@@ -225,33 +228,38 @@ func gridChargeOnceCancelHandler(site site.API) http.HandlerFunc {
 	}
 }
 
-// feedInSplitHandler returns the export split by feed-in tariff, per month for
-// the last two years or, with aggregate=day, per day of the given month
-// (month=YYYY-MM, default the current one)
+// feedInSplitHandler returns the export split by feed-in tariff in the
+// buckets of the energy history
 func feedInSplitHandler(w http.ResponseWriter, r *http.Request) {
-	now := time.Now()
-	thisMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	if db.Instance == nil {
+		jsonError(w, http.StatusBadRequest, errors.New("database offline"))
+		return
+	}
 
-	from, to, aggregate := thisMonth.AddDate(-2, 1, 0), thisMonth.AddDate(0, 1, 0), "month"
-
-	if r.URL.Query().Get("aggregate") == "day" {
-		aggregate, from = "day", thisMonth
-
-		if m := r.URL.Query().Get("month"); m != "" {
-			t, err := time.ParseInLocation("2006-01", m, now.Location())
+	var from, to time.Time
+	for name, dst := range map[string]*time.Time{"from": &from, "to": &to} {
+		if v := r.URL.Query().Get(name); v != "" {
+			t, err := time.Parse(time.RFC3339, v)
 			if err != nil {
-				jsonError(w, http.StatusBadRequest, err)
+				jsonError(w, http.StatusBadRequest, fmt.Errorf("invalid '%s' parameter", name))
 				return
 			}
-			from = t
+			*dst = t
 		}
+	}
 
-		to = from.AddDate(0, 1, 0)
+	if to.IsZero() {
+		to = time.Now().AddDate(0, 0, 1)
+	}
+
+	aggregate := r.URL.Query().Get("aggregate")
+	if aggregate == "" {
+		aggregate = "15m"
 	}
 
 	res, err := metrics.QueryFeedInSplit(from, to, aggregate)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, err)
+		jsonError(w, http.StatusBadRequest, err)
 		return
 	}
 
