@@ -632,6 +632,10 @@ func (site *Site) updatePeakShaving(state siteState) {
 
 	case shaving:
 		value = peak.Setpoint(state.gridPower, state.battery.Power, allowed)
+
+	// the optimizer withholds discharging: only a peak is covered, see site_optimizer_gate.go
+	case site.optimizerHolds():
+		value = peak.Setpoint(state.gridPower, state.battery.Power, allowed)
 	}
 
 	// log the start of a peak, not every cycle of it
@@ -1116,9 +1120,14 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 
 	site.peakCheckMeters()
 
-	if gridCharge || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown {
+	if gridCharge || site.optimizerCharges() || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)
 		return
+	}
+
+	// the optimizer's requests pass the gate only on the path above
+	if site.optimizerInControl() {
+		site.releaseGridCharge()
 	}
 
 	if site.GetBatteryMode() == api.BatteryNormal {
@@ -1177,7 +1186,7 @@ func (site *Site) SetPeakShaving(val bool) error {
 	if changed {
 		settings.SetBool(keys.PeakShaving, val)
 		site.publish(keys.PeakShaving, val)
-		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_gate.go
 		// the circuit may take the peak limit, see site_lm_switch.go
 		site.applyCircuitLimits()
 
@@ -1511,7 +1520,7 @@ func (site *Site) SetPeakShavingLimit(limit float64) error {
 		site.log.DEBUG.Println("set peak shaving limit:", limit)
 		settings.SetFloat(keys.PeakShavingLimit, limit)
 		site.publish(keys.PeakShavingLimit, limit)
-		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_gate.go
 		// the circuit may take the peak limit, see site_lm_switch.go
 		site.applyCircuitLimits()
 	}
@@ -1547,7 +1556,7 @@ func (site *Site) SetPeakShavingReserve(soc float64) error {
 		site.log.DEBUG.Println("set peak shaving reserve:", soc)
 		settings.SetFloat(keys.PeakShavingReserve, soc)
 		site.publish(keys.PeakShavingReserve, effective)
-		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_gate.go
 	}
 
 	return nil
