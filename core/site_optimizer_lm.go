@@ -139,6 +139,22 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, dt []int, p
 		}
 	}
 
+	// one-time grid charging: the target by the chosen time, or as early as
+	// the charge power can reach it, see site_lm_once.go
+	if o := site.gridChargeOnce(); o.Target > 0 && bat.ChargeFromGrid {
+		if goal := wh(o.Target); goal > bat.SInitial {
+			d := time.Until(o.Until)
+			if o.Until.IsZero() {
+				d = site.onceRequiredDuration(o.Target, float64(bat.SInitial/bat.SCapacity*100))
+			}
+			if len(bat.SGoal) != len(dt) {
+				bat.SGoal = make([]float32, len(dt))
+			}
+			i := slotAfter(dt, max(d, 0))
+			bat.SGoal[i] = max(bat.SGoal[i], min(goal, bat.SMax))
+		}
+	}
+
 	// never above the current soc, the optimizer cannot start below its minimum
 	if floor = min(floor, bat.SInitial); floor > bat.SMin {
 		bat.SMin = floor

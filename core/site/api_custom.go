@@ -1,6 +1,10 @@
 package site
 
-import "github.com/evcc-io/evcc/core/lm/profile"
+import (
+	"time"
+
+	"github.com/evcc-io/evcc/core/lm/profile"
+)
 
 // CustomAPI is the part of the site api added by this fork. It lives in its own
 // file so that upstream changes to API merge without conflicts; API embeds it.
@@ -12,6 +16,10 @@ type CustomAPI interface {
 	SetBatterySocGridChargeStart(float64) error
 	GetBatterySocGridChargeStop() float64
 	SetBatterySocGridChargeStop(float64) error
+
+	// one-time grid charging, see core/site_lm_once.go
+	SetBatteryGridChargeOnce(target float64, until time.Time) error
+	CancelBatteryGridChargeOnce() error
 
 	// load management shed priorities, see core/site_lm.go
 	SetLmPriority(name string, prio int) error

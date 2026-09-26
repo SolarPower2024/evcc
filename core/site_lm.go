@@ -55,12 +55,13 @@ type lmState struct {
 	advMu sync.Mutex
 	adv   lmAdvanced
 
-	batteryShedUntil  time.Time   // battery grid charge hold-off after a shed
-	feedInTried       time.Time   // last feed-in finalization attempt, see site_feedin.go
-	feedInOnce        sync.Once   // feed-in history backfilled
-	feedInMarket      *float64    // market price last published
-	batteryCircuit    api.Circuit // resolved from the assignment
-	batteryCircuitRef string      // what batteryCircuit was resolved from
+	batteryShedUntil  time.Time      // battery grid charge hold-off after a shed
+	feedInTried       time.Time      // last feed-in finalization attempt, see site_feedin.go
+	feedInOnce        sync.Once      // feed-in history backfilled
+	feedInMarket      *float64       // market price last published
+	gridOnce          gridChargeOnce // one-time grid charging, see site_lm_once.go
+	batteryCircuit    api.Circuit    // resolved from the assignment
+	batteryCircuitRef string         // what batteryCircuit was resolved from
 	batteryLoad       *batteryLoad
 }
 
@@ -106,6 +107,7 @@ func (site *Site) restoreLmSettings() {
 	}
 
 	lm.SetPriorityLookup(site.lmPriorityLookup)
+	site.restoreGridChargeOnce()
 
 	site.restoreLmGuard()
 	site.restoreLmAdvanced()
@@ -358,6 +360,7 @@ func (site *Site) batteryCircuitAllows() bool {
 func (site *Site) batteryGridChargeRequested(rate api.Rate) bool {
 	// evaluated unconditionally so the hysteresis keeps tracking the soc
 	socActive := site.batterySocChargeActive()
+	onceActive := site.batteryGridChargeOnceActive()
 
 	// the optimizer in automatic mode decides, its charge request passes the
 	// same gate, see site_optimizer_lm.go
@@ -365,7 +368,7 @@ func (site *Site) batteryGridChargeRequested(rate api.Rate) bool {
 		return false
 	}
 
-	if !socActive && !site.batteryGridChargeActive(rate) {
+	if !socActive && !onceActive && !site.batteryGridChargeActive(rate) {
 		site.releaseGridCharge()
 		return false
 	}
