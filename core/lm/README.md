@@ -258,7 +258,9 @@ settings as inputs, so the plan matches what the fork will actually do, see
   planned ahead before the battery would fall below it; while it runs the
   stop soc as goal (`s_goal`) within the grid charge window (*Erweitert →
   Netzlade-Ziel erreichen in*, default 3 h)
-- one-time grid charging: its target as goal, right away or at the chosen time
+- one-time grid charging: its target as goal at the chosen time, or right away
+  when the charge power (grid charge power, else the battery's maximum) can
+  reach it with 90% charging efficiency
 - grid charging refused right now (shed hold-off, running peak, unknown charge
   power on a circuit) is not offered (`charge_from_grid`)
 - load management: a loadpoint plans with at most its circuits' power, the
@@ -272,6 +274,10 @@ separately on top of these inputs.
 `TestLmOptimizerReplay` sends a recorded request with these inputs to a
 running optimizer (`OPTIMIZER_REPLAY`, `OPTIMIZER_URI`, optional
 `REPLAY_SETTINGS`, `REPLAY_GRID_PRICE`, `REPLAY_SOC`) and checks the plan.
+`TestLmOptimizerScenarios` (`OPTIMIZER_URI` only) solves synthetic days (winter,
+summer, cheap night, negative and low prices, vehicles, horizons up to 408
+steps) and checks: soc never below the minimum, import within the limit or
+reported, energy balance, goals reached, no grid charging while refused.
 
 ## One-time grid charging
 
