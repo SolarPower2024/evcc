@@ -133,7 +133,7 @@ Keep these in mind when merging a new evcc version:
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateFeedInFinalization`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
+| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateFeedInFinalization`, `updateFeedInEeg`, `restoreFeedInEeg`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
 | `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes |
 | `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
@@ -146,6 +146,9 @@ Keep these in mind when merging a new evcc version:
 | `assets/js/components/BottomTabs/MoreMenu.vue` | "Lastmanagement" and "Peak Shaving" entries |
 | `assets/js/components/Config/TariffCard.vue` | OeMAG summary in the feed-in card |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
+| `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff role: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
+| `assets/js/components/Config/TariffModal.vue` | `feedInEeg` offers the price templates |
+| `assets/js/views/Energy.vue`, `assets/js/components/Energy/GroupChart.vue`, `assets/js/components/Energy/GridStats.vue` | EEG split of the grid card: series, legend, `returnColor`, revenue tiles (energy page of evcc PR 33989, see below) |
 | `assets/js/types/evcc.ts`, `i18n/de.json`, `i18n/en.json` | state fields and texts |
 
 Everything else lives in files of its own: `core/lm/`, `core/site_lm.go`, `core/site_lm_guard.go`,
@@ -153,8 +156,8 @@ Everything else lives in files of its own: `core/lm/`, `core/site_lm.go`, `core/
 `core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
 `core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
 `core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`,
-`tariff/oemag.go`, `tariff/wrapper_custom.go`, `templates/definition/tariff/oemag.yaml` and the new Vue
-components.
+`tariff/oemag.go`, `tariff/wrapper_custom.go`, `templates/definition/tariff/oemag.yaml`, `core/site_feedin_eeg.go`,
+`core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` and the new Vue components.
 
 ## Shed guard
 
@@ -231,6 +234,29 @@ battery (grid draw) and without it (grid draw plus battery power, charging
 counts negative), and how often the battery started covering a peak. Only
 quarter hours metered from their start count. Kept for 24 months in
 `peakMonths`, see `core/site_peak_stats.go`.
+
+## Second feed-in tariff (EEG)
+
+Part of the export can go to an energy community (EEG) at a fixed price, the rest
+gets the standard feed-in tariff (OeMAG). Tariff settings: "Einspeisevergütung EEG
+hinzufügen" below the feed-in tariff (fixed price, 0 allowed), its card sets the
+Home Assistant counter of the EEG export (kWh, Wh or MWh).
+
+- The counter is recorded per 15 minute slot by a collector of group `meter`
+  (`feedin-eeg`), which upstream keeps out of every balance. A changed counter
+  starts a fresh recording, so the jump between two counters never counts.
+- The EEG price is persisted per slot in `tariffs_eeg`.
+- `GET /api/feedinsplit?from&to&aggregate` returns per bucket: export (grid
+  meter), EEG (counter), standard = export minus EEG (clamped at 0), and the
+  revenue of both, priced slot by slot.
+- Only counters are used. The grid meter power that drives PV control, load
+  management and peak shaving is untouched; self-consumption and the solar
+  share of sessions stay valued at the standard feed-in tariff.
+- The energy page (evcc PR 33989, not released yet) shows the split in its grid
+  card. Until that page ships in an evcc release, this builds on the branch
+  `preview/energy-page`, which carries that PR as one commit.
+
+Without a counter nothing runs and evcc behaves as upstream.
 
 ## 4. Peak shaving
 

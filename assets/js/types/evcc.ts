@@ -463,6 +463,10 @@ export interface State {
   lmAdvanced?: LmAdvanced;
   /** OeMAG finalization: finalize day, published market price and finalized months. */
   feedInFinal?: FeedInFinal;
+  /** Home Assistant counter of the export under the second feed-in tariff (EEG), empty = off. */
+  feedInEegEntity?: string;
+  /** Current price of the second feed-in tariff. */
+  tariffFeedInEeg?: number;
   /** Load management overview, only while circuits are configured. */
   lmStatus?: LmStatus;
   /** Battery profiles. */
@@ -1594,7 +1598,14 @@ export type DeviceType =
   | "curtailer";
 export type MeterType = "grid" | "pv" | "battery" | "charge" | "aux" | "ext" | "consumer";
 export type MeterTemplateUsage = "grid" | "pv" | "battery" | "charge" | "aux";
-export type TariffType = "grid" | "feedIn" | "co2" | "planner" | "solar" | "temperature";
+export type TariffType =
+  | "grid"
+  | "feedIn"
+  | "feedInEeg" // custom: second feed-in tariff, see core/site_feedin_eeg.go
+  | "co2"
+  | "planner"
+  | "solar"
+  | "temperature";
 
 // see https://stackoverflow.com/a/54178819
 type Omit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;

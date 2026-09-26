@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/evcc-io/evcc/core/lm/profile"
+	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/site"
 	"github.com/gorilla/mux"
 )
@@ -42,6 +44,11 @@ func customSiteRoutes(site site.API) map[string]route {
 
 		// feed-in price published after the fact, see core/site_feedin.go
 		"feedinfinalize": {"POST", "/feedinfinalize/{month:[0-9]{4}-[0-9]{2}}/{value:[0-9.]+}", feedInFinalizeHandler(site)},
+
+		// export under a second feed-in tariff, see core/site_feedin_eeg.go
+		"feedineegentity":       {"POST", "/feedineegentity/{value:[a-zA-Z0-9_.]+}", stringHandler(site.SetFeedInEegEntity, site.GetFeedInEegEntity)},
+		"feedineegentitydelete": {"DELETE", "/feedineegentity", stringHandler(site.SetFeedInEegEntity, site.GetFeedInEegEntity)},
+		"feedinsplit":           {"GET", "/feedinsplit", feedInSplitHandler},
 
 		// peak shaving, see core/site_peakshaving.go
 		"peakshaving":                   {"POST", "/peakshaving/{value:[01truefalse]+}", boolHandler(site.SetPeakShaving, site.GetPeakShaving)},
@@ -165,4 +172,30 @@ func lmPriorityHandler(site site.API) http.HandlerFunc {
 
 		jsonWrite(w, prio)
 	}
+}
+
+// feedInSplitHandler returns the export split by feed-in tariff in the
+// buckets of the energy history
+func feedInSplitHandler(w http.ResponseWriter, r *http.Request) {
+	from, to, ok := historyRange(w, r)
+	if !ok {
+		return
+	}
+
+	if to.IsZero() {
+		to = time.Now().AddDate(0, 0, 1)
+	}
+
+	aggregate := r.URL.Query().Get("aggregate")
+	if aggregate == "" {
+		aggregate = "15m"
+	}
+
+	res, err := metrics.QueryFeedInSplit(from, to, aggregate)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	jsonWrite(w, res)
 }

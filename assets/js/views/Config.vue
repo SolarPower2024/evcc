@@ -274,6 +274,25 @@
 							@edit="openModal('tariff', { type: 'feedIn', id: feedInTariff.id })"
 							@enable="handleDisable('tariff', feedInTariff.id, false)"
 						/>
+						<!-- custom: second feed-in tariff, see core/site_feedin_eeg.go -->
+						<TariffCard
+							v-if="feedInEegTariff"
+							:tariff="feedInEegTariff"
+							tariff-type="feedInEeg"
+							:has-error="hasDeviceError('tariff', feedInEegTariff.name)"
+							:tags="deviceTags('tariff', feedInEegTariff.name)"
+							:currency="currency"
+							@edit="
+								openModal('tariff', { type: 'feedInEeg', id: feedInEegTariff.id })
+							"
+							@enable="handleDisable('tariff', feedInEegTariff.id, false)"
+						/>
+						<NewDeviceButton
+							v-if="feedInTariff && !feedInEegTariff"
+							:title="$t('config.tariff.option.feedInEeg')"
+							data-testid="add-tariff-feedInEeg"
+							@click="openModal('tariff', { type: 'feedInEeg' })"
+						/>
 						<NewDeviceButton
 							v-if="possibleTariffTypes.length"
 							:title="$t('config.tariff.addTariff')"
@@ -572,6 +591,7 @@
 				<LmAdvancedModal />
 				<LmProfilesModal />
 				<FeedInFinalModal />
+				<FeedInEegModal />
 				<GridChargeModal />
 				<ExperimentalModal :experimental="experimental" />
 				<RemoteModal :remote="remote" :is-sponsor="isSponsor" :site-title="siteTitle" />
@@ -638,6 +658,7 @@ import LmShedGuardModal from "../components/Config/LmShedGuardModal.vue";
 import LmAdvancedModal from "../components/Config/LmAdvancedModal.vue";
 import LmProfilesModal from "../components/Config/LmProfilesModal.vue";
 import FeedInFinalModal from "../components/Config/FeedInFinalModal.vue";
+import FeedInEegModal from "../components/Config/FeedInEegModal.vue";
 import GridChargeModal from "../components/Config/GridChargeModal.vue";
 import HemsIcon from "../components/MaterialIcon/Hems.vue";
 import HemsModal from "../components/Config/HemsModal.vue";
@@ -762,6 +783,7 @@ export default defineComponent({
 		LmAdvancedModal,
 		LmProfilesModal,
 		FeedInFinalModal,
+		FeedInEegModal,
 		GridChargeModal,
 		HemsIcon,
 		HemsModal,
@@ -828,6 +850,7 @@ export default defineComponent({
 				planner: "",
 				solar: [] as string[],
 				temperature: "",
+				feedInEeg: "", // custom: see core/site_feedin_eeg.go
 			},
 			site: {
 				grid: "",
@@ -1042,6 +1065,11 @@ export default defineComponent({
 		},
 		feedInTariff() {
 			const name = this.tariffRefs?.feedIn;
+			return name ? this.tariffs.find((t) => t.name === name) : null;
+		},
+		// custom: second feed-in tariff, see core/site_feedin_eeg.go
+		feedInEegTariff() {
+			const name = this.tariffRefs?.feedInEeg;
 			return name ? this.tariffs.find((t) => t.name === name) : null;
 		},
 		co2Tariff() {

@@ -49,6 +49,8 @@ export interface HistorySeries {
 	virtual?: boolean;
 	// explicit color, skips palette resolution
 	color?: string;
+	// custom: export color of a split export, see components/Energy/feedInEeg.ts
+	returnColor?: string;
 	// socTemp holds a temperature, the entity heats instead of charging
 	isTemp?: boolean;
 	// Stable index into the palette, preserved across navigations even when the
@@ -563,6 +565,7 @@ export default defineComponent({
 			this.series.forEach((s, i) => {
 				const c = this.entryColors[i] || this.color;
 				const returnEnergyColor =
+					s.returnColor || // custom: split export, see feedInEeg.ts
 					(s.group === "grid" && colors.export) ||
 					(s.group === "battery" ? setAlpha(c, "cc") || c : c);
 				const energyValues = energyByEntity[i]!;

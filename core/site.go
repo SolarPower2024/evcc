@@ -518,6 +518,7 @@ func (site *Site) restoreSettings() error {
 	// custom: load management, see core/site_lm.go
 	site.restoreLmSettings()
 	site.restorePeakSettings()
+	site.restoreFeedInEeg() // custom: second feed-in tariff, see core/site_feedin_eeg.go
 
 	// drop legacy accumulator-based forecast settings (now stored via metrics collector)
 	settings.Delete("solarAccForecast")
@@ -1293,6 +1294,8 @@ func (site *Site) update(lp updater) {
 		site.updatePeakShaving(state)
 		// custom: feed-in price published after the fact, see core/site_feedin.go
 		site.updateFeedInFinalization()
+		// custom: export under a second feed-in tariff, see core/site_feedin_eeg.go
+		site.updateFeedInEeg()
 	}
 
 	// smart grid charging

@@ -55,12 +55,13 @@ type lmState struct {
 	advMu sync.Mutex
 	adv   lmAdvanced
 
-	batteryShedUntil  time.Time   // battery grid charge hold-off after a shed
-	feedInTried       time.Time   // last feed-in finalization attempt, see site_feedin.go
-	feedInOnce        sync.Once   // feed-in history backfilled
-	feedInMarket      *float64    // market price last published
-	batteryCircuit    api.Circuit // resolved from the assignment
-	batteryCircuitRef string      // what batteryCircuit was resolved from
+	batteryShedUntil  time.Time      // battery grid charge hold-off after a shed
+	feedInTried       time.Time      // last feed-in finalization attempt, see site_feedin.go
+	feedInOnce        sync.Once      // feed-in history backfilled
+	feedInMarket      *float64       // market price last published
+	eeg               feedInEegState // second feed-in tariff, see site_feedin_eeg.go
+	batteryCircuit    api.Circuit    // resolved from the assignment
+	batteryCircuitRef string         // what batteryCircuit was resolved from
 	batteryLoad       *batteryLoad
 }
 
