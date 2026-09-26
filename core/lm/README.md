@@ -128,6 +128,7 @@ Keep these in mind when merging a new evcc version:
 | `core/site/api.go` | embeds `CustomAPI`, one line |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff role: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `assets/js/components/Config/TariffModal.vue` | `feedInEeg` offers the price templates |
+| `assets/js/views/Energy.vue`, `assets/js/components/Energy/GroupChart.vue`, `assets/js/components/Energy/GridStats.vue` | EEG split of the grid card: series, legend, `returnColor`, revenue tiles, meters without the EEG counter |
 | `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
@@ -239,9 +240,12 @@ Home Assistant counter of the EEG export (kWh, Wh or MWh).
 - Only counters are used. The grid meter power that drives PV control, load
   management and peak shaving is untouched; self-consumption and the solar
   share of sessions stay valued at the standard feed-in tariff.
-- The display on the new energy page (evcc PR 33989, not released yet) is
-  prepared separately; until then the data is recorded and available via the
-  api.
+- The energy page (evcc PR 33989, not released yet; until then this builds on
+  the branch `preview/energy-page`) shows the split in its grid card: EEG as
+  its own lighter export bar, both amounts in the legend, and the revenue of
+  the standard feed-in and of EEG as separate tiles, also without a grid
+  price. The counter is not listed again among the additional meters (its
+  collector is titled `feedin-eeg` for that).
 
 Without a counter nothing runs and evcc behaves as upstream.
 
