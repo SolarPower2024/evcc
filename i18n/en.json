@@ -1480,6 +1480,10 @@
       "meter": {
         "energy": "Energy",
         "returnEnergy": "Energy (reverse)"
+      },
+      "eeg": {
+        "energy": "",
+        "returnEnergy": "exported"
       }
     },
     "empty": "No energy data available for this time range.",
@@ -1552,7 +1556,11 @@
       "savings": "Savings",
       "savingsTooltip": "Compared to buying the consumed {energy} from the grid."
     },
-    "title": "Energy"
+    "title": "Energy",
+    "feedInEeg": {
+      "eeg": "EEG",
+      "revenue": "EEG revenue"
+    }
   },
   "issue": {
     "additional": {
