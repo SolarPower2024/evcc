@@ -602,6 +602,8 @@ func (site *Site) optimizerRequest(battery []types.Measurement) (optimizer.Optim
 		batteries = append(batteries, optimizerBattery{cfg, detail})
 	}
 
+	site.applyLmOptimizerInputs(&req, batteries) // custom: fork settings as inputs, see core/site_optimizer_lm.go
+
 	for _, b := range batteries {
 		b.cfg.PA = pa
 		req.Batteries = append(req.Batteries, b.cfg)
