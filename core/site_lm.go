@@ -106,6 +106,7 @@ func (site *Site) restoreLmSettings() {
 	}
 
 	lm.SetPriorityLookup(site.lmPriorityLookup)
+	site.unifyLmPriorities()
 
 	site.restoreLmGuard()
 	site.restoreLmAdvanced()
@@ -642,11 +643,12 @@ func (site *Site) lmLoadName(l lm.Load) string {
 	return ""
 }
 
-// lmPriorityLookup returns the priority set in the ui. Loads without one keep
-// their own: the loadpoint's lmpriority or the yaml battery priority.
+// lmPriorityLookup returns the battery's priority set in the ui. Loadpoints use
+// their upstream priority, see site_lm_planner.go; a battery without a ui value
+// keeps the yaml one.
 func (site *Site) lmPriorityLookup(l lm.Load) (int, bool) {
 	name := site.lmLoadName(l)
-	if name == "" {
+	if name != lmBatteryName {
 		return 0, false
 	}
 
@@ -692,16 +694,27 @@ func (site *Site) publishLmPriorities() {
 	site.publish(keys.LmPriorities, site.lmPriorities())
 }
 
-// SetLmPriority sets a load's shed priority, lower is shed first
+// SetLmPriority sets a load's priority, lower is shed first. For a loadpoint
+// that is its upstream priority, which also ranks pv surplus and plans.
 func (site *Site) SetLmPriority(name string, prio int) error {
 	if prio < 0 || prio > lmMaxPriority {
 		return fmt.Errorf("priority must be between 0 and %d", lmMaxPriority)
 	}
 
 	if name != lmBatteryName {
-		if _, err := config.Loadpoints().ByName(name); err != nil {
+		dev, err := config.Loadpoints().ByName(name)
+		if err != nil {
 			return fmt.Errorf("unknown loadpoint: %s", name)
 		}
+		lp, ok := dev.Instance().(*Loadpoint)
+		if !ok {
+			return fmt.Errorf("unknown loadpoint: %s", name)
+		}
+
+		lp.SetPriority(prio)
+		site.publishLmPriorities()
+
+		return nil
 	}
 
 	s := site.lms()

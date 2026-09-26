@@ -31,6 +31,8 @@ const (
 
 	// load management shed priorities
 	LmPriorities = "lmPriorities"
+	// loadpoint load management priorities taken over into the loadpoint priority, see core/site_lm_planner.go
+	LmPrioritiesUnified = "lmPrioritiesUnified"
 
 	// load management shed guard: minutes a shed loadpoint stays off, and which
 	LmShedGuard     = "lmShedGuard"

@@ -48,6 +48,9 @@ func (site *Site) publishLmStatus(gridCharge bool) {
 		return
 	}
 
+	// a loadpoint priority can also change in the loadpoint settings
+	site.publishLmPriorities()
+
 	now := time.Now()
 	res := lmStatus{Loads: make([]lmLoadStatus, 0), Events: lm.Events()}
 
