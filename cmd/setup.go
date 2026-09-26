@@ -1288,6 +1288,7 @@ func configureTariffs(conf *globalconfig.Tariffs, names ...string) (*tariff.Tari
 	eg.Go(func() error { return configureTariff(conf.Planner, refs.Planner, &tariffs.Planner) })
 	eg.Go(func() error { return configureSolarTariffs(conf.Solar, refs.Solar, &tariffs.Solar) })
 	eg.Go(func() error { return configureTariff(conf.Temperature, refs.Temperature, &tariffs.Temperature) })
+	eg.Go(func() error { return configureTariff(config.Typed{}, refs.FeedInEeg, &tariffs.FeedInEeg) }) // custom: see core/site_feedin_eeg.go
 	if err := eg.Wait(); err != nil {
 		return &tariffs, &ClassError{ClassTariff, err}
 	}

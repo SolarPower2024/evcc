@@ -60,6 +60,7 @@ type lmState struct {
 	feedInOnce        sync.Once      // feed-in history backfilled
 	feedInMarket      *float64       // market price last published
 	gridOnce          gridChargeOnce // one-time grid charging, see site_lm_once.go
+	eeg               feedInEegState // second feed-in tariff, see site_feedin_eeg.go
 	batteryCircuit    api.Circuit    // resolved from the assignment
 	batteryCircuitRef string         // what batteryCircuit was resolved from
 	batteryLoad       *batteryLoad
