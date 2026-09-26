@@ -120,7 +120,7 @@ Keep these in mind when merging a new evcc version:
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateFeedInFinalization`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
+| `core/site.go` | `setLedger` in `Boot` (planner ledger, evcc PR 34044), `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateFeedInFinalization`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
 | `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes |
 | `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
@@ -142,9 +142,24 @@ Everything else lives in files of its own: `core/lm/`, `core/site_lm.go`, `core/
 `core/site_lm_advanced.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
 `core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
 `core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
-`core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`,
+`core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_lm_planner.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`,
 `tariff/oemag.go`, `tariff/wrapper_custom.go`, `templates/definition/tariff/oemag.yaml` and the new Vue
 components.
+
+## Planner
+
+With the planner sharing circuit capacity (evcc PR 34044, not released yet;
+until then this builds on the branch `preview/planner-ledger`), plans are made
+around the reservations of higher ranked loadpoints. Two inputs are added to
+its ledger every cycle, see `core/site_lm_planner.go`:
+
+- the battery while it grid charges, for the running slot, ranked by its
+  priority: lower ranked plans go around it
+- while peak shaving is on, the part of the site circuit above the peak limit,
+  ranked above everything: plans stay within the limit
+
+Both are released as soon as they no longer apply. Without circuits, battery
+circuit and peak shaving the ledger holds nothing of ours.
 
 ## Shed guard
 
