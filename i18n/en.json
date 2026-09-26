@@ -370,6 +370,15 @@
       "sourceManual": "by hand",
       "title": "OeMAG settlement"
     },
+    "feedineeg": {
+      "title": "EEG counter",
+      "description": "Home Assistant counter of the export to the energy community. Export tariff = total export minus EEG. Only counters are evaluated, control stays unchanged.",
+      "entityLabel": "EEG energy counter",
+      "entityHelp": "Sensor in kWh or Wh. Empty = all export at the export tariff.",
+      "counterLabel": "EEG counter",
+      "none": "not set",
+      "set": "Set counter"
+    },
     "form": {
       "danger": "Danger",
       "deprecated": "deprecated",
@@ -1164,7 +1173,8 @@
         "grid": "Add grid import tariff",
         "planner": "Add planner forecast",
         "solar": "Add solar forecast",
-        "temperature": "Add temperature forecast"
+        "temperature": "Add temperature forecast",
+        "feedInEeg": "Add EEG export tariff"
       },
       "planner": {
         "description": "Advanced setting. Usually not needed as dynamic electricity tariffs or CO₂ forecasts are used automatically. Enables an additional data source that's only used for charge planning, not for statistics and price calculations.",
@@ -1191,7 +1201,8 @@
         "grid": "Grid Import Price",
         "planner": "Planner",
         "solar": "Solar",
-        "temperature": "Temperature Forecast"
+        "temperature": "Temperature Forecast",
+        "feedInEeg": "Grid export tariff EEG"
       },
       "zones": {
         "add": "Add zone",
@@ -1213,6 +1224,11 @@
         "timeRangeError": "Start time must be before end time. To span midnight, create two separate zones.",
         "timeTo": "To",
         "weekdays": "Weekdays"
+      },
+      "feedInEeg": {
+        "description": "Fixed price for export to the energy community (EEG), 0 is allowed. The EEG counter meters the amount, the rest of the export gets the export tariff.",
+        "titleAdd": "Add EEG Export Tariff",
+        "titleEdit": "Edit EEG Export Tariff"
       }
     },
     "telemetry": {
