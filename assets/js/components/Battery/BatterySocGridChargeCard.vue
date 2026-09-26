@@ -45,6 +45,13 @@
 		</div>
 		<!-- custom: one-time grid charging, see core/site_lm_once.go -->
 		<BatteryGridChargeOnce />
+		<p
+			v-if="optimizer"
+			class="small text-muted mt-3 mb-0"
+			data-testid="battery-soc-grid-charge-optimizer"
+		>
+			{{ $t("battery.socGridCharge.optimizer") }}
+		</p>
 	</Card>
 </template>
 
@@ -68,6 +75,8 @@ export default defineComponent({
 		active: Boolean,
 		startSoc: { type: Number, default: 20 },
 		stopSoc: { type: Number, default: 80 },
+		// the optimizer in automatic mode plans the charging, see core/site_optimizer_lm.go
+		optimizer: Boolean,
 	},
 	data() {
 		return {

@@ -65,6 +65,12 @@
 									class="evcc-gray lock"
 									:title="$t('lmoverview.protected')"
 								></shopicon-regular-lock>
+								<span
+									v-if="l.optimizer"
+									class="badge rounded-pill text-bg-light ms-1"
+									:title="$t('lmoverview.optimizerHint')"
+									>{{ $t("lmoverview.optimizer") }}</span
+								>
 							</td>
 							<td class="evcc-gray text-nowrap">
 								{{ $t("lmoverview.priority", { priority: l.priority }) }}
