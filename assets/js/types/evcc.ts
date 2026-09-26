@@ -179,6 +179,7 @@ export interface LmAdvanced {
   peakCap: number;
   /** Cycles after which a load ignoring its limit is no longer counted on, 0 = off. */
   followCycles: number;
+  gridChargeWindow: number;
 }
 
 // custom: a battery profile, see core/lm/profile. Values left out are not changed.

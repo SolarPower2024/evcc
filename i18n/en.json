@@ -539,7 +539,9 @@
       "phasesLabel": "Battery phases",
       "timeoutHelp": "How long a waiting higher priority load keeps power reserved. Default {std} min.",
       "timeoutLabel": "Reservation expiry",
-      "title": "Advanced settings"
+      "title": "Advanced settings",
+      "gridChargeWindowLabel": "Reach the grid charge goal within",
+      "gridChargeWindowHelp": "With the optimizer: how long it may take to reach the stop soc of soc-based grid charging. It picks the cheapest time. Default {std} h."
     },
     "lmpriorities": {
       "battery": "Home battery (grid charging)",

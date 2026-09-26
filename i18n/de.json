@@ -539,7 +539,9 @@
       "phasesLabel": "Phasen der Batterie",
       "timeoutHelp": "So lange hält ein wartender Verbraucher höherer Priorität Leistung frei. Standard {std} min.",
       "timeoutLabel": "Ablaufzeit der Reservierung",
-      "title": "Erweiterte Einstellungen"
+      "title": "Erweiterte Einstellungen",
+      "gridChargeWindowLabel": "Netzlade-Ziel erreichen in",
+      "gridChargeWindowHelp": "Mit Optimizer: So lange darf er brauchen, um beim Netzladen nach Ladestand den Stopp-Ladestand zu erreichen. Er wählt dafür die günstigste Zeit. Standard {std} h."
     },
     "lmpriorities": {
       "battery": "Hausbatterie (Netzladen)",
