@@ -43,6 +43,8 @@
 				</template>
 			</i18n-t>
 		</div>
+		<!-- custom: one-time grid charging, see core/site_lm_once.go -->
+		<BatteryGridChargeOnce />
 		<p
 			v-if="optimizer"
 			class="small text-muted mt-3 mb-0"
@@ -60,12 +62,13 @@ import formatter from "@/mixins/formatter";
 import api from "@/api";
 import Card from "../Helper/Card.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
+import BatteryGridChargeOnce from "./BatteryGridChargeOnce.vue";
 
 // Soc-based grid charging: charge the home battery from the grid between a start
 // and a stop soc, independent of the price-based grid charge limit.
 export default defineComponent({
 	name: "BatterySocGridChargeCard",
-	components: { Card, InlineSocSelect },
+	components: { Card, InlineSocSelect, BatteryGridChargeOnce },
 	mixins: [formatter],
 	props: {
 		enabled: Boolean,

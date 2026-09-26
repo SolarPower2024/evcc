@@ -81,6 +81,20 @@
       "range": "Charging starts at {start} or below and stops at {stop}.",
       "waiting": "Waiting for the start state of charge",
       "optimizer": "With optimizer automatic mode the optimizer plans the charging: the battery does not fall below the start soc, and charges to the stop soc at the cheapest time."
+    },
+    "gridChargeOnce": {
+      "title": "Charge once",
+      "sentence": "Charge once from the grid up to {soc}",
+      "now": "right away",
+      "until": "by a time",
+      "byTime": "by {time}, at the cheapest time",
+      "timeLabel": "Time",
+      "start": "Start",
+      "cancel": "Cancel",
+      "running": "Charging once up to {soc}",
+      "active": "charging",
+      "waiting": "waiting for the cheapest time",
+      "help": "Ends by itself at the target soc and continues across restarts. Load management and the peak limit apply."
     }
   },
   "batterySettings": {

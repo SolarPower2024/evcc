@@ -81,6 +81,20 @@
       "range": "Laden startet bei {start} oder darunter und stoppt bei {stop}.",
       "waiting": "Wartet auf den Startladestand",
       "optimizer": "Mit Optimizer-Automatik plant der Optimizer das Laden: unter den Start-Ladestand fällt der Speicher nicht, bis zum Stopp-Ladestand lädt er zur günstigsten Zeit."
+    },
+    "gridChargeOnce": {
+      "title": "Einmalig laden",
+      "sentence": "Einmalig bis {soc} aus dem Netz laden",
+      "now": "sofort",
+      "until": "bis Uhrzeit",
+      "byTime": "bis {time}, zur günstigsten Zeit",
+      "timeLabel": "Uhrzeit",
+      "start": "Starten",
+      "cancel": "Abbrechen",
+      "running": "Lädt einmalig bis {soc}",
+      "active": "lädt",
+      "waiting": "wartet auf die günstigste Zeit",
+      "help": "Endet von selbst beim Ziel-Ladestand, läuft über Neustarts weiter. Lastmanagement und Peak-Grenze gelten."
     }
   },
   "batterySettings": {
