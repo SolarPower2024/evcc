@@ -79,7 +79,8 @@
       "enable": "Hausbatterie abhängig vom Ladestand aus dem Netz laden.",
       "off": "Inaktiv",
       "range": "Laden startet bei {start} oder darunter und stoppt bei {stop}.",
-      "waiting": "Wartet auf den Startladestand"
+      "waiting": "Wartet auf den Startladestand",
+      "optimizer": "Mit Optimizer-Automatik plant der Optimizer das Laden: unter den Start-Ladestand fällt der Speicher nicht, bis zum Stopp-Ladestand lädt er zur günstigsten Zeit."
     }
   },
   "batterySettings": {
@@ -527,7 +528,9 @@
       "phasesLabel": "Phasen der Batterie",
       "timeoutHelp": "So lange hält ein wartender Verbraucher höherer Priorität Leistung frei. Standard {std} min.",
       "timeoutLabel": "Ablaufzeit der Reservierung",
-      "title": "Erweiterte Einstellungen"
+      "title": "Erweiterte Einstellungen",
+      "gridChargeWindowLabel": "Netzlade-Ziel erreichen in",
+      "gridChargeWindowHelp": "Mit Optimizer: So lange darf er brauchen, um beim Netzladen nach Ladestand den Stopp-Ladestand zu erreichen. Er wählt dafür die günstigste Zeit. Standard {std} h."
     },
     "lmpriorities": {
       "battery": "Hausbatterie (Netzladen)",
@@ -580,7 +583,8 @@
       "title": "Profile",
       "unchanged": "nicht ändern",
       "valueCount": "{count} Werte",
-      "yes": "Ja"
+      "yes": "Ja",
+      "optimizer": "Mit Optimizer-Automatik wird die Entladesteuerung übersprungen, sie entscheidet der Optimizer."
     },
     "lmshedguard": {
       "description": "Schaltet das Lastmanagement einen geschützten Ladepunkt ab, bleibt er für die Sperrzeit aus. Konnte er gar nicht erst starten, wird er nicht gesperrt.",
@@ -1537,7 +1541,9 @@
       "throttled": "Gedrosselt · {allowed} von {requested}",
       "waiting": "Wartet · braucht {requested}, {allowed} frei"
     },
-    "title": "Lastmanagement"
+    "title": "Lastmanagement",
+    "optimizer": "Optimizer",
+    "optimizerHint": "Der Optimizer entscheidet, das Lastmanagement begrenzt."
   },
   "log": {
     "areaLabel": "Nach Bereich filtern",
