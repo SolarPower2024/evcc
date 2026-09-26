@@ -62,6 +62,7 @@ func (site *Site) fromTo(requested, m api.BatteryMode) bool {
 
 func (site *Site) updateBatteryMode(batteryGridChargeActive, batteryGridDischargeActive bool, rate api.Rate) {
 	batteryMode := site.requiredBatteryMode(batteryGridChargeActive, batteryGridDischargeActive, rate)
+	batteryMode = site.lmGateBatteryMode(batteryMode, batteryGridChargeActive) // custom: see core/site_optimizer_lm.go
 
 	// put battery into hold mode when charging is active and HEMS dimmed
 	if dimmed := hems.Dimmed(site.hems); site.fromTo(batteryMode, api.BatteryCharge) && dimmed != nil && *dimmed {
