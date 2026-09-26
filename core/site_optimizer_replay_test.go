@@ -66,9 +66,36 @@ func TestLmOptimizerReplay(t *testing.T) {
 		return peak
 	}
 
+	// optional overrides for realistic cases: grid price in EUR/kWh and the
+	// home battery's initial soc in %
+	if v := os.Getenv("REPLAY_GRID_PRICE"); v != "" {
+		var price float64
+		_, err := fmt.Sscanf(v, "%f", &price)
+		require.NoError(t, err)
+		for i := range rec.Req.TimeSeries.PN {
+			rec.Req.TimeSeries.PN[i] = float32(price / 1000)
+		}
+	}
+	if v := os.Getenv("REPLAY_SOC"); v != "" {
+		var soc float64
+		_, err := fmt.Sscanf(v, "%f", &soc)
+		require.NoError(t, err)
+		b := &rec.Req.Batteries[home]
+		b.SInitial = b.SCapacity * float32(soc) / 100
+		b.SMin = min(b.SMin, b.SInitial)
+	}
+
 	// upstream request as recorded
 	base, elapsed := solve(t, rec.Req)
-	t.Logf("recorded request: %s, %d steps, %v, grid peak %.0f W", base.Status, len(rec.Req.TimeSeries.Dt), elapsed.Round(time.Millisecond), peakW(base, rec.Req.TimeSeries.Dt))
+	minSoc := func(res *optimizer.OptimizationResult) float64 {
+		soc := res.Batteries[home].StateOfCharge
+		m := float64(soc[0])
+		for _, v := range soc {
+			m = min(m, float64(v))
+		}
+		return m / float64(rec.Req.Batteries[home].SCapacity) * 100
+	}
+	t.Logf("recorded request: %s, %d steps, %v, grid peak %.0f W, battery min %.1f%%", base.Status, len(rec.Req.TimeSeries.Dt), elapsed.Round(time.Millisecond), peakW(base, rec.Req.TimeSeries.Dt), minSoc(base))
 
 	// scenario runs the recorded request with the fork's inputs for the given
 	// settings and checks the plan respects them
@@ -99,7 +126,7 @@ func TestLmOptimizerReplay(t *testing.T) {
 		bat := req.Batteries[home]
 
 		res, elapsed := solve(t, req)
-		t.Logf("%s, %v, limit %.0f W, grid peak %.0f W, min soc %.0f Wh", res.Status, elapsed.Round(time.Millisecond), limit, peakW(res, req.TimeSeries.Dt), bat.SMin)
+		t.Logf("%s, %v, limit %.0f W, grid peak %.0f W, min soc %.0f Wh, battery min %.1f%%", res.Status, elapsed.Round(time.Millisecond), limit, peakW(res, req.TimeSeries.Dt), bat.SMin, minSoc(res))
 
 		soc := res.Batteries[home].StateOfCharge
 		require.NotEmpty(t, soc)
