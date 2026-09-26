@@ -21,6 +21,14 @@ export interface FeedInSplit {
 
 export type FeedInSplitTotals = Omit<FeedInSplit, "start" | "end">;
 
+// title of the EEG counter's own series, see metrics.FeedInEeg
+const FEED_IN_EEG = "feedin-eeg";
+
+// the EEG counter is shown in the grid card, not again among the meters
+export function withoutFeedInEeg(meters: HistorySeries[]): HistorySeries[] {
+  return meters.filter((s) => s.title !== FEED_IN_EEG);
+}
+
 export async function fetchFeedInSplit(
   from: Date,
   to: Date,

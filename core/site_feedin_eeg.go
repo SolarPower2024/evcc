@@ -137,7 +137,8 @@ func (site *Site) applyFeedInEegEntity(entity string, changed bool) error {
 			opt = append(opt, metrics.WithClock(s.clock))
 		}
 
-		c, err := metrics.NewCollector(metrics.Meter, metrics.FeedInEeg, "EEG", opt...)
+		// titled with its name, so the energy page can leave it out of its meters
+		c, err := metrics.NewCollector(metrics.Meter, metrics.FeedInEeg, metrics.FeedInEeg, opt...)
 		if err != nil {
 			return err
 		}

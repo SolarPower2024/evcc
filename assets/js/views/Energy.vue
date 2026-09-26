@@ -406,6 +406,7 @@ import {
 	feedInSplitTotals,
 	fetchFeedInSplit,
 	splitGridSeries,
+	withoutFeedInEeg,
 	type FeedInSplit,
 	type FeedInSplitTotals,
 } from "../components/Energy/feedInEeg";
@@ -707,7 +708,7 @@ export default defineComponent({
 			return this.withData("battery");
 		},
 		meters(): HistorySeries[] {
-			return this.withData("meter");
+			return withoutFeedInEeg(this.withData("meter")); // custom: see feedInEeg.ts
 		},
 		meterColors(): Record<string, string> {
 			return this.entityColors(this.meters);
