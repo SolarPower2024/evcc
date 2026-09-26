@@ -127,7 +127,8 @@
 								<GroupChart
 									group="grid"
 									:color="colors.grid || ''"
-									:series="gridSeries"
+									:series="gridChartSeries"
+									:stacked="!!feedInEeg"
 									:prices="settings.energyGridPrices ? gridPrices : null"
 									:currency="currency"
 									:height="200"
@@ -140,7 +141,11 @@
 							</Card>
 						</div>
 						<div class="col-12 col-lg-3 col-xxl-2">
-							<GridStats :cost="flow?.cost" :currency="currency" />
+							<GridStats
+								:cost="flow?.cost"
+								:currency="currency"
+								:feed-in-eeg="feedInEeg"
+							/>
 						</div>
 					</div>
 				</div>
@@ -395,6 +400,15 @@ import {
 import type { DeviceColors } from "@/types/evcc";
 import { CURRENCY } from "@/types/evcc";
 import api from "../api";
+// custom: export split by feed-in tariff, see core/site_feedin_eeg.go
+import {
+	eegColor,
+	feedInSplitTotals,
+	fetchFeedInSplit,
+	splitGridSeries,
+	type FeedInSplit,
+	type FeedInSplitTotals,
+} from "../components/Energy/feedInEeg";
 import settings from "../settings";
 import formatter from "../mixins/formatter";
 import store from "../store";
@@ -465,6 +479,7 @@ export default defineComponent({
 			loading: false,
 			focusedPv: null as number | null,
 			startDate: new Date(2020, 0, 1),
+			feedInSplit: [] as FeedInSplit[], // custom: see feedInEeg.ts
 		};
 	},
 	head() {
@@ -725,6 +740,20 @@ export default defineComponent({
 		gridSeries(): HistorySeries[] {
 			return this.withData("grid");
 		},
+		// custom: export split by feed-in tariff, see feedInEeg.ts
+		feedInEeg(): FeedInSplitTotals | null {
+			if (!this.feedInSplit.length) return null;
+			return feedInSplitTotals(this.feedInSplit);
+		},
+		gridChartSeries(): HistorySeries[] {
+			if (!this.feedInEeg) return this.gridSeries;
+			return splitGridSeries(
+				this.gridSeries,
+				this.feedInSplit,
+				this.aggregate,
+				this.$t("energy.group.grid")
+			);
+		},
 		// with the price overlay on, both prices as lines with their range over the period
 		gridLegends(): Legend[] {
 			const list: Legend[] = [
@@ -739,6 +768,23 @@ export default defineComponent({
 					value: this.fmtKWh(this.gridExport),
 				},
 			];
+			// custom: export split by feed-in tariff, see feedInEeg.ts
+			if (this.feedInEeg) {
+				list.splice(
+					1,
+					1,
+					{
+						label: this.$t("energy.grid.revenue"),
+						color: colors.export || "",
+						value: this.fmtKWh(this.feedInEeg.standard),
+					},
+					{
+						label: this.$t("energy.feedInEeg.eeg"),
+						color: eegColor(),
+						value: this.fmtKWh(this.feedInEeg.eeg),
+					}
+				);
+			}
 			const prices = settings.energyGridPrices ? this.gridPrices : null;
 			const range = (band: PriceBand) => {
 				const known = (v: (number | null)[]) => v.filter((x): x is number => x !== null);
@@ -1132,6 +1178,7 @@ export default defineComponent({
 		async fetchData() {
 			this.loading = true;
 			const requestKey = this.fetchKey;
+			this.loadFeedInSplit(requestKey); // custom: see feedInEeg.ts
 			try {
 				const [flow, energy, tariffs] = await Promise.all([
 					this.fetchFlow(this.from, this.to),
@@ -1153,6 +1200,19 @@ export default defineComponent({
 				console.error("Failed to load energy flow", e);
 			} finally {
 				if (requestKey === this.fetchKey) this.loading = false;
+			}
+		},
+		// custom: export split by feed-in tariff, only with an EEG counter
+		async loadFeedInSplit(requestKey: string) {
+			if (!store.state.feedInEegEntity) {
+				this.feedInSplit = [];
+				return;
+			}
+			try {
+				const split = await fetchFeedInSplit(this.from, this.to, this.aggregate);
+				if (requestKey === this.fetchKey) this.feedInSplit = split;
+			} catch (e) {
+				console.error("Failed to load feed-in split", e);
 			}
 		},
 		fetchFlow(from: Date, to: Date) {
