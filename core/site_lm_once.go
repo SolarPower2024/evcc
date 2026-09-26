@@ -181,7 +181,8 @@ func (site *Site) onceSlotActive(o gridChargeOnce, soc float64) bool {
 		tariff = site.GetTariff(api.TariffUsagePlanner)
 	}
 
-	plan := planner.New(util.NewLogger("gridcharge"), tariff).Plan(required, 0, o.Until, false)
+	// the shares of other loadpoints' plans do not apply to the battery
+	plan, _ := planner.New(util.NewLogger("gridcharge"), tariff).Plan(required, 0, o.Until, false)
 
 	now := time.Now()
 	for _, slot := range plan {
