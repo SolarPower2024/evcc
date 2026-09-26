@@ -139,6 +139,7 @@ Keep these in mind when merging a new evcc version:
 | `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `core/site/api.go` | embeds `CustomAPI`, one line |
+| `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
 | `assets/js/views/Config.vue` | load management details section and its modals, OeMAG modal |
@@ -152,7 +153,7 @@ Everything else lives in files of its own: `core/lm/`, `core/site_lm.go`, `core/
 `core/site_lm_advanced.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
 `core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
 `core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
-`core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`,
+`core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`,
 `tariff/oemag.go`, `tariff/wrapper_custom.go`, `templates/definition/tariff/oemag.yaml` and the new Vue
 components.
 
@@ -231,6 +232,43 @@ battery (grid draw) and without it (grid draw plus battery power, charging
 counts negative), and how often the battery started covering a peak. Only
 quarter hours metered from their start count. Kept for 24 months in
 `peakMonths`, see `core/site_peak_stats.go`.
+
+## Optimizer
+
+The optimizer plans battery and vehicle charging and, today, advises: its
+result is the battery soc forecast and the suggestions. The fork gives it its
+settings as inputs, so the plan matches what the fork will actually do, see
+`core/site_optimizer_lm.go`:
+
+- peak shaving: peak limit as hard grid import limit (`p_max_imp`), reserve
+  as the home battery's minimum soc (`s_min`)
+- soc-based grid charging: start soc as minimum soc, so the charging is
+  planned ahead before the battery would fall below it; while it runs the
+  stop soc as goal (`s_goal`) within the grid charge window (*Erweitert →
+  Netzlade-Ziel erreichen in*, default 3 h)
+- one-time grid charging: its target as goal, right away or at the chosen time
+- grid charging refused right now (shed hold-off, running peak, unknown charge
+  power on a circuit) is not offered (`charge_from_grid`)
+- load management: a loadpoint plans with at most its circuits' power, the
+  priorities 0-3/4-6/7-10 become `c_priority` 0/1/2
+
+Without circuits, peak shaving, soc-based and one-time grid charging the
+request is unchanged. The optimizer's automatic mode (evcc PR 32881, not
+released yet) additionally needs a gate at execution; that is prepared
+separately on top of these inputs.
+
+`TestLmOptimizerReplay` sends a recorded request with these inputs to a
+running optimizer (`OPTIMIZER_REPLAY`, `OPTIMIZER_URI`, optional
+`REPLAY_SETTINGS`, `REPLAY_GRID_PRICE`, `REPLAY_SOC`) and checks the plan.
+
+## One-time grid charging
+
+Battery page, below *Netzladen nach Ladestand*: grid-charges once up to the
+chosen soc and switches itself off, right away or by a time of day at the
+cheapest slots before it (upstream planner on the planner tariff, right away
+once the time passed or when the duration is unknown). It survives a restart,
+can be cancelled and passes the same gate as the soc-based grid charging, see
+`core/site_lm_once.go`.
 
 ## 4. Peak shaving
 
