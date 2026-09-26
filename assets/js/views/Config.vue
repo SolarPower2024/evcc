@@ -288,6 +288,12 @@
 							@enable="handleDisable('tariff', feedInEegTariff.id, false)"
 						/>
 						<NewDeviceButton
+							v-if="feedInTariff && !feedInEegTariff"
+							:title="$t('config.tariff.option.feedInEeg')"
+							data-testid="add-tariff-feedInEeg"
+							@click="openModal('tariff', { type: 'feedInEeg' })"
+						/>
+						<NewDeviceButton
 							v-if="possibleTariffTypes.length"
 							:title="$t('config.tariff.addTariff')"
 							@click="openModal('tariff', { choices: possibleTariffTypes })"
@@ -1086,7 +1092,6 @@ export default defineComponent({
 			const types: TariffType[] = [];
 			if (!this.gridTariff) types.push("grid");
 			if (!this.feedInTariff) types.push("feedIn");
-			if (this.feedInTariff && !this.feedInEegTariff) types.push("feedInEeg"); // custom
 			return types;
 		},
 		possibleForecastTypes(): TariffType[] {
