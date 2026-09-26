@@ -73,7 +73,7 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 				b.cfg.CPriority = optimizerPriority(lm.Priority(site.lmBattery()))
 			}
 
-		case batteryTypeLoadpoint:
+		case batteryTypeLoadpoint, batteryTypeVehicle:
 			if !lmActive || b.detail.loadpoint == nil || *b.detail.loadpoint >= len(site.loadpoints) {
 				continue
 			}
