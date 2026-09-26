@@ -146,6 +146,10 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, dt []int, p
 			d := time.Until(o.Until)
 			if o.Until.IsZero() {
 				d = site.onceRequiredDuration(o.Target, float64(bat.SInitial/bat.SCapacity*100))
+				// unknown grid charge power: the battery's maximum charge power
+				if d <= 0 && bat.CMax > 0 {
+					d = time.Duration(float64(goal-bat.SInitial) / (float64(bat.CMax) * eta) * float64(time.Hour))
+				}
 			}
 			if len(bat.SGoal) != len(dt) {
 				bat.SGoal = make([]float32, len(dt))
