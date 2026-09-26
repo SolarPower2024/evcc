@@ -79,7 +79,7 @@ import InlineSocSelect from "./InlineSocSelect.vue";
 
 interface GridChargeOnce {
 	target: number;
-	until?: string;
+	until?: string | null;
 	active?: boolean;
 }
 

@@ -25,11 +25,27 @@ import (
 	"github.com/evcc-io/evcc/util"
 )
 
-// gridChargeOnce is the one-time grid charge as stored and published
+// gridChargeOnce is the one-time grid charge as stored
 type gridChargeOnce struct {
 	Target float64   `json:"target"`           // soc %, 0 = off
 	Until  time.Time `json:"until,omitzero"`   // cheapest slots before this time, zero = right away
 	Active bool      `json:"active,omitempty"` // charging in this slot
+}
+
+// gridChargeOncePublished is what the ui gets: every field always present, as
+// the ui merges a published object into the previous one
+type gridChargeOncePublished struct {
+	Target float64    `json:"target"`
+	Until  *time.Time `json:"until"` // null = right away
+	Active bool       `json:"active"`
+}
+
+func (site *Site) publishGridChargeOnce(o gridChargeOnce) {
+	res := gridChargeOncePublished{Target: o.Target, Active: o.Active}
+	if !o.Until.IsZero() {
+		res.Until = &o.Until
+	}
+	site.publish(keys.BatteryGridChargeOnce, res)
 }
 
 // maxGridChargeOnceAhead is how far ahead the time of day may be
@@ -54,7 +70,7 @@ func (site *Site) setGridChargeOnce(o gridChargeOnce) {
 	if err := settings.SetJson(keys.BatteryGridChargeOnce, o); err != nil {
 		site.log.ERROR.Printf("battery grid charge once: %v", err)
 	}
-	site.publish(keys.BatteryGridChargeOnce, o)
+	site.publishGridChargeOnce(o)
 }
 
 // restoreGridChargeOnce continues a one-time grid charge across a restart
@@ -67,7 +83,7 @@ func (site *Site) restoreGridChargeOnce() {
 		s.mu.Unlock()
 	}
 
-	site.publish(keys.BatteryGridChargeOnce, site.gridChargeOnce())
+	site.publishGridChargeOnce(site.gridChargeOnce())
 }
 
 // SetBatteryGridChargeOnce starts one-time grid charging up to target soc, right
