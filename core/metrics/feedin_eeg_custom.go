@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// FeedInEeg is the name of the EEG counter's collector in group Meter
+// FeedInEeg is the name and title of the EEG counter's collector in group Meter
 const FeedInEeg = "feedin-eeg"
 
 type eegPrice struct {
