@@ -352,7 +352,10 @@ counter of the EEG export (kWh, Wh or MWh).
 - only counters are used; pv control, load management and peak shaving are
   untouched
 
-The display on evcc's new energy page (evcc PR 33989) is prepared separately.
+The energy page shows the split in its grid card: EEG as its own lighter
+export bar, both amounts in the legend, and the revenue of the regular feed-in
+and of EEG as separate tiles, also without a grid price. The counter is not
+listed again among the additional meters (its collector is titled `feedin-eeg`).
 See `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`.
 
 ## 16. Optimizer inputs
@@ -467,6 +470,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/components/Loadpoints/Loadpoint.vue`, `Mode.vue` | `chargerStages` prop, mode labels Aus/Smart/Ein for a heater in stages |
 | `assets/js/components/Config/TariffCard.vue`, `TariffModal.vue` | EEG counter in the EEG card, price templates for `feedInEeg`, planner price hint |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
+| `assets/js/views/Energy.vue`, `assets/js/components/Energy/GroupChart.vue`, `GridStats.vue` | EEG split of the grid card: series, legend, `returnColor`, revenue tiles, meters without the EEG counter |
 | `assets/js/types/evcc.ts` | `State`/`ConfigLoadpoint` extend the types in `evcc-lm.ts`; `feedInEeg` tariff type |
 | `i18n/de.json`, `i18n/en.json` | added texts only |
 
@@ -482,7 +486,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
-| EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go` |
+| EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
 | ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `FeedInEegSummary`, `PhaseSwitchFields`) |
