@@ -8,6 +8,7 @@ package core
 import (
 	"time"
 
+	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/util/config"
@@ -34,6 +35,7 @@ type lmLoadStatus struct {
 	Requested float64    `json:"requested,omitempty"` // asked for in W
 	Allowed   float64    `json:"allowed,omitempty"`   // allowed in W
 	Until     *time.Time `json:"until,omitempty"`     // shed or paused until
+	Optimizer bool       `json:"optimizer,omitempty"` // the optimizer decides, load management limits
 }
 
 type lmStatus struct {
@@ -77,6 +79,7 @@ func (site *Site) publishLmStatus(gridCharge bool) {
 			Power:     lp.GetChargePower(),
 		}
 		st.State, st.Requested, st.Allowed, st.Until = lmLoadpointState(lp, st.Power, now)
+		st.Optimizer = lp.optimizerControlled()
 
 		res.Loads = append(res.Loads, st)
 	}
@@ -115,6 +118,12 @@ func (site *Site) lmBatteryStatus(now time.Time, gridCharge bool) lmLoadStatus {
 		Battery:  true,
 		Priority: lm.Priority(bat),
 		State:    lmStateOff,
+		// the optimizer's charge request passed the gate, see site_optimizer_gate.go
+		Optimizer: site.optimizerInControl(),
+	}
+
+	if st.Optimizer && site.GetBatteryMode() == api.BatteryCharge {
+		gridCharge = true
 	}
 
 	p := site.peak()

@@ -55,12 +55,13 @@ type lmState struct {
 	advMu sync.Mutex
 	adv   lmAdvanced
 
-	batteryShedUntil  time.Time   // battery grid charge hold-off after a shed
-	feedInTried       time.Time   // last feed-in finalization attempt, see site_feedin.go
-	feedInOnce        sync.Once   // feed-in history backfilled
-	feedInMarket      *float64    // market price last published
-	batteryCircuit    api.Circuit // resolved from the assignment
-	batteryCircuitRef string      // what batteryCircuit was resolved from
+	batteryShedUntil  time.Time      // battery grid charge hold-off after a shed
+	feedInTried       time.Time      // last feed-in finalization attempt, see site_feedin.go
+	feedInOnce        sync.Once      // feed-in history backfilled
+	feedInMarket      *float64       // market price last published
+	gridOnce          gridChargeOnce // one-time grid charging, see site_lm_once.go
+	batteryCircuit    api.Circuit    // resolved from the assignment
+	batteryCircuitRef string         // what batteryCircuit was resolved from
 	batteryLoad       *batteryLoad
 }
 
@@ -106,6 +107,7 @@ func (site *Site) restoreLmSettings() {
 	}
 
 	lm.SetPriorityLookup(site.lmPriorityLookup)
+	site.restoreGridChargeOnce()
 
 	site.restoreLmGuard()
 	site.restoreLmAdvanced()
@@ -358,14 +360,29 @@ func (site *Site) batteryCircuitAllows() bool {
 func (site *Site) batteryGridChargeRequested(rate api.Rate) bool {
 	// evaluated unconditionally so the hysteresis keeps tracking the soc
 	socActive := site.batterySocChargeActive()
+	onceActive := site.batteryGridChargeOnceActive()
 
+	// the optimizer in automatic mode decides, its charge request passes the
+	// same gate, see site_optimizer_lm.go
+	if site.optimizerInControl() {
+		return false
+	}
+
+	if !socActive && !onceActive && !site.batteryGridChargeActive(rate) {
+		site.releaseGridCharge()
+		return false
+	}
+
+	return site.gridChargeGate()
+}
+
+// gridChargeGate clears a grid charge request against a running peak and the
+// circuit headroom and writes the charge power setpoint. A denied request
+// releases what the battery had reserved.
+func (site *Site) gridChargeGate() bool {
 	// a running demand peak needs the battery for shaving, not charging
-	if !socActive && !site.batteryGridChargeActive(rate) || site.peakPausesGridCharge() {
-		// release what the battery had reserved on the circuit, lower priority
-		// loads would otherwise stay throttled until the reservation expires
-		lm.Forget(site.lmBattery())
-		site.writeChargeValue(0)
-		site.recordBatteryLimit(0, 0)
+	if site.peakPausesGridCharge() {
+		site.releaseGridCharge()
 		return false
 	}
 
@@ -388,6 +405,15 @@ func (site *Site) batteryGridChargeRequested(rate api.Rate) bool {
 	site.recordBatteryLimit(want, power)
 
 	return power > 0
+}
+
+// releaseGridCharge stops grid charging: the charge power goes to 0 and what
+// the battery had reserved on the circuit is released, lower priority loads
+// would otherwise stay throttled until the reservation expires
+func (site *Site) releaseGridCharge() {
+	lm.Forget(site.lmBattery())
+	site.writeChargeValue(0)
+	site.recordBatteryLimit(0, 0)
 }
 
 // recordBatteryLimit keeps what the battery may grid-charge with, which load

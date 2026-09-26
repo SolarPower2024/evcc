@@ -132,7 +132,12 @@ func (site *Site) ApplyLmProfile(id string) error {
 	site.applyProfileBatteryUsage(p, add)
 
 	if v := p.DischargeControl; v != nil {
-		add("discharge control", site.SetBatteryDischargeControl(*v))
+		// the optimizer decides it in automatic mode, the stored value applies again without
+		if err := site.SetBatteryDischargeControl(*v); errors.Is(err, ErrOptimizerAutomatic) {
+			site.log.DEBUG.Printf("profile %s: discharge control left to the optimizer", p.Name)
+		} else {
+			add("discharge control", err)
+		}
 	}
 
 	if v := p.PeakLimit; v != nil {

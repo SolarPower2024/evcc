@@ -85,6 +85,9 @@
 			</div>
 
 			<p class="small text-muted mb-2">{{ $t("config.lmprofiles.hint") }}</p>
+			<p v-if="optimizerAutomatic" class="small text-muted mb-2">
+				{{ $t("config.lmprofiles.optimizer") }}
+			</p>
 
 			<section v-for="group in groups" :key="group.key" class="group">
 				<h6 class="mt-3 mb-2">{{ $t(`config.lmprofiles.group.${group.key}`) }}</h6>
@@ -204,6 +207,9 @@ export default {
 	computed: {
 		profiles() {
 			return store.state?.lmProfiles || [];
+		},
+		optimizerAutomatic() {
+			return !!store.state?.optimizerAutomatic;
 		},
 		wallboxes() {
 			return store.state?.lmProfileWallboxes || [];

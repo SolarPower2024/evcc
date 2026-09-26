@@ -79,7 +79,22 @@
       "enable": "Charge the home battery from the grid based on its state of charge.",
       "off": "Inactive",
       "range": "Charging starts at {start} or below and stops at {stop}.",
-      "waiting": "Waiting for the start state of charge"
+      "waiting": "Waiting for the start state of charge",
+      "optimizer": "With optimizer automatic mode the optimizer plans the charging: the battery does not fall below the start soc, and charges to the stop soc at the cheapest time."
+    },
+    "gridChargeOnce": {
+      "title": "Charge once",
+      "sentence": "Charge once from the grid up to {soc}",
+      "now": "right away",
+      "until": "by a time",
+      "byTime": "by {time}, at the cheapest time",
+      "timeLabel": "Time",
+      "start": "Start",
+      "cancel": "Cancel",
+      "running": "Charging once up to {soc}",
+      "active": "charging",
+      "waiting": "waiting for the cheapest time",
+      "help": "Ends by itself at the target soc and continues across restarts. Load management and the peak limit apply."
     }
   },
   "batterySettings": {
@@ -527,7 +542,9 @@
       "phasesLabel": "Battery phases",
       "timeoutHelp": "How long a waiting higher priority load keeps power reserved. Default {std} min.",
       "timeoutLabel": "Reservation expiry",
-      "title": "Advanced settings"
+      "title": "Advanced settings",
+      "gridChargeWindowLabel": "Reach the grid charge goal within",
+      "gridChargeWindowHelp": "With the optimizer: how long it may take to reach the stop soc of soc-based grid charging. It picks the cheapest time. Default {std} h."
     },
     "lmpriorities": {
       "battery": "Home battery (grid charging)",
@@ -580,7 +597,8 @@
       "title": "Profiles",
       "unchanged": "unchanged",
       "valueCount": "Values: {count}",
-      "yes": "Yes"
+      "yes": "Yes",
+      "optimizer": "With optimizer automatic mode discharge control is skipped, the optimizer decides it."
     },
     "lmshedguard": {
       "description": "A protected loadpoint switched off by load management stays off for the lock time. One that could not start at all is not locked.",
@@ -1537,7 +1555,9 @@
       "throttled": "Throttled · {allowed} of {requested}",
       "waiting": "Waiting · needs {requested}, {allowed} free"
     },
-    "title": "Load management"
+    "title": "Load management",
+    "optimizer": "Optimizer",
+    "optimizerHint": "The optimizer decides, load management limits."
   },
   "log": {
     "areaLabel": "Filter by area",

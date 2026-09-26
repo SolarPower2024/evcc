@@ -8,6 +8,7 @@ const (
 	BatterySocGridChargeStart   = "batterySocGridChargeStart"
 	BatterySocGridChargeStop    = "batterySocGridChargeStop"
 	BatterySocGridChargeRunning = "batterySocGridChargeRunning" // hysteresis state, not published
+	BatteryGridChargeOnce       = "batteryGridChargeOnce"       // one-time grid charging, see core/site_lm_once.go
 
 	// battery peak shaving
 	PeakShaving                     = "peakShaving"

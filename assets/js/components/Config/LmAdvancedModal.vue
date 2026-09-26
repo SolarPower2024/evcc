@@ -91,6 +91,7 @@ const FIELDS = [
 	{ name: "timeout", unit: "min", min: 1, max: 60, integer: true, default: 10 },
 	{ name: "peakFreeze", unit: "min", min: 1, max: 14, integer: true, default: 12 },
 	{ name: "peakCap", unit: "×", min: 1, max: 10, integer: false, default: 2 },
+	{ name: "gridChargeWindow", unit: "h", min: 1, max: 24, integer: true, default: 3 },
 	{
 		name: "followCycles",
 		unitKey: "config.lmadvanced.cycles",
