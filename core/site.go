@@ -244,6 +244,7 @@ func (site *Site) Boot(log *util.Logger, loadpoints []*Loadpoint, tariffs *tarif
 
 	// give loadpoints access to vehicles and database
 	ledger := planner.NewLedger()
+	site.setLedger(ledger) // custom: the fork's loads in the ledger, see core/site_lm_planner.go
 	for i, lp := range site.activeLoadpoints() {
 		lp.coordinator = coordinator.NewAdapter(lp, site.coordinator)
 		lp.planner = planner.New(lp.log, tariff, planner.WithLedger(ledger, plannerOwner(i, lp)))

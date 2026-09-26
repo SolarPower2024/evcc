@@ -25,6 +25,7 @@ import (
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/loadpoint"
+	"github.com/evcc-io/evcc/core/planner"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/config"
 )
@@ -55,12 +56,13 @@ type lmState struct {
 	advMu sync.Mutex
 	adv   lmAdvanced
 
-	batteryShedUntil  time.Time   // battery grid charge hold-off after a shed
-	feedInTried       time.Time   // last feed-in finalization attempt, see site_feedin.go
-	feedInOnce        sync.Once   // feed-in history backfilled
-	feedInMarket      *float64    // market price last published
-	batteryCircuit    api.Circuit // resolved from the assignment
-	batteryCircuitRef string      // what batteryCircuit was resolved from
+	batteryShedUntil  time.Time       // battery grid charge hold-off after a shed
+	feedInTried       time.Time       // last feed-in finalization attempt, see site_feedin.go
+	feedInOnce        sync.Once       // feed-in history backfilled
+	feedInMarket      *float64        // market price last published
+	ledger            *planner.Ledger // planner's circuit ledger, see site_lm_planner.go
+	batteryCircuit    api.Circuit     // resolved from the assignment
+	batteryCircuitRef string          // what batteryCircuit was resolved from
 	batteryLoad       *batteryLoad
 }
 
