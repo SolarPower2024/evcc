@@ -384,6 +384,15 @@
       "sourceManual": "von Hand",
       "title": "OeMAG-Abrechnung"
     },
+    "feedineeg": {
+      "title": "EEG-Zähler",
+      "description": "Home-Assistant-Zähler der Einspeisung in die Energiegemeinschaft. Einspeisevergütung = gesamte Einspeisung minus EEG. Es werden nur Zählerstände ausgewertet, die Regelung bleibt unverändert.",
+      "entityLabel": "Energiezähler EEG",
+      "entityHelp": "Sensor in kWh oder Wh. Leer = gesamte Einspeisung zur Einspeisevergütung.",
+      "counterLabel": "EEG-Zähler",
+      "none": "nicht festgelegt",
+      "set": "Zähler festlegen"
+    },
     "form": {
       "danger": "Achtung",
       "deprecated": "veraltet",
@@ -1180,7 +1189,8 @@
         "grid": "Netzbezugstarif hinzufügen",
         "planner": "Planer-Vorhersage hinzufügen",
         "solar": "Solar-Vorhersage hinzufügen",
-        "temperature": "Temperatur-Vorhersage hinzufügen"
+        "temperature": "Temperatur-Vorhersage hinzufügen",
+        "feedInEeg": "Einspeisevergütung EEG hinzufügen"
       },
       "planner": {
         "description": "Erweiterte Einstellung. Normalerweise nicht nötig, da dynamische Stromtarife oder CO₂-Vorhersagen automatisch verwendet werden. Ermöglicht eine zusätzliche Datenquelle, die nur für die Ladeplanung verwendet wird und nicht für Statistiken und Preisberechnungen.",
@@ -1207,7 +1217,8 @@
         "grid": "Netzbezugspreis",
         "planner": "Planer",
         "solar": "Solar",
-        "temperature": "Temperaturvorhersage"
+        "temperature": "Temperaturvorhersage",
+        "feedInEeg": "Einspeisevergütung EEG"
       },
       "zones": {
         "add": "Zone hinzufügen",
@@ -1229,6 +1240,11 @@
         "timeRangeError": "Startzeit muss vor Endzeit liegen. Um Mitternacht zu überspannen, erstelle zwei separate Zonen.",
         "timeTo": "Bis",
         "weekdays": "Wochentage"
+      },
+      "feedInEeg": {
+        "description": "Fester Preis für die Einspeisung in die Energiegemeinschaft (EEG), 0 ist möglich. Die Menge misst der EEG-Zähler, der Rest der Einspeisung erhält die Einspeisevergütung.",
+        "titleAdd": "Einspeisevergütung EEG hinzufügen",
+        "titleEdit": "Einspeisevergütung EEG bearbeiten"
       }
     },
     "telemetry": {

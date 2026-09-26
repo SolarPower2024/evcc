@@ -19,6 +19,8 @@
 			<FeedInFinalSummary
 				v-if="tariffType === 'feedIn' && tariff.config?.template === 'oemag'"
 			/>
+			<!-- custom: counter of the second feed-in tariff, see core/site_feedin_eeg.go -->
+			<FeedInEegSummary v-if="tariffType === 'feedInEeg'" />
 		</template>
 	</DeviceCard>
 </template>
@@ -35,6 +37,7 @@ import type { TariffType, CURRENCY } from "@/types/evcc";
 import DeviceCard from "./DeviceCard.vue";
 import DeviceTags from "./DeviceTags.vue";
 import FeedInFinalSummary from "./FeedInFinalSummary.vue";
+import FeedInEegSummary from "./FeedInEegSummary.vue";
 
 type ConfigTariff = {
 	id: number;
@@ -52,6 +55,7 @@ export default {
 		DeviceCard,
 		DeviceTags,
 		FeedInFinalSummary,
+		FeedInEegSummary,
 	},
 	props: {
 		tariff: { type: Object as PropType<ConfigTariff>, required: true },
@@ -76,6 +80,7 @@ export default {
 			const iconMap: Record<TariffType, string> = {
 				grid: "shopicon-regular-invoice",
 				feedIn: "shopicon-regular-receivepayment",
+				feedInEeg: "shopicon-regular-receivepayment", // custom
 				co2: "shopicon-regular-eco1",
 				planner: "shopicon-regular-clock",
 				solar: "shopicon-regular-sun",

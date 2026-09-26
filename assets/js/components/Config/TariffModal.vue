@@ -199,6 +199,7 @@ export default defineComponent({
 			const groupMap: Record<string, { service: Product[]; generic: Product[] }> = {
 				grid: { service: priceProducts, generic: priceGeneric },
 				feedIn: { service: priceProducts, generic: priceGeneric },
+				feedInEeg: { service: [], generic: priceGeneric }, // custom: fixed price
 				co2: { service: co2Products, generic: co2Generic },
 				solar: { service: solarProducts, generic: solarGeneric },
 				temperature: { service: temperatureProducts, generic: temperatureGeneric },
@@ -226,6 +227,7 @@ export default defineComponent({
 				if (
 					this.tariffType === "grid" ||
 					this.tariffType === "feedIn" ||
+					this.tariffType === "feedInEeg" || // custom
 					this.tariffType === "planner"
 				) {
 					values.yaml = tariffPriceYaml;
