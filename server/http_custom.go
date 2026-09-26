@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/evcc-io/evcc/core/lm/profile"
 	"github.com/evcc-io/evcc/core/site"
@@ -24,6 +25,11 @@ func customSiteRoutes(site site.API) map[string]route {
 		"batterysocgridcharge":      {"POST", "/batterysocgridcharge/{value:[01truefalse]+}", boolHandler(site.SetBatterySocGridCharge, site.GetBatterySocGridCharge)},
 		"batterysocgridchargestart": {"POST", "/batterysocgridchargestart/{value:[0-9.]+}", floatHandler(site.SetBatterySocGridChargeStart, site.GetBatterySocGridChargeStart)},
 		"batterysocgridchargestop":  {"POST", "/batterysocgridchargestop/{value:[0-9.]+}", floatHandler(site.SetBatterySocGridChargeStop, site.GetBatterySocGridChargeStop)},
+
+		// one-time grid charging, see core/site_lm_once.go
+		"batterygridchargeonce":       {"POST", "/batterygridchargeonce/{soc:[0-9]+}", gridChargeOnceHandler(site)},
+		"batterygridchargeonceuntil":  {"POST", "/batterygridchargeonce/{soc:[0-9]+}/{until:[0-9]{2}:[0-9]{2}}", gridChargeOnceHandler(site)},
+		"batterygridchargeoncecancel": {"DELETE", "/batterygridchargeonce", gridChargeOnceCancelHandler(site)},
 
 		// load management shed priorities, see core/site_lm.go
 		"lmpriority": {"POST", "/lmpriority/{name:" + namePattern + "}/{value:[0-9]+}", lmPriorityHandler(site)},
@@ -164,5 +170,51 @@ func lmPriorityHandler(site site.API) http.HandlerFunc {
 		}
 
 		jsonWrite(w, prio)
+	}
+}
+
+// gridChargeOnceHandler starts one-time grid charging up to a soc, right away
+// or at the cheapest slots before the next occurrence of a time of day (HH:MM)
+func gridChargeOnceHandler(site site.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+
+		soc, err := strconv.ParseFloat(vars["soc"], 64)
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		var until time.Time
+		if s := vars["until"]; s != "" {
+			t, err := time.ParseInLocation("15:04", s, time.Local)
+			if err != nil {
+				jsonError(w, http.StatusBadRequest, err)
+				return
+			}
+			now := time.Now()
+			until = time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, time.Local)
+			if !until.After(now) {
+				until = until.AddDate(0, 0, 1)
+			}
+		}
+
+		if err := site.SetBatteryGridChargeOnce(soc, until); err != nil {
+			jsonError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		jsonWrite(w, soc)
+	}
+}
+
+// gridChargeOnceCancelHandler stops one-time grid charging
+func gridChargeOnceCancelHandler(site site.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := site.CancelBatteryGridChargeOnce(); err != nil {
+			jsonError(w, http.StatusBadRequest, err)
+			return
+		}
+		jsonWrite(w, true)
 	}
 }
