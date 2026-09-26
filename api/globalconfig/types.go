@@ -187,15 +187,16 @@ type TariffRefs struct {
 	Planner     string   `json:"planner"`
 	Solar       []string `json:"solar"`
 	Temperature string   `json:"temperature"`
+	FeedInEeg   string   `json:"feedInEeg,omitempty"` // custom: second feed-in tariff, see core/site_feedin_eeg.go
 }
 
 func (refs TariffRefs) IsConfigured() bool {
-	return refs.Grid != "" || refs.FeedIn != "" || refs.Co2 != "" || refs.Planner != "" || len(refs.Solar) > 0 || refs.Temperature != ""
+	return refs.Grid != "" || refs.FeedIn != "" || refs.Co2 != "" || refs.Planner != "" || len(refs.Solar) > 0 || refs.Temperature != "" || refs.FeedInEeg != "" // custom: FeedInEeg
 }
 
 func (refs TariffRefs) Used() iter.Seq[string] {
 	return func(yield func(string) bool) {
-		for _, ref := range append([]string{refs.Grid, refs.FeedIn, refs.Co2, refs.Planner, refs.Temperature}, refs.Solar...) {
+		for _, ref := range append([]string{refs.Grid, refs.FeedIn, refs.Co2, refs.Planner, refs.Temperature, refs.FeedInEeg /* custom */}, refs.Solar...) {
 			if ref != "" {
 				if !yield(ref) {
 					return

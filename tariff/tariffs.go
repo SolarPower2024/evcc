@@ -10,6 +10,7 @@ import (
 type Tariffs struct {
 	Currency                                       currency.Unit
 	Grid, FeedIn, Co2, Planner, Solar, Temperature api.Tariff
+	FeedInEeg                                      api.Tariff // custom: second feed-in tariff, see core/site_feedin_eeg.go
 }
 
 // At returns the rate at the given time
