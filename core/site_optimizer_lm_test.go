@@ -142,6 +142,13 @@ func TestLmOptimizerInputsLoadpoint(t *testing.T) {
 	assert.Equal(t, float32(7000), batteries[0].cfg.CMax, "garage circuit")
 	assert.Equal(t, 2, batteries[0].cfg.CPriority)
 
+	// with a vehicle the entry is typed as such, same inputs
+	batteries[0].cfg.CMax, batteries[0].cfg.CPriority = 11000, 0
+	batteries[0].detail.Type = batteryTypeVehicle
+	site.applyLmOptimizerInputs(&req, batteries)
+	assert.Equal(t, float32(7000), batteries[0].cfg.CMax)
+	assert.Equal(t, 2, batteries[0].cfg.CPriority)
+
 	for prio, want := range map[int]int{0: 0, 3: 0, 4: 1, 6: 1, 7: 2, 10: 2} {
 		assert.Equal(t, want, optimizerPriority(prio), "priority %d", prio)
 	}
