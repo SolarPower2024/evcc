@@ -85,6 +85,9 @@
 			</div>
 
 			<p class="small text-muted mb-2">{{ $t("config.lmprofiles.hint") }}</p>
+			<p v-if="optimizerAutomatic" class="small text-muted mb-2">
+				{{ $t("config.lmprofiles.optimizer") }}
+			</p>
 
 			<section v-for="group in groups" :key="group.key" class="group">
 				<h6 class="mt-3 mb-2">{{ $t(`config.lmprofiles.group.${group.key}`) }}</h6>
@@ -182,6 +185,7 @@
 import GenericModal from "../Helper/GenericModal.vue";
 import ProfileIcon, { PROFILE_ICONS } from "../Battery/ProfileIcon.vue";
 import store from "@/store";
+import { OPTIMIZER_AUTOMATIC } from "@/types/evcc";
 import api from "@/api";
 
 const MAX_PROFILES = 10;
@@ -204,6 +208,10 @@ export default {
 	computed: {
 		profiles() {
 			return store.state?.lmProfiles || [];
+		},
+		optimizerAutomatic() {
+			const level = store.state?.optimizerAutomatic;
+			return !!level && level !== OPTIMIZER_AUTOMATIC.OFF;
 		},
 		wallboxes() {
 			return store.state?.lmProfileWallboxes || [];
