@@ -9,34 +9,21 @@ Upstream circuits serve requests first come, first served. A shed priority puts
 an order on that: **lower is shed first**, the default `0` puts every load on
 the same level.
 
-The priorities are set in the ui under *Lastspitzenmanagement →
-Lastmanagement-Prioritäten*, for every loadpoint on a circuit and for the home
-battery once it is assigned to one. They apply immediately and are stored as
-the `lmPriorities` setting. The yaml keys below are only the fallback for loads
-without a ui value:
+One priority ranks everything: a loadpoint's regular (upstream) `priority`
+decides pv surplus, shedding and, once planned charging shares circuit
+capacity, the planner alike. The battery has no upstream priority; it keeps a
+value of its own on the same 0-10 scale.
 
-```yaml
-loadpoints:
-  - title: Wallbox
-    charger: wallbox
-    circuit: main
-    priority: 5 # pv surplus goes here first (upstream, unchanged)
-    lmpriority: 1 # ... but this is the first load to be reduced
+All of them are set in the ui under *Lastmanagement-Details → Prioritäten*, for
+every loadpoint on a circuit and for the home battery once it is assigned to
+one. A loadpoint's value there is its regular priority (also editable in the
+loadpoint settings), the battery's is stored in the `lmPriorities` setting,
+with `loadmanagement.battery.priority` in yaml as fallback.
 
-  - title: Heizstab
-    charger: ha-switch-heater
-    circuit: main
-    lmpriority: 2
-
-  - title: Wärmepumpe
-    charger: ha-switch-heatpump
-    circuit: main
-    lmpriority: 5 # keeps its power the longest
-```
-
-`lmpriority` is deliberately separate from `priority`: the load that should get
-pv surplus first is usually not the one that should keep power when the fuse is
-the constraint.
+Earlier the loadpoints had a separate `lmpriority`. Those values (from the ui,
+else a non-zero yaml `lmpriority`) are taken over into the loadpoints'
+priority once, logged, see `core/site_lm_priority.go`. That changes the pv
+surplus order accordingly.
 
 ### How it works
 
@@ -139,6 +126,8 @@ Keep these in mind when merging a new evcc version:
 | `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `core/site/api.go` | embeds `CustomAPI`, one line |
+| `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff role: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
+| `assets/js/components/Config/TariffModal.vue` | `feedInEeg` offers the price templates |
 | `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
@@ -153,7 +142,7 @@ Everything else lives in files of its own: `core/lm/`, `core/site_lm.go`, `core/
 `core/site_lm_advanced.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
 `core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
 `core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
-`core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`,
+`core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`,
 `tariff/oemag.go`, `tariff/wrapper_custom.go`, `templates/definition/tariff/oemag.yaml` and the new Vue
 components.
 
@@ -232,6 +221,29 @@ battery (grid draw) and without it (grid draw plus battery power, charging
 counts negative), and how often the battery started covering a peak. Only
 quarter hours metered from their start count. Kept for 24 months in
 `peakMonths`, see `core/site_peak_stats.go`.
+
+## Second feed-in tariff (EEG)
+
+Part of the export can go to an energy community (EEG) at a fixed price, the rest
+gets the standard feed-in tariff (OeMAG). Tariff settings: "Einspeisevergütung EEG
+hinzufügen" below the feed-in tariff (fixed price, 0 allowed), its card sets the
+Home Assistant counter of the EEG export (kWh, Wh or MWh).
+
+- The counter is recorded per 15 minute slot by a collector of group `meter`
+  (`feedin-eeg`), which upstream keeps out of every balance. A changed counter
+  starts a fresh recording, so the jump between two counters never counts.
+- The EEG price is persisted per slot in `tariffs_eeg`.
+- `GET /api/feedinsplit?from&to&aggregate` returns per bucket: export (grid
+  meter), EEG (counter), standard = export minus EEG (clamped at 0), and the
+  revenue of both, priced slot by slot.
+- Only counters are used. The grid meter power that drives PV control, load
+  management and peak shaving is untouched; self-consumption and the solar
+  share of sessions stay valued at the standard feed-in tariff.
+- The display on the new energy page (evcc PR 33989, not released yet) is
+  prepared separately; until then the data is recorded and available via the
+  api.
+
+Without a counter nothing runs and evcc behaves as upstream.
 
 ## Optimizer
 
