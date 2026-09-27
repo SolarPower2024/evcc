@@ -95,9 +95,10 @@ type peakState struct {
 	set func(float64) error // resolved from config
 
 	// follow the peak, see site_peak_follow.go
-	follow       bool
-	followBuffer float64 // W below the month's peak
-	followBase   float64 // W, the limit set by hand
+	follow        bool
+	followBuffer  float64 // W below the month's peak
+	followBase    float64 // W, the limit set by hand
+	followCircuit string  // circuit whose power limit rises along, see site_lm_switch.go
 
 	tariff peakTariff // capacity tariff, see site_peak_tariff.go
 
@@ -822,6 +823,7 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 	defer site.publishLmStatus(gridCharge)
 	defer site.publishLmWallboxes()
 	defer site.checkLmFollowing()
+	defer site.applyCircuitLimits()
 
 	if gridCharge || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)

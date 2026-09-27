@@ -1021,6 +1021,9 @@
       "followBufferHelp": "How far the limit stays below the month's peak, 0–5 kW. Example 0.5 kW: peak 10 kW → limit 9.5 kW.",
       "followBufferInvalid": "The buffer must be between 0 and 5 kW, in steps of 0.1 kW.",
       "followBufferLabel": "Buffer",
+      "followCircuitHelp": "This circuit's power limit rises along, never below its configured value. Choose it only if it is the peak limit, not the agreed connection power.",
+      "followCircuitLabel": "Raise circuit limit along",
+      "followCircuitNone": "None",
       "followHelp": "Once the month's highest quarter hour is above your peak limit, the limit rises to that peak minus the buffer. It is paid anyway, the battery need not shave below it. A new month starts with your limit again.",
       "followLabel": "Follow the peak: limit follows the month's peak",
       "hint": "Switch, peak limit and reserve are set on the battery page.",
@@ -1538,7 +1541,12 @@
   "lmoverview": {
     "battery": "Home battery (grid charging)",
     "blockedCircuit": "Circuit · until {time}",
+    "circuitFollows": "follows the month's peak, set {limit}",
+    "circuitLifted": "limit {limit} lifted",
     "description": "What load management is doing right now.",
+    "disabledHelp": "Off: the circuits' power limits do not apply, nothing is throttled for them. Fuses (current limits), §14a and battery peak shaving stay active.",
+    "enabled": "Load management",
+    "enabledHelp": "The circuits' power limits (peak) throttle wallboxes, heaters and grid charging.",
     "event": {
       "gridChargeDenied": "Grid charging blocked · circuit allows {allowed} of {wanted}",
       "gridChargePaused": "Grid charging paused · demand {demand} above peak limit {limit}",
@@ -1557,6 +1565,7 @@
     "overall": {
       "limited": "Limited",
       "normal": "Normal",
+      "off": "Off",
       "overload": "Overload"
     },
     "pausedPeak": "Peak · resumes at {time}",

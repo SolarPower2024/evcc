@@ -47,6 +47,12 @@ type lmState struct {
 
 	prios map[string]int // shed priorities set in the ui, by load name
 
+	// load management switched off, see site_lm_switch.go
+	off          bool
+	offLimits    map[string]float64 // lifted power limits by circuit name
+	offDynamic   map[string]bool    // circuits with a plugin limit that stays
+	offPublished bool
+
 	guardMinutes int             // shed guard, see site_lm_guard.go
 	guarded      map[string]bool // loadpoints the shed guard protects, by name
 
@@ -113,6 +119,7 @@ func (site *Site) restoreLmSettings() {
 
 	site.restoreLmGuard()
 	site.restoreLmAdvanced()
+	site.restoreLmSwitch()
 	site.publishLmProfiles()
 
 	site.publishLmSettings()

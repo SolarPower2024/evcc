@@ -233,8 +233,26 @@ the limit set by hand, the base. A new month starts at the base again. Setting
 the limit by hand, or by a profile, while following sets the base; switching
 off returns to it. See `core/site_peak_follow.go`.
 
-Open: how this relates to the circuit limits of load management; waits for
-circuits configured in the ui (evcc PR 33077).
+Optionally a circuit's power limit rises along (*Stromkreis-Grenze
+mitziehen*): the chosen circuit gets the raised limit, never less than its
+configured value, and its configured value back with the next month or when
+following stops. Meant for a circuit that is the peak limit, not the agreed
+connection power. See `core/site_lm_switch.go`.
+
+Open: revisit once circuits are configured in the ui (evcc PR 33077), which may
+set circuit limits at runtime too.
+
+## Load management switch
+
+Mehr → Lastmanagement → *Lastmanagement*. Off lifts the power limits of all
+circuits at runtime (`SetMaxPower(0)`, unlimited), so loadpoints and the
+battery's grid charging are no longer throttled or shed for them; the
+configuration stays unchanged. Current limits (fuses), a HEMS consumption limit
+(§14a) and battery peak shaving keep applying. Switching on restores the
+configured limits (or the raised one of follow the peak). Survives a restart
+(`lmOff`). Circuits whose limit comes from a plugin are left alone and listed.
+Circuit limits changed at runtime are published with their configured values
+in `lmOff.limits`, so the overview shows them.
 
 ## Capacity tariff
 

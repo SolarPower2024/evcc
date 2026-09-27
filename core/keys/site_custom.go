@@ -32,6 +32,7 @@ const (
 	PeakFollow                      = "peakFollow"                // follow the peak, see core/site_peak_follow.go
 	PeakFollowBuffer                = "peakFollowBuffer"
 	PeakFollowBase                  = "peakFollowBase"
+	PeakFollowCircuit               = "peakFollowCircuit"
 	PeakTariff                      = "peakTariff" // capacity tariff, see core/site_peak_tariff.go
 
 	// load management shed priorities
@@ -45,6 +46,9 @@ const (
 
 	// advanced load management settings, see core/site_lm_advanced.go
 	LmAdvanced = "lmAdvanced"
+
+	// load management switched off, see core/site_lm_switch.go
+	LmOff = "lmOff"
 
 	// load management overview: every load's state and the event log, see core/site_lm_status.go
 	LmStatus = "lmStatus"

@@ -83,6 +83,25 @@
 					<span class="input-group-text">kW</span>
 				</div>
 			</FormRow>
+			<FormRow
+				v-if="follow"
+				id="peakFollowCircuit"
+				:label="$t('config.peakshaving.followCircuitLabel')"
+				:help="$t('config.peakshaving.followCircuitHelp')"
+				optional
+			>
+				<select
+					id="peakFollowCircuit"
+					v-model="followCircuit"
+					class="form-select"
+					data-testid="peakshaving-follow-circuit"
+				>
+					<option value="">{{ $t("config.peakshaving.followCircuitNone") }}</option>
+					<option v-for="c in circuitOptions" :key="c.name" :value="c.name">
+						{{ c.title }}
+					</option>
+				</select>
+			</FormRow>
 
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
 				<button
@@ -114,6 +133,7 @@
 <script>
 import GenericModal from "../Helper/GenericModal.vue";
 import FormRow from "./FormRow.vue";
+import formatter from "@/mixins/formatter";
 import store from "@/store";
 import api from "@/api";
 
@@ -123,6 +143,7 @@ import api from "@/api";
 export default {
 	name: "PeakShavingModal",
 	components: { FormRow, GenericModal },
+	mixins: [formatter],
 	emits: ["changed"],
 	data() {
 		return {
@@ -136,6 +157,8 @@ export default {
 			initialFollow: false,
 			buffer: 0.5,
 			initialBuffer: 0.5,
+			followCircuit: "",
+			initialFollowCircuit: "",
 		};
 	},
 	computed: {
@@ -151,12 +174,26 @@ export default {
 		bufferChanged() {
 			return this.buffer !== this.initialBuffer;
 		},
+		followCircuitChanged() {
+			return this.followCircuit !== this.initialFollowCircuit;
+		},
+		// circuits with a power limit, configured or changed at runtime
+		circuitOptions() {
+			const configured = store?.state?.lmOff?.limits || {};
+			return Object.entries(store?.state?.circuits || {})
+				.filter(([name, c]) => c.maxPower > 0 || configured[name] > 0)
+				.map(([name, c]) => ({
+					name,
+					title: `${c.title || name} (${this.fmtW(configured[name] || c.maxPower)})`,
+				}));
+		},
 		changed() {
 			return (
 				this.entityChanged ||
 				this.energyEntityChanged ||
 				this.followChanged ||
-				this.bufferChanged
+				this.bufferChanged ||
+				this.followCircuitChanged
 			);
 		},
 		sourceText() {
@@ -179,6 +216,8 @@ export default {
 			this.initialFollow = this.follow;
 			this.buffer = (follow?.buffer ?? 500) / 1000;
 			this.initialBuffer = this.buffer;
+			this.followCircuit = follow?.circuit || "";
+			this.initialFollowCircuit = this.followCircuit;
 		},
 		open() {
 			this.reset();
@@ -225,6 +264,15 @@ export default {
 
 				if (this.bufferChanged) {
 					await api.post(`peakfollowbuffer/${bufferW}`);
+				}
+				if (this.followCircuitChanged) {
+					if (this.followCircuit) {
+						await api.post(
+							`peakfollowcircuit/${encodeURIComponent(this.followCircuit)}`
+						);
+					} else {
+						await api.delete("peakfollowcircuit");
+					}
 				}
 				if (this.followChanged) {
 					await api.post(`peakfollow/${this.follow}`);

@@ -29,6 +29,10 @@ type CustomAPI interface {
 	SetLmShedGuard(int) error
 	SetLmShedProtected(name string, protected bool) error
 
+	// load management switch, see core/site_lm_switch.go
+	GetLmEnabled() bool
+	SetLmEnabled(bool) error
+
 	// advanced load management settings, see core/site_lm_advanced.go
 	SetLmAdvanced(name string, value float64) error
 
@@ -55,6 +59,8 @@ type CustomAPI interface {
 	SetPeakFollow(bool) error
 	GetPeakFollowBuffer() float64
 	SetPeakFollowBuffer(float64) error
+	GetPeakFollowCircuit() string
+	SetPeakFollowCircuit(string) error
 
 	// capacity tariff, see core/site_peak_tariff.go
 	SetPeakTariff(name string, value float64) error

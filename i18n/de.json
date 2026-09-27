@@ -1021,6 +1021,9 @@
       "followBufferHelp": "So weit bleibt die Grenze unter der Monatsspitze, 0–5 kW. Beispiel 0,5 kW: Spitze 10 kW → Grenze 9,5 kW.",
       "followBufferInvalid": "Der Puffer muss zwischen 0 und 5 kW liegen, in Schritten von 0,1 kW.",
       "followBufferLabel": "Puffer",
+      "followCircuitHelp": "Die Leistungsgrenze dieses Stromkreises steigt mit, nie unter ihren eingestellten Wert. Nur wählen, wenn sie die Peak-Grenze ist, nicht die vereinbarte Anschlussleistung.",
+      "followCircuitLabel": "Stromkreis-Grenze mitziehen",
+      "followCircuitNone": "Keiner",
       "followHelp": "Liegt die höchste Viertelstunde des Monats schon über deiner Peak-Grenze, steigt die Grenze auf diese Spitze minus Puffer. Sie ist ohnehin bezahlt, die Batterie muss darunter nicht kappen. Zum Monatsbeginn gilt wieder deine Grenze.",
       "followLabel": "Follow the Peak: Grenze folgt der Monatsspitze",
       "hint": "Schalter, Peak-Grenze und Reserve stellst du im Reiter Batterie ein.",
@@ -1538,7 +1541,12 @@
   "lmoverview": {
     "battery": "Hausbatterie (Netzladen)",
     "blockedCircuit": "Stromkreis · bis {time}",
+    "circuitFollows": "folgt der Monatsspitze, eingestellt {limit}",
+    "circuitLifted": "Grenze {limit} aufgehoben",
     "description": "Was das Lastmanagement gerade tut.",
+    "disabledHelp": "Aus: Die Leistungsgrenzen der Stromkreise gelten nicht, nichts wird dafür gedrosselt. Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv.",
+    "enabled": "Lastmanagement",
+    "enabledHelp": "Die Leistungsgrenzen der Stromkreise (Peak) drosseln Wallbox, Heizstäbe und Netzladen.",
     "event": {
       "gridChargeDenied": "Netzladen gesperrt · Stromkreis erlaubt {allowed} von {wanted}",
       "gridChargePaused": "Netzladen pausiert · Bedarf {demand} über Peak-Grenze {limit}",
@@ -1557,6 +1565,7 @@
     "overall": {
       "limited": "Begrenzt",
       "normal": "Normal",
+      "off": "Aus",
       "overload": "Überlast"
     },
     "pausedPeak": "Peak · wieder ab {time}",

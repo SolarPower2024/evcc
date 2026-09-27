@@ -42,6 +42,9 @@ func customSiteRoutes(site site.API) map[string]route {
 		"lmshedguard":   {"POST", "/lmshedguard/{value:[0-9]+}", intHandler(site.SetLmShedGuard, site.GetLmShedGuard)},
 		"lmshedprotect": {"POST", "/lmshedprotect/{name:" + namePattern + "}/{value:[01truefalse]+}", lmShedProtectHandler(site)},
 
+		// load management switch, see core/site_lm_switch.go
+		"lmenabled": {"POST", "/lmenabled/{value:[01truefalse]+}", boolHandler(site.SetLmEnabled, site.GetLmEnabled)},
+
 		// advanced load management settings, see core/site_lm_advanced.go
 		"lmadvanced": {"POST", "/lmadvanced/{name:[a-zA-Z]+}/{value:[0-9.]+}", lmAdvancedHandler(site)},
 
@@ -62,6 +65,8 @@ func customSiteRoutes(site site.API) map[string]route {
 		"peakshaving":                   {"POST", "/peakshaving/{value:[01truefalse]+}", boolHandler(site.SetPeakShaving, site.GetPeakShaving)},
 		"peakshavinglimit":              {"POST", "/peakshavinglimit/{value:[0-9.]+}", floatHandler(site.SetPeakShavingLimit, site.GetPeakShavingLimit)},
 		"peakfollow":                    {"POST", "/peakfollow/{value:[01truefalse]+}", boolHandler(site.SetPeakFollow, site.GetPeakFollow)},
+		"peakfollowcircuit":             {"POST", "/peakfollowcircuit/{value:" + namePattern + "}", stringHandler(site.SetPeakFollowCircuit, site.GetPeakFollowCircuit)},
+		"peakfollowcircuitdelete":       {"DELETE", "/peakfollowcircuit", stringHandler(site.SetPeakFollowCircuit, site.GetPeakFollowCircuit)},
 		"peakfollowbuffer":              {"POST", "/peakfollowbuffer/{value:[0-9.]+}", floatHandler(site.SetPeakFollowBuffer, site.GetPeakFollowBuffer)},
 		"peaktariff":                    {"POST", "/peaktariff/{name:[a-zA-Z]+}/{value:[0-9.]+}", peakTariffHandler(site)},
 		"peakshavingreserve":            {"POST", "/peakshavingreserve/{value:[0-9.]+}", floatHandler(site.SetPeakShavingReserve, site.GetPeakShavingReserve)},
