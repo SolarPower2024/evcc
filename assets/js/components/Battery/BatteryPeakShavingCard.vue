@@ -58,6 +58,14 @@
 				{{ windowAvgText }}
 			</span>
 		</div>
+		<div
+			v-if="followOn"
+			class="d-flex justify-content-between mt-1"
+			data-testid="battery-peak-shaving-follow"
+		>
+			<span class="text-muted">{{ $t("battery.peakShaving.follow") }}</span>
+			<span class="fw-bold">{{ fmtW(limit) }}</span>
+		</div>
 		<div v-if="enabled" class="d-flex justify-content-between mt-1">
 			<span class="text-muted">{{ allowedLabel }}</span>
 			<span class="fw-bold" data-testid="battery-peak-shaving-allowed">
@@ -73,7 +81,8 @@
 
 <script lang="ts">
 import "@h2d2/shopicons/es/regular/lightning";
-import { defineComponent } from "vue";
+import { defineComponent, type PropType } from "vue";
+import type { PeakFollow } from "@/types/evcc";
 import formatter from "@/mixins/formatter";
 import api from "@/api";
 import Card from "../Helper/Card.vue";
@@ -108,6 +117,8 @@ export default defineComponent({
 		// legitimately equal the free-discharge value
 		shaving: Boolean,
 		entity: { type: String, default: "" },
+		// follow the peak: { enabled, buffer, base }, see core/site_peak_follow.go
+		follow: { type: Object as PropType<PeakFollow>, default: undefined },
 	},
 	data() {
 		return {
@@ -122,6 +133,13 @@ export default defineComponent({
 			return this.$t(
 				this.shaving ? "battery.peakShaving.shaving" : "battery.peakShaving.normal"
 			);
+		},
+		followOn(): boolean {
+			return !!this.follow?.enabled;
+		},
+		// the limit set by hand: the base while following the peak
+		handLimit(): number {
+			return this.followOn && this.follow?.base ? this.follow.base : this.limit;
 		},
 		overLimit(): boolean {
 			return this.windowAvg > this.limit;
@@ -157,10 +175,16 @@ export default defineComponent({
 	},
 	watch: {
 		limit: {
-			handler(v) {
-				this.selectedLimit = v;
+			handler() {
+				this.selectedLimit = this.handLimit;
 			},
 			immediate: true,
+		},
+		follow: {
+			handler() {
+				this.selectedLimit = this.handLimit;
+			},
+			deep: true,
 		},
 		reserve: {
 			handler(v) {

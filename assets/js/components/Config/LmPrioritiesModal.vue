@@ -14,23 +14,25 @@
 		</p>
 
 		<form ref="form" class="container mx-0 px-0" @submit.prevent="save">
-			<FormRow
-				v-for="load in loads"
-				:id="rowId(load.name)"
-				:key="load.name"
-				:label="load.label"
-			>
-				<select
-					:id="rowId(load.name)"
-					v-model.number="values[load.name]"
-					class="form-select"
-					:data-testid="`lmpriority-${load.name}`"
+			<!-- custom: order by drag, top = highest, see utils/lmPriorityOrder.ts -->
+			<DragDropList v-if="loads.length" :key="listKey" :values="order" @reorder="reorder">
+				<DragDropItem
+					v-for="name in order"
+					:key="name"
+					:title="label(name)"
+					:data-testid="`lmpriority-${name}`"
 				>
-					<option v-for="o in options" :key="o.value" :value="o.value">
-						{{ o.name }}
-					</option>
-				</select>
-			</FormRow>
+					{{ label(name) }}
+					<template #actions>
+						<span class="evcc-gray small text-nowrap" data-testid="lmpriority-value">
+							{{ $t("config.lmpriorities.value", { priority: values[name] }) }}
+						</span>
+					</template>
+				</DragDropItem>
+			</DragDropList>
+			<p v-if="loads.length > 1" class="small evcc-gray mb-0">
+				{{ $t("config.lmpriorities.orderHint") }}
+			</p>
 
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
 				<button
@@ -61,18 +63,18 @@
 
 <script>
 import GenericModal from "../Helper/GenericModal.vue";
-import FormRow from "./FormRow.vue";
+import DragDropList from "@/components/Helper/DragDropList.vue";
+import DragDropItem from "@/components/Helper/DragDropItem.vue";
 import store from "@/store";
 import api from "@/api";
-
-const MAX_PRIORITY = 10;
+import { orderPriorities } from "@/utils/lmPriorityOrder";
 
 // Shed priorities of all loads in load management: the loadpoints on a circuit
-// and the home battery once it is assigned to one. Lower is shed first. Unlike
-// the loadpoints' own settings, these take effect immediately.
+// and the home battery once it is assigned to one. Sorted by drag, the lowest is
+// shed first. Unlike the loadpoints' own settings, these take effect immediately.
 export default {
 	name: "LmPrioritiesModal",
-	components: { FormRow, GenericModal },
+	components: { DragDropList, DragDropItem, GenericModal },
 	emits: ["changed"],
 	data() {
 		return {
@@ -80,6 +82,8 @@ export default {
 			error: "",
 			values: {},
 			initial: {},
+			order: [],
+			listKey: 0,
 		};
 	},
 	computed: {
@@ -90,14 +94,6 @@ export default {
 				label: l.battery ? this.$t("config.lmpriorities.battery") : l.title || l.name,
 			}));
 		},
-		options() {
-			return Array.from({ length: MAX_PRIORITY + 1 }, (_, i) => {
-				let name = `${i}`;
-				if (i === 0) name = this.$t("config.lmpriorities.first", { priority: i });
-				if (i === MAX_PRIORITY) name = this.$t("config.lmpriorities.last", { priority: i });
-				return { value: i, name };
-			});
-		},
 		changed() {
 			return this.loads
 				.map((l) => l.name)
@@ -105,8 +101,8 @@ export default {
 		},
 	},
 	methods: {
-		rowId(name) {
-			return `lmPriority-${name.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+		label(name) {
+			return this.loads.find((l) => l.name === name)?.label || name;
 		},
 		reset() {
 			const values = {};
@@ -115,6 +111,17 @@ export default {
 			this.error = "";
 			this.values = { ...values };
 			this.initial = { ...values };
+			// highest first, equal ones as listed
+			this.order = this.loads
+				.map((l, i) => ({ name: l.name, priority: l.priority, i }))
+				.sort((a, b) => b.priority - a.priority || a.i - b.i)
+				.map((l) => l.name);
+			this.listKey++;
+		},
+		// a drag numbers all loads by their new order
+		reorder(order) {
+			this.order = order;
+			this.values = orderPriorities(order);
 		},
 		open() {
 			this.reset();

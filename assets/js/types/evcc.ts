@@ -216,6 +216,38 @@ export interface PeakMonth {
   interventions: number;
 }
 
+export interface PeakFollow {
+  enabled: boolean;
+  /** W below the month's peak. */
+  buffer: number;
+  /** W, the limit set by hand. */
+  base: number;
+}
+
+export interface PeakTariffMonth {
+  /** YYYY-MM */
+  month: string;
+  /** kW billed. */
+  billed: number;
+  /** Capacity cost of the month with the battery. */
+  cost: number;
+  /** The same without the battery. */
+  costWithout: number;
+  /** costWithout - cost, negative when grid charging raised the peak. */
+  saving: number;
+}
+
+export interface PeakTariff {
+  /** Per kW and year up to the threshold, 0 = off. */
+  price: number;
+  threshold: number;
+  priceAbove: number;
+  agreed: number;
+  minShare: number;
+  minimum: number;
+  months: PeakTariffMonth[];
+}
+
 // custom: load management overview, see core/site_lm_status.go
 export interface LmLoadStatus {
   name: string;
@@ -247,29 +279,6 @@ export interface LmStatus {
   loads: LmLoadStatus[];
   /** Newest first. */
   events: LmEvent[];
-}
-
-// custom: a finalized feed-in month, see core/site_feedin.go
-export interface FeedInMonth {
-  /** YYYY-MM. */
-  month: string;
-  /** Market price in EUR/kWh, 0 = unknown. */
-  market: number;
-  /** Feed-in rate applied in EUR/kWh, with charges and tax. */
-  price: number;
-  slots: number;
-  sessions: number;
-  skipped: number;
-  at: string;
-  manual?: boolean;
-}
-
-export interface FeedInFinal {
-  finalizeDay: number;
-  /** Latest published market price in EUR/kWh, 0 = none yet. */
-  market: number;
-  /** Newest first. */
-  months: FeedInMonth[];
 }
 
 /**
@@ -452,6 +461,18 @@ export interface State {
   peakShavingEnergyEntity?: string;
   /** Monthly peak statistics, newest first. */
   peakMonths?: PeakMonth[];
+  /** Follow the peak: the limit rises to the month's peak minus the buffer (W), base = limit set by hand. */
+  peakFollow?: PeakFollow;
+  /** Load management switch: off lifts the circuits' power limits; limits = configured values of changed circuits. */
+  /** circuit: the load management (peak) circuit, empty = all */
+  lmOff?: {
+    enabled: boolean;
+    limits: Record<string, number>;
+    dynamic: string[];
+    circuit: string;
+  };
+  /** Capacity tariff with each month's cost with and without the battery, a zero price is off. */
+  peakTariff?: PeakTariff;
   /** Home Assistant number entity receiving the grid charge power, empty = on/off charging. */
   peakShavingChargeEntity?: string;
   /** Grid charge power in W currently written to that entity, 0 = not charging. */
@@ -464,8 +485,6 @@ export interface State {
   lmShedProtected?: string[];
   /** Advanced load management settings in effect. */
   lmAdvanced?: LmAdvanced;
-  /** OeMAG finalization: finalize day, published market price and finalized months. */
-  feedInFinal?: FeedInFinal;
   /** Home Assistant counter of the export under the second feed-in tariff (EEG), empty = off. */
   feedInEegEntity?: string;
   /** Current price of the second feed-in tariff. */

@@ -451,7 +451,7 @@ func (site *Site) optimizerRequest(battery []types.Measurement) (optimizer.Optim
 	solarTariff := site.GetTariff(api.TariffUsageSolar)
 	solar := currentRates(solarTariff)
 
-	grid := currentRates(site.GetTariff(api.TariffUsageGrid))
+	grid := currentRates(site.optimizerGridTariff()) // custom: planner price, see core/site_optimizer_lm.go
 	feedIn := currentRates(site.GetTariff(api.TariffUsageFeedIn))
 
 	minLen := lo.Min([]int{len(grid), len(feedIn)})

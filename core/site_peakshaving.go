@@ -94,6 +94,13 @@ type peakState struct {
 
 	set func(float64) error // resolved from config
 
+	// follow the peak, see site_peak_follow.go
+	follow       bool
+	followBuffer float64 // W below the month's peak
+	followBase   float64 // W, the limit set by hand
+
+	tariff peakTariff // capacity tariff, see site_peak_tariff.go
+
 	// grid charge power control: the battery charges at a power evcc writes to
 	// this entity, sized to stay below the peak limit and within the circuit
 	chargeEntity   string
@@ -196,6 +203,8 @@ func (site *Site) restorePeakSettings() {
 	}
 
 	site.restorePeakMonths()
+	site.restorePeakFollow()
+	site.restorePeakTariff()
 	site.publishPeakSettings()
 	site.publishLmPriorities()
 }
@@ -414,6 +423,8 @@ func (site *Site) updatePeakShaving(state siteState) {
 	defer site.savePeakMonths()
 
 	site.updatePeakWindow(state.gridPower, state.battery.Power)
+	site.updatePeakFollow()
+	site.applyCircuitLimits() // load management switch and follow circuit, see site_lm_switch.go
 
 	s.mu.Lock()
 	enabled, limit, reserve, set, allowed := s.enabled, s.limit, s.reserve, s.set, s.allowed
@@ -883,6 +894,7 @@ func (site *Site) SetPeakShaving(val bool) error {
 	if changed {
 		settings.SetBool(keys.PeakShaving, val)
 		site.publish(keys.PeakShaving, val)
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 
 		// hand control back when switching off
 		if !val {
@@ -1147,6 +1159,11 @@ func (site *Site) SetPeakShavingLimit(limit float64) error {
 		return fmt.Errorf("peak limit must be a multiple of %.0fW", peakLimitStep)
 	}
 
+	// following the peak: the limit set by hand is the base
+	if site.peakFollowSetBase(limit) {
+		return nil
+	}
+
 	s := site.peak()
 
 	s.mu.Lock()
@@ -1158,6 +1175,7 @@ func (site *Site) SetPeakShavingLimit(limit float64) error {
 		site.log.DEBUG.Println("set peak shaving limit:", limit)
 		settings.SetFloat(keys.PeakShavingLimit, limit)
 		site.publish(keys.PeakShavingLimit, limit)
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 	}
 
 	return nil
@@ -1188,6 +1206,7 @@ func (site *Site) SetPeakShavingReserve(soc float64) error {
 		site.log.DEBUG.Println("set peak shaving reserve:", soc)
 		settings.SetFloat(keys.PeakShavingReserve, soc)
 		site.publish(keys.PeakShavingReserve, soc)
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 	}
 
 	return nil

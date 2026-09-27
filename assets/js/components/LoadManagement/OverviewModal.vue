@@ -9,6 +9,27 @@
 		@closed="visible = false"
 	>
 		<div v-if="visible">
+			<!-- custom: switch load management off, see core/site_lm_switch.go -->
+			<div class="form-check form-switch mb-1">
+				<input
+					id="lmEnabled"
+					:checked="lmEnabled"
+					class="form-check-input"
+					type="checkbox"
+					role="switch"
+					data-testid="lm-enabled"
+					:disabled="switching"
+					@change="changeEnabled"
+				/>
+				<label class="form-check-label" for="lmEnabled">
+					{{ $t("lmoverview.enabled") }}
+				</label>
+			</div>
+			<p class="small evcc-gray mb-3" data-testid="lm-enabled-help">
+				{{ enabledHelp }}
+			</p>
+			<p v-if="switchError" class="text-danger small">{{ switchError }}</p>
+
 			<div class="d-flex justify-content-between align-items-center mb-3">
 				<p class="text-gray my-0">{{ $t("lmoverview.description") }}</p>
 				<span class="pill ms-3 flex-shrink-0" :class="overall.class">{{
@@ -21,7 +42,11 @@
 					<div class="tile-label">{{ c.title }}</div>
 					<div class="tile-value">
 						{{ fmtW(c.power, POWER_UNIT.KW, false) }}
-						<span class="tile-unit">/ {{ fmtW(c.maxPower) }}</span>
+						<span v-if="c.lifted" class="tile-unit">kW</span>
+						<span v-else class="tile-unit">/ {{ fmtW(c.maxPower) }}</span>
+					</div>
+					<div v-if="c.note" class="tile-sub" data-testid="lm-circuit-note">
+						{{ c.note }}
 					</div>
 					<div class="bar">
 						<div
@@ -57,23 +82,22 @@
 				<table class="table table-sm align-middle mb-0">
 					<tbody>
 						<tr v-for="l in loads" :key="l.name" :data-testid="`lm-load-${l.name}`">
-							<td class="text-nowrap">
-								{{ l.battery ? $t("lmoverview.battery") : l.title || l.name }}
-								<shopicon-regular-lock
-									v-if="l.protected"
-									size="s"
-									class="evcc-gray lock"
-									:title="$t('lmoverview.protected')"
-								></shopicon-regular-lock>
-								<span
-									v-if="l.optimizer"
-									class="badge rounded-pill text-bg-light ms-1"
-									:title="$t('lmoverview.optimizerHint')"
-									>{{ $t("lmoverview.optimizer") }}</span
-								>
-							</td>
-							<td class="evcc-gray text-nowrap">
-								{{ $t("lmoverview.priority", { priority: l.priority }) }}
+							<td>
+								<span class="d-inline-flex align-items-center text-nowrap">
+									{{ l.battery ? $t("lmoverview.battery") : l.title || l.name }}
+									<shopicon-regular-lock
+										v-if="l.protected"
+										size="s"
+										class="evcc-gray lock"
+										:title="$t('lmoverview.protected')"
+									></shopicon-regular-lock>
+									<span
+										v-if="l.optimizer"
+										class="badge rounded-pill text-bg-light ms-1"
+										:title="$t('lmoverview.optimizerHint')"
+										>{{ $t("lmoverview.optimizer") }}</span
+									>
+								</span>
 							</td>
 							<td class="text-end text-nowrap">{{ fmtW(l.power) }}</td>
 							<td class="text-end">
@@ -104,6 +128,7 @@ import "@h2d2/shopicons/es/regular/lock";
 import GenericModal from "../Helper/GenericModal.vue";
 import formatter from "@/mixins/formatter";
 import store from "@/store";
+import api from "@/api";
 
 // Custom extension: what load management is doing right now, see
 // core/site_lm_status.go. Opened from the more menu, like the vehicle settings.
@@ -112,7 +137,7 @@ export default {
 	components: { GenericModal },
 	mixins: [formatter],
 	data() {
-		return { visible: false };
+		return { visible: false, switching: false, switchError: "" };
 	},
 	computed: {
 		state() {
@@ -121,19 +146,54 @@ export default {
 		status() {
 			return this.state?.lmStatus;
 		},
+		lmEnabled() {
+			return this.state?.lmOff?.enabled ?? true;
+		},
+		// the load management (peak) circuit, chosen under Erweitert, empty = all
+		lmCircuit() {
+			const name = this.state?.lmOff?.circuit;
+			return name && this.state?.circuits?.[name] ? name : "";
+		},
+		enabledHelp() {
+			const c = this.lmCircuit;
+			const circuit = c ? this.state.circuits[c].title || c : "";
+			if (this.lmEnabled) {
+				return circuit
+					? this.$t("lmoverview.enabledHelpCircuit", { circuit })
+					: this.$t("lmoverview.enabledHelp");
+			}
+			return circuit
+				? this.$t("lmoverview.disabledHelpCircuit", { circuit })
+				: this.$t("lmoverview.disabledHelp");
+		},
 		circuits() {
+			// configured limits of circuits changed at runtime (switched off, following the peak)
+			const configured = this.state?.lmOff?.limits || {};
 			return Object.entries(this.state?.circuits || {})
-				.filter(([, c]) => c.maxPower > 0)
+				.filter(([name]) => !this.lmCircuit || name === this.lmCircuit)
+				.filter(([name, c]) => c.maxPower > 0 || configured[name] > 0)
 				.map(([name, c]) => {
-					const ratio = c.power / c.maxPower;
-					let barClass = "bg-success";
-					if (ratio > 1) barClass = "bg-danger";
-					else if (ratio >= 0.9) barClass = "bg-warning";
+					const lifted = !(c.maxPower > 0);
+					const limit = lifted ? configured[name] : c.maxPower;
+					const ratio = c.power / limit;
+					let barClass = lifted ? "bg-secondary" : "bg-success";
+					if (!lifted && ratio > 1) barClass = "bg-danger";
+					else if (!lifted && ratio >= 0.9) barClass = "bg-warning";
+					let note = "";
+					if (lifted) {
+						note = this.$t("lmoverview.circuitLifted", { limit: this.fmtW(limit) });
+					} else if (configured[name] > 0 && configured[name] !== c.maxPower) {
+						note = this.$t("lmoverview.circuitFollows", {
+							limit: this.fmtW(configured[name]),
+						});
+					}
 					return {
 						name,
 						title: c.title || name,
 						power: c.power || 0,
-						maxPower: c.maxPower,
+						maxPower: limit,
+						lifted,
+						note,
 						percent: Math.min(100, Math.round(ratio * 100)),
 						barClass,
 					};
@@ -194,7 +254,10 @@ export default {
 			return { value: this.$t("lmoverview.state.off"), sub: "" };
 		},
 		overall() {
-			if (this.circuits.some((c) => c.power > c.maxPower)) {
+			if (!this.lmEnabled) {
+				return { text: this.$t("lmoverview.overall.off"), class: "pill-muted" };
+			}
+			if (this.circuits.some((c) => !c.lifted && c.power > c.maxPower)) {
 				return { text: this.$t("lmoverview.overall.overload"), class: "pill-danger" };
 			}
 			const limited = ["throttled", "shed", "waiting", "paused"];
@@ -208,6 +271,18 @@ export default {
 		},
 	},
 	methods: {
+		async changeEnabled(e) {
+			const target = e.target;
+			this.switching = true;
+			this.switchError = "";
+			try {
+				await api.post(`lmenabled/${target.checked}`);
+			} catch (err) {
+				target.checked = this.lmEnabled;
+				this.switchError = err?.response?.data?.error || err.message;
+			}
+			this.switching = false;
+		},
 		until(l) {
 			return l.until ? this.fmtHourMinute(new Date(l.until)) : "–";
 		},
