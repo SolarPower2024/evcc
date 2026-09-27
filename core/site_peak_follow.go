@@ -103,6 +103,7 @@ func (site *Site) updatePeakFollow() {
 
 	settings.SetFloat(keys.PeakShavingLimit, limit)
 	site.publish(keys.PeakShavingLimit, limit)
+	site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 }
 
 // peakFollowSetBase takes a limit set by hand as the base while following,
@@ -170,6 +171,7 @@ func (site *Site) SetPeakFollow(val bool) error {
 			site.log.INFO.Printf("follow the peak: off, limit back to %.1f kW", base/1e3)
 			settings.SetFloat(keys.PeakShavingLimit, base)
 			site.publish(keys.PeakShavingLimit, base)
+			site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 		}
 	}
 

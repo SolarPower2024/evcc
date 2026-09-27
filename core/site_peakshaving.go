@@ -886,6 +886,7 @@ func (site *Site) SetPeakShaving(val bool) error {
 	if changed {
 		settings.SetBool(keys.PeakShaving, val)
 		site.publish(keys.PeakShaving, val)
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 
 		// hand control back when switching off
 		if !val {
@@ -1166,6 +1167,7 @@ func (site *Site) SetPeakShavingLimit(limit float64) error {
 		site.log.DEBUG.Println("set peak shaving limit:", limit)
 		settings.SetFloat(keys.PeakShavingLimit, limit)
 		site.publish(keys.PeakShavingLimit, limit)
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 	}
 
 	return nil
@@ -1196,6 +1198,7 @@ func (site *Site) SetPeakShavingReserve(soc float64) error {
 		site.log.DEBUG.Println("set peak shaving reserve:", soc)
 		settings.SetFloat(keys.PeakShavingReserve, soc)
 		site.publish(keys.PeakShavingReserve, soc)
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 	}
 
 	return nil

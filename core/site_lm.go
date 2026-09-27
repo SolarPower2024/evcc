@@ -532,6 +532,7 @@ func (site *Site) SetBatterySocGridCharge(val bool) error {
 	if changed {
 		settings.SetBool(keys.BatterySocGridCharge, val)
 		site.publish(keys.BatterySocGridCharge, val)
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 	}
 
 	return nil
@@ -573,6 +574,7 @@ func (site *Site) SetBatterySocGridChargeStart(soc float64) error {
 		site.log.DEBUG.Println("set battery soc grid charge start:", soc)
 		settings.SetFloat(keys.BatterySocGridChargeStart, soc)
 		site.publish(keys.BatterySocGridChargeStart, soc)
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 	}
 
 	return nil
@@ -614,6 +616,7 @@ func (site *Site) SetBatterySocGridChargeStop(soc float64) error {
 		site.log.DEBUG.Println("set battery soc grid charge stop:", soc)
 		settings.SetFloat(keys.BatterySocGridChargeStop, soc)
 		site.publish(keys.BatterySocGridChargeStop, soc)
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 	}
 
 	return nil

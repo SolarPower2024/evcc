@@ -145,6 +145,7 @@ func (site *Site) applyCircuitLimits() {
 	if changed {
 		site.publish(keys.LmOff, res)
 		site.publishCircuits()
+		site.Optimize() // custom: the optimizer's import limit may change, see core/site_optimizer_lm.go
 	}
 }
 
