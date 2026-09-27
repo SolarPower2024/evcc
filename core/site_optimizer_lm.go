@@ -23,6 +23,7 @@ package core
 // unchanged.
 
 import (
+	"cmp"
 	"time"
 
 	"github.com/evcc-io/evcc/api"
@@ -82,6 +83,11 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 	lmActive := len(config.Circuits().Devices()) > 0
 	peakOn, limit, reserve := site.peakShavingConfigured()
 
+	s := site.lms()
+	s.mu.Lock()
+	s.floorRaised = false
+	s.mu.Unlock()
+
 	if peakOn && limit > 0 && (req.Grid.PMaxImp == 0 || float32(limit) < req.Grid.PMaxImp) {
 		req.Grid.PMaxImp = float32(limit)
 	}
@@ -92,7 +98,7 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 		switch b.detail.Type {
 		case batteryTypeBattery:
 			site.applyBatteryIdent(&b.cfg, &b.detail)
-			site.applyLmBatteryInputs(&b.cfg, req.TimeSeries.Dt, peakOn, reserve)
+			site.applyLmBatteryInputs(&b.cfg, req, peakOn, reserve)
 
 			if lmActive && site.lmBatteryCircuit() != nil {
 				b.cfg.CPriority = optimizerPriority(lm.Priority(site.lmBattery()))
@@ -130,9 +136,15 @@ func circuitPower(c api.Circuit) float64 {
 }
 
 // applyLmBatteryInputs sets the home battery's minimum soc and grid charge goal
-func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, dt []int, peakOn bool, reserve float64) {
+func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimizer.OptimizationInput, peakOn bool, reserve float64) {
 	if bat.SCapacity <= 0 {
 		return
+	}
+
+	dt := req.TimeSeries.Dt
+	top := bat.SMax
+	if top <= 0 {
+		top = bat.SCapacity
 	}
 
 	wh := func(soc float64) float32 { return bat.SCapacity * float32(soc) / 100 }
@@ -155,12 +167,14 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, dt []int, p
 	if socOn && bat.ChargeFromGrid {
 		floor = max(floor, wh(start))
 
-		if goal := wh(stop); running && goal > bat.SInitial {
+		// the stop soc within the window from each time charging starts: now
+		// while it runs, else where the battery is expected to fall to the start soc
+		goal := min(wh(stop), top)
+		for _, i := range socChargeGoals(*bat, req, running, wh(start), goal, site.gridChargeWindow()) {
 			if len(bat.SGoal) != len(dt) {
 				bat.SGoal = make([]float32, len(dt))
 			}
-			i := slotAfter(dt, site.gridChargeWindow())
-			bat.SGoal[i] = max(bat.SGoal[i], min(goal, bat.SMax))
+			bat.SGoal[i] = max(bat.SGoal[i], goal)
 		}
 	}
 
@@ -180,14 +194,79 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, dt []int, p
 				bat.SGoal = make([]float32, len(dt))
 			}
 			i := slotAfter(dt, max(d, 0))
-			bat.SGoal[i] = max(bat.SGoal[i], min(goal, bat.SMax))
+			bat.SGoal[i] = max(bat.SGoal[i], min(goal, top))
 		}
 	}
 
 	// never above the current soc, the optimizer cannot start below its minimum
 	if floor = min(floor, bat.SInitial); floor > bat.SMin {
 		bat.SMin = floor
+
+		s.mu.Lock()
+		s.floorRaised = true
+		s.mu.Unlock()
 	}
+}
+
+// lmForecastLowest keeps the forecast from calling the battery empty when it
+// only reaches the floor set here (reserve, start soc), see
+// batteryForecastSocExtremes
+func (site *Site) lmForecastLowest(low *batteryForecastSlot) *batteryForecastSlot {
+	s := site.lms()
+
+	s.mu.Lock()
+	raised := s.floorRaised
+	s.mu.Unlock()
+
+	if low != nil && low.limit && raised {
+		low.limit = false
+	}
+	return low
+}
+
+// socChargeGoals returns the slots by which soc-based grid charging reaches
+// its stop soc. Charging starts right away while running, else where the
+// battery, covering the home demand the solar forecast leaves and storing its
+// surplus, falls to the start soc; after reaching the stop soc it may fall
+// again. The optimizer itself cannot foresee this switching.
+func socChargeGoals(bat optimizer.BatteryConfig, req *optimizer.OptimizationInput, running bool, start, stop float32, window time.Duration) []int {
+	ts := req.TimeSeries
+	if stop <= start || len(ts.Dt) == 0 {
+		return nil
+	}
+
+	top := bat.SMax
+	if top <= 0 {
+		top = bat.SCapacity
+	}
+	etaC, etaD := cmp.Or(req.EtaC, 1), cmp.Or(req.EtaD, 1)
+
+	var res []int
+	e := bat.SInitial
+	for i := 0; i < len(ts.Dt); i++ {
+		if running || e <= start {
+			running = false
+			g := i + slotAfter(ts.Dt[i:], window)
+			if e < stop {
+				res = append(res, g)
+			}
+			e = max(e, stop)
+			i = g
+			continue
+		}
+
+		if i >= len(ts.Gt) || i >= len(ts.Ft) {
+			break
+		}
+		h := float32(ts.Dt[i]) / 3600
+		if net := ts.Gt[i] - ts.Ft[i]; net > 0 {
+			e -= min(net, bat.DMax*h) / etaD
+		} else {
+			e = min(top, e+min(-net, bat.CMax*h)*etaC)
+		}
+	}
+
+	return res
 }
 
 // slotAfter returns the index of the time step in which d has passed

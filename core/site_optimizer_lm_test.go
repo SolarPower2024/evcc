@@ -270,3 +270,58 @@ func TestLmOptimizerGridTariff(t *testing.T) {
 
 	assert.Nil(t, (&Site{}).optimizerGridTariff())
 }
+
+// Soc-based grid charging is planned where the battery is expected to fall
+// to the start soc, and again after each charge.
+func TestSocChargeGoals(t *testing.T) {
+	const capacity = 10000
+	night := func(n int, demand, pv float32) *optimizer.OptimizationInput {
+		req := &optimizer.OptimizationInput{EtaC: 0.9, EtaD: 0.9}
+		for range n {
+			req.TimeSeries.Dt = append(req.TimeSeries.Dt, 900)
+			req.TimeSeries.Gt = append(req.TimeSeries.Gt, demand)
+			req.TimeSeries.Ft = append(req.TimeSeries.Ft, pv)
+		}
+		return req
+	}
+	bat := optimizer.BatteryConfig{SCapacity: capacity, SMax: capacity, SInitial: 9000, CMax: 5000, DMax: 5000}
+	window := 3 * time.Hour
+
+	// 250 Wh per slot out of the battery (225 Wh demand at 0.9): 9000 -> 2500
+	// after 26 slots, the stop soc 3 h (12 slots) later; 4000 -> 2500 takes 6
+	req := night(96, 225, 0)
+	goals := socChargeGoals(bat, req, false, 2500, 4000, window)
+	require.GreaterOrEqual(t, len(goals), 2)
+	assert.Equal(t, 26+11, goals[0], "start soc reached, stop soc 3 h later")
+	assert.Equal(t, goals[0]+1+6+11, goals[1], "falls again after the charge")
+
+	// running: within the window from now
+	low := bat
+	low.SInitial = 3000
+	goals = socChargeGoals(low, req, true, 2500, 4000, window)
+	require.NotEmpty(t, goals)
+	assert.Equal(t, 11, goals[0])
+
+	// running above the stop soc: nothing to charge now
+	high := bat
+	high.SInitial = 9900
+	assert.Empty(t, socChargeGoals(high, night(8, 225, 0), true, 2500, 4000, window))
+
+	// pv covers the demand: never falls to the start soc
+	assert.Empty(t, socChargeGoals(bat, night(96, 180, 500), false, 2500, 4000, window))
+
+	// invalid range
+	assert.Empty(t, socChargeGoals(bat, req, false, 4000, 4000, window))
+}
+
+// The forecast does not call the battery empty at a floor set by the fork.
+func TestLmForecastLowest(t *testing.T) {
+	site := &Site{log: util.NewLogger("test")}
+	low := &batteryForecastSlot{soc: 25, limit: true}
+
+	assert.True(t, site.lmForecastLowest(low).limit, "without a raised floor it is empty")
+
+	site.lms().floorRaised = true
+	assert.False(t, site.lmForecastLowest(low).limit)
+	assert.Nil(t, site.lmForecastLowest(nil))
+}

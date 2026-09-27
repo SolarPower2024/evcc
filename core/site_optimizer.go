@@ -804,6 +804,7 @@ func (site *Site) addBatteryForecastTotals(req []optimizer.BatteryConfig, resp [
 	}
 
 	high, low := batteryForecastSocExtremes(req, resp, schedule, now)
+	low = site.lmForecastLowest(low) // custom: a floor of the fork is not empty, see core/site_optimizer_lm.go
 	if high == nil && low == nil {
 		return nil
 	}

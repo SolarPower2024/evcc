@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
 	optimizer "github.com/evcc-io/optimizer/client"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -314,6 +316,27 @@ func TestLmOptimizerScenarios(t *testing.T) {
 		}
 	})
 
+	// not yet running: the battery falls to the start soc and is charged to the
+	// stop soc again, the forecast shows it (the plan must not stay at the start soc)
+	t.Run("grid charging planned ahead", func(t *testing.T) {
+		day := winter
+		day.demand = 1100
+		day.price = flat(0.25) // planner price that lets the battery discharge
+		for _, soc := range []float64{40, 97} {
+			t.Run(ftoa(soc), func(t *testing.T) {
+				r := run(t, day, soc, installation, opts{})
+				goals := lo.Filter(r.req.Batteries[0].SGoal, func(g float32, _ int) bool { return g > 0 })
+				require.NotEmpty(t, goals, "stop soc planned")
+
+				// where the plan reaches the start soc it comes back to the stop soc
+				s := r.soc(0)
+				if first := slices.IndexFunc(s, func(v float32) bool { return pct(v) <= 26 }); first >= 0 && first < len(s)-16 {
+					assert.True(t, slices.ContainsFunc(s[first:], func(v float32) bool { return pct(v) >= 39 }), "charged to the stop soc again")
+				}
+			})
+		}
+	})
+
 	// the limit leaves no room for grid charging: the limit wins
 	t.Run("grid charging against a tight limit", func(t *testing.T) {
 		set := installation
@@ -402,20 +425,16 @@ func TestLmOptimizerScenarios(t *testing.T) {
 		set.running = true
 		set.once = gridChargeOnce{Target: 90, Until: time.Now().Add(12 * time.Hour)}
 		r := run(t, winter, 20, set, opts{})
-		goals := 0
-		for _, g := range r.req.Batteries[0].SGoal {
-			if g > 0 {
-				goals++
-			}
-		}
-		assert.Equal(t, 2, goals)
+		goals := lo.Filter(r.req.Batteries[0].SGoal, func(g float32, _ int) bool { return g > 0 })
+		assert.Contains(t, goals, float32(scenarioCapacity*0.9), "one-time target")
+		assert.Contains(t, goals, float32(scenarioCapacity*0.4), "stop soc")
 	})
 
 	t.Run("once below the soc", func(t *testing.T) {
 		set := installation
 		set.once = gridChargeOnce{Target: 50}
 		r := run(t, winter, 60, set, opts{})
-		assert.Nil(t, r.req.Batteries[0].SGoal)
+		assert.NotContains(t, r.req.Batteries[0].SGoal, float32(scenarioCapacity*0.5), "no one-time target")
 	})
 
 	// negative prices: the battery charges from the grid in them, within the limit

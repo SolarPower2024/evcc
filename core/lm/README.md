@@ -338,10 +338,14 @@ settings as inputs, so the plan matches what the fork will actually do, see
 
 - peak shaving: peak limit as hard grid import limit (`p_max_imp`), reserve
   as the home battery's minimum soc (`s_min`)
-- soc-based grid charging: start soc as minimum soc, so the charging is
-  planned ahead before the battery would fall below it; while it runs the
-  stop soc as goal (`s_goal`) within the grid charge window (*Erweitert →
-  Netzlade-Ziel erreichen in*, default 3 h)
+- soc-based grid charging: start soc as minimum soc; the stop soc as goal
+  (`s_goal`) within the grid charge window (*Erweitert → Ziel Batterie-Netzladen
+  erreichen in*, default 3 h) from each time charging starts: now while it
+  runs, else where a simple forecast of the battery (home demand minus solar,
+  charge and discharge limits, efficiency) falls to the start soc, again after
+  each charge. The optimizer cannot foresee this switching itself, without the
+  goals its plan stayed at the start soc. A floor raised this way is not shown
+  as "leer" in the battery forecast.
 - one-time grid charging: its target as goal at the chosen time, or right away
   when the charge power (grid charge power, else the battery's maximum) can
   reach it with 90% charging efficiency

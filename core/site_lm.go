@@ -69,6 +69,10 @@ type lmState struct {
 	batteryCircuitRef string         // what batteryCircuit was resolved from
 	batteryLoad       *batteryLoad
 
+	// the optimizer's soc floor was raised above the battery's own minimum,
+	// see site_optimizer_lm.go
+	floorRaised bool
+
 	// battery identification, see site_battery_ident.go
 	identUse bool
 	ident    []batteryIdentResult
