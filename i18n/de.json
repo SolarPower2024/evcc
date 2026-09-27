@@ -558,13 +558,13 @@
     },
     "lmpriorities": {
       "battery": "Hausbatterie (Netzladen)",
-      "description": "Reicht die Leistung nicht, wird die niedrigste Priorität zuerst gedrosselt oder abgeschaltet, bei gleicher zählt, wer zuerst da ist. Bei Ladepunkten ist es ihre normale Priorität, sie gilt auch für PV-Überschuss und Planer. Die Batterie hat einen eigenen Wert.",
+      "description": "Oben der wichtigste Verbraucher. Reicht die Leistung nicht, wird von unten her gedrosselt oder abgeschaltet, bei gleicher Priorität zählt, wer zuerst da ist. Bei Ladepunkten ist es ihre normale Priorität, sie gilt auch für PV-Überschuss und Planer. Die Batterie hat einen eigenen Wert.",
       "entryLabel": "Prioritäten",
-      "first": "{priority} (zuerst abwerfen)",
       "invalid": "Priorität konnte nicht gespeichert werden.",
-      "last": "{priority} (zuletzt abwerfen)",
       "noLoads": "Keine Verbraucher im Lastmanagement. Ladepunkte erscheinen mit zugewiesenem Stromkreis, die Batterie über Batterie-Stromkreis.",
-      "title": "Lastmanagement-Prioritäten"
+      "title": "Lastmanagement-Prioritäten",
+      "orderHint": "Zum Sortieren ziehen. Nur der verschobene Verbraucher bekommt eine neue Priorität, andere nur, wenn kein Platz ist.",
+      "value": "Prio {priority}"
     },
     "lmprofiles": {
       "active": "Aktiv",

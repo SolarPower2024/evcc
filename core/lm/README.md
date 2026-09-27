@@ -19,6 +19,10 @@ every loadpoint on a circuit and for the home battery once it is assigned to
 one. A loadpoint's value there is its regular priority (also editable in the
 loadpoint settings), the battery's is stored in the `lmPriorities` setting,
 with `loadmanagement.battery.priority` in yaml as fallback.
+They are sorted there by drag, top = highest. Only the moved load gets a new
+value, between its new neighbours and closest to its old one; the loads above
+or below move along only without room, keeping their gaps and ties, see
+`assets/js/utils/lmPriorityOrder.ts`.
 
 Earlier the loadpoints had a separate `lmpriority`. Those values (from the ui,
 else a non-zero yaml `lmpriority`) are taken over into the loadpoints'

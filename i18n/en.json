@@ -558,13 +558,13 @@
     },
     "lmpriorities": {
       "battery": "Home battery (grid charging)",
-      "description": "If power runs short, the lowest priority is reduced or switched off first, on equal priority first come first served. For loadpoints this is their regular priority, it also ranks pv surplus and the planner. The battery has a value of its own.",
+      "description": "The most important load on top. If the power is not enough, loads are throttled or switched off from the bottom up; with equal priority, the first to arrive wins. For loadpoints it is their regular priority, which also applies to solar surplus and the planner. The battery has its own value.",
       "entryLabel": "Priorities",
-      "first": "{priority} (shed first)",
       "invalid": "Could not save the priority.",
-      "last": "{priority} (shed last)",
       "noLoads": "No loads in load management. Loadpoints appear once assigned to a circuit, the battery via Battery circuit.",
-      "title": "Load management priorities"
+      "title": "Load management priorities",
+      "orderHint": "Drag to sort. Only the moved load gets a new priority, others only when there is no room.",
+      "value": "Prio {priority}"
     },
     "lmprofiles": {
       "active": "Active",
