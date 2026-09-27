@@ -47,6 +47,13 @@ type lmState struct {
 
 	prios map[string]int // shed priorities set in the ui, by load name
 
+	// load management switched off, see site_lm_switch.go
+	off          bool
+	offLimits    map[string]float64 // lifted power limits by circuit name
+	offDynamic   map[string]bool    // circuits with a plugin limit that stays
+	offPublished bool
+	circuit      string // the load management (peak) circuit, empty = all
+
 	guardMinutes int             // shed guard, see site_lm_guard.go
 	guarded      map[string]bool // loadpoints the shed guard protects, by name
 
@@ -56,9 +63,6 @@ type lmState struct {
 	adv   lmAdvanced
 
 	batteryShedUntil  time.Time      // battery grid charge hold-off after a shed
-	feedInTried       time.Time      // last feed-in finalization attempt, see site_feedin.go
-	feedInOnce        sync.Once      // feed-in history backfilled
-	feedInMarket      *float64       // market price last published
 	gridOnce          gridChargeOnce // one-time grid charging, see site_lm_once.go
 	eeg               feedInEegState // second feed-in tariff, see site_feedin_eeg.go
 	batteryCircuit    api.Circuit    // resolved from the assignment
@@ -113,6 +117,7 @@ func (site *Site) restoreLmSettings() {
 
 	site.restoreLmGuard()
 	site.restoreLmAdvanced()
+	site.restoreLmSwitch()
 	site.publishLmProfiles()
 
 	site.publishLmSettings()
@@ -525,6 +530,7 @@ func (site *Site) SetBatterySocGridCharge(val bool) error {
 	if changed {
 		settings.SetBool(keys.BatterySocGridCharge, val)
 		site.publish(keys.BatterySocGridCharge, val)
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 	}
 
 	return nil
@@ -566,6 +572,7 @@ func (site *Site) SetBatterySocGridChargeStart(soc float64) error {
 		site.log.DEBUG.Println("set battery soc grid charge start:", soc)
 		settings.SetFloat(keys.BatterySocGridChargeStart, soc)
 		site.publish(keys.BatterySocGridChargeStart, soc)
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 	}
 
 	return nil
@@ -607,6 +614,7 @@ func (site *Site) SetBatterySocGridChargeStop(soc float64) error {
 		site.log.DEBUG.Println("set battery soc grid charge stop:", soc)
 		settings.SetFloat(keys.BatterySocGridChargeStop, soc)
 		site.publish(keys.BatterySocGridChargeStop, soc)
+		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 	}
 
 	return nil

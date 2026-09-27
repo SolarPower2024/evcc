@@ -3,7 +3,7 @@ package core
 // Custom extension: export sold under two feed-in tariffs.
 //
 // Part of the export goes to an energy community (EEG) at a fixed price, the
-// rest at the standard feed-in tariff (OeMAG). A Home Assistant energy counter
+// rest at the standard feed-in tariff. A Home Assistant energy counter
 // meters the EEG part. It is recorded like any other meter, per 15 minute slot,
 // by a collector of group "meter", which upstream keeps out of every balance.
 // The standard part is the grid meter's export minus EEG, derived from the

@@ -16,6 +16,8 @@ package core
 //     offered (charge_from_grid off)
 //   - load management: a loadpoint plans with at most its circuits' power, and
 //     the priorities rank the batteries (c_priority)
+//   - a price tariff set as planner tariff is the grid price the optimizer
+//     plans with, statistics keep the grid tariff
 //
 // Without circuits, peak shaving and soc-based grid charging the request is
 // unchanged.
@@ -51,6 +53,28 @@ func optimizerPriority(prio int) int {
 	default:
 		return 0
 	}
+}
+
+// optimizerGridTariff returns the tariff the optimizer plans the grid price
+// with: a price tariff set as planner tariff, else the grid tariff as upstream.
+// Lets a fixed planning price above the real one make discharging pay where the
+// real prices are too close to the feed-in price.
+func (site *Site) optimizerGridTariff() api.Tariff {
+	site.RLock()
+	defer site.RUnlock()
+
+	if site.tariffs == nil {
+		return nil
+	}
+
+	if t := site.tariffs.Planner; t != nil {
+		switch t.Type() {
+		case api.TariffTypePriceStatic, api.TariffTypePriceDynamic, api.TariffTypePriceForecast:
+			return t
+		}
+	}
+
+	return site.tariffs.Get(api.TariffUsageGrid)
 }
 
 // applyLmOptimizerInputs adds the fork's settings to the optimizer request
@@ -146,6 +170,10 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, dt []int, p
 			d := time.Until(o.Until)
 			if o.Until.IsZero() {
 				d = site.onceRequiredDuration(o.Target, float64(bat.SInitial/bat.SCapacity*100))
+				// unknown grid charge power: the battery's maximum charge power
+				if d <= 0 && bat.CMax > 0 {
+					d = time.Duration(float64(goal-bat.SInitial) / (float64(bat.CMax) * eta) * float64(time.Hour))
+				}
 			}
 			if len(bat.SGoal) != len(dt) {
 				bat.SGoal = make([]float32, len(dt))
