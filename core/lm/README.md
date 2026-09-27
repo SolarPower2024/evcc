@@ -19,6 +19,9 @@ every loadpoint on a circuit and for the home battery once it is assigned to
 one. A loadpoint's value there is its regular priority (also editable in the
 loadpoint settings), the battery's is stored in the `lmPriorities` setting,
 with `loadmanagement.battery.priority` in yaml as fallback.
+They are sorted there by drag, top = highest. A drag renumbers all loads by
+their order from the bottom: 0, 1, 2 and so on, at most 10, see
+`assets/js/utils/lmPriorityOrder.ts`.
 
 Earlier the loadpoints had a separate `lmpriority`. Those values (from the ui,
 else a non-zero yaml `lmpriority`) are taken over into the loadpoints'
@@ -111,8 +114,7 @@ Every fork feature follows these, so that taking in a new evcc version stays che
 4. **Contract tests.** Each hook has a test pinning the upstream behaviour it
    relies on, and that the fork is inert while its features are off:
    `TestForkInertWhenUnused`, `TestSetLimitUsesLmCircuit`,
-   `TestEqualPrioritiesAreUpstream`, `TestPeakReserveKeepsExternalMode`,
-   `TestFinalizeFeedIn` (upstream session and metrics models).
+   `TestEqualPrioritiesAreUpstream`, `TestPeakReserveKeepsExternalMode`.
 
 ## Upstream touch points
 
@@ -120,7 +122,8 @@ Keep these in mind when merging a new evcc version:
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateFeedInFinalization`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
+| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
+| `core/circuit/circuit.go` | over power logged via `overPowerLog()` (INFO, no ui notification), see `circuit_custom.go` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
 | `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes |
 | `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
@@ -131,20 +134,19 @@ Keep these in mind when merging a new evcc version:
 | `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
-| `assets/js/views/Config.vue` | load management details section and its modals, OeMAG modal |
+| `assets/js/views/Config.vue` | load management details section and its modals |
 | `assets/js/views/App.vue` | mounts the load management overview and the peak statistics |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | "Lastmanagement" and "Peak Shaving" entries |
-| `assets/js/components/Config/TariffCard.vue` | OeMAG summary in the feed-in card |
+| `assets/js/components/Config/TariffCard.vue` | EEG counter summary in the EEG card |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
 | `assets/js/types/evcc.ts`, `i18n/de.json`, `i18n/en.json` | state fields and texts |
 
-Everything else lives in files of its own: `core/lm/`, `core/site_lm.go`, `core/site_lm_guard.go`,
+Everything else lives in files of its own: `core/lm/`, `core/circuit/circuit_custom.go`, `core/site_lm.go`, `core/site_lm_guard.go`,
 `core/site_lm_advanced.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
 `core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
 `core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
-`core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`,
-`tariff/oemag.go`, `tariff/wrapper_custom.go`, `templates/definition/tariff/oemag.yaml` and the new Vue
-components.
+`core/site/api_custom.go`, `server/http_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`
+and the new Vue components.
 
 ## Shed guard
 
@@ -222,10 +224,60 @@ counts negative), and how often the battery started covering a peak. Only
 quarter hours metered from their start count. Kept for 24 months in
 `peakMonths`, see `core/site_peak_stats.go`.
 
+## Follow the peak
+
+Lastmanagement-Details → Peak Shaving. A capacity tariff bills the month's
+highest quarter hour, so once the month already has a peak above the limit,
+shaving below it saves nothing and only drains the battery. With follow the
+peak on, the limit rises to the month's peak (with the battery) minus a buffer
+(0-5 kW, default 0.5 kW, rounded down to 100 W, at most 20 kW) and never below
+the limit set by hand, the base. A new month starts at the base again. Setting
+the limit by hand, or by a profile, while following sets the base; switching
+off returns to it. See `core/site_peak_follow.go`.
+
+The load management (peak) circuit, when chosen, rises along: it gets the
+raised limit, never less than its configured value, and its configured value
+back with the next month or when following stops. See `core/site_lm_switch.go`.
+
+Open: revisit once circuits are configured in the ui (evcc PR 33077), which may
+set circuit limits at runtime too.
+
+## Load management (peak) circuit
+
+Lastmanagement-Details → Erweitert → *Stromkreis Lastmanagement (Peak)*: the
+circuit whose power limit is the peak, beside a circuit for the fuse or the
+agreed connection power. Chosen, only it is shown under Mehr → Lastmanagement
+(Peak), lifted by the switch and raised by follow the peak; none = all circuits,
+nothing raised. Stored in `lmCircuit`, published as `lmOff.circuit`; lm3/lm4
+chose it as the follow the peak circuit (`peakFollowCircuit`), taken over once.
+
+## Load management switch
+
+Mehr → Lastmanagement (Peak) → *Lastmanagement*. Off lifts the power limit of
+the load management (peak) circuit, without one of all circuits, at runtime (`SetMaxPower(0)`, unlimited), so loadpoints and the
+battery's grid charging are no longer throttled or shed for them; the
+configuration stays unchanged. Current limits (fuses), a HEMS consumption limit
+(§14a) and battery peak shaving keep applying. Switching on restores the
+configured limits (or the raised one of follow the peak). Survives a restart
+(`lmOff`). Circuits whose limit comes from a plugin are left alone and listed.
+Circuit limits changed at runtime are published with their configured values
+in `lmOff.limits`, so the overview shows them.
+
+## Capacity tariff
+
+Lastmanagement-Details → Leistungstarif. The month's highest quarter hour is
+billed per kW and year up to a threshold, at a higher price above it, and at
+least a minimum and a share of the agreed power; a zero price is off. For each
+recorded month the cost with the battery (grid draw) and without it is
+published in `peakTariff` and shown under Mehr → Peak Shaving with the saving,
+negative when grid charging raised the peak. Prefilled with the Austrian draft
+for 2027: 33.82 EUR/kW/year up to 10 kW, double above, at least 20% of the
+agreed power and 2 kW. See `core/site_peak_tariff.go`.
+
 ## Second feed-in tariff (EEG)
 
 Part of the export can go to an energy community (EEG) at a fixed price, the rest
-gets the standard feed-in tariff (OeMAG). Tariff settings: "Einspeisevergütung EEG
+gets the standard feed-in tariff. Tariff settings: "Einspeisevergütung EEG
 hinzufügen" below the feed-in tariff (fixed price, 0 allowed), its card sets the
 Home Assistant counter of the EEG export (kWh, Wh or MWh).
 
@@ -258,11 +310,21 @@ settings as inputs, so the plan matches what the fork will actually do, see
   planned ahead before the battery would fall below it; while it runs the
   stop soc as goal (`s_goal`) within the grid charge window (*Erweitert →
   Netzlade-Ziel erreichen in*, default 3 h)
-- one-time grid charging: its target as goal, right away or at the chosen time
+- one-time grid charging: its target as goal at the chosen time, or right away
+  when the charge power (grid charge power, else the battery's maximum) can
+  reach it with 90% charging efficiency
 - grid charging refused right now (shed hold-off, running peak, unknown charge
   power on a circuit) is not offered (`charge_from_grid`)
 - load management: a loadpoint plans with at most its circuits' power, the
   priorities 0-3/4-6/7-10 become `c_priority` 0/1/2
+- a price tariff set as planner tariff (*Tarife → Planer-Vorhersage*) is the
+  grid price the optimizer plans with (`p_N`); statistics, costs and sessions
+  keep the grid tariff. With real prices close to the feed-in price (10 ct vs
+  9 ct) the optimizer never discharges: evcc's end value keeps stored energy
+  at least the feed-in price / 0.9, so discharging needs a grid price of about
+  1.25 × feed-in. A fixed planning price of 12 ct makes it discharge down to
+  the floor. Note the planner tariff also drives vehicle plans and smart cost
+  limits, so a fixed one would hide a dynamic grid tariff's cheap slots.
 
 Without circuits, peak shaving, soc-based and one-time grid charging the
 request is unchanged. The optimizer's automatic mode (evcc PR 32881, not
@@ -272,6 +334,10 @@ separately on top of these inputs.
 `TestLmOptimizerReplay` sends a recorded request with these inputs to a
 running optimizer (`OPTIMIZER_REPLAY`, `OPTIMIZER_URI`, optional
 `REPLAY_SETTINGS`, `REPLAY_GRID_PRICE`, `REPLAY_SOC`) and checks the plan.
+`TestLmOptimizerScenarios` (`OPTIMIZER_URI` only) solves synthetic days (winter,
+summer, cheap night, negative and low prices, vehicles, horizons up to 408
+steps) and checks: soc never below the minimum, import within the limit or
+reported, energy balance, goals reached, no grid charging while refused.
 
 ## One-time grid charging
 

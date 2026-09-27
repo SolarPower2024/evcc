@@ -57,6 +57,7 @@
 						:allowed="state.peakShavingAllowed ?? 0"
 						:window-end="state.peakShavingWindowEnd ?? ''"
 						:entity="state.peakShavingEntity ?? ''"
+						:follow="state.peakFollow"
 					/>
 
 					<Card

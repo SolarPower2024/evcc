@@ -66,6 +66,7 @@
       "current": "Aktuelle Anforderung",
       "description": "Unter {reserve} deckt die Batterie nur, was das 15-Minuten-Mittel über {limit} heben würde. Darüber normaler Eigenverbrauch.",
       "enable": "Untere Batteriereserve für Lastspitzen zurückhalten.",
+      "follow": "Grenze diesen Monat (Follow the Peak)",
       "free": "unbegrenzt",
       "noEntity": "Keine Zielentität hinterlegt (Konfiguration → Lastmanagement-Details → Peak Shaving).",
       "normal": "Eigenverbrauch, Reserve unberührt",
@@ -357,33 +358,6 @@
       "titleAdd": "Zusätzlichen Zähler hinzufügen",
       "titleEdit": "Zusätzlichen Zähler bearbeiten"
     },
-    "feedinfinal": {
-      "applied": "Angewendet",
-      "counts": "{slots} Werte, {sessions} Ladungen",
-      "countsLabel": "Neu berechnet",
-      "description": "Die OeMAG veröffentlicht den Marktpreis erst im Folgemonat. Am {day}. wird er für den Vormonat übernommen und dessen Einspeise- und Ladepreise (Solaranteil) neu berechnet.",
-      "doneMessage": "{month} wurde neu berechnet.",
-      "edit": "Auswählen",
-      "invalidPrice": "Bitte einen Preis zwischen 0 und 100 ct/kWh eingeben.",
-      "lastLabel": "Endgültig",
-      "market": "Marktpreis",
-      "month": "Monat",
-      "monthsLabel": "Berechnete Monate",
-      "nextLabel": "Nächste Neuberechnung",
-      "none": "Noch kein Monat",
-      "nonePublished": "noch keiner",
-      "priceHelp": "Wie von der OeMAG veröffentlicht. Aufschläge und Steuer aus dem Tarif werden angewendet.",
-      "priceLabel": "Marktpreis",
-      "published": "Zuletzt veröffentlicht:",
-      "recalcHelp": "Etwa bei falschem Wert am Stichtag. Überschreibt die Einspeise- und Ladepreise (Solaranteil) des Monats.",
-      "recalcTitle": "Monat neu berechnen",
-      "recalculate": "Neu berechnen",
-      "show": "Monate anzeigen",
-      "source": "Art",
-      "sourceAuto": "automatisch",
-      "sourceManual": "von Hand",
-      "title": "OeMAG-Abrechnung"
-    },
     "feedineeg": {
       "title": "EEG-Zähler",
       "description": "Home-Assistant-Zähler der Einspeisung in die Energiegemeinschaft. Einspeisevergütung = gesamte Einspeisung minus EEG. Es werden nur Zählerstände ausgewertet, die Regelung bleibt unverändert.",
@@ -465,7 +439,7 @@
       "entityHelp": "Erhält die erlaubte Ladeleistung in W, 0 = nicht laden. Braucht Min 0, Max ≥ Netzladeleistung, Schritt 1. Leer = Ein/Aus.",
       "entityInvalid": "Entität konnte nicht gesetzt werden.",
       "entityLabel": "Entität für die Ladeleistung",
-      "entryLabel": "Netzladen",
+      "entryLabel": "Batterie-Netzladen",
       "setpoint": "Aktuelle Vorgabe:",
       "source": {
         "setting": "hier eingetragen",
@@ -473,7 +447,7 @@
         "meter": "aus der Batteriekonfiguration",
         "unknown": "unbekannt"
       },
-      "title": "Netzladen"
+      "title": "Batterie-Netzladen"
     },
     "hems": {
       "changeConfirm": "Bestehende Konfiguration wird gelöscht. Fortfahren?",
@@ -529,38 +503,41 @@
       "cycles": "Zyklen",
       "description": "Die Standardwerte passen für die meisten Anlagen.",
       "entryLabel": "Erweitert",
-      "followCyclesHelp": "Zieht ein reduzierter Verbraucher bei Überlast so viele Zyklen mehr als erlaubt, wird stattdessen der Nächste in der Prioritätenreihe gedrosselt. 0 = aus. Standard {std}.",
+      "followCyclesHelp": "Zieht ein reduzierter Verbraucher bei Überlast so viele Zyklen mehr als erlaubt, wird stattdessen der Nächste in der Prioritätenreihe gedrosselt. 0 = aus.",
       "followCyclesLabel": "Vorgabe ignoriert nach",
-      "freeValueHelp": "Wird in die Peak-Shaving-Entität geschrieben, solange die Batterie frei entladen darf. Standard {std} W.",
+      "freeValueHelp": "Wird in die Peak-Shaving-Entität geschrieben, solange die Batterie frei entladen darf.",
       "freeValueLabel": "Freigabewert",
-      "holdOffHelp": "So lange bleibt das Netzladen aus, nachdem eine Spitze oder der Stromkreis es gestoppt hat. Standard {std} min.",
-      "holdOffLabel": "Wartezeit nach Netzlade-Abbruch",
-      "hysteresisHelp": "So weit muss der Ladestand über die Reserve steigen, bis sie wieder frei ist. Standard {std} %.",
-      "hysteresisLabel": "Hysterese der Reserve",
+      "holdOffHelp": "So lange bleibt das Batterie-Netzladen aus, nachdem eine Spitze oder der Stromkreis es gestoppt hat.",
+      "holdOffLabel": "Wartezeit nach Abbruch Batterie-Netzladen",
+      "hysteresisHelp": "Unter der Reserve entlädt die Batterie nur noch für Spitzen. Für den Hausverbrauch ist sie erst wieder frei, wenn der Ladestand so weit über der Reserve liegt. Verhindert ständiges Umschalten.",
+      "hysteresisLabel": "Hysterese der Peak-Shaving-Reserve",
       "invalid": "{label}: bitte einen Wert von {min} bis {max} eingeben.",
-      "peakCapHelp": "Höchstens dieses Vielfache der Peak-Grenze erlaubt das 15-Minuten-Budget. Standard {std}.",
-      "peakCapLabel": "Obergrenze erlaubter Netzbezug",
-      "peakFreezeHelp": "Ab dieser Minute der Viertelstunde steigt der erlaubte Netzbezug nicht mehr. Standard {std}.",
-      "peakFreezeLabel": "Budget einfrieren ab Minute",
+      "peakCapHelp": "Das Peak-Shaving-Budget (erlaubter Netzbezug bis Ende der Viertelstunde) steigt höchstens auf dieses Vielfache der Peak-Grenze.",
+      "peakCapLabel": "Obergrenze Peak-Shaving-Budget",
+      "peakFreezeHelp": "Ab dieser Minute der Viertelstunde steigt das Peak-Shaving-Budget (erlaubter Netzbezug bis Ende der Viertelstunde) nicht mehr.",
+      "peakFreezeLabel": "Peak-Shaving-Budget einfrieren ab Minute",
       "phases1": "1 Phase",
       "phases3": "3 Phasen",
       "phasesHelp": "Nur für Stromkreise mit Stromgrenze (A) nötig.",
       "phasesLabel": "Phasen der Batterie",
-      "timeoutHelp": "So lange hält ein wartender Verbraucher höherer Priorität Leistung frei. Standard {std} min.",
+      "timeoutHelp": "So lange hält ein wartender Verbraucher höherer Priorität Leistung frei.",
       "timeoutLabel": "Ablaufzeit der Reservierung",
       "title": "Erweiterte Einstellungen",
-      "gridChargeWindowLabel": "Netzlade-Ziel erreichen in",
-      "gridChargeWindowHelp": "Mit Optimizer: So lange darf er brauchen, um beim Netzladen nach Ladestand den Stopp-Ladestand zu erreichen. Er wählt dafür die günstigste Zeit. Standard {std} h."
+      "gridChargeWindowLabel": "Ziel Batterie-Netzladen erreichen in",
+      "gridChargeWindowHelp": "Nur mit Optimizer: So viel Zeit bekommt er beim Batterie-Netzladen nach Ladestand bis zum Stopp-Ladestand und lädt in den günstigsten Stunden davon. 1 h = sofort.",
+      "circuitLabel": "Stromkreis Lastmanagement (Peak)",
+      "circuitHelp": "Der Stromkreis mit deiner Peak-Grenze, nicht der Absicherung. Nur er erscheint unter Mehr → Lastmanagement (Peak), wird dort mit dem Schalter aufgehoben und steigt bei Follow the Peak mit.",
+      "circuitAll": "Keiner – alle Stromkreise, keiner steigt mit"
     },
     "lmpriorities": {
       "battery": "Hausbatterie (Netzladen)",
-      "description": "Reicht die Leistung nicht, wird die niedrigste Priorität zuerst gedrosselt oder abgeschaltet, bei gleicher zählt, wer zuerst da ist. Bei Ladepunkten ist es ihre normale Priorität, sie gilt auch für PV-Überschuss und Planer. Die Batterie hat einen eigenen Wert.",
+      "description": "Oben der wichtigste Verbraucher. Reicht die Leistung nicht, wird von unten her gedrosselt oder abgeschaltet, bei gleicher Priorität zählt, wer zuerst da ist. Bei Ladepunkten ist es ihre normale Priorität, sie gilt auch für PV-Überschuss und Planer. Die Batterie hat einen eigenen Wert.",
       "entryLabel": "Prioritäten",
-      "first": "{priority} (zuerst abwerfen)",
       "invalid": "Priorität konnte nicht gespeichert werden.",
-      "last": "{priority} (zuletzt abwerfen)",
       "noLoads": "Keine Verbraucher im Lastmanagement. Ladepunkte erscheinen mit zugewiesenem Stromkreis, die Batterie über Batterie-Stromkreis.",
-      "title": "Lastmanagement-Prioritäten"
+      "title": "Lastmanagement-Prioritäten",
+      "orderHint": "Zum Sortieren ziehen. Die Prioritäten werden dann von unten ab 0 neu durchnummeriert.",
+      "value": "Prio {priority}"
     },
     "lmprofiles": {
       "active": "Aktiv",
@@ -1017,14 +994,38 @@
       "entityInvalid": "Entität konnte nicht gesetzt werden.",
       "entityLabel": "Entität für den Entlade-Sollwert",
       "entryLabel": "Peak Shaving",
-      "hint": "Schalter, Peak-Grenze und Reserve stellst du im Reiter Batterie ein.",
+      "followBufferHelp": "So weit bleibt die Grenze unter der Monatsspitze, 0–5 kW. Beispiel 0,5 kW: Spitze 10 kW → Grenze 9,5 kW.",
+      "followBufferInvalid": "Der Puffer muss zwischen 0 und 5 kW liegen, in Schritten von 0,1 kW.",
+      "followBufferLabel": "Puffer",
+      "followHelp": "Liegt die höchste Viertelstunde des Monats schon über deiner Peak-Grenze, steigt die Grenze auf diese Spitze. Zum Monatsbeginn gilt wieder deine Grenze.",
+      "followLabel": "Follow the Peak: Grenze folgt der Monatsspitze",
       "source": {
         "entity": "Energiezähler aus Home Assistant",
         "meter": "Energiezähler des Netzzählers",
-        "power": "Netzleistung (alle 10–30 s)"
+        "power": "Netzleistung"
       },
       "sourceLabel": "15-Minuten-Mittel gemessen mit",
       "title": "Peak Shaving"
+    },
+    "peaktariff": {
+      "agreedHelp": "Laut Netzvertrag, 0 = ohne.",
+      "agreedLabel": "Vereinbarte Leistung",
+      "description": "Bewertet die höchste Viertelstunde je Monat in Geld und zeigt unter Mehr → Peak Shaving, was die Batterie spart.",
+      "enable": "Leistungstarif verwenden",
+      "entryLabel": "Leistungstarif",
+      "invalid": "{label} muss zwischen {min} und {max} liegen.",
+      "minShareHelp": "Anteil der vereinbarten Leistung.",
+      "minShareLabel": "Mindestens verrechnet",
+      "minimumHelp": "Wird immer mindestens verrechnet.",
+      "minimumLabel": "Mindestleistung",
+      "perKwYear": "{currency}/kW·Jahr",
+      "priceAboveHelp": "Pro kW und Jahr. Österreich: doppelt.",
+      "priceAboveLabel": "Leistungspreis über der Schwelle",
+      "priceHelp": "Pro kW und Jahr bis zur Schwelle.",
+      "priceLabel": "Leistungspreis",
+      "thresholdHelp": "Bis hier gilt der Leistungspreis, darüber der höhere.",
+      "thresholdLabel": "Schwelle",
+      "title": "Leistungstarif"
     },
     "pv": {
       "titleAdd": "PV-Anlage hinzufügen",
@@ -1194,6 +1195,7 @@
       },
       "planner": {
         "description": "Erweiterte Einstellung. Normalerweise nicht nötig, da dynamische Stromtarife oder CO₂-Vorhersagen automatisch verwendet werden. Ermöglicht eine zusätzliche Datenquelle, die nur für die Ladeplanung verwendet wird und nicht für Statistiken und Preisberechnungen.",
+        "optimizer": "Mit Optimizer: Ein fester Preis hier ist der Bezugspreis, mit dem er plant. Liegt der echte Preis knapp über der Einspeisevergütung, erlaubt ein höherer Planungspreis (mind. 1,25 × Einspeisevergütung) das Entladen. Statistik und Kosten nutzen weiter den Netztarif.",
         "titleAdd": "Planer-Vorhersage hinzufügen",
         "titleEdit": "Planer-Vorhersage bearbeiten"
       },
@@ -1511,7 +1513,12 @@
   "lmoverview": {
     "battery": "Hausbatterie (Netzladen)",
     "blockedCircuit": "Stromkreis · bis {time}",
+    "circuitFollows": "folgt der Monatsspitze, eingestellt {limit}",
+    "circuitLifted": "Grenze {limit} aufgehoben",
     "description": "Was das Lastmanagement gerade tut.",
+    "disabledHelp": "Aus: Die Leistungsgrenzen der Stromkreise gelten nicht, nichts wird dafür gedrosselt. Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv.",
+    "enabled": "Lastmanagement",
+    "enabledHelp": "Die Leistungsgrenzen der Stromkreise (Peak) drosseln Wallbox, Heizstäbe und Batterie-Netzladen.",
     "event": {
       "gridChargeDenied": "Netzladen gesperrt · Stromkreis erlaubt {allowed} von {wanted}",
       "gridChargePaused": "Netzladen pausiert · Bedarf {demand} über Peak-Grenze {limit}",
@@ -1522,14 +1529,15 @@
       "throttled": "{load} gedrosselt {requested} → {allowed}"
     },
     "events": "Letzte Ereignisse",
-    "gridCharge": "Netzladen Batterie",
-    "loads": "Verbraucher · höchste Priorität zuerst",
-    "menu": "Lastmanagement",
+    "gridCharge": "Batterie-Netzladen",
+    "loads": "Verbraucher nach Priorität · unten wird zuerst abgeworfen",
+    "menu": "Lastmanagement (Peak)",
     "noEvents": "Noch keine Ereignisse seit dem Start.",
     "noLoads": "Keine Verbraucher im Lastmanagement.",
     "overall": {
       "limited": "Begrenzt",
       "normal": "Normal",
+      "off": "Aus",
       "overload": "Überlast"
     },
     "pausedPeak": "Peak · wieder ab {time}",
@@ -1538,7 +1546,6 @@
     "peakFree": "Über der Reserve · frei",
     "peakOff": "Aus",
     "peakReserve": "Reserve aktiv · Soll {setpoint}",
-    "priority": "Prio {priority}",
     "protected": "Abwurfschutz",
     "setpoint": "Soll {power}",
     "state": {
@@ -1555,7 +1562,9 @@
       "throttled": "Gedrosselt · {allowed} von {requested}",
       "waiting": "Wartet · braucht {requested}, {allowed} frei"
     },
-    "title": "Lastmanagement"
+    "title": "Lastmanagement (Peak)",
+    "enabledHelpCircuit": "Die Leistungsgrenze von „{circuit}“ drosselt Wallbox, Heizstäbe und Batterie-Netzladen.",
+    "disabledHelpCircuit": "Aus: Die Leistungsgrenze von „{circuit}“ gilt nicht, nichts wird dafür gedrosselt. Andere Stromkreise, Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv."
   },
   "log": {
     "areaLabel": "Nach Bereich filtern",
@@ -1929,12 +1938,19 @@
     "updatePassword": "Passwort ändern"
   },
   "peakstats": {
+    "cost": "Leistungspreis",
+    "costShort": "Kosten",
     "description": "Höchste Viertelstunde je Monat, mit und ohne Batterie.",
     "empty": "Noch keine vollständige Viertelstunde erfasst.",
+    "extraCost": "Mehrkosten {cost}",
     "interventions": "Eingriffe",
     "interventionsCount": "{count} Eingriffe",
     "menu": "Peak Shaving",
     "month": "Monat",
+    "saving": "Ersparnis Leistungspreis",
+    "savingShort": "gespart {saving}",
+    "savingTotal": "gesamt {total}",
+    "tariffHint": "Mit einem Leistungstarif siehst du hier auch die Kosten und die Ersparnis: Konfiguration → Lastmanagement-Details → Leistungstarif.",
     "title": "Peak Shaving",
     "withBattery": "Mit Batterie",
     "withoutBattery": "Ohne Batterie"

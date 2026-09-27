@@ -11,12 +11,31 @@
 		<p v-if="error" class="text-danger">{{ error }}</p>
 
 		<form ref="form" class="container mx-0 px-0" @submit.prevent="save">
+			<!-- custom: the load management (peak) circuit, see core/site_lm_switch.go -->
+			<FormRow
+				id="lmAdvanced-circuit"
+				:label="$t('config.lmadvanced.circuitLabel')"
+				:help="$t('config.lmadvanced.circuitHelp')"
+			>
+				<select
+					id="lmAdvanced-circuit"
+					v-model="circuit"
+					class="form-select"
+					data-testid="lmadvanced-circuit"
+				>
+					<option value="">{{ $t("config.lmadvanced.circuitAll") }}</option>
+					<option v-for="c in circuitOptions" :key="c.name" :value="c.name">
+						{{ c.title }}
+					</option>
+				</select>
+			</FormRow>
+
 			<FormRow
 				v-for="field in numberFields"
 				:id="`lmAdvanced-${field.name}`"
 				:key="field.name"
 				:label="$t(`config.lmadvanced.${field.name}Label`)"
-				:help="$t(`config.lmadvanced.${field.name}Help`, { std: field.default })"
+				:help="$t(`config.lmadvanced.${field.name}Help`)"
 			>
 				<div class="input-group">
 					<input
@@ -61,7 +80,7 @@
 				<button
 					type="submit"
 					class="btn btn-primary order-1 order-sm-2 flex-grow-1 flex-sm-grow-0 px-4"
-					:disabled="saving || !changed.length"
+					:disabled="saving || (!changed.length && !circuitChanged)"
 				>
 					<span
 						v-if="saving"
@@ -79,6 +98,7 @@
 <script>
 import GenericModal from "../Helper/GenericModal.vue";
 import FormRow from "./FormRow.vue";
+import formatter from "@/mixins/formatter";
 import store from "@/store";
 import api from "@/api";
 
@@ -107,6 +127,7 @@ const FIELDS = [
 export default {
 	name: "LmAdvancedModal",
 	components: { FormRow, GenericModal },
+	mixins: [formatter],
 	emits: ["changed"],
 	data() {
 		return {
@@ -114,11 +135,26 @@ export default {
 			error: "",
 			values: {},
 			initial: {},
+			circuit: "",
+			initialCircuit: "",
 		};
 	},
 	computed: {
 		numberFields() {
 			return FIELDS;
+		},
+		circuitChanged() {
+			return this.circuit !== this.initialCircuit;
+		},
+		// circuits with a power limit, configured or changed at runtime
+		circuitOptions() {
+			const configured = store.state?.lmOff?.limits || {};
+			return Object.entries(store.state?.circuits || {})
+				.filter(([name, c]) => c.maxPower > 0 || configured[name] > 0)
+				.map(([name, c]) => ({
+					name,
+					title: `${c.title || name} (${this.fmtW(configured[name] || c.maxPower)})`,
+				}));
 		},
 		changed() {
 			return Object.keys(this.values).filter(
@@ -137,6 +173,8 @@ export default {
 			this.error = "";
 			this.values = { ...values };
 			this.initial = { ...values };
+			this.circuit = store.state?.lmOff?.circuit || "";
+			this.initialCircuit = this.circuit;
 		},
 		invalidField() {
 			return FIELDS.find((f) => {
@@ -165,6 +203,13 @@ export default {
 			this.error = "";
 
 			try {
+				if (this.circuitChanged) {
+					if (this.circuit) {
+						await api.post(`lmcircuit/${encodeURIComponent(this.circuit)}`);
+					} else {
+						await api.delete("lmcircuit");
+					}
+				}
 				for (const name of this.changed) {
 					await api.post(`lmadvanced/${name}/${this.values[name]}`);
 				}

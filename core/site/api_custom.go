@@ -29,6 +29,12 @@ type CustomAPI interface {
 	SetLmShedGuard(int) error
 	SetLmShedProtected(name string, protected bool) error
 
+	// load management switch, see core/site_lm_switch.go
+	GetLmEnabled() bool
+	SetLmEnabled(bool) error
+	GetLmCircuit() string
+	SetLmCircuit(string) error
+
 	// advanced load management settings, see core/site_lm_advanced.go
 	SetLmAdvanced(name string, value float64) error
 
@@ -36,9 +42,6 @@ type CustomAPI interface {
 	SaveLmProfile(profile.Profile) (profile.Profile, error)
 	DeleteLmProfile(id string) error
 	ApplyLmProfile(id string) error
-
-	// feed-in price published after the fact, see core/site_feedin.go
-	FinalizeFeedIn(month string, market float64) error
 
 	// export under a second feed-in tariff, see core/site_feedin_eeg.go
 	GetFeedInEegEntity() string
@@ -49,6 +52,16 @@ type CustomAPI interface {
 	SetPeakShaving(bool) error
 	GetPeakShavingLimit() float64
 	SetPeakShavingLimit(float64) error
+
+	// follow the peak, see core/site_peak_follow.go
+	GetPeakFollow() bool
+	SetPeakFollow(bool) error
+	GetPeakFollowBuffer() float64
+	SetPeakFollowBuffer(float64) error
+
+	// capacity tariff, see core/site_peak_tariff.go
+	SetPeakTariff(name string, value float64) error
+
 	GetPeakShavingEntity() string
 	SetPeakShavingEntity(string) error
 	GetPeakShavingChargeEntity() string
