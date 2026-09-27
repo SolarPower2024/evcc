@@ -26,7 +26,7 @@
 				</label>
 			</div>
 			<p class="small evcc-gray mb-3" data-testid="lm-enabled-help">
-				{{ lmEnabled ? $t("lmoverview.enabledHelp") : $t("lmoverview.disabledHelp") }}
+				{{ enabledHelp }}
 			</p>
 			<p v-if="switchError" class="text-danger small">{{ switchError }}</p>
 
@@ -143,10 +143,28 @@ export default {
 		lmEnabled() {
 			return this.state?.lmOff?.enabled ?? true;
 		},
+		// the load management (peak) circuit, chosen under Erweitert, empty = all
+		lmCircuit() {
+			const name = this.state?.lmOff?.circuit;
+			return name && this.state?.circuits?.[name] ? name : "";
+		},
+		enabledHelp() {
+			const c = this.lmCircuit;
+			const circuit = c ? this.state.circuits[c].title || c : "";
+			if (this.lmEnabled) {
+				return circuit
+					? this.$t("lmoverview.enabledHelpCircuit", { circuit })
+					: this.$t("lmoverview.enabledHelp");
+			}
+			return circuit
+				? this.$t("lmoverview.disabledHelpCircuit", { circuit })
+				: this.$t("lmoverview.disabledHelp");
+		},
 		circuits() {
 			// configured limits of circuits changed at runtime (switched off, following the peak)
 			const configured = this.state?.lmOff?.limits || {};
 			return Object.entries(this.state?.circuits || {})
+				.filter(([name]) => !this.lmCircuit || name === this.lmCircuit)
 				.filter(([name, c]) => c.maxPower > 0 || configured[name] > 0)
 				.map(([name, c]) => {
 					const lifted = !(c.maxPower > 0);

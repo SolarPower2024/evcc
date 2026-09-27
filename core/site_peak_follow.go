@@ -13,7 +13,6 @@ import (
 
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/db/settings"
-	"github.com/evcc-io/evcc/util/config"
 )
 
 const (
@@ -25,9 +24,8 @@ const (
 // peakFollowState is what the ui shows
 type peakFollowState struct {
 	Enabled bool    `json:"enabled"`
-	Buffer  float64 `json:"buffer"`  // W
-	Base    float64 `json:"base"`    // W, the limit set by hand
-	Circuit string  `json:"circuit"` // circuit whose power limit rises along, empty = none
+	Buffer  float64 `json:"buffer"` // W
+	Base    float64 `json:"base"`   // W, the limit set by hand
 }
 
 // restorePeakFollow restores follow the peak after the peak settings
@@ -46,9 +44,6 @@ func (site *Site) restorePeakFollow() {
 	if v, err := settings.Float(keys.PeakFollowBase); err == nil && v > 0 {
 		s.followBase = v
 	}
-	if v, err := settings.String(keys.PeakFollowCircuit); err == nil {
-		s.followCircuit = v
-	}
 	s.mu.Unlock()
 
 	site.updatePeakFollow()
@@ -59,7 +54,7 @@ func (site *Site) publishPeakFollow() {
 	s := site.peak()
 
 	s.mu.Lock()
-	res := peakFollowState{Enabled: s.follow, Buffer: s.followBuffer, Base: s.followBase, Circuit: s.followCircuit}
+	res := peakFollowState{Enabled: s.follow, Buffer: s.followBuffer, Base: s.followBase}
 	s.mu.Unlock()
 
 	site.publish(keys.PeakFollow, res)
@@ -206,39 +201,6 @@ func (site *Site) SetPeakFollowBuffer(buffer float64) error {
 	settings.SetFloat(keys.PeakFollowBuffer, buffer)
 
 	site.updatePeakFollow()
-	site.applyCircuitLimits()
-	site.publishPeakFollow()
-
-	return nil
-}
-
-func (site *Site) GetPeakFollowCircuit() string {
-	s := site.peak()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.followCircuit
-}
-
-// SetPeakFollowCircuit sets the circuit whose power limit rises with the
-// raised peak limit, empty = none
-func (site *Site) SetPeakFollowCircuit(name string) error {
-	if name != "" {
-		if _, err := config.Circuits().ByName(name); err != nil {
-			return fmt.Errorf("circuit %s: %w", name, err)
-		}
-	}
-
-	s := site.peak()
-
-	s.mu.Lock()
-	s.followCircuit = name
-	s.mu.Unlock()
-
-	site.log.DEBUG.Println("set follow the peak circuit:", name)
-	settings.SetString(keys.PeakFollowCircuit, name)
-
 	site.applyCircuitLimits()
 	site.publishPeakFollow()
 

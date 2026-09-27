@@ -233,19 +233,26 @@ the limit set by hand, the base. A new month starts at the base again. Setting
 the limit by hand, or by a profile, while following sets the base; switching
 off returns to it. See `core/site_peak_follow.go`.
 
-Optionally a circuit's power limit rises along (*Stromkreis-Grenze
-mitziehen*): the chosen circuit gets the raised limit, never less than its
-configured value, and its configured value back with the next month or when
-following stops. Meant for a circuit that is the peak limit, not the agreed
-connection power. See `core/site_lm_switch.go`.
+The load management (peak) circuit, when chosen, rises along: it gets the
+raised limit, never less than its configured value, and its configured value
+back with the next month or when following stops. See `core/site_lm_switch.go`.
 
 Open: revisit once circuits are configured in the ui (evcc PR 33077), which may
 set circuit limits at runtime too.
 
+## Load management (peak) circuit
+
+Lastmanagement-Details → Erweitert → *Stromkreis Lastmanagement (Peak)*: the
+circuit whose power limit is the peak, beside a circuit for the fuse or the
+agreed connection power. Chosen, only it is shown under Mehr → Lastmanagement
+(Peak), lifted by the switch and raised by follow the peak; none = all circuits,
+nothing raised. Stored in `lmCircuit`, published as `lmOff.circuit`; lm3/lm4
+chose it as the follow the peak circuit (`peakFollowCircuit`), taken over once.
+
 ## Load management switch
 
-Mehr → Lastmanagement → *Lastmanagement*. Off lifts the power limits of all
-circuits at runtime (`SetMaxPower(0)`, unlimited), so loadpoints and the
+Mehr → Lastmanagement (Peak) → *Lastmanagement*. Off lifts the power limit of
+the load management (peak) circuit, without one of all circuits, at runtime (`SetMaxPower(0)`, unlimited), so loadpoints and the
 battery's grid charging are no longer throttled or shed for them; the
 configuration stays unchanged. Current limits (fuses), a HEMS consumption limit
 (§14a) and battery peak shaving keep applying. Switching on restores the

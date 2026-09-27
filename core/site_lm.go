@@ -52,6 +52,7 @@ type lmState struct {
 	offLimits    map[string]float64 // lifted power limits by circuit name
 	offDynamic   map[string]bool    // circuits with a plugin limit that stays
 	offPublished bool
+	circuit      string // the load management (peak) circuit, empty = all
 
 	guardMinutes int             // shed guard, see site_lm_guard.go
 	guarded      map[string]bool // loadpoints the shed guard protects, by name

@@ -3,12 +3,16 @@ package core
 // Custom extension: runtime changes to the circuits' power limits, from two
 // sources, without touching the configuration:
 //
-//   - load management off (Mehr → Lastmanagement): the power limits of all
-//     circuits (the peak) are lifted, so wallboxes, heaters and the battery's
-//     grid charging are no longer throttled or shed for them
-//   - follow the peak with a circuit chosen (Lastmanagement-Details → Peak
-//     Shaving): that circuit's limit rises with the raised peak limit, never
-//     below its configured value, see site_peak_follow.go
+//   - load management off (Mehr → Lastmanagement (Peak)): the power limit of
+//     the load management (peak) circuit is lifted, so wallboxes, heaters and
+//     the battery's grid charging are no longer throttled or shed for it.
+//     Without that circuit chosen, the power limits of all circuits.
+//   - follow the peak: the load management (peak) circuit's limit rises with
+//     the raised peak limit, never below its configured value, see
+//     site_peak_follow.go
+//
+// The load management (peak) circuit is chosen under Lastmanagement-Details →
+// Erweitert, so a circuit for the fuse can sit beside it untouched.
 //
 // The current limits (fuses) and a HEMS consumption limit (§14a) always apply.
 // The configured value is kept when a circuit is first changed and put back
@@ -29,16 +33,28 @@ type lmSwitchState struct {
 	Enabled bool               `json:"enabled"`
 	Limits  map[string]float64 `json:"limits"`  // W, the configured power limits of the changed circuits
 	Dynamic []string           `json:"dynamic"` // circuits whose limit comes from a plugin and stays
+	Circuit string             `json:"circuit"` // the load management (peak) circuit, empty = all
 }
 
 // restoreLmSwitch continues switched off load management across a restart
 func (site *Site) restoreLmSwitch() {
-	if v, err := settings.Bool(keys.LmOff); err == nil && v {
-		s := site.lms()
-		s.mu.Lock()
-		s.off = true
-		s.mu.Unlock()
+	s := site.lms()
+
+	circuit, err := settings.String(keys.LmCircuit)
+	if err != nil {
+		// lm3/lm4 chose it as the circuit following the peak
+		if circuit, err = settings.String(keys.PeakFollowCircuit); err == nil && circuit != "" {
+			settings.SetString(keys.LmCircuit, circuit)
+		}
+		_ = settings.Delete(keys.PeakFollowCircuit)
 	}
+
+	s.mu.Lock()
+	s.circuit = circuit
+	if v, err := settings.Bool(keys.LmOff); err == nil && v {
+		s.off = true
+	}
+	s.mu.Unlock()
 
 	site.applyCircuitLimits()
 }
@@ -61,17 +77,25 @@ func circuitLimitWanted(configured float64, off, follow bool, followLimit float6
 func (site *Site) applyCircuitLimits() {
 	p := site.peak()
 	p.mu.Lock()
-	followCircuit := ""
-	var followLimit float64
-	if p.follow && p.limit > p.followBase {
-		followCircuit, followLimit = p.followCircuit, p.limit
-	}
+	following := p.follow && p.limit > p.followBase
+	followLimit := p.limit
 	p.mu.Unlock()
 
 	s := site.lms()
 
 	s.mu.Lock()
-	off := s.off
+	off, lmCircuit := s.off, s.circuit
+
+	// a chosen circuit that no longer exists: all circuits, nothing follows
+	if lmCircuit != "" {
+		if _, err := config.Circuits().ByName(lmCircuit); err != nil {
+			lmCircuit = ""
+		}
+	}
+	followCircuit := ""
+	if following {
+		followCircuit = lmCircuit
+	}
 	if s.offLimits == nil {
 		s.offLimits = make(map[string]float64)
 	}
@@ -86,8 +110,8 @@ func (site *Site) applyCircuitLimits() {
 			configured = c.GetMaxPower()
 		}
 
-		follow := name == followCircuit
-		wanted := circuitLimitWanted(configured, off, follow, followLimit)
+		lift := off && (lmCircuit == "" || name == lmCircuit)
+		wanted := circuitLimitWanted(configured, lift, name == followCircuit, followLimit)
 
 		if !touched {
 			if wanted == configured || configured <= 0 || s.offDynamic[name] {
@@ -132,7 +156,7 @@ func (site *Site) applyCircuitLimits() {
 		changed = true
 	}
 
-	res := lmSwitchState{Enabled: !off, Limits: make(map[string]float64, len(s.offLimits)), Dynamic: make([]string, 0)}
+	res := lmSwitchState{Enabled: !off, Limits: make(map[string]float64, len(s.offLimits)), Dynamic: make([]string, 0), Circuit: s.circuit}
 	for name, v := range s.offLimits {
 		res.Limits[name] = v
 	}
@@ -180,6 +204,39 @@ func (site *Site) SetLmEnabled(enabled bool) error {
 		site.log.INFO.Println("load management:", map[bool]string{true: "on", false: "off"}[enabled])
 		settings.SetBool(keys.LmOff, !enabled)
 	}
+
+	site.applyCircuitLimits()
+
+	return nil
+}
+
+// GetLmCircuit returns the load management (peak) circuit, empty = all
+func (site *Site) GetLmCircuit() string {
+	s := site.lms()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.circuit
+}
+
+// SetLmCircuit sets the load management (peak) circuit, empty = all
+func (site *Site) SetLmCircuit(name string) error {
+	if name != "" {
+		if _, err := config.Circuits().ByName(name); err != nil {
+			return fmt.Errorf("circuit %s: %w", name, err)
+		}
+	}
+
+	s := site.lms()
+
+	s.mu.Lock()
+	s.circuit = name
+	s.offPublished = false
+	s.mu.Unlock()
+
+	site.log.DEBUG.Println("set load management circuit:", name)
+	settings.SetString(keys.LmCircuit, name)
 
 	site.applyCircuitLimits()
 

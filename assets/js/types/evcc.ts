@@ -222,8 +222,6 @@ export interface PeakFollow {
   buffer: number;
   /** W, the limit set by hand. */
   base: number;
-  /** Circuit whose power limit rises along, empty = none. */
-  circuit: string;
 }
 
 export interface PeakTariffMonth {
@@ -489,7 +487,13 @@ export interface State {
   /** Follow the peak: the limit rises to the month's peak minus the buffer (W), base = limit set by hand. */
   peakFollow?: PeakFollow;
   /** Load management switch: off lifts the circuits' power limits; limits = configured values of changed circuits. */
-  lmOff?: { enabled: boolean; limits: Record<string, number>; dynamic: string[] };
+  /** circuit: the load management (peak) circuit, empty = all */
+  lmOff?: {
+    enabled: boolean;
+    limits: Record<string, number>;
+    dynamic: string[];
+    circuit: string;
+  };
   /** Capacity tariff with each month's cost with and without the battery, a zero price is off. */
   peakTariff?: PeakTariff;
   /** Home Assistant number entity receiving the grid charge power, empty = on/off charging. */

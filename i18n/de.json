@@ -551,7 +551,10 @@
       "timeoutLabel": "Ablaufzeit der Reservierung",
       "title": "Erweiterte Einstellungen",
       "gridChargeWindowLabel": "Ziel Batterie-Netzladen erreichen in",
-      "gridChargeWindowHelp": "Nur mit Optimizer: So viel Zeit bekommt er beim Batterie-Netzladen nach Ladestand bis zum Stopp-Ladestand und lädt in den günstigsten Stunden davon. 1 h = sofort."
+      "gridChargeWindowHelp": "Nur mit Optimizer: So viel Zeit bekommt er beim Batterie-Netzladen nach Ladestand bis zum Stopp-Ladestand und lädt in den günstigsten Stunden davon. 1 h = sofort.",
+      "circuitLabel": "Stromkreis Lastmanagement (Peak)",
+      "circuitHelp": "Der Stromkreis mit deiner Peak-Grenze, nicht der Absicherung. Nur er erscheint unter Mehr → Lastmanagement (Peak), wird dort mit dem Schalter aufgehoben und steigt bei Follow the Peak mit.",
+      "circuitAll": "Keiner – alle Stromkreise, keiner steigt mit"
     },
     "lmpriorities": {
       "battery": "Hausbatterie (Netzladen)",
@@ -1021,9 +1024,6 @@
       "followBufferHelp": "So weit bleibt die Grenze unter der Monatsspitze, 0–5 kW. Beispiel 0,5 kW: Spitze 10 kW → Grenze 9,5 kW.",
       "followBufferInvalid": "Der Puffer muss zwischen 0 und 5 kW liegen, in Schritten von 0,1 kW.",
       "followBufferLabel": "Puffer",
-      "followCircuitHelp": "Die Leistungsgrenze dieses Stromkreises steigt mit, nie unter ihren eingestellten Wert. Nur wählen, wenn sie die Peak-Grenze ist, nicht die vereinbarte Anschlussleistung.",
-      "followCircuitLabel": "Stromkreis-Grenze mitziehen",
-      "followCircuitNone": "Keiner",
       "followHelp": "Liegt die höchste Viertelstunde des Monats schon über deiner Peak-Grenze, steigt die Grenze auf diese Spitze. Zum Monatsbeginn gilt wieder deine Grenze.",
       "followLabel": "Follow the Peak: Grenze folgt der Monatsspitze",
       "source": {
@@ -1558,7 +1558,7 @@
     "events": "Letzte Ereignisse",
     "gridCharge": "Batterie-Netzladen",
     "loads": "Verbraucher nach Priorität · unten wird zuerst abgeworfen",
-    "menu": "Lastmanagement",
+    "menu": "Lastmanagement (Peak)",
     "noEvents": "Noch keine Ereignisse seit dem Start.",
     "noLoads": "Keine Verbraucher im Lastmanagement.",
     "overall": {
@@ -1589,7 +1589,9 @@
       "throttled": "Gedrosselt · {allowed} von {requested}",
       "waiting": "Wartet · braucht {requested}, {allowed} frei"
     },
-    "title": "Lastmanagement"
+    "title": "Lastmanagement (Peak)",
+    "enabledHelpCircuit": "Die Leistungsgrenze von „{circuit}“ drosselt Wallbox, Heizstäbe und Batterie-Netzladen.",
+    "disabledHelpCircuit": "Aus: Die Leistungsgrenze von „{circuit}“ gilt nicht, nichts wird dafür gedrosselt. Andere Stromkreise, Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv."
   },
   "log": {
     "areaLabel": "Nach Bereich filtern",

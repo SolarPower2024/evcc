@@ -551,7 +551,10 @@
       "timeoutLabel": "Reservation expiry",
       "title": "Advanced settings",
       "gridChargeWindowLabel": "Reach the battery grid charge goal within",
-      "gridChargeWindowHelp": "Optimizer only: the time it gets for soc-based battery grid charging to reach the stop soc, charging in the cheapest hours of it. 1 h = right away."
+      "gridChargeWindowHelp": "Optimizer only: the time it gets for soc-based battery grid charging to reach the stop soc, charging in the cheapest hours of it. 1 h = right away.",
+      "circuitLabel": "Load management (peak) circuit",
+      "circuitHelp": "The circuit holding your peak limit, not the fuse. Only it shows under More → Load management (peak), is lifted by the switch there and rises with follow the peak.",
+      "circuitAll": "None – all circuits, none rises along"
     },
     "lmpriorities": {
       "battery": "Home battery (grid charging)",
@@ -1021,9 +1024,6 @@
       "followBufferHelp": "How far the limit stays below the month's peak, 0–5 kW. Example 0.5 kW: peak 10 kW → limit 9.5 kW.",
       "followBufferInvalid": "The buffer must be between 0 and 5 kW, in steps of 0.1 kW.",
       "followBufferLabel": "Buffer",
-      "followCircuitHelp": "This circuit's power limit rises along, never below its configured value. Choose it only if it is the peak limit, not the agreed connection power.",
-      "followCircuitLabel": "Raise circuit limit along",
-      "followCircuitNone": "None",
       "followHelp": "Once the month's highest quarter hour is above your peak limit, the limit rises to that peak. A new month starts with your limit again.",
       "followLabel": "Follow the peak: limit follows the month's peak",
       "source": {
@@ -1558,7 +1558,7 @@
     "events": "Recent events",
     "gridCharge": "Battery grid charging",
     "loads": "Loads by priority · the bottom one is shed first",
-    "menu": "Load management",
+    "menu": "Load management (peak)",
     "noEvents": "No events since the start.",
     "noLoads": "No loads in load management.",
     "overall": {
@@ -1589,7 +1589,9 @@
       "throttled": "Throttled · {allowed} of {requested}",
       "waiting": "Waiting · needs {requested}, {allowed} free"
     },
-    "title": "Load management"
+    "title": "Load management (peak)",
+    "enabledHelpCircuit": "The power limit of \"{circuit}\" throttles wallboxes, heaters and battery grid charging.",
+    "disabledHelpCircuit": "Off: the power limit of \"{circuit}\" does not apply, nothing is throttled for it. Other circuits, fuses (current limits), §14a and battery peak shaving stay active."
   },
   "log": {
     "areaLabel": "Filter by area",
