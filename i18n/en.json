@@ -1194,6 +1194,7 @@
       },
       "planner": {
         "description": "Advanced setting. Usually not needed as dynamic electricity tariffs or CO₂ forecasts are used automatically. Enables an additional data source that's only used for charge planning, not for statistics and price calculations.",
+        "optimizer": "With the optimizer: a fixed price here is the grid price it plans with. If the real price is just above the feed-in tariff, a higher planning price (at least 1.25 × feed-in) lets the battery discharge. Statistics and costs keep the grid tariff.",
         "titleAdd": "Add Planner Forecast",
         "titleEdit": "Edit Planner Forecast"
       },

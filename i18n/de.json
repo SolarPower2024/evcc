@@ -1194,6 +1194,7 @@
       },
       "planner": {
         "description": "Erweiterte Einstellung. Normalerweise nicht nötig, da dynamische Stromtarife oder CO₂-Vorhersagen automatisch verwendet werden. Ermöglicht eine zusätzliche Datenquelle, die nur für die Ladeplanung verwendet wird und nicht für Statistiken und Preisberechnungen.",
+        "optimizer": "Mit Optimizer: Ein fester Preis hier ist der Bezugspreis, mit dem er plant. Liegt der echte Preis knapp über der Einspeisevergütung, erlaubt ein höherer Planungspreis (mind. 1,25 × Einspeisevergütung) das Entladen. Statistik und Kosten nutzen weiter den Netztarif.",
         "titleAdd": "Planer-Vorhersage hinzufügen",
         "titleEdit": "Planer-Vorhersage bearbeiten"
       },

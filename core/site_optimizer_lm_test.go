@@ -237,3 +237,36 @@ func TestLmOptimizerFeedInWithEeg(t *testing.T) {
 		assert.Equal(t, 0.09, r.Value)
 	}
 }
+
+// co2Tariff is a planner tariff that is no price
+type co2Tariff struct{}
+
+func (co2Tariff) Rates() (api.Rates, error) { return nil, nil }
+func (co2Tariff) Type() api.TariffType      { return api.TariffTypeCo2 }
+
+// A price tariff set as planner tariff is the optimizer's grid price, anything
+// else leaves the grid tariff.
+func TestLmOptimizerGridTariff(t *testing.T) {
+	grid, err := tariff.NewFixedFromConfig(map[string]any{"price": 0.10})
+	require.NoError(t, err)
+	planner, err := tariff.NewFixedFromConfig(map[string]any{"price": 0.12})
+	require.NoError(t, err)
+
+	price := func(site *Site) float64 {
+		rates := currentRates(site.optimizerGridTariff())
+		require.NotEmpty(t, rates)
+		return rates[0].Value
+	}
+
+	site := &Site{log: util.NewLogger("test"), tariffs: &tariff.Tariffs{Grid: grid}}
+	assert.Equal(t, 0.10, price(site), "without planner tariff: grid as upstream")
+
+	site.tariffs.Planner = planner
+	assert.Equal(t, 0.12, price(site), "planner price")
+	assert.Equal(t, 0.10, currentRates(site.GetTariff(api.TariffUsageGrid))[0].Value, "grid tariff unchanged")
+
+	site.tariffs.Planner = co2Tariff{}
+	assert.Equal(t, 0.10, price(site), "co2 planner: grid")
+
+	assert.Nil(t, (&Site{}).optimizerGridTariff())
+}

@@ -265,6 +265,14 @@ settings as inputs, so the plan matches what the fork will actually do, see
   power on a circuit) is not offered (`charge_from_grid`)
 - load management: a loadpoint plans with at most its circuits' power, the
   priorities 0-3/4-6/7-10 become `c_priority` 0/1/2
+- a price tariff set as planner tariff (*Tarife → Planer-Vorhersage*) is the
+  grid price the optimizer plans with (`p_N`); statistics, costs and sessions
+  keep the grid tariff. With real prices close to the feed-in price (10 ct vs
+  9 ct) the optimizer never discharges: evcc's end value keeps stored energy
+  at least the feed-in price / 0.9, so discharging needs a grid price of about
+  1.25 × feed-in. A fixed planning price of 12 ct makes it discharge down to
+  the floor. Note the planner tariff also drives vehicle plans and smart cost
+  limits, so a fixed one would hide a dynamic grid tariff's cheap slots.
 
 Without circuits, peak shaving, soc-based and one-time grid charging the
 request is unchanged. The optimizer's automatic mode (evcc PR 32881, not
