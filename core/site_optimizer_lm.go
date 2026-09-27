@@ -170,7 +170,7 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 		// the stop soc within the window from each time charging starts: now
 		// while it runs, else where the battery is expected to fall to the start soc
 		goal := min(wh(stop), top)
-		for _, i := range socChargeGoals(*bat, req, running, wh(start), goal, site.gridChargeWindow()) {
+		for _, i := range socChargeGoals(*bat, req, running, floor, wh(start), goal, site.gridChargeWindow()) {
 			if len(bat.SGoal) != len(dt) {
 				bat.SGoal = make([]float32, len(dt))
 			}
@@ -228,8 +228,11 @@ func (site *Site) lmForecastLowest(low *batteryForecastSlot) *batteryForecastSlo
 // its stop soc. Charging starts right away while running, else where the
 // battery, covering the home demand the solar forecast leaves and storing its
 // surplus, falls to the start soc; after reaching the stop soc it may fall
-// again. The optimizer itself cannot foresee this switching.
-func socChargeGoals(bat optimizer.BatteryConfig, req *optimizer.OptimizationInput, running bool, start, stop float32, window time.Duration) []int {
+// again. The optimizer itself cannot foresee this switching. The battery never
+// falls below floor (the peak shaving reserve and the start soc, a hard
+// minimum for the optimizer): with the reserve above the start soc charging
+// only happens while it already runs.
+func socChargeGoals(bat optimizer.BatteryConfig, req *optimizer.OptimizationInput, running bool, floor, start, stop float32, window time.Duration) []int {
 	ts := req.TimeSeries
 	if stop <= start || len(ts.Dt) == 0 {
 		return nil
@@ -260,7 +263,7 @@ func socChargeGoals(bat optimizer.BatteryConfig, req *optimizer.OptimizationInpu
 		}
 		h := float32(ts.Dt[i]) / 3600
 		if net := ts.Gt[i] - ts.Ft[i]; net > 0 {
-			e -= min(net, bat.DMax*h) / etaD
+			e = max(min(e, floor), e-min(net, bat.DMax*h)/etaD)
 		} else {
 			e = min(top, e+min(-net, bat.CMax*h)*etaC)
 		}

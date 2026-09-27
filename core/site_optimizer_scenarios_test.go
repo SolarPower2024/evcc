@@ -337,6 +337,21 @@ func TestLmOptimizerScenarios(t *testing.T) {
 		}
 	})
 
+	// the peak shaving reserve above the stop soc is a hard minimum, even when
+	// discharging further would pay
+	t.Run("reserve above the stop soc", func(t *testing.T) {
+		day := winter
+		day.demand = 1100
+		day.price = flat(0.25)
+		set := installation
+		set.reserve = 50
+		r := run(t, day, 97, set, opts{})
+		assert.Empty(t, lo.Filter(r.req.Batteries[0].SGoal, func(g float32, _ int) bool { return g > 0 }), "no grid charging planned")
+		for i, v := range r.soc(0) {
+			assert.GreaterOrEqual(t, pct(v), 49.9, "below the reserve at step %d", i)
+		}
+	})
+
 	// the limit leaves no room for grid charging: the limit wins
 	t.Run("grid charging against a tight limit", func(t *testing.T) {
 		set := installation

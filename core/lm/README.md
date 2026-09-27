@@ -344,7 +344,10 @@ settings as inputs, so the plan matches what the fork will actually do, see
   runs, else where a simple forecast of the battery (home demand minus solar,
   charge and discharge limits, efficiency) falls to the start soc, again after
   each charge. The optimizer cannot foresee this switching itself, without the
-  goals its plan stayed at the start soc. A floor raised this way is not shown
+  goals its plan stayed at the start soc. Only while soc-based grid charging is
+  switched on and grid charging is allowed. The forecast never lets the battery
+  fall below the hard minimum (reserve, start soc): with the peak shaving
+  reserve above the start soc charging is only planned while it already runs. A floor raised this way is not shown
   as "leer" in the battery forecast.
 - one-time grid charging: its target as goal at the chosen time, or right away
   when the charge power (grid charge power, else the battery's maximum) can

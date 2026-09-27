@@ -290,7 +290,7 @@ func TestSocChargeGoals(t *testing.T) {
 	// 250 Wh per slot out of the battery (225 Wh demand at 0.9): 9000 -> 2500
 	// after 26 slots, the stop soc 3 h (12 slots) later; 4000 -> 2500 takes 6
 	req := night(96, 225, 0)
-	goals := socChargeGoals(bat, req, false, 2500, 4000, window)
+	goals := socChargeGoals(bat, req, false, 2500, 2500, 4000, window)
 	require.GreaterOrEqual(t, len(goals), 2)
 	assert.Equal(t, 26+11, goals[0], "start soc reached, stop soc 3 h later")
 	assert.Equal(t, goals[0]+1+6+11, goals[1], "falls again after the charge")
@@ -298,20 +298,20 @@ func TestSocChargeGoals(t *testing.T) {
 	// running: within the window from now
 	low := bat
 	low.SInitial = 3000
-	goals = socChargeGoals(low, req, true, 2500, 4000, window)
+	goals = socChargeGoals(low, req, true, 2500, 2500, 4000, window)
 	require.NotEmpty(t, goals)
 	assert.Equal(t, 11, goals[0])
 
 	// running above the stop soc: nothing to charge now
 	high := bat
 	high.SInitial = 9900
-	assert.Empty(t, socChargeGoals(high, night(8, 225, 0), true, 2500, 4000, window))
+	assert.Empty(t, socChargeGoals(high, night(8, 225, 0), true, 2500, 2500, 4000, window))
 
 	// pv covers the demand: never falls to the start soc
-	assert.Empty(t, socChargeGoals(bat, night(96, 180, 500), false, 2500, 4000, window))
+	assert.Empty(t, socChargeGoals(bat, night(96, 180, 500), false, 2500, 2500, 4000, window))
 
 	// invalid range
-	assert.Empty(t, socChargeGoals(bat, req, false, 4000, 4000, window))
+	assert.Empty(t, socChargeGoals(bat, req, false, 4000, 4000, 4000, window))
 }
 
 // The forecast does not call the battery empty at a floor set by the fork.
@@ -324,4 +324,72 @@ func TestLmForecastLowest(t *testing.T) {
 	site.lms().floorRaised = true
 	assert.False(t, site.lmForecastLowest(low).limit)
 	assert.Nil(t, site.lmForecastLowest(nil))
+}
+
+// The peak shaving reserve is a hard minimum: the battery never falls below it,
+// so with the reserve above the start soc grid charging is not planned.
+func TestSocChargeGoalsReserve(t *testing.T) {
+	req := &optimizer.OptimizationInput{EtaC: 0.9, EtaD: 0.9}
+	for range 96 {
+		req.TimeSeries.Dt = append(req.TimeSeries.Dt, 900)
+		req.TimeSeries.Gt = append(req.TimeSeries.Gt, 225)
+		req.TimeSeries.Ft = append(req.TimeSeries.Ft, 0)
+	}
+	bat := optimizer.BatteryConfig{SCapacity: 10000, SMax: 10000, SInitial: 9000, CMax: 5000, DMax: 5000}
+	window := 3 * time.Hour
+
+	// reserve 20 % below the start soc 25 %: planned as before
+	assert.NotEmpty(t, socChargeGoals(bat, req, false, 2500, 2500, 4000, window))
+
+	// reserve 30 % between start and stop, reserve 50 % above the stop soc
+	assert.Empty(t, socChargeGoals(bat, req, false, 3000, 2500, 4000, window))
+	assert.Empty(t, socChargeGoals(bat, req, false, 5000, 2500, 4000, window))
+
+	// already running below the reserve (a peak was covered): charges to the stop soc
+	low := bat
+	low.SInitial = 2000
+	assert.Equal(t, []int{11}, socChargeGoals(low, req, true, 5000, 2500, 4000, window)[:1])
+}
+
+// Grid charging only enters the request while it is switched on and allowed;
+// the reserve stays a hard minimum above the stop soc.
+func TestLmBatteryInputsSocChargeSwitch(t *testing.T) {
+	newReq := func() (*optimizer.OptimizationInput, *optimizer.BatteryConfig) {
+		req := &optimizer.OptimizationInput{EtaC: 0.9, EtaD: 0.9}
+		for range 96 {
+			req.TimeSeries.Dt = append(req.TimeSeries.Dt, 900)
+			req.TimeSeries.Gt = append(req.TimeSeries.Gt, 225)
+			req.TimeSeries.Ft = append(req.TimeSeries.Ft, 0)
+		}
+		return req, &optimizer.BatteryConfig{SCapacity: 10000, SMax: 10000, SInitial: 9000, CMax: 5000, DMax: 5000, ChargeFromGrid: true}
+	}
+
+	site := &Site{log: util.NewLogger("test")}
+	s := site.lms()
+	s.socChargeStart, s.socChargeStop = 25, 40
+
+	// switched off: no goal, no floor from it
+	req, bat := newReq()
+	site.applyLmBatteryInputs(bat, req, false, 0)
+	assert.Empty(t, bat.SGoal)
+	assert.Zero(t, bat.SMin)
+
+	// switched on: floor at the start soc, goals
+	s.socChargeEnabled = true
+	req, bat = newReq()
+	site.applyLmBatteryInputs(bat, req, false, 0)
+	assert.Equal(t, float32(2500), bat.SMin)
+	assert.NotEmpty(t, bat.SGoal)
+
+	// peak shaving reserve 50 % above the stop soc: hard minimum, nothing planned
+	req, bat = newReq()
+	site.applyLmBatteryInputs(bat, req, true, 50)
+	assert.Equal(t, float32(5000), bat.SMin)
+	assert.Empty(t, bat.SGoal)
+
+	// grid charging not allowed from the grid: no goal
+	req, bat = newReq()
+	bat.ChargeFromGrid = false
+	site.applyLmBatteryInputs(bat, req, false, 0)
+	assert.Empty(t, bat.SGoal)
 }
