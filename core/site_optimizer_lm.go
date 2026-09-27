@@ -23,7 +23,6 @@ package core
 // unchanged.
 
 import (
-	"cmp"
 	"time"
 
 	"github.com/evcc-io/evcc/api"
@@ -167,13 +166,13 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 	if socOn && bat.ChargeFromGrid {
 		floor = max(floor, wh(start))
 
-		// the stop soc within the window from each time charging starts: now
-		// while it runs, else where the battery is expected to fall to the start soc
-		goal := min(wh(stop), top)
-		for _, i := range socChargeGoals(*bat, req, running, floor, wh(start), goal, site.gridChargeWindow()) {
+		// while it runs the stop soc as goal, reached as the fork charges; where
+		// it starts later is found by a second pass, see site_optimizer_soc_pass.go
+		if goal := min(wh(stop), top); running && goal > bat.SInitial {
 			if len(bat.SGoal) != len(dt) {
 				bat.SGoal = make([]float32, len(dt))
 			}
+			i := slotAfter(dt, site.socChargeDuration(*bat, bat.SInitial, goal))
 			bat.SGoal[i] = max(bat.SGoal[i], goal)
 		}
 	}
@@ -224,52 +223,23 @@ func (site *Site) lmForecastLowest(low *batteryForecastSlot) *batteryForecastSlo
 	return low
 }
 
-// socChargeGoals returns the slots by which soc-based grid charging reaches
-// its stop soc. Charging starts right away while running, else where the
-// battery, covering the home demand the solar forecast leaves and storing its
-// surplus, falls to the start soc; after reaching the stop soc it may fall
-// again. The optimizer itself cannot foresee this switching. The battery never
-// falls below floor (the peak shaving reserve and the start soc, a hard
-// minimum for the optimizer): with the reserve above the start soc charging
-// only happens while it already runs.
-func socChargeGoals(bat optimizer.BatteryConfig, req *optimizer.OptimizationInput, running bool, floor, start, stop float32, window time.Duration) []int {
-	ts := req.TimeSeries
-	if stop <= start || len(ts.Dt) == 0 {
-		return nil
+// socChargeDuration is how long soc-based grid charging takes from one stored
+// energy to another: the fork charges right away at its grid charge power (else
+// the battery's maximum) with the charging efficiency, at most the grid charge
+// window
+func (site *Site) socChargeDuration(bat optimizer.BatteryConfig, from, to float32) time.Duration {
+	window := site.gridChargeWindow()
+
+	power, _ := site.lmBatteryChargePower()
+	if power <= 0 {
+		power = float64(bat.CMax)
+	}
+	if power <= 0 || to <= from {
+		return window
 	}
 
-	top := bat.SMax
-	if top <= 0 {
-		top = bat.SCapacity
-	}
-	etaC, etaD := cmp.Or(req.EtaC, 1), cmp.Or(req.EtaD, 1)
-
-	var res []int
-	e := bat.SInitial
-	for i := 0; i < len(ts.Dt); i++ {
-		if running || e <= start {
-			running = false
-			g := i + slotAfter(ts.Dt[i:], window)
-			if e < stop {
-				res = append(res, g)
-			}
-			e = max(e, stop)
-			i = g
-			continue
-		}
-
-		if i >= len(ts.Gt) || i >= len(ts.Ft) {
-			break
-		}
-		h := float32(ts.Dt[i]) / 3600
-		if net := ts.Gt[i] - ts.Ft[i]; net > 0 {
-			e = max(min(e, floor), e-min(net, bat.DMax*h)/etaD)
-		} else {
-			e = min(top, e+min(-net, bat.CMax*h)*etaC)
-		}
-	}
-
-	return res
+	d := time.Duration(float64(to-from) / (power * site.identChargeEta()) * float64(time.Hour))
+	return min(d, window)
 }
 
 // slotAfter returns the index of the time step in which d has passed

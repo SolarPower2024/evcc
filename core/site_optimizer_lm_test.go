@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -91,13 +92,16 @@ func TestLmOptimizerInputsPeakAndGridCharge(t *testing.T) {
 	site.applyLmOptimizerInputs(&req, batteries)
 	assert.Equal(t, float32(4000), batteries[0].cfg.SMin)
 
-	// running: stop soc as goal after the grid charge window (3 h = 12th quarter hour)
+	// running: stop soc as goal after the charging time, at most the window
 	s.socChargeRunning = true
 	batteries = []optimizerBattery{homeBattery()}
 	site.applyLmOptimizerInputs(&req, batteries)
 	bat = batteries[0].cfg
 	require.Len(t, bat.SGoal, 16)
-	assert.Equal(t, float32(8000), bat.SGoal[11])
+	i := slices.IndexFunc(bat.SGoal, func(g float32) bool { return g > 0 })
+	assert.Equal(t, float32(8000), bat.SGoal[i])
+	assert.Equal(t, slotAfter(req.TimeSeries.Dt, site.socChargeDuration(homeBattery().cfg, homeBattery().cfg.SInitial, 8000)), i)
+	assert.LessOrEqual(t, i, 11, "within the 3 h window")
 
 	// below the floor: the minimum is the current soc
 	batteries = []optimizerBattery{homeBattery()}
@@ -196,7 +200,7 @@ func TestLmOptimizerInputsEdgeCases(t *testing.T) {
 	b.cfg.SMax = 7000
 	batteries = []optimizerBattery{b}
 	site.applyLmOptimizerInputs(&req, batteries)
-	assert.Equal(t, float32(7000), batteries[0].cfg.SGoal[11])
+	assert.Contains(t, batteries[0].cfg.SGoal, float32(7000))
 
 	// one-time charging by a time already passed: as soon as possible
 	s.socChargeRunning = false
@@ -271,49 +275,6 @@ func TestLmOptimizerGridTariff(t *testing.T) {
 	assert.Nil(t, (&Site{}).optimizerGridTariff())
 }
 
-// Soc-based grid charging is planned where the battery is expected to fall
-// to the start soc, and again after each charge.
-func TestSocChargeGoals(t *testing.T) {
-	const capacity = 10000
-	night := func(n int, demand, pv float32) *optimizer.OptimizationInput {
-		req := &optimizer.OptimizationInput{EtaC: 0.9, EtaD: 0.9}
-		for range n {
-			req.TimeSeries.Dt = append(req.TimeSeries.Dt, 900)
-			req.TimeSeries.Gt = append(req.TimeSeries.Gt, demand)
-			req.TimeSeries.Ft = append(req.TimeSeries.Ft, pv)
-		}
-		return req
-	}
-	bat := optimizer.BatteryConfig{SCapacity: capacity, SMax: capacity, SInitial: 9000, CMax: 5000, DMax: 5000}
-	window := 3 * time.Hour
-
-	// 250 Wh per slot out of the battery (225 Wh demand at 0.9): 9000 -> 2500
-	// after 26 slots, the stop soc 3 h (12 slots) later; 4000 -> 2500 takes 6
-	req := night(96, 225, 0)
-	goals := socChargeGoals(bat, req, false, 2500, 2500, 4000, window)
-	require.GreaterOrEqual(t, len(goals), 2)
-	assert.Equal(t, 26+11, goals[0], "start soc reached, stop soc 3 h later")
-	assert.Equal(t, goals[0]+1+6+11, goals[1], "falls again after the charge")
-
-	// running: within the window from now
-	low := bat
-	low.SInitial = 3000
-	goals = socChargeGoals(low, req, true, 2500, 2500, 4000, window)
-	require.NotEmpty(t, goals)
-	assert.Equal(t, 11, goals[0])
-
-	// running above the stop soc: nothing to charge now
-	high := bat
-	high.SInitial = 9900
-	assert.Empty(t, socChargeGoals(high, night(8, 225, 0), true, 2500, 2500, 4000, window))
-
-	// pv covers the demand: never falls to the start soc
-	assert.Empty(t, socChargeGoals(bat, night(96, 180, 500), false, 2500, 2500, 4000, window))
-
-	// invalid range
-	assert.Empty(t, socChargeGoals(bat, req, false, 4000, 4000, 4000, window))
-}
-
 // The forecast does not call the battery empty at a floor set by the fork.
 func TestLmForecastLowest(t *testing.T) {
 	site := &Site{log: util.NewLogger("test")}
@@ -324,31 +285,6 @@ func TestLmForecastLowest(t *testing.T) {
 	site.lms().floorRaised = true
 	assert.False(t, site.lmForecastLowest(low).limit)
 	assert.Nil(t, site.lmForecastLowest(nil))
-}
-
-// The peak shaving reserve is a hard minimum: the battery never falls below it,
-// so with the reserve above the start soc grid charging is not planned.
-func TestSocChargeGoalsReserve(t *testing.T) {
-	req := &optimizer.OptimizationInput{EtaC: 0.9, EtaD: 0.9}
-	for range 96 {
-		req.TimeSeries.Dt = append(req.TimeSeries.Dt, 900)
-		req.TimeSeries.Gt = append(req.TimeSeries.Gt, 225)
-		req.TimeSeries.Ft = append(req.TimeSeries.Ft, 0)
-	}
-	bat := optimizer.BatteryConfig{SCapacity: 10000, SMax: 10000, SInitial: 9000, CMax: 5000, DMax: 5000}
-	window := 3 * time.Hour
-
-	// reserve 20 % below the start soc 25 %: planned as before
-	assert.NotEmpty(t, socChargeGoals(bat, req, false, 2500, 2500, 4000, window))
-
-	// reserve 30 % between start and stop, reserve 50 % above the stop soc
-	assert.Empty(t, socChargeGoals(bat, req, false, 3000, 2500, 4000, window))
-	assert.Empty(t, socChargeGoals(bat, req, false, 5000, 2500, 4000, window))
-
-	// already running below the reserve (a peak was covered): charges to the stop soc
-	low := bat
-	low.SInitial = 2000
-	assert.Equal(t, []int{11}, socChargeGoals(low, req, true, 5000, 2500, 4000, window)[:1])
 }
 
 // Grid charging only enters the request while it is switched on and allowed;
@@ -374,12 +310,23 @@ func TestLmBatteryInputsSocChargeSwitch(t *testing.T) {
 	assert.Empty(t, bat.SGoal)
 	assert.Zero(t, bat.SMin)
 
-	// switched on: floor at the start soc, goals
+	// switched on, not running: floor at the start soc, the charge is planned
+	// by the second pass
 	s.socChargeEnabled = true
 	req, bat = newReq()
 	site.applyLmBatteryInputs(bat, req, false, 0)
 	assert.Equal(t, float32(2500), bat.SMin)
-	assert.NotEmpty(t, bat.SGoal)
+	assert.Empty(t, bat.SGoal)
+
+	// running: the stop soc after the charging time at the battery's maximum,
+	// 1500 Wh at 5000 W and 0.9 = 20 min, in slot 1
+	s.socChargeRunning = true
+	req, bat = newReq()
+	bat.SInitial = 2500
+	site.applyLmBatteryInputs(bat, req, false, 0)
+	require.Len(t, bat.SGoal, 96)
+	assert.Equal(t, float32(4000), bat.SGoal[1])
+	s.socChargeRunning = false
 
 	// peak shaving reserve 50 % above the stop soc: hard minimum, nothing planned
 	req, bat = newReq()
@@ -392,4 +339,66 @@ func TestLmBatteryInputsSocChargeSwitch(t *testing.T) {
 	bat.ChargeFromGrid = false
 	site.applyLmBatteryInputs(bat, req, false, 0)
 	assert.Empty(t, bat.SGoal)
+}
+
+// The second pass starts where the plan reaches the start soc; its request
+// continues from the plan's state then, and both plans are joined.
+func TestSocPass(t *testing.T) {
+	site := &Site{log: util.NewLogger("test")}
+	s := site.lms()
+	s.socChargeEnabled, s.socChargeStart, s.socChargeStop = true, 25, 40
+
+	req := &optimizer.OptimizationInput{Batteries: []optimizer.BatteryConfig{
+		{SCapacity: 10000, SMax: 10000, SInitial: 9000, SMin: 2500, CMax: 5000, DMax: 5000, ChargeFromGrid: true},
+		{SMax: 50000, SInitial: 20000, CMax: 11000, PDemand: []float32{1, 2, 3, 4, 5, 6}},
+	}}
+	req.TimeSeries = optimizer.TimeSeries{Dt: []int{900, 900, 900, 900, 900, 900}, Gt: []float32{1, 2, 3, 4, 5, 6}, Ft: []float32{0, 0, 0, 0, 0, 0}, PN: []float32{1, 1, 1, 1, 1, 1}, PE: []float32{0, 0, 0, 0, 0, 0}}
+	details := requestDetails{BatteryDetails: []batteryDetail{{Type: batteryTypeBattery}, {Type: batteryTypeVehicle}}}
+	res := &optimizer.OptimizationResult{Status: optimizer.Optimal, Batteries: []optimizer.BatteryResult{
+		{StateOfCharge: []float32{7000, 5000, 2500, 2500, 2500, 2500}, ChargingPower: make([]float32, 6), DischargingPower: []float32{2000, 2000, 2500, 0, 0, 0}},
+		{StateOfCharge: []float32{21000, 22000, 23000, 23000, 23000, 23000}, ChargingPower: []float32{1000, 1000, 1000, 0, 0, 0}, DischargingPower: make([]float32, 6)},
+	}, GridImport: []float32{0, 0, 0, 9, 9, 9}}
+
+	home, k, goal := site.socPassStart(req, details, res)
+	assert.Equal(t, 0, home)
+	assert.Equal(t, 2, k, "start soc reached at the end of slot 2")
+	assert.Equal(t, float32(4000), goal)
+
+	req2 := socPassRequest(*req, res, k)
+	assert.Equal(t, []int{900, 900, 900}, req2.TimeSeries.Dt)
+	assert.Equal(t, []float32{4, 5, 6}, req2.TimeSeries.Gt)
+	assert.Equal(t, float32(2500), req2.Batteries[0].SInitial)
+	assert.Equal(t, float32(23000), req2.Batteries[1].SInitial)
+	assert.True(t, req2.Batteries[1].CActive, "the vehicle was charging")
+	assert.Equal(t, []float32{4, 5, 6}, req2.Batteries[1].PDemand)
+	assert.Equal(t, float32(9000), req.Batteries[0].SInitial, "the first request is unchanged")
+
+	res2 := optimizer.OptimizationResult{Status: optimizer.Optimal, Batteries: []optimizer.BatteryResult{
+		{StateOfCharge: []float32{4000, 3500, 3000}, ChargingPower: []float32{1500, 0, 0}, DischargingPower: []float32{0, 500, 500}},
+		{StateOfCharge: []float32{23000, 23000, 23000}, ChargingPower: make([]float32, 3), DischargingPower: make([]float32, 3)},
+	}, GridImport: []float32{2000, 1, 1}}
+	socPassJoin(res, res2, k)
+	assert.Equal(t, []float32{7000, 5000, 2500, 4000, 3500, 3000}, res.Batteries[0].StateOfCharge)
+	assert.Equal(t, []float32{0, 0, 0, 2000, 1, 1}, res.GridImport)
+	assert.Len(t, res.Batteries[1].ChargingPower, 6)
+
+	// not reached, running, switched off, reserve above the start soc
+	res.Batteries[0].StateOfCharge = []float32{9000, 9000, 9000, 9000, 9000, 9000}
+	_, k, _ = site.socPassStart(req, details, res)
+	assert.Equal(t, -1, k, "not reached")
+
+	res.Batteries[0].StateOfCharge = []float32{7000, 2500, 2500, 2500, 2500, 2500}
+	s.socChargeRunning = true
+	_, k, _ = site.socPassStart(req, details, res)
+	assert.Equal(t, -1, k, "running: goal of the first pass")
+	s.socChargeRunning = false
+
+	req.Batteries[0].SMin = 5000
+	_, k, _ = site.socPassStart(req, details, res)
+	assert.Equal(t, -1, k, "reserve above the start soc")
+	req.Batteries[0].SMin = 2500
+
+	s.socChargeEnabled = false
+	_, k, _ = site.socPassStart(req, details, res)
+	assert.Equal(t, -1, k, "switched off")
 }

@@ -309,7 +309,9 @@ func TestLmOptimizerScenarios(t *testing.T) {
 				set := installation
 				set.running, set.window = true, window
 				r := run(t, winter, 20, set, opts{})
-				i := slotAfter(r.req.TimeSeries.Dt, time.Duration(window*float64(time.Hour)))
+				bat := r.req.Batteries[0]
+				i := slotAfter(r.req.TimeSeries.Dt, set.site().socChargeDuration(bat, bat.SInitial, scenarioCapacity*0.4))
+				assert.LessOrEqual(t, i, slotAfter(r.req.TimeSeries.Dt, time.Duration(window*float64(time.Hour))), "within the window")
 				require.Len(t, r.req.Batteries[0].SGoal, len(r.req.TimeSeries.Dt))
 				assert.InDelta(t, scenarioCapacity*0.4, r.req.Batteries[0].SGoal[i], 1)
 			})
@@ -324,15 +326,26 @@ func TestLmOptimizerScenarios(t *testing.T) {
 		day.price = flat(0.25) // planner price that lets the battery discharge
 		for _, soc := range []float64{40, 97} {
 			t.Run(ftoa(soc), func(t *testing.T) {
-				r := run(t, day, soc, installation, opts{})
-				goals := lo.Filter(r.req.Batteries[0].SGoal, func(g float32, _ int) bool { return g > 0 })
-				require.NotEmpty(t, goals, "stop soc planned")
+				req, batteries := day.request(soc)
+				site := installation.site()
+				site.applyLmOptimizerInputs(&req, batteries)
+				finish(&req, batteries)
+				r := solveReq(t, req)
+				details := requestDetails{BatteryDetails: lo.Map(batteries, func(b optimizerBattery, _ int) batteryDetail { return b.detail })}
 
-				// where the plan reaches the start soc it comes back to the stop soc
+				site.lmSocChargePass(client, &req, details, r.res)
 				s := r.soc(0)
-				if first := slices.IndexFunc(s, func(v float32) bool { return pct(v) <= 26 }); first >= 0 && first < len(s)-16 {
-					assert.True(t, slices.ContainsFunc(s[first:], func(v float32) bool { return pct(v) >= 39 }), "charged to the stop soc again")
+				require.Len(t, s, len(req.TimeSeries.Dt), "joined over the whole horizon")
+
+				// down to the start soc, then charged to the stop soc right away
+				first := slices.IndexFunc(s, func(v float32) bool { return pct(v) <= 26 })
+				require.GreaterOrEqual(t, first, 0, "discharges to the start soc")
+				require.Less(t, first+3, len(s))
+				assert.GreaterOrEqual(t, pct(max(s[first+1], s[first+2], s[first+3])), 39.0, "charged to the stop soc")
+				for i, v := range s {
+					assert.GreaterOrEqual(t, pct(v), 24.9, "below the start soc at step %d", i)
 				}
+				t.Logf("start soc at step %d, then %.0f%% %.0f%% %.0f%%", first, pct(s[first+1]), pct(s[first+2]), pct(s[first+3]))
 			})
 		}
 	})
@@ -346,6 +359,8 @@ func TestLmOptimizerScenarios(t *testing.T) {
 		set := installation
 		set.reserve = 50
 		r := run(t, day, 97, set, opts{})
+		details := requestDetails{BatteryDetails: []batteryDetail{{Type: batteryTypeBattery}}}
+		set.site().lmSocChargePass(client, &r.req, details, r.res)
 		assert.Empty(t, lo.Filter(r.req.Batteries[0].SGoal, func(g float32, _ int) bool { return g > 0 }), "no grid charging planned")
 		for i, v := range r.soc(0) {
 			assert.GreaterOrEqual(t, pct(v), 49.9, "below the reserve at step %d", i)

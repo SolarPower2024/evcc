@@ -132,7 +132,7 @@ Keep these in mind when merging a new evcc version:
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff role: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `assets/js/components/Config/TariffModal.vue` | `feedInEeg` offers the price templates |
 | `core/site_load_predictor.go` | `homeProfileByWeekday` call in `homeProfile` |
-| `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled |
+| `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled, `lmSocChargePass` after the solve, `lmForecastLowest` for the forecast |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
 | `assets/js/views/Config.vue` | load management details section and its modals |
@@ -338,17 +338,19 @@ settings as inputs, so the plan matches what the fork will actually do, see
 
 - peak shaving: peak limit as hard grid import limit (`p_max_imp`), reserve
   as the home battery's minimum soc (`s_min`)
-- soc-based grid charging: start soc as minimum soc; the stop soc as goal
-  (`s_goal`) within the grid charge window (*Erweitert → Ziel Batterie-Netzladen
-  erreichen in*, default 3 h) from each time charging starts: now while it
-  runs, else where a simple forecast of the battery (home demand minus solar,
-  charge and discharge limits, efficiency) falls to the start soc, again after
-  each charge. The optimizer cannot foresee this switching itself, without the
-  goals its plan stayed at the start soc. Only while soc-based grid charging is
-  switched on and grid charging is allowed. The forecast never lets the battery
-  fall below the hard minimum (reserve, start soc): with the peak shaving
-  reserve above the start soc charging is only planned while it already runs. A floor raised this way is not shown
-  as "leer" in the battery forecast.
+- soc-based grid charging (only while switched on and grid charging is
+  allowed): start soc as minimum soc. The optimizer only knows minimums, given
+  the stop soc as goal it would just stop discharging there, which the fork
+  does not do. So the plan is solved twice (`core/site_optimizer_soc_pass.go`):
+  as requested, then again from the slot the battery reaches the start soc,
+  with the plan's state as starting point and the stop soc as goal after the
+  charging time (grid charge power, else the battery's maximum, with the
+  charging efficiency; at most the grid charge window), and both are joined.
+  The plan shows the discharge to the start soc and the charge to the stop soc
+  as the fork does them; a later charge is up to the optimizer. While charging
+  runs the stop soc is a goal of the first pass. A peak shaving reserve above
+  the start soc is a hard minimum, the battery never gets there. A floor
+  raised this way is not shown as "leer" in the battery forecast.
 - one-time grid charging: its target as goal at the chosen time, or right away
   when the charge power (grid charge power, else the battery's maximum) can
   reach it with 90% charging efficiency
