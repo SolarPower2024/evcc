@@ -49,33 +49,6 @@
 		<div v-if="!entity" class="alert alert-warning mt-3 mb-0 py-2 small">
 			{{ $t("battery.peakShaving.noEntity") }}
 		</div>
-
-		<hr class="my-3" />
-
-		<div class="d-flex justify-content-between">
-			<span class="text-muted">{{ $t("battery.peakShaving.windowAvg") }}</span>
-			<span class="fw-bold" :class="{ 'text-danger': overLimit }">
-				{{ windowAvgText }}
-			</span>
-		</div>
-		<div
-			v-if="followOn"
-			class="d-flex justify-content-between mt-1"
-			data-testid="battery-peak-shaving-follow"
-		>
-			<span class="text-muted">{{ $t("battery.peakShaving.follow") }}</span>
-			<span class="fw-bold">{{ fmtW(limit) }}</span>
-		</div>
-		<div v-if="enabled" class="d-flex justify-content-between mt-1">
-			<span class="text-muted">{{ allowedLabel }}</span>
-			<span class="fw-bold" data-testid="battery-peak-shaving-allowed">
-				{{ allowedText }}
-			</span>
-		</div>
-		<div class="d-flex justify-content-between mt-1">
-			<span class="text-muted">{{ $t("battery.peakShaving.current") }}</span>
-			<span class="fw-bold">{{ currentLabel }}</span>
-		</div>
 	</Card>
 </template>
 
@@ -108,11 +81,6 @@ export default defineComponent({
 		enabled: Boolean,
 		limit: { type: Number, default: 5000 },
 		reserve: { type: Number, default: 30 },
-		power: { type: Number, default: 0 },
-		windowAvg: { type: Number, default: 0 },
-		// grid power that keeps the window's average at the limit, until windowEnd
-		allowed: { type: Number, default: 0 },
-		windowEnd: { type: String, default: "" },
 		// reported by the backend, not inferred from power: a setpoint can
 		// legitimately equal the free-discharge value
 		shaving: Boolean,
@@ -140,23 +108,6 @@ export default defineComponent({
 		// the limit set by hand: the base while following the peak
 		handLimit(): number {
 			return this.followOn && this.follow?.base ? this.follow.base : this.limit;
-		},
-		overLimit(): boolean {
-			return this.windowAvg > this.limit;
-		},
-		windowAvgText(): string {
-			return this.fmtW(this.windowAvg);
-		},
-		allowedLabel(): string {
-			const time = this.windowEnd ? this.fmtHourMinute(new Date(this.windowEnd)) : "–";
-			return this.$t("battery.peakShaving.allowed", { time });
-		},
-		allowedText(): string {
-			return this.fmtW(this.allowed);
-		},
-		currentLabel(): string {
-			if (!this.enabled) return "—";
-			return this.shaving ? this.fmtW(this.power) : this.$t("battery.peakShaving.free");
 		},
 		limitOptions() {
 			const options = [];

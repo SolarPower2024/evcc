@@ -62,17 +62,12 @@
       "suggestion": "Suggestion"
     },
     "peakShaving": {
-      "allowed": "Grid draw allowed until {time}",
-      "current": "Current request",
       "description": "Below {reserve}, the battery only covers what would lift the 15 minute average above {limit}. Above it, normal self-consumption.",
       "enable": "Hold the lower battery range back for demand peaks.",
-      "follow": "Limit this month (follow the peak)",
-      "free": "unrestricted",
       "noEntity": "No target entity set (Configuration → Load management details → Peak Shaving).",
       "normal": "Self-consumption, reserve untouched",
       "off": "Inactive",
-      "shaving": "Reserve active, capping peaks",
-      "windowAvg": "Average of the 15 minute window"
+      "shaving": "Reserve active, capping peaks"
     },
     "socGridCharge": {
       "active": "Grid charging is running",
@@ -92,8 +87,7 @@
       "cancel": "Cancel",
       "running": "Charging once up to {soc}",
       "active": "charging",
-      "waiting": "waiting for the cheapest time",
-      "help": "Ends by itself at the target soc and continues across restarts. Load management and the peak limit apply."
+      "waiting": "waiting for the cheapest time"
     }
   },
   "batterySettings": {
@@ -544,7 +538,6 @@
       "invalid": "Could not save the priority.",
       "noLoads": "No loads in load management. Loadpoints appear once assigned to a circuit, the battery via Battery circuit.",
       "title": "Load management priorities",
-      "orderHint": "Drag to sort. The priorities are then renumbered from the bottom, starting at 0.",
       "value": "Prio {priority}"
     },
     "lmprofiles": {
@@ -1537,7 +1530,6 @@
     "blockedCircuit": "Circuit · until {time}",
     "circuitFollows": "follows the month's peak, set {limit}",
     "circuitLifted": "limit {limit} lifted",
-    "description": "What load management is doing right now.",
     "disabledHelp": "Off: the circuits' power limits do not apply, nothing is throttled for them. Fuses (current limits), §14a and battery peak shaving stay active.",
     "enabled": "Load management",
     "enabledHelp": "The circuits' power limits (peak) throttle wallboxes, heaters and battery grid charging.",
@@ -1552,7 +1544,7 @@
     },
     "events": "Recent events",
     "gridCharge": "Battery grid charging",
-    "loads": "Loads by priority · the bottom one is shed first",
+    "loads": "Loads by priority · throttled/switched off from the bottom up",
     "menu": "Load management (peak)",
     "noEvents": "No events since the start.",
     "noLoads": "No loads in load management.",
@@ -1586,7 +1578,8 @@
     },
     "title": "Load management (peak)",
     "enabledHelpCircuit": "The power limit of \"{circuit}\" throttles wallboxes, heaters and battery grid charging.",
-    "disabledHelpCircuit": "Off: the power limit of \"{circuit}\" does not apply, nothing is throttled for it. Other circuits, fuses (current limits), §14a and battery peak shaving stay active."
+    "disabledHelpCircuit": "Off: the power limit of \"{circuit}\" does not apply, nothing is throttled for it. Other circuits, fuses (current limits), §14a and battery peak shaving stay active.",
+    "peakFollow": "Follow the peak: limit raised this month, set {limit}"
   },
   "log": {
     "areaLabel": "Filter by area",
@@ -1972,7 +1965,6 @@
     "saving": "Capacity saving",
     "savingShort": "saved {saving}",
     "savingTotal": "total {total}",
-    "tariffHint": "With a capacity tariff you also see costs and savings here: Configuration → Load management details → Capacity tariff.",
     "title": "Peak Shaving",
     "withBattery": "With battery",
     "withoutBattery": "Without battery"

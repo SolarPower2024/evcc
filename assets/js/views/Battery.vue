@@ -51,11 +51,7 @@
 						:enabled="!!state.peakShaving"
 						:limit="state.peakShavingLimit ?? 5000"
 						:reserve="state.peakShavingReserve ?? 30"
-						:power="state.peakShavingPower ?? 0"
 						:shaving="!!state.peakShavingActive"
-						:window-avg="state.peakShavingWindowAvg ?? 0"
-						:allowed="state.peakShavingAllowed ?? 0"
-						:window-end="state.peakShavingWindowEnd ?? ''"
 						:entity="state.peakShavingEntity ?? ''"
 						:follow="state.peakFollow"
 					/>

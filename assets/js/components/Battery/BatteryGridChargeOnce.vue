@@ -66,7 +66,6 @@
 		</form>
 
 		<p v-if="error" class="text-danger small mt-2 mb-0">{{ error }}</p>
-		<p v-else class="small text-muted mt-2 mb-0">{{ $t("battery.gridChargeOnce.help") }}</p>
 	</div>
 </template>
 

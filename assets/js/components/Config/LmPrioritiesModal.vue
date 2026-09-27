@@ -30,9 +30,6 @@
 					</template>
 				</DragDropItem>
 			</DragDropList>
-			<p v-if="loads.length > 1" class="small evcc-gray mb-0">
-				{{ $t("config.lmpriorities.orderHint") }}
-			</p>
 
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
 				<button

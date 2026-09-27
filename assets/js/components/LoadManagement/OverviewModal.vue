@@ -10,32 +10,33 @@
 	>
 		<div v-if="visible">
 			<!-- custom: switch load management off, see core/site_lm_switch.go -->
-			<div class="form-check form-switch mb-1">
-				<input
-					id="lmEnabled"
-					:checked="lmEnabled"
-					class="form-check-input"
-					type="checkbox"
-					role="switch"
-					data-testid="lm-enabled"
-					:disabled="switching"
-					@change="changeEnabled"
-				/>
-				<label class="form-check-label" for="lmEnabled">
-					{{ $t("lmoverview.enabled") }}
-				</label>
+			<div class="d-flex justify-content-between align-items-center mb-1">
+				<div class="form-check form-switch mb-0">
+					<input
+						id="lmEnabled"
+						:checked="lmEnabled"
+						class="form-check-input"
+						type="checkbox"
+						role="switch"
+						data-testid="lm-enabled"
+						:disabled="switching"
+						@change="changeEnabled"
+					/>
+					<label class="form-check-label" for="lmEnabled">
+						{{ $t("lmoverview.enabled") }}
+					</label>
+				</div>
+				<span
+					class="pill ms-3 flex-shrink-0"
+					:class="overall.class"
+					data-testid="lm-overall"
+					>{{ overall.text }}</span
+				>
 			</div>
 			<p class="small evcc-gray mb-3" data-testid="lm-enabled-help">
 				{{ enabledHelp }}
 			</p>
 			<p v-if="switchError" class="text-danger small">{{ switchError }}</p>
-
-			<div class="d-flex justify-content-between align-items-center mb-3">
-				<p class="text-gray my-0">{{ $t("lmoverview.description") }}</p>
-				<span class="pill ms-3 flex-shrink-0" :class="overall.class">{{
-					overall.text
-				}}</span>
-			</div>
 
 			<div class="tiles mb-4">
 				<div v-for="c in circuits" :key="c.name" class="tile" data-testid="lm-circuit">
@@ -67,6 +68,9 @@
 					<div v-if="peak.allowed" class="tile-sub" data-testid="lm-peak-allowed">
 						{{ peak.allowed }}
 					</div>
+					<div v-if="peak.follow" class="tile-sub" data-testid="lm-peak-follow">
+						{{ peak.follow }}
+					</div>
 				</div>
 
 				<div v-if="battery" class="tile" data-testid="lm-gridcharge">
@@ -86,7 +90,7 @@
 								<span class="d-inline-flex align-items-center text-nowrap">
 									{{ l.battery ? $t("lmoverview.battery") : l.title || l.name }}
 									<shopicon-regular-lock
-										v-if="l.protected"
+										v-if="l.protected && l.state === 'shed'"
 										size="s"
 										class="evcc-gray lock"
 										:title="$t('lmoverview.protected')"
@@ -211,11 +215,19 @@ export default {
 							time: this.fmtHourMinute(new Date(end)),
 						})
 					: "";
+			// follow the peak raised the limit this month, see core/site_peak_follow.go
+			const f = this.state.peakFollow;
+			const limit = this.state.peakShavingLimit || 0;
+			const follow =
+				f?.enabled && limit > f.base
+					? this.$t("lmoverview.peakFollow", { limit: this.fmtW(f.base) })
+					: "";
 			return {
 				avg: this.state.peakShavingWindowAvg || 0,
-				limit: this.state.peakShavingLimit || 0,
+				limit,
 				text,
 				allowed,
+				follow,
 			};
 		},
 		loads() {

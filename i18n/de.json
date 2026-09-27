@@ -62,17 +62,12 @@
       "suggestion": "Vorschlag"
     },
     "peakShaving": {
-      "allowed": "Erlaubter Netzbezug bis {time}",
-      "current": "Aktuelle Anforderung",
       "description": "Unter {reserve} deckt die Batterie nur, was das 15-Minuten-Mittel über {limit} heben würde. Darüber normaler Eigenverbrauch.",
       "enable": "Untere Batteriereserve für Lastspitzen zurückhalten.",
-      "follow": "Grenze diesen Monat (Follow the Peak)",
-      "free": "unbegrenzt",
       "noEntity": "Keine Zielentität hinterlegt (Konfiguration → Lastmanagement-Details → Peak Shaving).",
       "normal": "Eigenverbrauch, Reserve unberührt",
       "off": "Inaktiv",
-      "shaving": "Reserve aktiv, kappt Lastspitzen",
-      "windowAvg": "Mittelwert im 15-Minuten-Fenster"
+      "shaving": "Reserve aktiv, kappt Lastspitzen"
     },
     "socGridCharge": {
       "active": "Netzladen läuft",
@@ -92,8 +87,7 @@
       "cancel": "Abbrechen",
       "running": "Lädt einmalig bis {soc}",
       "active": "lädt",
-      "waiting": "wartet auf die günstigste Zeit",
-      "help": "Endet von selbst beim Ziel-Ladestand, läuft über Neustarts weiter. Lastmanagement und Peak-Grenze gelten."
+      "waiting": "wartet auf die günstigste Zeit"
     }
   },
   "batterySettings": {
@@ -544,7 +538,6 @@
       "invalid": "Priorität konnte nicht gespeichert werden.",
       "noLoads": "Keine Verbraucher im Lastmanagement. Ladepunkte erscheinen mit zugewiesenem Stromkreis, die Batterie über Batterie-Stromkreis.",
       "title": "Lastmanagement-Prioritäten",
-      "orderHint": "Zum Sortieren ziehen. Die Prioritäten werden dann von unten ab 0 neu durchnummeriert.",
       "value": "Prio {priority}"
     },
     "lmprofiles": {
@@ -1537,7 +1530,6 @@
     "blockedCircuit": "Stromkreis · bis {time}",
     "circuitFollows": "folgt der Monatsspitze, eingestellt {limit}",
     "circuitLifted": "Grenze {limit} aufgehoben",
-    "description": "Was das Lastmanagement gerade tut.",
     "disabledHelp": "Aus: Die Leistungsgrenzen der Stromkreise gelten nicht, nichts wird dafür gedrosselt. Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv.",
     "enabled": "Lastmanagement",
     "enabledHelp": "Die Leistungsgrenzen der Stromkreise (Peak) drosseln Wallbox, Heizstäbe und Batterie-Netzladen.",
@@ -1552,7 +1544,7 @@
     },
     "events": "Letzte Ereignisse",
     "gridCharge": "Batterie-Netzladen",
-    "loads": "Verbraucher nach Priorität · unten wird zuerst abgeworfen",
+    "loads": "Verbraucher nach Priorität · dimmen/abschalten von unten nach oben",
     "menu": "Lastmanagement (Peak)",
     "noEvents": "Noch keine Ereignisse seit dem Start.",
     "noLoads": "Keine Verbraucher im Lastmanagement.",
@@ -1586,7 +1578,8 @@
     },
     "title": "Lastmanagement (Peak)",
     "enabledHelpCircuit": "Die Leistungsgrenze von „{circuit}“ drosselt Wallbox, Heizstäbe und Batterie-Netzladen.",
-    "disabledHelpCircuit": "Aus: Die Leistungsgrenze von „{circuit}“ gilt nicht, nichts wird dafür gedrosselt. Andere Stromkreise, Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv."
+    "disabledHelpCircuit": "Aus: Die Leistungsgrenze von „{circuit}“ gilt nicht, nichts wird dafür gedrosselt. Andere Stromkreise, Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv.",
+    "peakFollow": "Follow the Peak: Grenze diesen Monat angehoben, eingestellt {limit}"
   },
   "log": {
     "areaLabel": "Nach Bereich filtern",
@@ -1972,7 +1965,6 @@
     "saving": "Ersparnis Leistungspreis",
     "savingShort": "gespart {saving}",
     "savingTotal": "gesamt {total}",
-    "tariffHint": "Mit einem Leistungstarif siehst du hier auch die Kosten und die Ersparnis: Konfiguration → Lastmanagement-Details → Leistungstarif.",
     "title": "Peak Shaving",
     "withBattery": "Mit Batterie",
     "withoutBattery": "Ohne Batterie"

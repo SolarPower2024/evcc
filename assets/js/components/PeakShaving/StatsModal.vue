@@ -104,9 +104,6 @@
 						</tbody>
 					</table>
 				</div>
-				<p v-if="!hasTariff" class="small text-muted mt-3 mb-0">
-					{{ $t("peakstats.tariffHint") }}
-				</p>
 			</template>
 		</div>
 	</GenericModal>
