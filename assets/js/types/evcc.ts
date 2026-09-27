@@ -177,6 +177,8 @@ export interface LmAdvanced {
   peakFreeze: number;
   /** Allowed grid draw at most this multiple of the peak limit. */
   peakCap: number;
+  /** Home consumption forecast per weekday. */
+  homeWeekday?: boolean;
   /** Cycles after which a load ignoring its limit is no longer counted on, 0 = off. */
   followCycles: number;
   gridChargeWindow: number;

@@ -68,6 +68,43 @@
 				</select>
 			</FormRow>
 
+			<!-- custom: home consumption forecast for the optimizer, see core/site_load_weekday.go -->
+			<FormRow
+				id="lmAdvanced-homeWeekday"
+				:label="$t('config.lmadvanced.homeWeekdayLabel')"
+				:help="$t('config.lmadvanced.homeWeekdayHelp')"
+			>
+				<select
+					id="lmAdvanced-homeWeekday"
+					v-model.number="values.homeWeekday"
+					class="form-select"
+					data-testid="lmadvanced-homeWeekday"
+				>
+					<option :value="0">{{ $t("config.lmadvanced.homeWeekdayOff") }}</option>
+					<option :value="1">{{ $t("config.lmadvanced.homeWeekdayOn") }}</option>
+				</select>
+			</FormRow>
+			<FormRow
+				id="lmAdvanced-percentile"
+				:label="$t('config.lmadvanced.percentileLabel')"
+				:help="$t('config.lmadvanced.percentileHelp')"
+			>
+				<select
+					id="lmAdvanced-percentile"
+					v-model.number="percentile"
+					class="form-select"
+					data-testid="lmadvanced-percentile"
+				>
+					<option v-for="p in percentiles" :key="p" :value="p">
+						{{
+							p
+								? $t("config.lmadvanced.percentileValue", { percentile: p })
+								: $t("config.lmadvanced.percentileAverage")
+						}}
+					</option>
+				</select>
+			</FormRow>
+
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
 				<button
 					type="button"
@@ -80,7 +117,7 @@
 				<button
 					type="submit"
 					class="btn btn-primary order-1 order-sm-2 flex-grow-1 flex-sm-grow-0 px-4"
-					:disabled="saving || (!changed.length && !circuitChanged)"
+					:disabled="saving || (!changed.length && !circuitChanged && !percentileChanged)"
 				>
 					<span
 						v-if="saving"
@@ -137,11 +174,23 @@ export default {
 			initial: {},
 			circuit: "",
 			initialCircuit: "",
+			percentile: 0,
+			initialPercentile: 0,
 		};
 	},
 	computed: {
 		numberFields() {
 			return FIELDS;
+		},
+		percentiles() {
+			// upstream profilePercentile in %, 0 = average
+			const res = [0, 60, 70, 80, 90];
+			return res.includes(this.initialPercentile)
+				? res
+				: [...res, this.initialPercentile].sort((a, b) => a - b);
+		},
+		percentileChanged() {
+			return this.percentile !== this.initialPercentile;
 		},
 		circuitChanged() {
 			return this.circuit !== this.initialCircuit;
@@ -168,6 +217,7 @@ export default {
 			const values = {};
 			FIELDS.forEach((f) => (values[f.name] = state[f.name] ?? f.default));
 			values.phases = state.phases ?? 3;
+			values.homeWeekday = state.homeWeekday ? 1 : 0;
 
 			this.saving = false;
 			this.error = "";
@@ -175,6 +225,8 @@ export default {
 			this.initial = { ...values };
 			this.circuit = store.state?.lmOff?.circuit || "";
 			this.initialCircuit = this.circuit;
+			this.percentile = store.state?.profilePercentile ?? 0;
+			this.initialPercentile = this.percentile;
 		},
 		invalidField() {
 			return FIELDS.find((f) => {
@@ -208,6 +260,13 @@ export default {
 						await api.post(`lmcircuit/${encodeURIComponent(this.circuit)}`);
 					} else {
 						await api.delete("lmcircuit");
+					}
+				}
+				if (this.percentileChanged) {
+					if (this.percentile) {
+						await api.post(`profilepercentile/${this.percentile}`);
+					} else {
+						await api.delete("profilepercentile");
 					}
 				}
 				for (const name of this.changed) {

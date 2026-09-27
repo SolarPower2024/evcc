@@ -554,7 +554,15 @@
       "gridChargeWindowHelp": "Optimizer only: the time it gets for soc-based battery grid charging to reach the stop soc, charging in the cheapest hours of it. 1 h = right away.",
       "circuitLabel": "Load management (peak) circuit",
       "circuitHelp": "The circuit holding your peak limit, not the fuse. Only it shows under More → Load management (peak), is lifted by the switch there and rises with follow the peak.",
-      "circuitAll": "None – all circuits, none rises along"
+      "circuitAll": "None – all circuits, none rises along",
+      "homeWeekdayLabel": "Consumption forecast",
+      "homeWeekdayHelp": "For the optimizer. By weekday: each day from the same weekday of the last 8 weeks, e.g. weekends differ from working days. Without enough data yet, the average applies.",
+      "homeWeekdayOff": "Average of the last 28 days",
+      "homeWeekdayOn": "By weekday",
+      "percentileLabel": "Consumption safety margin",
+      "percentileHelp": "Instead of the mean per quarter hour a higher value from the past, e.g. 80 %: only 2 of 10 days were above it. The optimizer then keeps more battery back. Also applies to the heating devices' profiles.",
+      "percentileAverage": "None (average)",
+      "percentileValue": "{percentile} %"
     },
     "lmpriorities": {
       "battery": "Home battery (grid charging)",

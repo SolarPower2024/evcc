@@ -27,6 +27,8 @@ type lmAdvanced struct {
 	FollowCycles *float64 `json:"followCycles,omitempty"`
 	// hours the optimizer may take to reach the stop soc of soc-based grid charging
 	GridChargeWindow *float64 `json:"gridChargeWindow,omitempty"`
+	// home consumption forecast per weekday, 1 = on, see site_load_weekday.go
+	HomeWeekday *float64 `json:"homeWeekday,omitempty"`
 }
 
 // lmAdvancedState is what the ui shows: the values in effect
@@ -40,6 +42,7 @@ type lmAdvancedState struct {
 	PeakCap          float64 `json:"peakCap"`
 	FollowCycles     int     `json:"followCycles"`
 	GridChargeWindow float64 `json:"gridChargeWindow"`
+	HomeWeekday      bool    `json:"homeWeekday"`
 }
 
 // lmAdvancedLimit is a setting's valid range
@@ -58,6 +61,7 @@ var lmAdvancedLimits = map[string]lmAdvancedLimit{
 	"peakCap":          {1, 10, false},
 	"followCycles":     {0, 20, true},
 	"gridChargeWindow": {1, 24, true},
+	"homeWeekday":      {0, 1, true},
 }
 
 // restoreLmAdvanced restores the persisted advanced settings
@@ -98,6 +102,7 @@ func (site *Site) publishLmAdvanced() {
 		PeakCap:          site.peakCap(),
 		FollowCycles:     site.lmFollowCycles(),
 		GridChargeWindow: site.gridChargeWindow().Hours(),
+		HomeWeekday:      site.homeWeekday(),
 	})
 }
 
@@ -148,6 +153,8 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 		s.adv.FollowCycles = &v
 	case "gridChargeWindow":
 		s.adv.GridChargeWindow = &v
+	case "homeWeekday":
+		s.adv.HomeWeekday = &v
 	}
 	adv := s.adv
 	s.advMu.Unlock()
@@ -160,6 +167,9 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 
 	if name == "timeout" {
 		lm.SetTimeout(site.lmTimeout())
+	}
+	if name == "homeWeekday" {
+		site.Optimize() // the home demand forecast changed
 	}
 
 	site.publishLmAdvanced()
