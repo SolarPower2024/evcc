@@ -131,6 +131,7 @@ Keep these in mind when merging a new evcc version:
 | `core/site/api.go` | embeds `CustomAPI`, one line |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff role: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `assets/js/components/Config/TariffModal.vue` | `feedInEeg` offers the price templates |
+| `core/site_load_predictor.go` | `homeProfileByWeekday` call in `homeProfile` |
 | `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
@@ -262,6 +263,20 @@ configured limits (or the raised one of follow the peak). Survives a restart
 (`lmOff`). Circuits whose limit comes from a plugin are left alone and listed.
 Circuit limits changed at runtime are published with their configured values
 in `lmOff.limits`, so the overview shows them.
+
+## Home consumption forecast per weekday
+
+Lastmanagement-Details → Erweitert → *Verbrauchsprognose*. evcc forecasts the
+home base load for the optimizer from the average of the last 28 days per
+quarter hour. *Nach Wochentag* takes each forecast day from the same weekday of
+the last 8 weeks instead, so weekends and working days keep their own shape; a
+weekday without complete data falls back to the average. Stored as
+`homeWeekday` in the advanced settings, see `core/site_load_weekday.go`, one
+call in `homeProfile` (`core/site_load_predictor.go`).
+
+*Sicherheitszuschlag Verbrauch* sets upstream's `profilePercentile` (API only
+upstream): a higher percentile per quarter hour instead of the mean, for both
+profiles and the heating devices' profiles.
 
 ## Capacity tariff
 

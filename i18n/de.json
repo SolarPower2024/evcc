@@ -527,7 +527,15 @@
       "gridChargeWindowHelp": "Nur mit Optimizer: So viel Zeit bekommt er beim Batterie-Netzladen nach Ladestand bis zum Stopp-Ladestand und lädt in den günstigsten Stunden davon. 1 h = sofort.",
       "circuitLabel": "Stromkreis Lastmanagement (Peak)",
       "circuitHelp": "Der Stromkreis mit deiner Peak-Grenze, nicht der Absicherung. Nur er erscheint unter Mehr → Lastmanagement (Peak), wird dort mit dem Schalter aufgehoben und steigt bei Follow the Peak mit.",
-      "circuitAll": "Keiner – alle Stromkreise, keiner steigt mit"
+      "circuitAll": "Keiner – alle Stromkreise, keiner steigt mit",
+      "homeWeekdayLabel": "Verbrauchsprognose",
+      "homeWeekdayHelp": "Für den Optimizer. Nach Wochentag: jeder Tag aus demselben Wochentag der letzten 8 Wochen, z. B. Wochenende anders als Werktage. Fehlen noch Daten, gilt der Durchschnitt.",
+      "homeWeekdayOff": "Durchschnitt der letzten 28 Tage",
+      "homeWeekdayOn": "Nach Wochentag",
+      "percentileLabel": "Sicherheitszuschlag Verbrauch",
+      "percentileHelp": "Statt des Mittelwerts je Viertelstunde ein höherer Wert der Vergangenheit, z. B. 80 %: nur 2 von 10 Tagen lagen darüber. Der Optimizer hält dann mehr Batterie zurück. Gilt auch für die Profile der Heizgeräte.",
+      "percentileAverage": "Keiner (Durchschnitt)",
+      "percentileValue": "{percentile} %"
     },
     "lmpriorities": {
       "battery": "Hausbatterie (Netzladen)",
