@@ -95,4 +95,5 @@ func (site *Site) savePeakMonths() {
 	}
 
 	site.publish(keys.PeakMonths, months)
+	site.publishPeakTariff()
 }

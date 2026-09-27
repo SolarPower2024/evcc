@@ -30,6 +30,15 @@
 						</div>
 						<div class="tile-sub">{{ when(current.demandAt) }}</div>
 					</div>
+					<div v-if="currentCost" class="tile" data-testid="peak-stats-saving">
+						<div class="tile-label">{{ $t("peakstats.saving") }}</div>
+						<div class="tile-value" :class="{ 'text-danger': currentCost.saving < 0 }">
+							{{ money(currentCost.saving) }}
+						</div>
+						<div class="tile-sub">
+							{{ $t("peakstats.savingTotal", { total: money(totalSaving) }) }}
+						</div>
+					</div>
 					<div class="tile">
 						<div class="tile-label">{{ $t("peakstats.interventions") }}</div>
 						<div class="tile-value">{{ current.interventions }}</div>
@@ -44,6 +53,12 @@
 								<th>{{ $t("peakstats.month") }}</th>
 								<th class="text-end">{{ $t("peakstats.withBattery") }}</th>
 								<th class="text-end">{{ $t("peakstats.withoutBattery") }}</th>
+								<th v-if="hasTariff" class="text-end">
+									<span class="d-sm-none">{{ $t("peakstats.costShort") }}</span>
+									<span class="d-none d-sm-inline">{{
+										$t("peakstats.cost")
+									}}</span>
+								</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -60,16 +75,38 @@
 								</td>
 								<td class="text-end text-nowrap">
 									{{ power(m.peak, m.peakAt) }}
-									<div class="evcc-gray small">{{ when(m.peakAt) }}</div>
+									<div class="evcc-gray small d-none d-sm-block">
+										{{ when(m.peakAt) }}
+									</div>
 								</td>
 								<td class="text-end text-nowrap">
 									{{ power(m.demand, m.demandAt) }}
-									<div class="evcc-gray small">{{ when(m.demandAt) }}</div>
+									<div class="evcc-gray small d-none d-sm-block">
+										{{ when(m.demandAt) }}
+									</div>
+								</td>
+								<td v-if="hasTariff" class="text-end">
+									<template v-if="costOf(m.month)">
+										{{ money(costOf(m.month).cost) }}
+										<div
+											class="small"
+											:class="
+												costOf(m.month).saving < 0
+													? 'text-danger'
+													: 'evcc-gray'
+											"
+										>
+											{{ savingText(costOf(m.month).saving) }}
+										</div>
+									</template>
 								</td>
 							</tr>
 						</tbody>
 					</table>
 				</div>
+				<p v-if="!hasTariff" class="small text-muted mt-3 mb-0">
+					{{ $t("peakstats.tariffHint") }}
+				</p>
 			</template>
 		</div>
 	</GenericModal>
@@ -100,14 +137,41 @@ export default {
 			const [y, m] = this.current.month.split("-").map(Number);
 			return this.fmtMonthYear(new Date(y, m - 1, 1));
 		},
+		// the limit set by hand, also while following the peak
 		limit() {
+			const follow = store.state?.peakFollow;
+			if (follow?.enabled && follow.base) return follow.base;
 			return store.state?.peakShavingLimit || 0;
+		},
+		// custom: capacity tariff, see core/site_peak_tariff.go
+		costs() {
+			return store.state?.peakTariff?.months || [];
+		},
+		hasTariff() {
+			return this.costs.length > 0;
+		},
+		currentCost() {
+			return this.costOf(this.current?.month);
+		},
+		totalSaving() {
+			return this.costs.reduce((sum, c) => sum + c.saving, 0);
 		},
 		overLimit() {
 			return this.limit > 0 && this.current.peak > this.limit;
 		},
 	},
 	methods: {
+		costOf(month) {
+			return this.costs.find((c) => c.month === month);
+		},
+		savingText(saving) {
+			return saving < 0
+				? this.$t("peakstats.extraCost", { cost: this.money(-saving) })
+				: this.$t("peakstats.savingShort", { saving: this.money(saving) });
+		},
+		money(amount) {
+			return this.fmtMoney(amount, store.state?.currency, true, true);
+		},
 		monthName(month) {
 			const [y, m] = month.split("-").map(Number);
 			return new Intl.DateTimeFormat(this.$i18n?.locale, {

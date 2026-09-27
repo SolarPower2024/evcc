@@ -1297,8 +1297,6 @@ func (site *Site) update(lp updater) {
 
 		// custom: peak shaving, see core/site_peakshaving.go
 		site.updatePeakShaving(state)
-		// custom: feed-in price published after the fact, see core/site_feedin.go
-		site.updateFeedInFinalization()
 		// custom: export under a second feed-in tariff, see core/site_feedin_eeg.go
 		site.updateFeedInEeg()
 	}
