@@ -80,7 +80,8 @@
       "enable": "Charge the home battery from the grid based on its state of charge.",
       "off": "Inactive",
       "range": "Charging starts at {start} or below and stops at {stop}.",
-      "waiting": "Waiting for the start state of charge"
+      "waiting": "Waiting for the start state of charge",
+      "optimizer": "With optimizer automatic mode the optimizer plans the charging: the battery does not fall below the start soc, and charges to the stop soc at the cheapest time."
     },
     "gridChargeOnce": {
       "title": "Charge once",
@@ -582,7 +583,8 @@
       "title": "Profiles",
       "unchanged": "unchanged",
       "valueCount": "Values: {count}",
-      "yes": "Yes"
+      "yes": "Yes",
+      "optimizer": "With optimizer automatic mode discharge control is skipped, the optimizer decides it."
     },
     "lmshedguard": {
       "description": "A protected loadpoint switched off by load management stays off for the lock time. One that could not start at all is not locked.",
@@ -1578,7 +1580,9 @@
     },
     "title": "Load management (peak)",
     "enabledHelpCircuit": "The power limit of \"{circuit}\" throttles wallboxes, heaters and battery grid charging.",
-    "disabledHelpCircuit": "Off: the power limit of \"{circuit}\" does not apply, nothing is throttled for it. Other circuits, fuses (current limits), §14a and battery peak shaving stay active."
+    "disabledHelpCircuit": "Off: the power limit of \"{circuit}\" does not apply, nothing is throttled for it. Other circuits, fuses (current limits), §14a and battery peak shaving stay active.",
+    "optimizer": "Optimizer",
+    "optimizerHint": "The optimizer decides, load management limits."
   },
   "log": {
     "areaLabel": "Filter by area",

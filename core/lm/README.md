@@ -132,6 +132,7 @@ Keep these in mind when merging a new evcc version:
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff role: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `assets/js/components/Config/TariffModal.vue` | `feedInEeg` offers the price templates |
 | `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled |
+| `core/site_battery.go` | `lmGateBatteryMode` after upstream decided the battery mode (optimizer automatic mode, evcc PR 32881) |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
 | `assets/js/views/Config.vue` | load management details section and its modals |
@@ -145,7 +146,7 @@ Everything else lives in files of its own: `core/lm/`, `core/circuit/circuit_cus
 `core/site_lm_advanced.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
 `core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
 `core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
-`core/site/api_custom.go`, `server/http_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`
+`core/site/api_custom.go`, `server/http_custom.go`, `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`
 and the new Vue components.
 
 ## Shed guard
@@ -327,9 +328,21 @@ settings as inputs, so the plan matches what the fork will actually do, see
   limits, so a fixed one would hide a dynamic grid tariff's cheap slots.
 
 Without circuits, peak shaving, soc-based and one-time grid charging the
-request is unchanged. The optimizer's automatic mode (evcc PR 32881, not
-released yet) additionally needs a gate at execution; that is prepared
-separately on top of these inputs.
+request is unchanged.
+
+In the optimizer's automatic mode (evcc PR 32881, not released yet; until
+then this builds on the branch `preview/optimizer-auto`) it also sets the
+battery mode and gates the loadpoints. The fork keeps its safety limits at
+execution, see `core/site_optimizer_gate.go`: a charge request passes the same
+checks as the fork's own grid charging (running peak, circuit headroom,
+charge power setpoint) and becomes hold when refused; hold gives way to normal
+while a peak has to be covered, and peak shaving then only covers the peak
+instead of writing the free value. Below the reserve the battery stays in
+normal mode as before. With a missing or stale optimizer result the fork's
+grid charging applies as without the optimizer, which otherwise does not
+switch the battery itself while the optimizer is in control. Profiles skip
+discharge control, which the optimizer decides. The overview marks what the
+optimizer controls. Without automatic mode the battery follows upstream.
 
 `TestLmOptimizerReplay` sends a recorded request with these inputs to a
 running optimizer (`OPTIMIZER_REPLAY`, `OPTIMIZER_URI`, optional

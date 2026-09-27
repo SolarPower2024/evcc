@@ -91,6 +91,12 @@
 										class="evcc-gray lock"
 										:title="$t('lmoverview.protected')"
 									></shopicon-regular-lock>
+									<span
+										v-if="l.optimizer"
+										class="badge rounded-pill text-bg-light ms-1"
+										:title="$t('lmoverview.optimizerHint')"
+										>{{ $t("lmoverview.optimizer") }}</span
+									>
 								</span>
 							</td>
 							<td class="text-end text-nowrap">{{ fmtW(l.power) }}</td>
