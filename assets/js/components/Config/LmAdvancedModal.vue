@@ -16,7 +16,7 @@
 				:id="`lmAdvanced-${field.name}`"
 				:key="field.name"
 				:label="$t(`config.lmadvanced.${field.name}Label`)"
-				:help="$t(`config.lmadvanced.${field.name}Help`, { std: field.default })"
+				:help="$t(`config.lmadvanced.${field.name}Help`)"
 			>
 				<div class="input-group">
 					<input

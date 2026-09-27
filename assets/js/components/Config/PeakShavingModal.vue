@@ -47,8 +47,6 @@
 				<strong>{{ sourceText }}</strong>
 			</p>
 
-			<p class="text-muted mt-3 small">{{ $t("config.peakshaving.hint") }}</p>
-
 			<!-- custom: follow the peak, see core/site_peak_follow.go -->
 			<hr class="my-4" />
 			<div class="form-check form-switch mb-2">

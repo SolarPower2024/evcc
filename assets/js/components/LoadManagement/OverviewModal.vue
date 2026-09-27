@@ -82,17 +82,16 @@
 				<table class="table table-sm align-middle mb-0">
 					<tbody>
 						<tr v-for="l in loads" :key="l.name" :data-testid="`lm-load-${l.name}`">
-							<td class="text-nowrap">
-								{{ l.battery ? $t("lmoverview.battery") : l.title || l.name }}
-								<shopicon-regular-lock
-									v-if="l.protected"
-									size="s"
-									class="evcc-gray lock"
-									:title="$t('lmoverview.protected')"
-								></shopicon-regular-lock>
-							</td>
-							<td class="evcc-gray text-nowrap">
-								{{ $t("lmoverview.priority", { priority: l.priority }) }}
+							<td>
+								<span class="d-inline-flex align-items-center text-nowrap">
+									{{ l.battery ? $t("lmoverview.battery") : l.title || l.name }}
+									<shopicon-regular-lock
+										v-if="l.protected"
+										size="s"
+										class="evcc-gray lock"
+										:title="$t('lmoverview.protected')"
+									></shopicon-regular-lock>
+								</span>
 							</td>
 							<td class="text-end text-nowrap">{{ fmtW(l.power) }}</td>
 							<td class="text-end">
