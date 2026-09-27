@@ -94,6 +94,11 @@ type peakState struct {
 
 	set func(float64) error // resolved from config
 
+	// follow the peak, see site_peak_follow.go
+	follow       bool
+	followBuffer float64 // W below the month's peak
+	followBase   float64 // W, the limit set by hand
+
 	// grid charge power control: the battery charges at a power evcc writes to
 	// this entity, sized to stay below the peak limit and within the circuit
 	chargeEntity   string
@@ -196,6 +201,7 @@ func (site *Site) restorePeakSettings() {
 	}
 
 	site.restorePeakMonths()
+	site.restorePeakFollow()
 	site.publishPeakSettings()
 	site.publishLmPriorities()
 }
@@ -414,6 +420,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 	defer site.savePeakMonths()
 
 	site.updatePeakWindow(state.gridPower, state.battery.Power)
+	site.updatePeakFollow()
 
 	s.mu.Lock()
 	enabled, limit, reserve, set, allowed := s.enabled, s.limit, s.reserve, s.set, s.allowed
@@ -1136,6 +1143,11 @@ func (site *Site) SetPeakShavingLimit(limit float64) error {
 	}
 	if math.Mod(limit, peakLimitStep) != 0 {
 		return fmt.Errorf("peak limit must be a multiple of %.0fW", peakLimitStep)
+	}
+
+	// following the peak: the limit set by hand is the base
+	if site.peakFollowSetBase(limit) {
+		return nil
 	}
 
 	s := site.peak()

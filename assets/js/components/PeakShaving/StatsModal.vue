@@ -100,7 +100,10 @@ export default {
 			const [y, m] = this.current.month.split("-").map(Number);
 			return this.fmtMonthYear(new Date(y, m - 1, 1));
 		},
+		// the limit set by hand, also while following the peak
 		limit() {
+			const follow = store.state?.peakFollow;
+			if (follow?.enabled && follow.base) return follow.base;
 			return store.state?.peakShavingLimit || 0;
 		},
 		overLimit() {

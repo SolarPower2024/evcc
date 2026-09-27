@@ -216,6 +216,14 @@ export interface PeakMonth {
   interventions: number;
 }
 
+export interface PeakFollow {
+  enabled: boolean;
+  /** W below the month's peak. */
+  buffer: number;
+  /** W, the limit set by hand. */
+  base: number;
+}
+
 // custom: load management overview, see core/site_lm_status.go
 export interface LmLoadStatus {
   name: string;
@@ -452,6 +460,8 @@ export interface State {
   peakShavingEnergyEntity?: string;
   /** Monthly peak statistics, newest first. */
   peakMonths?: PeakMonth[];
+  /** Follow the peak: the limit rises to the month's peak minus the buffer (W), base = limit set by hand. */
+  peakFollow?: PeakFollow;
   /** Home Assistant number entity receiving the grid charge power, empty = on/off charging. */
   peakShavingChargeEntity?: string;
   /** Grid charge power in W currently written to that entity, 0 = not charging. */

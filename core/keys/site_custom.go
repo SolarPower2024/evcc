@@ -29,6 +29,9 @@ const (
 	PeakMonths                      = "peakMonths"                // monthly peak statistics
 	PeakShavingChargeEntity         = "peakShavingChargeEntity"   // grid charge power target
 	PeakShavingChargeSetpoint       = "peakShavingChargeSetpoint" // grid charge power written, 0 = not charging
+	PeakFollow                      = "peakFollow"                // follow the peak, see core/site_peak_follow.go
+	PeakFollowBuffer                = "peakFollowBuffer"
+	PeakFollowBase                  = "peakFollowBase"
 
 	// load management shed priorities
 	LmPriorities = "lmPriorities"

@@ -222,6 +222,20 @@ counts negative), and how often the battery started covering a peak. Only
 quarter hours metered from their start count. Kept for 24 months in
 `peakMonths`, see `core/site_peak_stats.go`.
 
+## Follow the peak
+
+Lastmanagement-Details → Peak Shaving. A capacity tariff bills the month's
+highest quarter hour, so once the month already has a peak above the limit,
+shaving below it saves nothing and only drains the battery. With follow the
+peak on, the limit rises to the month's peak (with the battery) minus a buffer
+(0-5 kW, default 0.5 kW, rounded down to 100 W, at most 20 kW) and never below
+the limit set by hand, the base. A new month starts at the base again. Setting
+the limit by hand, or by a profile, while following sets the base; switching
+off returns to it. See `core/site_peak_follow.go`.
+
+Open: how this relates to the circuit limits of load management; waits for
+circuits configured in the ui (evcc PR 33077).
+
 ## Second feed-in tariff (EEG)
 
 Part of the export can go to an energy community (EEG) at a fixed price, the rest

@@ -49,6 +49,13 @@ type CustomAPI interface {
 	SetPeakShaving(bool) error
 	GetPeakShavingLimit() float64
 	SetPeakShavingLimit(float64) error
+
+	// follow the peak, see core/site_peak_follow.go
+	GetPeakFollow() bool
+	SetPeakFollow(bool) error
+	GetPeakFollowBuffer() float64
+	SetPeakFollowBuffer(float64) error
+
 	GetPeakShavingEntity() string
 	SetPeakShavingEntity(string) error
 	GetPeakShavingChargeEntity() string

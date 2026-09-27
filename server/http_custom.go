@@ -61,6 +61,8 @@ func customSiteRoutes(site site.API) map[string]route {
 		// peak shaving, see core/site_peakshaving.go
 		"peakshaving":                   {"POST", "/peakshaving/{value:[01truefalse]+}", boolHandler(site.SetPeakShaving, site.GetPeakShaving)},
 		"peakshavinglimit":              {"POST", "/peakshavinglimit/{value:[0-9.]+}", floatHandler(site.SetPeakShavingLimit, site.GetPeakShavingLimit)},
+		"peakfollow":                    {"POST", "/peakfollow/{value:[01truefalse]+}", boolHandler(site.SetPeakFollow, site.GetPeakFollow)},
+		"peakfollowbuffer":              {"POST", "/peakfollowbuffer/{value:[0-9.]+}", floatHandler(site.SetPeakFollowBuffer, site.GetPeakFollowBuffer)},
 		"peakshavingreserve":            {"POST", "/peakshavingreserve/{value:[0-9.]+}", floatHandler(site.SetPeakShavingReserve, site.GetPeakShavingReserve)},
 		"peakshavingentity":             {"POST", "/peakshavingentity/{value:[a-zA-Z0-9_.]+}", stringHandler(site.SetPeakShavingEntity, site.GetPeakShavingEntity)},
 		"peakshavingentitydelete":       {"DELETE", "/peakshavingentity", stringHandler(site.SetPeakShavingEntity, site.GetPeakShavingEntity)},
