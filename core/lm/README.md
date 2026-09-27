@@ -236,6 +236,17 @@ off returns to it. See `core/site_peak_follow.go`.
 Open: how this relates to the circuit limits of load management; waits for
 circuits configured in the ui (evcc PR 33077).
 
+## Capacity tariff
+
+Lastmanagement-Details → Leistungstarif. The month's highest quarter hour is
+billed per kW and year up to a threshold, at a higher price above it, and at
+least a minimum and a share of the agreed power; a zero price is off. For each
+recorded month the cost with the battery (grid draw) and without it is
+published in `peakTariff` and shown under Mehr → Peak Shaving with the saving,
+negative when grid charging raised the peak. Prefilled with the Austrian draft
+for 2027: 33.82 EUR/kW/year up to 10 kW, double above, at least 20% of the
+agreed power and 2 kW. See `core/site_peak_tariff.go`.
+
 ## Second feed-in tariff (EEG)
 
 Part of the export can go to an energy community (EEG) at a fixed price, the rest

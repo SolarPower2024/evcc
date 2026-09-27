@@ -589,6 +589,7 @@
 				<LmPrioritiesModal />
 				<LmShedGuardModal />
 				<LmAdvancedModal />
+				<PeakTariffModal />
 				<LmProfilesModal />
 				<FeedInFinalModal />
 				<FeedInEegModal />
@@ -656,6 +657,7 @@ import PeakShavingCircuitModal from "../components/Config/PeakShavingCircuitModa
 import LmPrioritiesModal from "../components/Config/LmPrioritiesModal.vue";
 import LmShedGuardModal from "../components/Config/LmShedGuardModal.vue";
 import LmAdvancedModal from "../components/Config/LmAdvancedModal.vue";
+import PeakTariffModal from "../components/Config/PeakTariffModal.vue";
 import LmProfilesModal from "../components/Config/LmProfilesModal.vue";
 import FeedInFinalModal from "../components/Config/FeedInFinalModal.vue";
 import FeedInEegModal from "../components/Config/FeedInEegModal.vue";
@@ -781,6 +783,7 @@ export default defineComponent({
 		LmPrioritiesModal,
 		LmShedGuardModal,
 		LmAdvancedModal,
+		PeakTariffModal,
 		LmProfilesModal,
 		FeedInFinalModal,
 		FeedInEegModal,

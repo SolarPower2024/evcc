@@ -99,6 +99,8 @@ type peakState struct {
 	followBuffer float64 // W below the month's peak
 	followBase   float64 // W, the limit set by hand
 
+	tariff peakTariff // capacity tariff, see site_peak_tariff.go
+
 	// grid charge power control: the battery charges at a power evcc writes to
 	// this entity, sized to stay below the peak limit and within the circuit
 	chargeEntity   string
@@ -202,6 +204,7 @@ func (site *Site) restorePeakSettings() {
 
 	site.restorePeakMonths()
 	site.restorePeakFollow()
+	site.restorePeakTariff()
 	site.publishPeakSettings()
 	site.publishLmPriorities()
 }

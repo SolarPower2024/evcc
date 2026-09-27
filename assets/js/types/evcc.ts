@@ -224,6 +224,30 @@ export interface PeakFollow {
   base: number;
 }
 
+export interface PeakTariffMonth {
+  /** YYYY-MM */
+  month: string;
+  /** kW billed. */
+  billed: number;
+  /** Capacity cost of the month with the battery. */
+  cost: number;
+  /** The same without the battery. */
+  costWithout: number;
+  /** costWithout - cost, negative when grid charging raised the peak. */
+  saving: number;
+}
+
+export interface PeakTariff {
+  /** Per kW and year up to the threshold, 0 = off. */
+  price: number;
+  threshold: number;
+  priceAbove: number;
+  agreed: number;
+  minShare: number;
+  minimum: number;
+  months: PeakTariffMonth[];
+}
+
 // custom: load management overview, see core/site_lm_status.go
 export interface LmLoadStatus {
   name: string;
@@ -462,6 +486,8 @@ export interface State {
   peakMonths?: PeakMonth[];
   /** Follow the peak: the limit rises to the month's peak minus the buffer (W), base = limit set by hand. */
   peakFollow?: PeakFollow;
+  /** Capacity tariff with each month's cost with and without the battery, a zero price is off. */
+  peakTariff?: PeakTariff;
   /** Home Assistant number entity receiving the grid charge power, empty = on/off charging. */
   peakShavingChargeEntity?: string;
   /** Grid charge power in W currently written to that entity, 0 = not charging. */

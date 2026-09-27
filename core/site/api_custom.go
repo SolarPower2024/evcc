@@ -56,6 +56,9 @@ type CustomAPI interface {
 	GetPeakFollowBuffer() float64
 	SetPeakFollowBuffer(float64) error
 
+	// capacity tariff, see core/site_peak_tariff.go
+	SetPeakTariff(name string, value float64) error
+
 	GetPeakShavingEntity() string
 	SetPeakShavingEntity(string) error
 	GetPeakShavingChargeEntity() string

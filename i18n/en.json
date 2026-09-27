@@ -1032,6 +1032,26 @@
       "sourceLabel": "15 minute average metered with",
       "title": "Peak shaving"
     },
+    "peaktariff": {
+      "agreedHelp": "As in the grid contract, 0 = none.",
+      "agreedLabel": "Agreed power",
+      "description": "Puts a price on each month's highest quarter hour and shows under More → Peak shaving what the battery saves. Prefilled with the Austrian draft from 2027, final amounts from December 2026.",
+      "enable": "Use a capacity tariff",
+      "entryLabel": "Capacity tariff",
+      "invalid": "{label} must be between {min} and {max}.",
+      "minShareHelp": "Share of the agreed power.",
+      "minShareLabel": "Billed at least",
+      "minimumHelp": "Always billed at least.",
+      "minimumLabel": "Minimum power",
+      "perKwYear": "{currency}/kW·year",
+      "priceAboveHelp": "Per kW and year. Austria: double.",
+      "priceAboveLabel": "Capacity price above the threshold",
+      "priceHelp": "Per kW and year up to the threshold.",
+      "priceLabel": "Capacity price",
+      "thresholdHelp": "Up to here the capacity price applies, above it the higher one.",
+      "thresholdLabel": "Threshold",
+      "title": "Capacity tariff"
+    },
     "pv": {
       "titleAdd": "Add Solar Meter",
       "titleEdit": "Edit Solar Meter"
@@ -1936,12 +1956,19 @@
     "updatePassword": "Update password"
   },
   "peakstats": {
+    "cost": "Capacity cost",
+    "costShort": "Cost",
     "description": "Highest quarter hour per month, with and without the battery.",
     "empty": "No complete quarter hour recorded yet.",
+    "extraCost": "extra cost {cost}",
     "interventions": "Interventions",
     "interventionsCount": "{count} interventions",
     "menu": "Peak Shaving",
     "month": "Month",
+    "saving": "Capacity saving",
+    "savingShort": "saved {saving}",
+    "savingTotal": "total {total}",
+    "tariffHint": "With a capacity tariff you also see costs and savings here: Configuration → Load management details → Capacity tariff.",
     "title": "Peak Shaving",
     "withBattery": "With battery",
     "withoutBattery": "Without battery"

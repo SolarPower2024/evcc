@@ -32,6 +32,7 @@ const (
 	PeakFollow                      = "peakFollow"                // follow the peak, see core/site_peak_follow.go
 	PeakFollowBuffer                = "peakFollowBuffer"
 	PeakFollowBase                  = "peakFollowBase"
+	PeakTariff                      = "peakTariff" // capacity tariff, see core/site_peak_tariff.go
 
 	// load management shed priorities
 	LmPriorities = "lmPriorities"

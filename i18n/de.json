@@ -1032,6 +1032,26 @@
       "sourceLabel": "15-Minuten-Mittel gemessen mit",
       "title": "Peak Shaving"
     },
+    "peaktariff": {
+      "agreedHelp": "Laut Netzvertrag, 0 = ohne.",
+      "agreedLabel": "Vereinbarte Leistung",
+      "description": "Bewertet die höchste Viertelstunde je Monat in Geld und zeigt unter Mehr → Peak Shaving, was die Batterie spart. Vorbelegt mit dem Entwurf für Österreich ab 2027, endgültige Beträge ab Dezember 2026.",
+      "enable": "Leistungstarif verwenden",
+      "entryLabel": "Leistungstarif",
+      "invalid": "{label} muss zwischen {min} und {max} liegen.",
+      "minShareHelp": "Anteil der vereinbarten Leistung.",
+      "minShareLabel": "Mindestens verrechnet",
+      "minimumHelp": "Wird immer mindestens verrechnet.",
+      "minimumLabel": "Mindestleistung",
+      "perKwYear": "{currency}/kW·Jahr",
+      "priceAboveHelp": "Pro kW und Jahr. Österreich: doppelt.",
+      "priceAboveLabel": "Leistungspreis über der Schwelle",
+      "priceHelp": "Pro kW und Jahr bis zur Schwelle.",
+      "priceLabel": "Leistungspreis",
+      "thresholdHelp": "Bis hier gilt der Leistungspreis, darüber der höhere.",
+      "thresholdLabel": "Schwelle",
+      "title": "Leistungstarif"
+    },
     "pv": {
       "titleAdd": "PV-Anlage hinzufügen",
       "titleEdit": "PV-Zähler bearbeiten"
@@ -1936,12 +1956,19 @@
     "updatePassword": "Passwort ändern"
   },
   "peakstats": {
+    "cost": "Leistungspreis",
+    "costShort": "Kosten",
     "description": "Höchste Viertelstunde je Monat, mit und ohne Batterie.",
     "empty": "Noch keine vollständige Viertelstunde erfasst.",
+    "extraCost": "Mehrkosten {cost}",
     "interventions": "Eingriffe",
     "interventionsCount": "{count} Eingriffe",
     "menu": "Peak Shaving",
     "month": "Monat",
+    "saving": "Ersparnis Leistungspreis",
+    "savingShort": "gespart {saving}",
+    "savingTotal": "gesamt {total}",
+    "tariffHint": "Mit einem Leistungstarif siehst du hier auch die Kosten und die Ersparnis: Konfiguration → Lastmanagement-Details → Leistungstarif.",
     "title": "Peak Shaving",
     "withBattery": "Mit Batterie",
     "withoutBattery": "Ohne Batterie"

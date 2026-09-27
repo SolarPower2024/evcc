@@ -63,6 +63,7 @@ func customSiteRoutes(site site.API) map[string]route {
 		"peakshavinglimit":              {"POST", "/peakshavinglimit/{value:[0-9.]+}", floatHandler(site.SetPeakShavingLimit, site.GetPeakShavingLimit)},
 		"peakfollow":                    {"POST", "/peakfollow/{value:[01truefalse]+}", boolHandler(site.SetPeakFollow, site.GetPeakFollow)},
 		"peakfollowbuffer":              {"POST", "/peakfollowbuffer/{value:[0-9.]+}", floatHandler(site.SetPeakFollowBuffer, site.GetPeakFollowBuffer)},
+		"peaktariff":                    {"POST", "/peaktariff/{name:[a-zA-Z]+}/{value:[0-9.]+}", peakTariffHandler(site)},
 		"peakshavingreserve":            {"POST", "/peakshavingreserve/{value:[0-9.]+}", floatHandler(site.SetPeakShavingReserve, site.GetPeakShavingReserve)},
 		"peakshavingentity":             {"POST", "/peakshavingentity/{value:[a-zA-Z0-9_.]+}", stringHandler(site.SetPeakShavingEntity, site.GetPeakShavingEntity)},
 		"peakshavingentitydelete":       {"DELETE", "/peakshavingentity", stringHandler(site.SetPeakShavingEntity, site.GetPeakShavingEntity)},
@@ -124,6 +125,25 @@ func lmProfileHandler(action func(string) error) http.HandlerFunc {
 		}
 
 		jsonWrite(w, id)
+	}
+}
+
+// peakTariffHandler sets one value of the capacity tariff
+func peakTariffHandler(site site.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+
+		value, err := strconv.ParseFloat(vars["value"], 64)
+		if err == nil {
+			err = site.SetPeakTariff(vars["name"], value)
+		}
+
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		jsonWrite(w, value)
 	}
 }
 
