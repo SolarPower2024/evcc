@@ -222,7 +222,7 @@ func TestLmOptimizerInputsEdgeCases(t *testing.T) {
 }
 
 // The EEG tariff never reaches the optimizer: its feed-in price is the
-// standard feed-in tariff.
+// standard feed-in tariff (OeMAG).
 func TestLmOptimizerFeedInWithEeg(t *testing.T) {
 	feedIn, err := tariff.NewFixedFromConfig(map[string]any{"price": 0.09})
 	require.NoError(t, err)

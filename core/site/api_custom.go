@@ -43,6 +43,9 @@ type CustomAPI interface {
 	DeleteLmProfile(id string) error
 	ApplyLmProfile(id string) error
 
+	// feed-in price published after the fact, see core/site_feedin.go
+	FinalizeFeedIn(month string, market float64) error
+
 	// export under a second feed-in tariff, see core/site_feedin_eeg.go
 	GetFeedInEegEntity() string
 	SetFeedInEegEntity(string) error

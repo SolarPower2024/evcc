@@ -591,6 +591,7 @@
 				<LmAdvancedModal />
 				<PeakTariffModal />
 				<LmProfilesModal />
+				<FeedInFinalModal />
 				<FeedInEegModal />
 				<GridChargeModal />
 				<ExperimentalModal :experimental="experimental" />
@@ -658,6 +659,7 @@ import LmShedGuardModal from "../components/Config/LmShedGuardModal.vue";
 import LmAdvancedModal from "../components/Config/LmAdvancedModal.vue";
 import PeakTariffModal from "../components/Config/PeakTariffModal.vue";
 import LmProfilesModal from "../components/Config/LmProfilesModal.vue";
+import FeedInFinalModal from "../components/Config/FeedInFinalModal.vue";
 import FeedInEegModal from "../components/Config/FeedInEegModal.vue";
 import GridChargeModal from "../components/Config/GridChargeModal.vue";
 import HemsIcon from "../components/MaterialIcon/Hems.vue";
@@ -783,6 +785,7 @@ export default defineComponent({
 		LmAdvancedModal,
 		PeakTariffModal,
 		LmProfilesModal,
+		FeedInFinalModal,
 		FeedInEegModal,
 		GridChargeModal,
 		HemsIcon,
