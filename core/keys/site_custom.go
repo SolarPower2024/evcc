@@ -51,6 +51,10 @@ const (
 	LmOff     = "lmOff"
 	LmCircuit = "lmCircuit" // the load management (peak) circuit
 
+	// battery identification, see core/site_battery_ident.go
+	BatteryIdent    = "batteryIdent"    // published: measured capacity and efficiency
+	BatteryIdentUse = "batteryIdentUse" // the measured values are used
+
 	// load management overview: every load's state and the event log, see core/site_lm_status.go
 	LmStatus = "lmStatus"
 

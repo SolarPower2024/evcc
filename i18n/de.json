@@ -1282,6 +1282,20 @@
       "template": "Hersteller",
       "titleAdd": "Fahrzeug hinzufügen",
       "titleEdit": "Fahrzeug bearbeiten"
+    },
+    "batteryident": {
+      "entryLabel": "Batterie-Vermessung",
+      "title": "Batterie-Vermessung",
+      "description": "Nutzbare Kapazität und Wirkungsgrad, gelernt aus den gespeicherten Lade- und Entladevorgängen der letzten 60 Tage (je mindestens 20 % Ladestand am Stück).",
+      "none": "Keine Hausbatterie konfiguriert.",
+      "configured": "Laut Konfiguration",
+      "capacity": "Gemessen",
+      "efficiency": "Wirkungsgrad (laden und entladen)",
+      "valid": "Aus {charges} Lade- und {discharges} Entladevorgängen.",
+      "implausible": "Nicht plausibel, wird nicht verwendet ({charges} Lade-, {discharges} Entladevorgänge). Kapazität in der Batterie-Konfiguration prüfen.",
+      "learning": "Lernt noch: {charges} Lade- und {discharges} Entladevorgänge, je {min} nötig.",
+      "use": "Gemessene Werte verwenden",
+      "useHelp": "Optimizer und Einmal-Netzladen planen dann mit der gemessenen Kapazität, Einmal-Netzladen auch mit dem gemessenen Wirkungsgrad. Nur solange die Werte plausibel sind."
     }
   },
   "footer": {

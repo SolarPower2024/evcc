@@ -47,6 +47,9 @@ func customSiteRoutes(site site.API) map[string]route {
 		"lmcircuit":       {"POST", "/lmcircuit/{value:" + namePattern + "}", stringHandler(site.SetLmCircuit, site.GetLmCircuit)},
 		"lmcircuitdelete": {"DELETE", "/lmcircuit", stringHandler(site.SetLmCircuit, site.GetLmCircuit)},
 
+		// battery identification, see core/site_battery_ident.go
+		"batteryidentuse": {"POST", "/batteryidentuse/{value:[01truefalse]+}", boolHandler(site.SetBatteryIdentUse, site.GetBatteryIdentUse)},
+
 		// advanced load management settings, see core/site_lm_advanced.go
 		"lmadvanced": {"POST", "/lmadvanced/{name:[a-zA-Z]+}/{value:[0-9.]+}", lmAdvancedHandler(site)},
 

@@ -35,6 +35,10 @@ type CustomAPI interface {
 	GetLmCircuit() string
 	SetLmCircuit(string) error
 
+	// battery identification, see core/site_battery_ident.go
+	GetBatteryIdentUse() bool
+	SetBatteryIdentUse(bool) error
+
 	// advanced load management settings, see core/site_lm_advanced.go
 	SetLmAdvanced(name string, value float64) error
 

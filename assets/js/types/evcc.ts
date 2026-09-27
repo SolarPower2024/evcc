@@ -475,6 +475,24 @@ export interface State {
   };
   /** Capacity tariff with each month's cost with and without the battery, a zero price is off. */
   peakTariff?: PeakTariff;
+  /** Battery capacity and efficiency learned from the stored slots. */
+  batteryIdent?: {
+    use: boolean;
+    updated: string;
+    batteries: {
+      name: string;
+      title: string;
+      /** kWh, datasheet */
+      configured: number;
+      /** kWh measured, 0 = not yet */
+      capacity: number;
+      /** round trip 0..1, 0 = not yet */
+      efficiency: number;
+      charges: number;
+      discharges: number;
+      valid: boolean;
+    }[];
+  };
   /** Home Assistant number entity receiving the grid charge power, empty = on/off charging. */
   peakShavingChargeEntity?: string;
   /** Grid charge power in W currently written to that entity, 0 = not charging. */

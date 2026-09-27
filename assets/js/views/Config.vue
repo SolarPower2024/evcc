@@ -590,6 +590,7 @@
 				<LmShedGuardModal />
 				<LmAdvancedModal />
 				<PeakTariffModal />
+				<BatteryIdentModal />
 				<LmProfilesModal />
 				<FeedInEegModal />
 				<GridChargeModal />
@@ -657,6 +658,7 @@ import LmPrioritiesModal from "../components/Config/LmPrioritiesModal.vue";
 import LmShedGuardModal from "../components/Config/LmShedGuardModal.vue";
 import LmAdvancedModal from "../components/Config/LmAdvancedModal.vue";
 import PeakTariffModal from "../components/Config/PeakTariffModal.vue";
+import BatteryIdentModal from "../components/Config/BatteryIdentModal.vue";
 import LmProfilesModal from "../components/Config/LmProfilesModal.vue";
 import FeedInEegModal from "../components/Config/FeedInEegModal.vue";
 import GridChargeModal from "../components/Config/GridChargeModal.vue";
@@ -782,6 +784,7 @@ export default defineComponent({
 		LmShedGuardModal,
 		LmAdvancedModal,
 		PeakTariffModal,
+		BatteryIdentModal,
 		LmProfilesModal,
 		FeedInEegModal,
 		GridChargeModal,
