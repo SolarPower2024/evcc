@@ -4,7 +4,7 @@ package metrics
 // core/site_feedin_eeg.go. The EEG counter is persisted by a regular collector
 // of group "meter" (monitoring only, never part of a balance), its price per
 // 15 minute slot in a table of its own. The split is derived from the persisted
-// slots only: EEG = the counter's slot energy, standard feed-in (OeMAG) = grid
+// slots only: EEG = the counter's slot energy, standard feed-in = grid
 // export minus EEG, clamped at zero.
 
 import (

@@ -114,8 +114,7 @@ Every fork feature follows these, so that taking in a new evcc version stays che
 4. **Contract tests.** Each hook has a test pinning the upstream behaviour it
    relies on, and that the fork is inert while its features are off:
    `TestForkInertWhenUnused`, `TestSetLimitUsesLmCircuit`,
-   `TestEqualPrioritiesAreUpstream`, `TestPeakReserveKeepsExternalMode`,
-   `TestFinalizeFeedIn` (upstream session and metrics models).
+   `TestEqualPrioritiesAreUpstream`, `TestPeakReserveKeepsExternalMode`.
 
 ## Upstream touch points
 
@@ -123,7 +122,7 @@ Keep these in mind when merging a new evcc version:
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateFeedInFinalization`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
+| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (INFO, no ui notification), see `circuit_custom.go` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
 | `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes |
@@ -136,10 +135,10 @@ Keep these in mind when merging a new evcc version:
 | `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
-| `assets/js/views/Config.vue` | load management details section and its modals, OeMAG modal |
+| `assets/js/views/Config.vue` | load management details section and its modals |
 | `assets/js/views/App.vue` | mounts the load management overview and the peak statistics |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | "Lastmanagement" and "Peak Shaving" entries |
-| `assets/js/components/Config/TariffCard.vue` | OeMAG summary in the feed-in card |
+| `assets/js/components/Config/TariffCard.vue` | EEG counter summary in the EEG card |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
 | `assets/js/types/evcc.ts`, `i18n/de.json`, `i18n/en.json` | state fields and texts |
 
@@ -147,9 +146,8 @@ Everything else lives in files of its own: `core/lm/`, `core/circuit/circuit_cus
 `core/site_lm_advanced.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
 `core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
 `core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
-`core/site/api_custom.go`, `server/http_custom.go`, `core/site_feedin.go`, `core/metrics/tariffs_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`,
-`tariff/oemag.go`, `tariff/wrapper_custom.go`, `templates/definition/tariff/oemag.yaml` and the new Vue
-components.
+`core/site/api_custom.go`, `server/http_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`
+and the new Vue components.
 
 ## Shed guard
 
@@ -294,7 +292,7 @@ agreed power and 2 kW. See `core/site_peak_tariff.go`.
 ## Second feed-in tariff (EEG)
 
 Part of the export can go to an energy community (EEG) at a fixed price, the rest
-gets the standard feed-in tariff (OeMAG). Tariff settings: "Einspeisevergütung EEG
+gets the standard feed-in tariff. Tariff settings: "Einspeisevergütung EEG
 hinzufügen" below the feed-in tariff (fixed price, 0 allowed), its card sets the
 Home Assistant counter of the EEG export (kWh, Wh or MWh).
 

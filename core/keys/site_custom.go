@@ -59,11 +59,6 @@ const (
 	LmProfileActive    = "lmProfileActive"
 	LmProfileWallboxes = "lmProfileWallboxes" // loadpoints a profile can set the solar share of
 
-	// last month whose feed-in price was finalized, YYYY-MM, see core/site_feedin.go
-	FeedInFinalized = "feedInFinalized"
-	FeedInHistory   = "feedInHistory" // finalized months, see core/site_feedin.go
-	FeedInFinal     = "feedInFinal"   // published: finalize day, market price and history
-
 	// export under a second feed-in tariff, see core/site_feedin_eeg.go
 	FeedInEegEntity = "feedInEegEntity" // Home Assistant energy counter of the EEG export
 	TariffFeedInEeg = "tariffFeedInEeg" // published: current EEG price
