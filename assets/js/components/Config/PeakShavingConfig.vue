@@ -60,6 +60,15 @@
 		</DeviceCard>
 
 		<DeviceCard
+			:title="$t('config.batteryident.entryLabel')"
+			editable
+			data-testid="batteryident-entry"
+			@edit="openModal('batteryident')"
+		>
+			<template #icon><shopicon-regular-ruler></shopicon-regular-ruler></template>
+		</DeviceCard>
+
+		<DeviceCard
 			:title="$t('config.lmprofiles.entryLabel')"
 			editable
 			data-testid="lmprofiles-entry"
@@ -87,6 +96,7 @@ import "@h2d2/shopicons/es/regular/lightning";
 import "@h2d2/shopicons/es/regular/cloudsun";
 import "@h2d2/shopicons/es/regular/settings";
 import "@h2d2/shopicons/es/regular/receivepayment";
+import "@h2d2/shopicons/es/regular/ruler";
 import { defineComponent } from "vue";
 import store from "@/store";
 import { openModal } from "@/configModal";
@@ -95,7 +105,7 @@ import CircuitsIcon from "../MaterialIcon/Circuits.vue";
 
 // Tiles of the load management details, laid out like the services. The settings
 // themselves are in PeakShavingCircuitModal, LmPrioritiesModal, LmShedGuardModal,
-// GridChargeModal, PeakShavingModal, PeakTariffModal, LmProfilesModal and
+// GridChargeModal, PeakShavingModal, PeakTariffModal, BatteryIdentModal, LmProfilesModal and
 // LmAdvancedModal. The
 // switches, the peak limit and the soc values live on the battery page.
 export default defineComponent({

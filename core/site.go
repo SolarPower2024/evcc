@@ -1294,6 +1294,8 @@ func (site *Site) update(lp updater) {
 		site.updatePeakShaving(state)
 		// custom: export under a second feed-in tariff, see core/site_feedin_eeg.go
 		site.updateFeedInEeg()
+		// custom: battery capacity and efficiency, see core/site_battery_ident.go
+		site.updateBatteryIdent()
 	}
 
 	// smart grid charging

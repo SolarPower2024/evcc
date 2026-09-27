@@ -1274,6 +1274,20 @@
       "template": "Manufacturer",
       "titleAdd": "Add Vehicle",
       "titleEdit": "Edit Vehicle"
+    },
+    "batteryident": {
+      "entryLabel": "Battery identification",
+      "title": "Battery identification",
+      "description": "Usable capacity and efficiency, learned from the stored charging and discharging runs of the last 60 days (each over at least 20 % soc).",
+      "none": "No home battery configured.",
+      "configured": "Configured",
+      "capacity": "Measured",
+      "efficiency": "Efficiency (charge and discharge)",
+      "valid": "From {charges} charging and {discharges} discharging runs.",
+      "implausible": "Not plausible, not used ({charges} charging, {discharges} discharging runs). Check the capacity in the battery configuration.",
+      "learning": "Still learning: {charges} charging and {discharges} discharging runs, {min} each needed.",
+      "use": "Use measured values",
+      "useHelp": "The optimizer and one-time grid charging then plan with the measured capacity, one-time grid charging also with the measured efficiency. Only while the values are plausible."
     }
   },
   "footer": {

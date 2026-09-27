@@ -68,6 +68,11 @@ type lmState struct {
 	batteryCircuit    api.Circuit    // resolved from the assignment
 	batteryCircuitRef string         // what batteryCircuit was resolved from
 	batteryLoad       *batteryLoad
+
+	// battery identification, see site_battery_ident.go
+	identUse bool
+	ident    []batteryIdentResult
+	identAt  time.Time
 }
 
 // lms returns the load management state, applying defaults on first use
@@ -118,6 +123,7 @@ func (site *Site) restoreLmSettings() {
 	site.restoreLmGuard()
 	site.restoreLmAdvanced()
 	site.restoreLmSwitch()
+	site.restoreBatteryIdent()
 	site.publishLmProfiles()
 
 	site.publishLmSettings()

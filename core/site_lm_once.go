@@ -163,7 +163,7 @@ func (site *Site) onceRequiredDuration(target, soc float64) time.Duration {
 		return 0
 	}
 
-	hours := (target - soc) / 100 * capacity * 1e3 / (power * eta)
+	hours := (target - soc) / 100 * capacity * 1e3 / (power * site.identChargeEta())
 	return time.Duration(hours * float64(time.Hour))
 }
 
@@ -193,10 +193,16 @@ func (site *Site) onceSlotActive(o gridChargeOnce, soc float64) bool {
 	return false
 }
 
-// batteryCapacityKWh returns the capacity of all batteries, 0 if one is unknown
+// batteryCapacityKWh returns the capacity of all batteries, measured where used
+// (see site_battery_ident.go), 0 if one is unknown
 func (site *Site) batteryCapacityKWh() float64 {
 	var res float64
 	for _, dev := range site.batteryMeters {
+		if r, ok := site.batteryIdentFor(dev.Config().Name); ok {
+			res += r.Capacity
+			continue
+		}
+
 		m, ok := api.Cap[api.BatteryCapacity](dev.Instance())
 		if !ok || m.Capacity() <= 0 {
 			return 0

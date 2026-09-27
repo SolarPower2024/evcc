@@ -91,6 +91,7 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 
 		switch b.detail.Type {
 		case batteryTypeBattery:
+			site.applyBatteryIdent(&b.cfg, &b.detail)
 			site.applyLmBatteryInputs(&b.cfg, req.TimeSeries.Dt, peakOn, reserve)
 
 			if lmActive && site.lmBatteryCircuit() != nil {
@@ -172,7 +173,7 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, dt []int, p
 				d = site.onceRequiredDuration(o.Target, float64(bat.SInitial/bat.SCapacity*100))
 				// unknown grid charge power: the battery's maximum charge power
 				if d <= 0 && bat.CMax > 0 {
-					d = time.Duration(float64(goal-bat.SInitial) / (float64(bat.CMax) * eta) * float64(time.Hour))
+					d = time.Duration(float64(goal-bat.SInitial) / (float64(bat.CMax) * site.identChargeEta()) * float64(time.Hour))
 				}
 			}
 			if len(bat.SGoal) != len(dt) {

@@ -122,7 +122,7 @@ Keep these in mind when merging a new evcc version:
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
+| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateBatteryIdent`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (INFO, no ui notification), see `circuit_custom.go` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
 | `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes |
@@ -262,6 +262,23 @@ configured limits (or the raised one of follow the peak). Survives a restart
 (`lmOff`). Circuits whose limit comes from a plugin are left alone and listed.
 Circuit limits changed at runtime are published with their configured values
 in `lmOff.limits`, so the overview shows them.
+
+## Battery identification
+
+Lastmanagement-Details → *Batterie-Vermessung*. The usable capacity and the
+round trip efficiency are learned from the 15 minute slots evcc stores for each
+battery (energy charged and discharged, soc at the slot start) over the last 60
+days: a charging run over at least 20 % soc gives the energy put in per 100 %
+(capacity / η), a discharging run the energy taken out (capacity × η). From the
+medians of at least 3 runs each: capacity = √(kc × kd), round trip = kd / kc.
+Runs with a soc jump, a gap or flow the other way are left out; an hour idle
+ends a run. Plausible: 50-120 % of the configured capacity, 60-100 % round
+trip. Refreshed every 6 hours, see `core/site_battery_ident.go`.
+
+With *Gemessene Werte verwenden* on, the optimizer request gets the measured
+capacity (all stored energies scaled, the soc values stay) and one-time grid
+charging plans with the measured capacity and charging efficiency. The
+optimizer's own efficiency is one value for batteries and vehicles and stays.
 
 ## Capacity tariff
 
