@@ -563,7 +563,7 @@
       "invalid": "Could not save the priority.",
       "noLoads": "No loads in load management. Loadpoints appear once assigned to a circuit, the battery via Battery circuit.",
       "title": "Load management priorities",
-      "orderHint": "Drag to sort. Only the moved load gets a new priority, others only when there is no room.",
+      "orderHint": "Drag to sort. The priorities are then renumbered from the bottom, starting at 0.",
       "value": "Prio {priority}"
     },
     "lmprofiles": {

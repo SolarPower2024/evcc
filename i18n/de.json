@@ -563,7 +563,7 @@
       "invalid": "Priorität konnte nicht gespeichert werden.",
       "noLoads": "Keine Verbraucher im Lastmanagement. Ladepunkte erscheinen mit zugewiesenem Stromkreis, die Batterie über Batterie-Stromkreis.",
       "title": "Lastmanagement-Prioritäten",
-      "orderHint": "Zum Sortieren ziehen. Nur der verschobene Verbraucher bekommt eine neue Priorität, andere nur, wenn kein Platz ist.",
+      "orderHint": "Zum Sortieren ziehen. Die Prioritäten werden dann von unten ab 0 neu durchnummeriert.",
       "value": "Prio {priority}"
     },
     "lmprofiles": {

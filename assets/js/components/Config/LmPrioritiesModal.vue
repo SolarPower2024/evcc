@@ -15,14 +15,7 @@
 
 		<form ref="form" class="container mx-0 px-0" @submit.prevent="save">
 			<!-- custom: order by drag, top = highest, see utils/lmPriorityOrder.ts -->
-			<DragDropList
-				v-if="loads.length"
-				:key="listKey"
-				:values="order"
-				@pointerdown.capture="dragStart"
-				@touchstart.capture="dragStart"
-				@reorder="reorder"
-			>
+			<DragDropList v-if="loads.length" :key="listKey" :values="order" @reorder="reorder">
 				<DragDropItem
 					v-for="name in order"
 					:key="name"
@@ -74,7 +67,7 @@ import DragDropList from "@/components/Helper/DragDropList.vue";
 import DragDropItem from "@/components/Helper/DragDropItem.vue";
 import store from "@/store";
 import api from "@/api";
-import { movedName, orderPriorities } from "@/utils/lmPriorityOrder";
+import { orderPriorities } from "@/utils/lmPriorityOrder";
 
 // Shed priorities of all loads in load management: the loadpoints on a circuit
 // and the home battery once it is assigned to one. Sorted by drag, the lowest is
@@ -91,7 +84,6 @@ export default {
 			initial: {},
 			order: [],
 			listKey: 0,
-			dragBase: null, // order and values when the drag started
 		};
 	},
 	computed: {
@@ -126,15 +118,10 @@ export default {
 				.map((l) => l.name);
 			this.listKey++;
 		},
-		dragStart() {
-			this.dragBase = { order: [...this.order], values: { ...this.values } };
-		},
-		// the list reports every step of a drag: always from where it started
+		// a drag numbers all loads by their new order
 		reorder(order) {
-			const base = this.dragBase || { order: this.order, values: this.values };
-			const moved = movedName(base.order, order);
-			this.values = moved ? orderPriorities(order, base.values, moved) : { ...base.values };
 			this.order = order;
+			this.values = orderPriorities(order);
 		},
 		open() {
 			this.reset();
