@@ -47,7 +47,40 @@
 				<strong>{{ sourceText }}</strong>
 			</p>
 
-			<p class="text-muted mt-3 small">{{ $t("config.peakshaving.hint") }}</p>
+			<!-- custom: follow the peak, see core/site_peak_follow.go -->
+			<hr class="my-4" />
+			<div class="form-check form-switch mb-2">
+				<input
+					id="peakFollow"
+					v-model="follow"
+					class="form-check-input"
+					type="checkbox"
+					role="switch"
+					data-testid="peakshaving-follow"
+				/>
+				<label class="form-check-label" for="peakFollow">
+					{{ $t("config.peakshaving.followLabel") }}
+				</label>
+			</div>
+			<p class="small text-muted">{{ $t("config.peakshaving.followHelp") }}</p>
+			<FormRow
+				v-if="follow"
+				id="peakFollowBuffer"
+				:label="$t('config.peakshaving.followBufferLabel')"
+				:help="$t('config.peakshaving.followBufferHelp')"
+			>
+				<div class="input-group">
+					<input
+						id="peakFollowBuffer"
+						v-model.number="buffer"
+						type="number"
+						step="any"
+						class="form-control"
+						data-testid="peakshaving-follow-buffer"
+					/>
+					<span class="input-group-text">kW</span>
+				</div>
+			</FormRow>
 
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
 				<button
@@ -97,6 +130,10 @@ export default {
 			initialEntity: "",
 			energyEntity: "",
 			initialEnergyEntity: "",
+			follow: false,
+			initialFollow: false,
+			buffer: 0.5,
+			initialBuffer: 0.5,
 		};
 	},
 	computed: {
@@ -106,8 +143,19 @@ export default {
 		energyEntityChanged() {
 			return this.energyEntity.trim() !== this.initialEnergyEntity;
 		},
+		followChanged() {
+			return this.follow !== this.initialFollow;
+		},
+		bufferChanged() {
+			return this.buffer !== this.initialBuffer;
+		},
 		changed() {
-			return this.entityChanged || this.energyEntityChanged;
+			return (
+				this.entityChanged ||
+				this.energyEntityChanged ||
+				this.followChanged ||
+				this.bufferChanged
+			);
 		},
 		sourceText() {
 			const source = store?.state?.peakShavingSource || "power";
@@ -124,11 +172,30 @@ export default {
 			this.initialEntity = entity;
 			this.energyEntity = energyEntity;
 			this.initialEnergyEntity = energyEntity;
+			const follow = store?.state?.peakFollow;
+			this.follow = !!follow?.enabled;
+			this.initialFollow = this.follow;
+			this.buffer = (follow?.buffer ?? 500) / 1000;
+			this.initialBuffer = this.buffer;
 		},
 		open() {
 			this.reset();
 		},
 		async save() {
+			// 0-5 kW in 0.1 kW steps, see core/site_peak_follow.go
+			const bufferW = Math.round(this.buffer * 1000);
+			if (
+				this.bufferChanged &&
+				(typeof this.buffer !== "number" ||
+					Number.isNaN(this.buffer) ||
+					bufferW < 0 ||
+					bufferW > 5000 ||
+					bufferW % 100 !== 0)
+			) {
+				this.error = this.$t("config.peakshaving.followBufferInvalid");
+				return;
+			}
+
 			this.saving = true;
 			this.error = "";
 
@@ -152,6 +219,13 @@ export default {
 					} else {
 						await api.delete("peakshavingenergyentity");
 					}
+				}
+
+				if (this.bufferChanged) {
+					await api.post(`peakfollowbuffer/${bufferW}`);
+				}
+				if (this.followChanged) {
+					await api.post(`peakfollow/${this.follow}`);
 				}
 
 				this.$emit("changed");

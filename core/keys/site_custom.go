@@ -29,6 +29,11 @@ const (
 	PeakMonths                      = "peakMonths"                // monthly peak statistics
 	PeakShavingChargeEntity         = "peakShavingChargeEntity"   // grid charge power target
 	PeakShavingChargeSetpoint       = "peakShavingChargeSetpoint" // grid charge power written, 0 = not charging
+	PeakFollow                      = "peakFollow"                // follow the peak, see core/site_peak_follow.go
+	PeakFollowBuffer                = "peakFollowBuffer"
+	PeakFollowBase                  = "peakFollowBase"
+	PeakFollowCircuit               = "peakFollowCircuit" // lm3/lm4, taken over into LmCircuit
+	PeakTariff                      = "peakTariff"        // capacity tariff, see core/site_peak_tariff.go
 
 	// load management shed priorities
 	LmPriorities = "lmPriorities"
@@ -42,6 +47,10 @@ const (
 	// advanced load management settings, see core/site_lm_advanced.go
 	LmAdvanced = "lmAdvanced"
 
+	// load management switched off, see core/site_lm_switch.go
+	LmOff     = "lmOff"
+	LmCircuit = "lmCircuit" // the load management (peak) circuit
+
 	// load management overview: every load's state and the event log, see core/site_lm_status.go
 	LmStatus = "lmStatus"
 
@@ -49,11 +58,6 @@ const (
 	LmProfiles         = "lmProfiles"
 	LmProfileActive    = "lmProfileActive"
 	LmProfileWallboxes = "lmProfileWallboxes" // loadpoints a profile can set the solar share of
-
-	// last month whose feed-in price was finalized, YYYY-MM, see core/site_feedin.go
-	FeedInFinalized = "feedInFinalized"
-	FeedInHistory   = "feedInHistory" // finalized months, see core/site_feedin.go
-	FeedInFinal     = "feedInFinal"   // published: finalize day, market price and history
 
 	// export under a second feed-in tariff, see core/site_feedin_eeg.go
 	FeedInEegEntity = "feedInEegEntity" // Home Assistant energy counter of the EEG export

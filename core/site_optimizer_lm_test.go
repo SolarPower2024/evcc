@@ -8,6 +8,7 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/circuit"
 	"github.com/evcc-io/evcc/core/lm"
+	"github.com/evcc-io/evcc/tariff"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
 	optimizer "github.com/evcc-io/optimizer/client"
@@ -160,4 +161,112 @@ func TestSlotAfter(t *testing.T) {
 	assert.Equal(t, 1, slotAfter(dt, 10*time.Minute))
 	assert.Equal(t, 3, slotAfter(dt, time.Hour))
 	assert.Equal(t, 3, slotAfter(dt, 48*time.Hour), "capped at the horizon")
+}
+
+// Edge cases: nothing to plan with, stale goal arrays, targets above the
+// maximum, a time already passed, unknown loadpoints.
+func TestLmOptimizerInputsEdgeCases(t *testing.T) {
+	config.Reset()
+	t.Cleanup(config.Reset)
+
+	site := &Site{log: util.NewLogger("test")}
+	setPeakShaving(site, 7000, 30)
+	s := site.lms()
+	s.socChargeEnabled, s.socChargeStart, s.socChargeStop, s.socChargeRunning = true, 20, 80, true
+
+	req := optimizer.OptimizationInput{TimeSeries: optimizer.TimeSeries{Dt: quarterHours(16)}}
+
+	// unknown capacity: soc inputs skipped
+	b := homeBattery()
+	b.cfg.SCapacity = 0
+	want := b.cfg
+	batteries := []optimizerBattery{b}
+	site.applyLmOptimizerInputs(&req, batteries)
+	assert.Equal(t, want, batteries[0].cfg)
+
+	// a goal array of another length is replaced, not indexed out of range
+	b = homeBattery()
+	b.cfg.SGoal = []float32{1, 2, 3}
+	batteries = []optimizerBattery{b}
+	site.applyLmOptimizerInputs(&req, batteries)
+	require.Len(t, batteries[0].cfg.SGoal, 16)
+
+	// a goal above the maximum soc is capped
+	b = homeBattery()
+	b.cfg.SMax = 7000
+	batteries = []optimizerBattery{b}
+	site.applyLmOptimizerInputs(&req, batteries)
+	assert.Equal(t, float32(7000), batteries[0].cfg.SGoal[11])
+
+	// one-time charging by a time already passed: as soon as possible
+	s.socChargeRunning = false
+	s.gridOnce = gridChargeOnce{Target: 90, Until: time.Now().Add(-time.Minute)}
+	batteries = []optimizerBattery{homeBattery()}
+	site.applyLmOptimizerInputs(&req, batteries)
+	require.Len(t, batteries[0].cfg.SGoal, 16)
+	assert.Equal(t, float32(9000), batteries[0].cfg.SGoal[0])
+
+	// right away without a known charge power: at the battery's charge power,
+	// 40% of 10 kWh at 5 kW with 90% efficiency takes 53 min, the 4th step
+	s.gridOnce = gridChargeOnce{Target: 90}
+	batteries = []optimizerBattery{homeBattery()}
+	site.applyLmOptimizerInputs(&req, batteries)
+	assert.Equal(t, float32(9000), batteries[0].cfg.SGoal[3])
+
+	// loadpoint entries without a known loadpoint are left alone
+	id := 5
+	lp := optimizerBattery{cfg: optimizer.BatteryConfig{CMax: 11000}, detail: batteryDetail{Type: batteryTypeLoadpoint, loadpoint: &id}}
+	batteries = []optimizerBattery{lp, {cfg: lp.cfg, detail: batteryDetail{Type: batteryTypeVehicle}}}
+	assert.NotPanics(t, func() { site.applyLmOptimizerInputs(&req, batteries) })
+	assert.Equal(t, float32(11000), batteries[0].cfg.CMax)
+}
+
+// The EEG tariff never reaches the optimizer: its feed-in price is the
+// standard feed-in tariff.
+func TestLmOptimizerFeedInWithEeg(t *testing.T) {
+	feedIn, err := tariff.NewFixedFromConfig(map[string]any{"price": 0.09})
+	require.NoError(t, err)
+	eeg, err := tariff.NewFixedFromConfig(map[string]any{"price": 0.0})
+	require.NoError(t, err)
+
+	site := &Site{log: util.NewLogger("test"), tariffs: &tariff.Tariffs{FeedIn: feedIn, FeedInEeg: eeg}}
+
+	rates := currentRates(site.GetTariff(api.TariffUsageFeedIn))
+	require.NotEmpty(t, rates)
+	for _, r := range rates {
+		assert.Equal(t, 0.09, r.Value)
+	}
+}
+
+// co2Tariff is a planner tariff that is no price
+type co2Tariff struct{}
+
+func (co2Tariff) Rates() (api.Rates, error) { return nil, nil }
+func (co2Tariff) Type() api.TariffType      { return api.TariffTypeCo2 }
+
+// A price tariff set as planner tariff is the optimizer's grid price, anything
+// else leaves the grid tariff.
+func TestLmOptimizerGridTariff(t *testing.T) {
+	grid, err := tariff.NewFixedFromConfig(map[string]any{"price": 0.10})
+	require.NoError(t, err)
+	planner, err := tariff.NewFixedFromConfig(map[string]any{"price": 0.12})
+	require.NoError(t, err)
+
+	price := func(site *Site) float64 {
+		rates := currentRates(site.optimizerGridTariff())
+		require.NotEmpty(t, rates)
+		return rates[0].Value
+	}
+
+	site := &Site{log: util.NewLogger("test"), tariffs: &tariff.Tariffs{Grid: grid}}
+	assert.Equal(t, 0.10, price(site), "without planner tariff: grid as upstream")
+
+	site.tariffs.Planner = planner
+	assert.Equal(t, 0.12, price(site), "planner price")
+	assert.Equal(t, 0.10, currentRates(site.GetTariff(api.TariffUsageGrid))[0].Value, "grid tariff unchanged")
+
+	site.tariffs.Planner = co2Tariff{}
+	assert.Equal(t, 0.10, price(site), "co2 planner: grid")
+
+	assert.Nil(t, (&Site{}).optimizerGridTariff())
 }

@@ -321,7 +321,7 @@ func (c *Circuit) Update(loadpoints []api.CircuitLoad) (err error) {
 
 	defer func() {
 		if maxPower != 0 && c.power > maxPower {
-			c.log.WARN.Printf("over power detected: %.0fW > %.0fW", c.power, maxPower)
+			c.overPowerLog().Printf("over power detected: %.0fW > %.0fW", c.power, maxPower) // custom: see circuit_custom.go
 		} else {
 			c.log.DEBUG.Printf("power: %.0fW", c.power)
 		}

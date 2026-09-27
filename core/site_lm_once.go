@@ -155,7 +155,7 @@ func (site *Site) batteryGridChargeOnceActive() bool {
 }
 
 // onceRequiredDuration is how long charging from soc to the target takes at the
-// grid charge power, 0 if unknown
+// grid charge power with the charging losses the optimizer assumes, 0 if unknown
 func (site *Site) onceRequiredDuration(target, soc float64) time.Duration {
 	power, _ := site.lmBatteryChargePower()
 	capacity := site.batteryCapacityKWh()
@@ -163,7 +163,7 @@ func (site *Site) onceRequiredDuration(target, soc float64) time.Duration {
 		return 0
 	}
 
-	hours := (target - soc) / 100 * capacity * 1e3 / power
+	hours := (target - soc) / 100 * capacity * 1e3 / (power * eta)
 	return time.Duration(hours * float64(time.Hour))
 }
 
