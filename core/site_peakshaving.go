@@ -425,6 +425,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 
 	site.updatePeakWindow(state.gridPower, state.battery.Power)
 	site.updatePeakFollow()
+	site.applyCircuitLimits() // load management switch and follow circuit, see site_lm_switch.go
 
 	s.mu.Lock()
 	enabled, limit, reserve, set, allowed := s.enabled, s.limit, s.reserve, s.set, s.allowed
@@ -823,7 +824,6 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 	defer site.publishLmStatus(gridCharge)
 	defer site.publishLmWallboxes()
 	defer site.checkLmFollowing()
-	defer site.applyCircuitLimits()
 
 	if gridCharge || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)
