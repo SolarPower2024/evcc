@@ -62,10 +62,10 @@ func TestGridChargeOnceRightAway(t *testing.T) {
 func TestGridChargeOnceByTime(t *testing.T) {
 	site := onceSite(t, 40)
 
-	// 40% -> 80% of 10 kWh at 5 kW takes 48 min: far ahead without a tariff the
+	// 40% -> 80% of 10 kWh at 5 kW with 90% efficiency takes 53 min: far ahead without a tariff the
 	// simple plan starts just before the time
 	require.NoError(t, site.SetBatteryGridChargeOnce(80, time.Now().Add(6*time.Hour)))
-	assert.Equal(t, 48*time.Minute, site.onceRequiredDuration(80, 40).Round(time.Minute))
+	assert.Equal(t, 53*time.Minute, site.onceRequiredDuration(80, 40).Round(time.Minute))
 	assert.False(t, site.batteryGridChargeOnceActive(), "not yet")
 
 	// the time passed without reaching the target

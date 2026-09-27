@@ -66,6 +66,7 @@
       "current": "Current request",
       "description": "Below {reserve}, the battery only covers what would lift the 15 minute average above {limit}. Above it, normal self-consumption.",
       "enable": "Hold the lower battery range back for demand peaks.",
+      "follow": "Limit this month (follow the peak)",
       "free": "unrestricted",
       "noEntity": "No target entity set (Configuration → Load management details → Peak Shaving).",
       "normal": "Self-consumption, reserve untouched",
@@ -357,33 +358,6 @@
       "titleAdd": "Add Additional Meter",
       "titleEdit": "Edit Additional Meter"
     },
-    "feedinfinal": {
-      "applied": "Applied",
-      "counts": "{slots} rates, {sessions} sessions",
-      "countsLabel": "Recalculated",
-      "description": "OeMAG publishes the market price in the following month. On day {day} it is applied to the previous month, whose feed-in and charging prices (solar share) are recalculated.",
-      "doneMessage": "{month} recalculated.",
-      "edit": "Select",
-      "invalidPrice": "Enter a price between 0 and 100 ct/kWh.",
-      "lastLabel": "Final",
-      "market": "Market price",
-      "month": "Month",
-      "monthsLabel": "Finalized months",
-      "nextLabel": "Next recalculation",
-      "none": "No month yet",
-      "nonePublished": "none yet",
-      "priceHelp": "As published by OeMAG. Surcharges and tax from the tariff are applied.",
-      "priceLabel": "Market price",
-      "published": "Last published:",
-      "recalcHelp": "E.g. if the value on the finalize day was wrong. Overwrites the month's feed-in and charging prices (solar share).",
-      "recalcTitle": "Recalculate month",
-      "recalculate": "Recalculate",
-      "show": "Show months",
-      "source": "Type",
-      "sourceAuto": "automatic",
-      "sourceManual": "by hand",
-      "title": "OeMAG settlement"
-    },
     "feedineeg": {
       "title": "EEG counter",
       "description": "Home Assistant counter of the export to the energy community. Export tariff = total export minus EEG. Only counters are evaluated, control stays unchanged.",
@@ -465,7 +439,7 @@
       "entityHelp": "Receives the allowed charge power in W, 0 = don't charge. Needs min 0, max ≥ grid charge power, step 1. Empty = on/off.",
       "entityInvalid": "Could not set the entity.",
       "entityLabel": "Charge power entity",
-      "entryLabel": "Grid charging",
+      "entryLabel": "Battery grid charging",
       "setpoint": "Current setpoint:",
       "source": {
         "setting": "entered here",
@@ -473,7 +447,7 @@
         "meter": "from the battery configuration",
         "unknown": "unknown"
       },
-      "title": "Grid charging"
+      "title": "Battery grid charging"
     },
     "hems": {
       "changeConfirm": "Existing configuration will be deleted. Continue?",
@@ -529,38 +503,41 @@
       "cycles": "cycles",
       "description": "The defaults suit most installations.",
       "entryLabel": "Advanced",
-      "followCyclesHelp": "If a reduced load draws more than allowed for this many cycles during an overload, the next load up the priority order is cut instead. 0 = off. Default {std}.",
+      "followCyclesHelp": "If a reduced load draws more than allowed for this many cycles during an overload, the next load up the priority order is cut instead. 0 = off.",
       "followCyclesLabel": "Limit ignored after",
-      "freeValueHelp": "Written to the peak shaving entity while the battery may discharge freely. Default {std} W.",
+      "freeValueHelp": "Written to the peak shaving entity while the battery may discharge freely.",
       "freeValueLabel": "Free discharge value",
-      "holdOffHelp": "Grid charging stays off this long after a peak or the circuit stopped it. Default {std} min.",
-      "holdOffLabel": "Hold-off after grid charging stopped",
-      "hysteresisHelp": "How far the soc must rise above the reserve to release it. Default {std} %.",
-      "hysteresisLabel": "Reserve hysteresis",
+      "holdOffHelp": "Battery grid charging stays off this long after a peak or the circuit stopped it.",
+      "holdOffLabel": "Hold-off after battery grid charging stopped",
+      "hysteresisHelp": "Below the reserve the battery discharges for peaks only. It is free for the house again once the soc is this far above the reserve. Prevents constant switching.",
+      "hysteresisLabel": "Peak shaving reserve hysteresis",
       "invalid": "{label}: enter a value from {min} to {max}.",
-      "peakCapHelp": "The 15 minute budget allows at most this multiple of the peak limit. Default {std}.",
-      "peakCapLabel": "Cap on the allowed grid draw",
-      "peakFreezeHelp": "From this minute of the quarter hour on, the allowed grid draw no longer grows. Default {std}.",
-      "peakFreezeLabel": "Freeze the budget from minute",
+      "peakCapHelp": "The peak shaving budget (grid draw allowed until the quarter hour ends) rises to at most this multiple of the peak limit.",
+      "peakCapLabel": "Cap on the peak shaving budget",
+      "peakFreezeHelp": "From this minute of the quarter hour on, the peak shaving budget (grid draw allowed until the quarter hour ends) no longer grows.",
+      "peakFreezeLabel": "Freeze the peak shaving budget from minute",
       "phases1": "1 phase",
       "phases3": "3 phases",
       "phasesHelp": "Only needed for circuits with a current limit (A).",
       "phasesLabel": "Battery phases",
-      "timeoutHelp": "How long a waiting higher priority load keeps power reserved. Default {std} min.",
+      "timeoutHelp": "How long a waiting higher priority load keeps power reserved.",
       "timeoutLabel": "Reservation expiry",
       "title": "Advanced settings",
-      "gridChargeWindowLabel": "Reach the grid charge goal within",
-      "gridChargeWindowHelp": "With the optimizer: how long it may take to reach the stop soc of soc-based grid charging. It picks the cheapest time. Default {std} h."
+      "gridChargeWindowLabel": "Reach the battery grid charge goal within",
+      "gridChargeWindowHelp": "Optimizer only: the time it gets for soc-based battery grid charging to reach the stop soc, charging in the cheapest hours of it. 1 h = right away.",
+      "circuitLabel": "Load management (peak) circuit",
+      "circuitHelp": "The circuit holding your peak limit, not the fuse. Only it shows under More → Load management (peak), is lifted by the switch there and rises with follow the peak.",
+      "circuitAll": "None – all circuits, none rises along"
     },
     "lmpriorities": {
       "battery": "Home battery (grid charging)",
-      "description": "If power runs short, the lowest priority is reduced or switched off first, on equal priority first come first served. For loadpoints this is their regular priority, it also ranks pv surplus and the planner. The battery has a value of its own.",
+      "description": "The most important load on top. If the power is not enough, loads are throttled or switched off from the bottom up; with equal priority, the first to arrive wins. For loadpoints it is their regular priority, which also applies to solar surplus and the planner. The battery has its own value.",
       "entryLabel": "Priorities",
-      "first": "{priority} (shed first)",
       "invalid": "Could not save the priority.",
-      "last": "{priority} (shed last)",
       "noLoads": "No loads in load management. Loadpoints appear once assigned to a circuit, the battery via Battery circuit.",
-      "title": "Load management priorities"
+      "title": "Load management priorities",
+      "orderHint": "Drag to sort. The priorities are then renumbered from the bottom, starting at 0.",
+      "value": "Prio {priority}"
     },
     "lmprofiles": {
       "active": "Active",
@@ -1017,14 +994,38 @@
       "entityInvalid": "Could not set the entity.",
       "entityLabel": "Discharge setpoint entity",
       "entryLabel": "Peak shaving",
-      "hint": "Switch, peak limit and reserve are set on the battery page.",
+      "followBufferHelp": "How far the limit stays below the month's peak, 0–5 kW. Example 0.5 kW: peak 10 kW → limit 9.5 kW.",
+      "followBufferInvalid": "The buffer must be between 0 and 5 kW, in steps of 0.1 kW.",
+      "followBufferLabel": "Buffer",
+      "followHelp": "Once the month's highest quarter hour is above your peak limit, the limit rises to that peak. A new month starts with your limit again.",
+      "followLabel": "Follow the peak: limit follows the month's peak",
       "source": {
         "entity": "energy counter from Home Assistant",
         "meter": "energy counter of the grid meter",
-        "power": "grid power (every 10–30 s)"
+        "power": "grid power"
       },
       "sourceLabel": "15 minute average metered with",
       "title": "Peak shaving"
+    },
+    "peaktariff": {
+      "agreedHelp": "As in the grid contract, 0 = none.",
+      "agreedLabel": "Agreed power",
+      "description": "Puts a price on each month's highest quarter hour and shows under More → Peak shaving what the battery saves.",
+      "enable": "Use a capacity tariff",
+      "entryLabel": "Capacity tariff",
+      "invalid": "{label} must be between {min} and {max}.",
+      "minShareHelp": "Share of the agreed power.",
+      "minShareLabel": "Billed at least",
+      "minimumHelp": "Always billed at least.",
+      "minimumLabel": "Minimum power",
+      "perKwYear": "{currency}/kW·year",
+      "priceAboveHelp": "Per kW and year. Austria: double.",
+      "priceAboveLabel": "Capacity price above the threshold",
+      "priceHelp": "Per kW and year up to the threshold.",
+      "priceLabel": "Capacity price",
+      "thresholdHelp": "Up to here the capacity price applies, above it the higher one.",
+      "thresholdLabel": "Threshold",
+      "title": "Capacity tariff"
     },
     "pv": {
       "titleAdd": "Add Solar Meter",
@@ -1194,6 +1195,7 @@
       },
       "planner": {
         "description": "Advanced setting. Usually not needed as dynamic electricity tariffs or CO₂ forecasts are used automatically. Enables an additional data source that's only used for charge planning, not for statistics and price calculations.",
+        "optimizer": "With the optimizer: a fixed price here is the grid price it plans with. If the real price is just above the feed-in tariff, a higher planning price (at least 1.25 × feed-in) lets the battery discharge. Statistics and costs keep the grid tariff.",
         "titleAdd": "Add Planner Forecast",
         "titleEdit": "Edit Planner Forecast"
       },
@@ -1617,7 +1619,12 @@
   "lmoverview": {
     "battery": "Home battery (grid charging)",
     "blockedCircuit": "Circuit · until {time}",
+    "circuitFollows": "follows the month's peak, set {limit}",
+    "circuitLifted": "limit {limit} lifted",
     "description": "What load management is doing right now.",
+    "disabledHelp": "Off: the circuits' power limits do not apply, nothing is throttled for them. Fuses (current limits), §14a and battery peak shaving stay active.",
+    "enabled": "Load management",
+    "enabledHelp": "The circuits' power limits (peak) throttle wallboxes, heaters and battery grid charging.",
     "event": {
       "gridChargeDenied": "Grid charging blocked · circuit allows {allowed} of {wanted}",
       "gridChargePaused": "Grid charging paused · demand {demand} above peak limit {limit}",
@@ -1629,13 +1636,14 @@
     },
     "events": "Recent events",
     "gridCharge": "Battery grid charging",
-    "loads": "Loads · highest priority first",
-    "menu": "Load management",
+    "loads": "Loads by priority · the bottom one is shed first",
+    "menu": "Load management (peak)",
     "noEvents": "No events since the start.",
     "noLoads": "No loads in load management.",
     "overall": {
       "limited": "Limited",
       "normal": "Normal",
+      "off": "Off",
       "overload": "Overload"
     },
     "pausedPeak": "Peak · resumes at {time}",
@@ -1644,7 +1652,6 @@
     "peakFree": "Above the reserve · free",
     "peakOff": "Off",
     "peakReserve": "Reserve active · setpoint {setpoint}",
-    "priority": "Prio {priority}",
     "protected": "Shed guard",
     "setpoint": "Setpoint {power}",
     "state": {
@@ -1661,7 +1668,9 @@
       "throttled": "Throttled · {allowed} of {requested}",
       "waiting": "Waiting · needs {requested}, {allowed} free"
     },
-    "title": "Load management"
+    "title": "Load management (peak)",
+    "enabledHelpCircuit": "The power limit of \"{circuit}\" throttles wallboxes, heaters and battery grid charging.",
+    "disabledHelpCircuit": "Off: the power limit of \"{circuit}\" does not apply, nothing is throttled for it. Other circuits, fuses (current limits), §14a and battery peak shaving stay active."
   },
   "log": {
     "areaLabel": "Filter by area",
@@ -2006,12 +2015,19 @@
     "updatePassword": "Update password"
   },
   "peakstats": {
+    "cost": "Capacity cost",
+    "costShort": "Cost",
     "description": "Highest quarter hour per month, with and without the battery.",
     "empty": "No complete quarter hour recorded yet.",
+    "extraCost": "extra cost {cost}",
     "interventions": "Interventions",
     "interventionsCount": "{count} interventions",
     "menu": "Peak Shaving",
     "month": "Month",
+    "saving": "Capacity saving",
+    "savingShort": "saved {saving}",
+    "savingTotal": "total {total}",
+    "tariffHint": "With a capacity tariff you also see costs and savings here: Configuration → Load management details → Capacity tariff.",
     "title": "Peak Shaving",
     "withBattery": "With battery",
     "withoutBattery": "Without battery"

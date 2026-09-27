@@ -32,6 +32,14 @@
 			<p v-if="hasDescription" class="mt-0 mb-4">
 				{{ $t(`config.tariff.${tariffType}.description`) }}
 			</p>
+			<!-- custom: the optimizer plans with the planner price, see core/site_optimizer_lm.go -->
+			<p
+				v-if="tariffType === 'planner'"
+				class="mt-0 mb-4"
+				data-testid="tariff-planner-optimizer"
+			>
+				{{ $t("config.tariff.planner.optimizer") }}
+			</p>
 		</template>
 
 		<template #before-template="{ values }">
