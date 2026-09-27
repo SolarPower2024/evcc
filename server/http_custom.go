@@ -55,9 +55,6 @@ func customSiteRoutes(site site.API) map[string]route {
 		"lmprofiledelete": {"DELETE", "/lmprofile/{id:[a-z0-9]+}", lmProfileHandler(site.DeleteLmProfile)},
 		"lmprofileapply":  {"POST", "/lmprofile/{id:[a-z0-9]+}/apply", lmProfileHandler(site.ApplyLmProfile)},
 
-		// feed-in price published after the fact, see core/site_feedin.go
-		"feedinfinalize": {"POST", "/feedinfinalize/{month:[0-9]{4}-[0-9]{2}}/{value:[0-9.]+}", feedInFinalizeHandler(site)},
-
 		// export under a second feed-in tariff, see core/site_feedin_eeg.go
 		"feedineegentity":       {"POST", "/feedineegentity/{value:[a-zA-Z0-9_.]+}", stringHandler(site.SetFeedInEegEntity, site.GetFeedInEegEntity)},
 		"feedineegentitydelete": {"DELETE", "/feedineegentity", stringHandler(site.SetFeedInEegEntity, site.GetFeedInEegEntity)},
@@ -79,25 +76,6 @@ func customSiteRoutes(site site.API) map[string]route {
 		"peakshavingchargepower":        {"POST", "/peakshavingchargepower/{value:[0-9.]+}", floatHandler(site.SetPeakShavingChargePower, site.GetPeakShavingChargePower)},
 		"peakshavingcircuit":            {"POST", "/peakshavingcircuit/{value:" + namePattern + "}", stringHandler(site.SetPeakShavingCircuit, site.GetPeakShavingCircuit)},
 		"peakshavingcircuitdelete":      {"DELETE", "/peakshavingcircuit", stringHandler(site.SetPeakShavingCircuit, site.GetPeakShavingCircuit)},
-	}
-}
-
-// feedInFinalizeHandler recalculates a past month at the given market price
-func feedInFinalizeHandler(site site.API) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-
-		market, err := strconv.ParseFloat(vars["value"], 64)
-		if err == nil {
-			err = site.FinalizeFeedIn(vars["month"], market)
-		}
-
-		if err != nil {
-			jsonError(w, http.StatusBadRequest, err)
-			return
-		}
-
-		jsonWrite(w, market)
 	}
 }
 

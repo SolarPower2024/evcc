@@ -281,29 +281,6 @@ export interface LmStatus {
   events: LmEvent[];
 }
 
-// custom: a finalized feed-in month, see core/site_feedin.go
-export interface FeedInMonth {
-  /** YYYY-MM. */
-  month: string;
-  /** Market price in EUR/kWh, 0 = unknown. */
-  market: number;
-  /** Feed-in rate applied in EUR/kWh, with charges and tax. */
-  price: number;
-  slots: number;
-  sessions: number;
-  skipped: number;
-  at: string;
-  manual?: boolean;
-}
-
-export interface FeedInFinal {
-  finalizeDay: number;
-  /** Latest published market price in EUR/kWh, 0 = none yet. */
-  market: number;
-  /** Newest first. */
-  months: FeedInMonth[];
-}
-
 /**
  * Complete system state as returned by /api/state and pushed via websocket and MQTT.
  * This structure mirrors the internal UI state and carries no compatibility promise.
@@ -508,8 +485,6 @@ export interface State {
   lmShedProtected?: string[];
   /** Advanced load management settings in effect. */
   lmAdvanced?: LmAdvanced;
-  /** OeMAG finalization: finalize day, published market price and finalized months. */
-  feedInFinal?: FeedInFinal;
   /** Home Assistant counter of the export under the second feed-in tariff (EEG), empty = off. */
   feedInEegEntity?: string;
   /** Current price of the second feed-in tariff. */
