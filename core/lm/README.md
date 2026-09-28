@@ -132,7 +132,7 @@ Keep these in mind when merging a new evcc version:
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff role: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `assets/js/components/Config/TariffModal.vue` | `feedInEeg` offers the price templates |
 | `core/site_load_predictor.go` | `homeProfileByWeekday` call in `homeProfile` |
-| `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast |
+| `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` so a forced run arriving during a run is not dropped |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
 | `assets/js/views/Config.vue` | load management details section and its modals |
@@ -365,6 +365,9 @@ settings as inputs, so the plan matches what the fork will actually do, see
   entity is trimmed to it, at least 500 W; a switched one pauses above the
   limit), paused while the demand exceeds it and the battery covers the peak.
   Without peak shaving at most the grid charge window.
+- the plan is solved again right away when soc-based grid charging starts or
+  stops, and a forced run (a changed setting) arriving while one runs is run
+  right after it instead of waiting for the next slot
 - one-time grid charging: its target as goal at the chosen time (with peak
   shaving at most what the room allows by then), or right away when the charge
   power can reach it

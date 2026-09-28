@@ -388,8 +388,10 @@ func (site *Site) optimizerUpdateAsync(minAge time.Duration) {
 	}
 
 	if !site.optimizerMu.TryLock() {
+		site.lmOptimizeLater(minAge) // custom: a forced run is not dropped, see core/site_optimizer_reserve_pass.go
 		return
 	}
+	defer site.lmOptimizeAgain() // custom: after unlocking, see core/site_optimizer_reserve_pass.go
 	defer site.optimizerMu.Unlock()
 
 	if minAge == 0 {

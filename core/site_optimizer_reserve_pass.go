@@ -18,6 +18,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/evcc-io/evcc/util/sponsor"
 	optimizer "github.com/evcc-io/optimizer/client"
@@ -394,6 +395,22 @@ func passErr(err error, res *optimizer.OptimizationResult) any {
 		return "no result"
 	default:
 		return "unusable result: " + string(res.Status)
+	}
+}
+
+// lmOptimizeLater remembers a forced run requested while one is running: a
+// changed setting or grid charging starting then waits for the next slot
+// otherwise, which with several passes per run happens often
+func (site *Site) lmOptimizeLater(minAge time.Duration) {
+	if minAge == 0 {
+		site.lms().optimizeAgain.Store(true)
+	}
+}
+
+// lmOptimizeAgain runs a remembered forced run once the running one is done
+func (site *Site) lmOptimizeAgain() {
+	if site.lms().optimizeAgain.Swap(false) {
+		go site.optimizerUpdateAsync(0)
 	}
 }
 

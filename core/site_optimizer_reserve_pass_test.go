@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/evcc-io/evcc/util"
 	optimizer "github.com/evcc-io/optimizer/client"
@@ -264,4 +265,16 @@ func TestLmGridChargeBlockedPeak(t *testing.T) {
 	setPeakShaving(site, 2000, 35)
 	site.peak().demand = 5000
 	assert.False(t, site.lmGridChargeBlocked())
+}
+
+// A forced run requested while one runs is remembered and run once after it.
+func TestLmOptimizeAgain(t *testing.T) {
+	site := &Site{log: util.NewLogger("test")}
+	site.lmOptimizeLater(time.Minute)
+	assert.False(t, site.lms().optimizeAgain.Load(), "a periodic run waits for the next slot")
+
+	site.lmOptimizeLater(0)
+	assert.True(t, site.lms().optimizeAgain.Load())
+	site.lmOptimizeAgain()
+	assert.False(t, site.lms().optimizeAgain.Load(), "run once")
 }
