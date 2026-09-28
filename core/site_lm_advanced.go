@@ -27,9 +27,20 @@ type lmAdvanced struct {
 	FollowCycles *float64 `json:"followCycles,omitempty"`
 	// hours the optimizer may take to reach the stop soc of soc-based grid charging
 	GridChargeWindow *float64 `json:"gridChargeWindow,omitempty"`
-	// home consumption forecast per weekday, 1 = on, see site_load_weekday.go
+	// home consumption forecast per weekday, 1 = on, see site_load_weekday.go.
+	// Replaced by HomeForecast, still read from settings stored before it.
 	HomeWeekday *float64 `json:"homeWeekday,omitempty"`
+	// home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load
+	// profile, see site_load_manual.go
+	HomeForecast *float64 `json:"homeForecast,omitempty"`
 }
+
+// home consumption forecasts, see HomeForecast
+const (
+	homeForecastEvcc = iota
+	homeForecastWeekday
+	homeForecastManual
+)
 
 // lmAdvancedState is what the ui shows: the values in effect
 type lmAdvancedState struct {
@@ -43,6 +54,7 @@ type lmAdvancedState struct {
 	FollowCycles     int     `json:"followCycles"`
 	GridChargeWindow float64 `json:"gridChargeWindow"`
 	HomeWeekday      bool    `json:"homeWeekday"`
+	HomeForecast     int     `json:"homeForecast"`
 }
 
 // lmAdvancedLimit is a setting's valid range
@@ -62,6 +74,7 @@ var lmAdvancedLimits = map[string]lmAdvancedLimit{
 	"followCycles":     {0, 20, true},
 	"gridChargeWindow": {1, 24, true},
 	"homeWeekday":      {0, 1, true},
+	"homeForecast":     {0, 2, true},
 }
 
 // restoreLmAdvanced restores the persisted advanced settings
@@ -79,6 +92,7 @@ func (site *Site) restoreLmAdvanced() {
 	lm.SetFollowCycles(site.lmFollowCycles)
 
 	site.publishLmAdvanced()
+	site.publishLmHomeProfile()
 }
 
 // advanced returns a copy of the values set in the ui
@@ -103,7 +117,20 @@ func (site *Site) publishLmAdvanced() {
 		FollowCycles:     site.lmFollowCycles(),
 		GridChargeWindow: site.gridChargeWindow().Hours(),
 		HomeWeekday:      site.homeWeekday(),
+		HomeForecast:     site.homeForecast(),
 	})
+}
+
+// homeForecast is the home consumption forecast in effect, see HomeForecast
+func (site *Site) homeForecast() int {
+	adv := site.advanced()
+	if v := adv.HomeForecast; v != nil {
+		return int(*v)
+	}
+	if v := adv.HomeWeekday; v != nil && *v == 1 {
+		return homeForecastWeekday
+	}
+	return homeForecastEvcc
 }
 
 // lmTimeout is how long an unserved demand keeps reserving headroom
@@ -153,8 +180,9 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 		s.adv.FollowCycles = &v
 	case "gridChargeWindow":
 		s.adv.GridChargeWindow = &v
-	case "homeWeekday":
-		s.adv.HomeWeekday = &v
+	case "homeWeekday", "homeForecast":
+		s.adv.HomeForecast = &v
+		s.adv.HomeWeekday = nil
 	}
 	adv := s.adv
 	s.advMu.Unlock()
@@ -168,7 +196,7 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 	if name == "timeout" {
 		lm.SetTimeout(site.lmTimeout())
 	}
-	if name == "homeWeekday" {
+	if name == "homeWeekday" || name == "homeForecast" {
 		site.Optimize() // the home demand forecast changed
 	}
 

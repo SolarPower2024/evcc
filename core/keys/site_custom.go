@@ -47,6 +47,9 @@ const (
 	// advanced load management settings, see core/site_lm_advanced.go
 	LmAdvanced = "lmAdvanced"
 
+	// uploaded load profile for the home consumption forecast, see core/site_load_manual.go
+	LmHomeProfile = "lmHomeProfile"
+
 	// load management switched off, see core/site_lm_switch.go
 	LmOff     = "lmOff"
 	LmCircuit = "lmCircuit" // the load management (peak) circuit

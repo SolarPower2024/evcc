@@ -42,6 +42,11 @@ type CustomAPI interface {
 	// advanced load management settings, see core/site_lm_advanced.go
 	SetLmAdvanced(name string, value float64) error
 
+	// uploaded load profile for the home forecast, see core/site_load_manual.go
+	SetLmHomeProfile(name string, data []byte) error
+	DeleteLmHomeProfile() error
+	LmHomeProfileCsv() []byte
+
 	// battery profiles, see core/site_lm_profiles.go
 	SaveLmProfile(profile.Profile) (profile.Profile, error)
 	DeleteLmProfile(id string) error

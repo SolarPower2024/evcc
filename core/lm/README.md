@@ -131,7 +131,7 @@ Keep these in mind when merging a new evcc version:
 | `core/site/api.go` | embeds `CustomAPI`, one line |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff role: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `assets/js/components/Config/TariffModal.vue` | `feedInEeg` offers the price templates |
-| `core/site_load_predictor.go` | `homeProfileByWeekday` call in `homeProfile` |
+| `core/site_load_predictor.go` | `homeProfileManual` and `homeProfileByWeekday` calls in `homeProfile` |
 | `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` so a forced run arriving during a run is not dropped |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
@@ -143,7 +143,7 @@ Keep these in mind when merging a new evcc version:
 | `assets/js/types/evcc.ts`, `i18n/de.json`, `i18n/en.json` | state fields and texts |
 
 Everything else lives in files of its own: `core/lm/`, `core/circuit/circuit_custom.go`, `core/site_lm.go`, `core/site_lm_guard.go`,
-`core/site_lm_advanced.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
+`core/site_lm_advanced.go`, `core/site_load_manual.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
 `core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
 `core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
 `core/site/api_custom.go`, `server/http_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`
@@ -264,19 +264,43 @@ configured limits (or the raised one of follow the peak). Survives a restart
 Circuit limits changed at runtime are published with their configured values
 in `lmOff.limits`, so the overview shows them.
 
-## Home consumption forecast per weekday
+## Home consumption forecast
 
-Lastmanagement-Details → Erweitert → *Verbrauchsprognose*. evcc forecasts the
-home base load for the optimizer from the average of the last 28 days per
-quarter hour. *Nach Wochentag* takes each forecast day from the same weekday of
-the last 8 weeks instead, so weekends and working days keep their own shape; a
-weekday without complete data falls back to the average. Stored as
-`homeWeekday` in the advanced settings, see `core/site_load_weekday.go`, one
-call in `homeProfile` (`core/site_load_predictor.go`).
+Lastmanagement-Details → Erweitert → *Verbrauchsprognose*, stored as
+`homeForecast` in the advanced settings (0 evcc, 1 per weekday, 2 manual; an
+older `homeWeekday` = 1 still reads as per weekday). evcc forecasts the home
+base load for the optimizer from the average of the last 28 days per quarter
+hour.
+
+*Nach Wochentag* takes each forecast day from the same weekday of the last 8
+weeks instead, so weekends and working days keep their own shape; a weekday
+without complete data falls back to the average. See `core/site_load_weekday.go`.
+
+*Manuell* uses an uploaded load profile (issue 10): a csv with the average home
+power in W per quarter hour (or hour) for each month, working days and weekends
+apart or together (columns `01-werktag`, `01-wochenende` or `01`). Missing day
+types take the other one, missing months the nearest given month. It is stored
+as `lmHomeProfile` in the settings (`POST/DELETE/GET /api/lmhomeprofile`, the
+GET returns it as csv again). The forecast mixes it with the measured home
+energy of the last 8 weeks, recent days counting more (half-life 4 days):
+
+1. the profile, interpolated between the month middles and scaled to the level
+   of the last weeks (factor 0.1 to 10)
+2. the last weeks' own profile per day type, slots evened out with their
+   neighbours
+3. both mixed: the last weeks count 0.5 while the profile fits them, up to 0.9
+   the more its shape (correlation) or level differs, less while the history is
+   shorter than 14 days
+4. a deviation of the last 3 hours of more than 25 % carries over into the next
+   hours and fades out (a third after 2 hours)
+
+Without a profile or on errors evcc's own forecast applies. See
+`core/site_load_manual.go`, one call in `homeProfile` (`core/site_load_predictor.go`).
 
 *Sicherheitszuschlag Verbrauch* sets upstream's `profilePercentile` (API only
 upstream): a higher percentile per quarter hour instead of the mean, for both
-profiles and the heating devices' profiles.
+profiles, the heating devices' profiles and, with a load profile, the last
+weeks' part.
 
 ## Battery identification
 

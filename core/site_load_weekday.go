@@ -3,7 +3,7 @@ package core
 // Custom extension: home consumption forecast per weekday. evcc forecasts the
 // home base load for the optimizer from the average of the last 28 days per
 // time of day, so weekends and working days blur into one profile. With it on
-// (Lastmanagement-Details → Erweitert), each forecast day takes the same weekday
+// (Lastmanagement-Details → Erweitert → Verbrauchsprognose), each forecast day takes the same weekday
 // of the last 8 weeks instead. The percentile set there (upstream
 // profilePercentile) applies to it like to the regular profile. A weekday
 // without complete data yet falls back to the regular profile.
@@ -22,8 +22,7 @@ const homeWeekdayWeeks = 8
 
 // homeWeekday reports whether the home forecast is taken per weekday
 func (site *Site) homeWeekday() bool {
-	v := site.advanced().HomeWeekday
-	return v != nil && *v == 1
+	return site.homeForecast() == homeForecastWeekday
 }
 
 // homeProfileByWeekday returns the home base load in Wh for minLen 15min slots

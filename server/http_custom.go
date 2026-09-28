@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/evcc-io/evcc/core/lm/profile"
@@ -52,6 +54,11 @@ func customSiteRoutes(site site.API) map[string]route {
 
 		// advanced load management settings, see core/site_lm_advanced.go
 		"lmadvanced": {"POST", "/lmadvanced/{name:[a-zA-Z]+}/{value:[0-9.]+}", lmAdvancedHandler(site)},
+
+		// uploaded load profile for the home forecast, see core/site_load_manual.go
+		"lmhomeprofile":       {"POST", "/lmhomeprofile", lmHomeProfileUploadHandler(site)},
+		"lmhomeprofiledelete": {"DELETE", "/lmhomeprofile", lmHomeProfileDeleteHandler(site)},
+		"lmhomeprofilecsv":    {"GET", "/lmhomeprofile", lmHomeProfileCsvHandler(site)},
 
 		// battery profiles, see core/site_lm_profiles.go
 		"lmprofile":       {"POST", "/lmprofile", lmProfileSaveHandler(site)},
@@ -149,6 +156,59 @@ func lmAdvancedHandler(site site.API) http.HandlerFunc {
 		}
 
 		jsonWrite(w, value)
+	}
+}
+
+// lmHomeProfileUploadHandler stores the load profile sent as csv in the body
+func lmHomeProfileUploadHandler(site site.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		name := strings.TrimSpace(r.URL.Query().Get("name"))
+		if name == "" {
+			name = "lastprofil.csv"
+		}
+		if len(name) > 100 {
+			name = name[:100]
+		}
+
+		if err := site.SetLmHomeProfile(name, data); err != nil {
+			jsonError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		jsonWrite(w, name)
+	}
+}
+
+// lmHomeProfileDeleteHandler removes the load profile
+func lmHomeProfileDeleteHandler(site site.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := site.DeleteLmHomeProfile(); err != nil {
+			jsonError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		jsonWrite(w, true)
+	}
+}
+
+// lmHomeProfileCsvHandler returns the load profile as csv
+func lmHomeProfileCsvHandler(site site.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data := site.LmHomeProfileCsv()
+		if data == nil {
+			jsonError(w, http.StatusNotFound, errors.New("no load profile"))
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="lastprofil.csv"`)
+		_, _ = w.Write(data)
 	}
 }
 
