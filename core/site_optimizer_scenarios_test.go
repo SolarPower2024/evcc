@@ -158,9 +158,10 @@ func (s scenarioSettings) site() *Site {
 }
 
 type scenarioResult struct {
-	req optimizer.OptimizationInput
-	res *optimizer.OptimizationResult
-	dur time.Duration
+	req  optimizer.OptimizationInput
+	res  *optimizer.OptimizationResult
+	dur  time.Duration
+	site *Site
 }
 
 func (r scenarioResult) soc(home int) []float32 { return r.res.Batteries[home].StateOfCharge }
@@ -204,7 +205,7 @@ func TestLmOptimizerScenarios(t *testing.T) {
 		for _, b := range res.Batteries {
 			require.Len(t, b.StateOfCharge, len(req.TimeSeries.Dt))
 		}
-		return scenarioResult{req, res, dur}
+		return scenarioResult{req: req, res: res, dur: dur}
 	}
 
 	// run applies the settings, solves and checks the general promises: soc
@@ -214,10 +215,12 @@ func TestLmOptimizerScenarios(t *testing.T) {
 	run := func(t *testing.T, day scenarioDay, soc float64, set scenarioSettings, o opts) scenarioResult {
 		t.Helper()
 		req, batteries := day.request(soc)
-		set.site().applyLmOptimizerInputs(&req, batteries)
+		site := set.site()
+		site.applyLmOptimizerInputs(&req, batteries)
 		finish(&req, batteries)
 
 		r := solveReq(t, req)
+		r.site = site
 		bat := req.Batteries[0]
 		s := r.soc(0)
 
@@ -310,10 +313,11 @@ func TestLmOptimizerScenarios(t *testing.T) {
 				set.running, set.window = true, window
 				r := run(t, winter, 20, set, opts{})
 				bat := r.req.Batteries[0]
-				i := slotAfter(r.req.TimeSeries.Dt, set.site().socChargeDuration(bat, bat.SInitial, scenarioCapacity*0.4))
+				require.Len(t, bat.SGoal, len(r.req.TimeSeries.Dt))
+				i := slices.IndexFunc(bat.SGoal, func(g float32) bool { return g > 0 })
+				require.GreaterOrEqual(t, i, 0)
 				assert.LessOrEqual(t, i, slotAfter(r.req.TimeSeries.Dt, time.Duration(window*float64(time.Hour))), "within the window")
-				require.Len(t, r.req.Batteries[0].SGoal, len(r.req.TimeSeries.Dt))
-				assert.InDelta(t, scenarioCapacity*0.4, r.req.Batteries[0].SGoal[i], 1)
+				assert.InDelta(t, scenarioCapacity*0.4, bat.SGoal[i], 1)
 			})
 		}
 	})
@@ -333,7 +337,7 @@ func TestLmOptimizerScenarios(t *testing.T) {
 				r := solveReq(t, req)
 				details := requestDetails{BatteryDetails: lo.Map(batteries, func(b optimizerBattery, _ int) batteryDetail { return b.detail })}
 
-				site.lmSocChargePass(client, &req, details, r.res)
+				site.lmOptimizerPasses(client, &req, details, r.res)
 				s := r.soc(0)
 				require.Len(t, s, len(req.TimeSeries.Dt), "joined over the whole horizon")
 
@@ -360,7 +364,7 @@ func TestLmOptimizerScenarios(t *testing.T) {
 		set.reserve = 50
 		r := run(t, day, 97, set, opts{})
 		details := requestDetails{BatteryDetails: []batteryDetail{{Type: batteryTypeBattery}}}
-		set.site().lmSocChargePass(client, &r.req, details, r.res)
+		r.site.lmOptimizerPasses(client, &r.req, details, r.res)
 		assert.Empty(t, lo.Filter(r.req.Batteries[0].SGoal, func(g float32, _ int) bool { return g > 0 }), "no grid charging planned")
 		for i, v := range r.soc(0) {
 			assert.GreaterOrEqual(t, pct(v), 49.9, "below the reserve at step %d", i)
@@ -382,8 +386,9 @@ func TestLmOptimizerScenarios(t *testing.T) {
 		assert.Equal(t, float32(1000), r.req.Grid.PMaxImp)
 	})
 
-	// a peak refuses grid charging: not offered, the battery charges from pv only
-	t.Run("peak refuses grid charging", func(t *testing.T) {
+	// a peak running now does not refuse grid charging for the whole plan:
+	// the import limit leaves it the room below the limit
+	t.Run("peak running now", func(t *testing.T) {
 		for name, day := range map[string]scenarioDay{"winter": winter, "summer": summer} {
 			t.Run(name, func(t *testing.T) {
 				set := installation
@@ -391,9 +396,8 @@ func TestLmOptimizerScenarios(t *testing.T) {
 				set.once = gridChargeOnce{Target: 90}
 				r := run(t, day, 20, set, opts{})
 				bat := r.req.Batteries[0]
-				assert.False(t, bat.ChargeFromGrid)
-				assert.Nil(t, bat.SGoal, "no goal while refused")
-				assert.InDelta(t, scenarioCapacity*0.2, bat.SMin, 1, "reserve only")
+				assert.True(t, bat.ChargeFromGrid)
+				assert.Contains(t, bat.SGoal, float32(scenarioCapacity*0.9), "one-time target")
 			})
 		}
 	})
@@ -573,6 +577,58 @@ func TestLmOptimizerScenarios(t *testing.T) {
 				set.running = true
 				r := run(t, day, 20, set, opts{goalMayMiss: steps < 12})
 				assert.Less(t, r.dur, 30*time.Second)
+			})
+		}
+	})
+
+	// below the reserve only what exceeds the peak limit leaves the battery,
+	// never charging while over the limit; without peaks it stops at the floor
+	t.Run("reserve for peaks", func(t *testing.T) {
+		day := winter
+		day.demand = 1600 // 4000 W in the evening
+		day.price = flat(0.25)
+		details := requestDetails{BatteryDetails: []batteryDetail{{Type: batteryTypeBattery}}}
+
+		for _, c := range []struct {
+			limit, reserve, start, stop float64
+			peaks                       bool
+		}{
+			{2500, 35, 0, 0, true},
+			{2500, 35, 25, 35, true},
+			{2500, 20, 30, 50, true},
+			{10000, 35, 25, 35, false},
+		} {
+			t.Run(ftoa(c.limit)+"/"+ftoa(c.reserve)+"/"+ftoa(c.start), func(t *testing.T) {
+				set := scenarioSettings{limit: c.limit, reserve: c.reserve, start: c.start, stop: c.stop, chargePower: scenarioPower}
+				r := run(t, day, 50, set, opts{goalMayMiss: true})
+				first := sumOf(r.res.GridImportOvershoot)
+
+				r.site.lmOptimizerPasses(client, &r.req, details, r.res)
+				require.True(t, lmPlanValid(r.req, 0, r.res))
+
+				s, rb, ts := r.soc(0), r.res.Batteries[0], r.req.TimeSeries
+				reserve := float32(scenarioCapacity * c.reserve / 100)
+				prev := r.req.Batteries[0].SInitial
+				for i := range ts.Dt {
+					excess := max(0, ts.Gt[i]-ts.Ft[i]-float32(c.limit)/4)
+					if prev < reserve-10 {
+						assert.LessOrEqual(t, rb.DischargingPower[i], excess+20, "more than the excess below the reserve at step %d", i)
+					}
+					if at(r.res.GridImportOvershoot, i) > 5 {
+						assert.LessOrEqual(t, rb.ChargingPower[i], float32(5), "charging over the limit at step %d", i)
+					}
+					prev = s[i]
+				}
+
+				low := pct(slices.Min(s))
+				over := sumOf(r.res.GridImportOvershoot)
+				t.Logf("lowest %.0f%%, over the limit %.0f Wh (first pass %.0f Wh)", low, over, first)
+				if c.peaks {
+					assert.Less(t, low, max(c.reserve, c.start), "the floor covers the peaks")
+					assert.LessOrEqual(t, over, first+1)
+				} else {
+					assert.GreaterOrEqual(t, low, max(c.reserve, c.start)-0.1, "stops at the floor")
+				}
 			})
 		}
 	})

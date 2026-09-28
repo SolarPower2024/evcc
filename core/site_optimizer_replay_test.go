@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -135,8 +136,7 @@ func TestLmOptimizerReplay(t *testing.T) {
 			assert.GreaterOrEqual(t, v, bat.SMin-1, "soc below the minimum at step %d", i)
 		}
 
-		if running && bat.SGoal != nil {
-			i := slotAfter(req.TimeSeries.Dt, site.gridChargeWindow())
+		if i := slices.IndexFunc(bat.SGoal, func(g float32) bool { return g > 0 }); running && i >= 0 {
 			t.Logf("goal %.0f Wh at step %d, planned %.0f Wh", bat.SGoal[i], i, soc[i])
 			if !goalMayMiss {
 				assert.GreaterOrEqual(t, soc[i], bat.SGoal[i]-1, "goal not reached at step %d", i)

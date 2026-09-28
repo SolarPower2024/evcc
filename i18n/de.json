@@ -518,7 +518,7 @@
       "timeoutLabel": "Ablaufzeit der Reservierung",
       "title": "Erweiterte Einstellungen",
       "gridChargeWindowLabel": "Ziel Batterie-Netzladen erreichen in",
-      "gridChargeWindowHelp": "Nur mit Optimizer: Beim Batterie-Netzladen nach Ladestand plant er den Stopp-Ladestand nach der Ladedauer mit der Netzladeleistung, höchstens nach dieser Zeit.",
+      "gridChargeWindowHelp": "Nur mit Optimizer: Beim Batterie-Netzladen nach Ladestand plant er den Stopp-Ladestand nach der Ladedauer mit der Netzladeleistung: ohne Lastspitzenkappung höchstens nach dieser Zeit, mit ihr so lange, wie der Platz unter dem Limit braucht.",
       "circuitLabel": "Stromkreis Lastmanagement (Peak)",
       "circuitHelp": "Der Stromkreis mit deiner Peak-Grenze, nicht der Absicherung. Nur er erscheint unter Mehr → Lastmanagement (Peak), wird dort mit dem Schalter aufgehoben und steigt bei Follow the Peak mit.",
       "circuitAll": "Keiner – alle Stromkreise, keiner steigt mit",

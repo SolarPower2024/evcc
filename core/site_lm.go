@@ -73,6 +73,10 @@ type lmState struct {
 	// see site_optimizer_lm.go
 	floorRaised bool
 
+	// the home battery's inputs for the further optimizer passes, see
+	// site_optimizer_reserve_pass.go
+	plan *lmPlan
+
 	// battery identification, see site_battery_ident.go
 	identUse bool
 	ident    []batteryIdentResult

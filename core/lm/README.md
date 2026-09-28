@@ -132,7 +132,7 @@ Keep these in mind when merging a new evcc version:
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff role: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `assets/js/components/Config/TariffModal.vue` | `feedInEeg` offers the price templates |
 | `core/site_load_predictor.go` | `homeProfileByWeekday` call in `homeProfile` |
-| `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled, `lmSocChargePass` after the solve, `lmForecastLowest` for the forecast |
+| `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast |
 | `server/http.go` | merges `customSiteRoutes`, one loop |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
 | `assets/js/views/Config.vue` | load management details section and its modals |
@@ -337,25 +337,42 @@ settings as inputs, so the plan matches what the fork will actually do, see
 `core/site_optimizer_lm.go`:
 
 - peak shaving: peak limit as hard grid import limit (`p_max_imp`), reserve
-  as the home battery's minimum soc (`s_min`)
+  as the home battery's minimum soc (`s_min`) in the first solve. Below the
+  reserve the fork discharges only what exceeds the limit and keeps what
+  charges there for peaks, a rule the optimizer cannot state. Where the first
+  plan leaves peaks uncovered, or the battery is below the floor now, the plan
+  is solved again (`core/site_optimizer_reserve_pass.go`) with the battery's
+  own minimum and a floor per slot (`s_goal`) that follows the fork: lowered
+  by the peaks it covers (above the reserve a peak pausing grid charging leaves
+  the battery free), raised by what really charges (pv surplus less what the
+  vehicles take, running and one-time grid charging), never by grid charging
+  the optimizer only chooses. The floor is checked against that plan once more
+  and solved a third time where it drifted. Without peaks the plan stops at the
+  floor as before.
 - soc-based grid charging (only while switched on and grid charging is
   allowed): start soc as minimum soc. The optimizer only knows minimums, given
   the stop soc as goal it would just stop discharging there, which the fork
-  does not do. So the plan is solved twice (`core/site_optimizer_soc_pass.go`):
-  as requested, then again from the slot the battery reaches the start soc,
-  with the plan's state as starting point and the stop soc as goal after the
-  charging time (grid charge power, else the battery's maximum, with the
-  charging efficiency; at most the grid charge window), and both are joined.
-  The plan shows the discharge to the start soc and the charge to the stop soc
-  as the fork does them; a later charge is up to the optimizer. While charging
-  runs the stop soc is a goal of the first pass. A peak shaving reserve above
-  the start soc is a hard minimum, the battery never gets there. A floor
-  raised this way is not shown as "leer" in the battery forecast.
-- one-time grid charging: its target as goal at the chosen time, or right away
-  when the charge power (grid charge power, else the battery's maximum) can
-  reach it with 90% charging efficiency
-- grid charging refused right now (shed hold-off, running peak, unknown charge
-  power on a circuit) is not offered (`charge_from_grid`)
+  does not do. So from the slot the battery reaches the start soc the rest is
+  solved again (`core/site_optimizer_soc_pass.go`) with the plan's state as
+  starting point and the stop soc as goal once the fork has charged it, and
+  joined. What the charge adds below the floor stays there until pv refills it.
+  While charging runs the stop soc is a goal of the first solve. A floor above
+  the start soc keeps the battery from getting there. A floor raised this way
+  is not shown as "leer" in the battery forecast, the battery's own minimum is.
+- grid charging goals are placed where the fork gets there: at the grid charge
+  power (else the battery's maximum) with the charging efficiency, with peak
+  shaving only with the room below the limit (a charge power set through an
+  entity is trimmed to it, at least 500 W; a switched one pauses above the
+  limit), paused while the demand exceeds it and the battery covers the peak.
+  Without peak shaving at most the grid charge window.
+- one-time grid charging: its target as goal at the chosen time (with peak
+  shaving at most what the room allows by then), or right away when the charge
+  power can reach it
+- grid charging refused right now (shed hold-off, unknown charge power on a
+  circuit) is not offered (`charge_from_grid`); a peak running now is not a
+  refusal, the import limit plans it
+- every further solve is checked (solved, complete, the battery within its
+  bounds, not more over the limit); otherwise the plan before stays
 - load management: a loadpoint plans with at most its circuits' power, the
   priorities 0-3/4-6/7-10 become `c_priority` 0/1/2
 - a price tariff set as planner tariff (*Tarife → Planer-Vorhersage*) is the

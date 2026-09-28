@@ -8,12 +8,13 @@ package core
 // automatic mode:
 //
 //   - peak shaving: the peak limit as hard grid import limit, the reserve as
-//     the home battery's minimum soc
-//   - soc-based grid charging: the start soc as minimum soc, so the optimizer
-//     plans the charging ahead before the battery would fall below it; while
-//     charging runs the stop soc as goal within the grid charge window
-//   - grid charging the load management or a peak currently refuses is not
-//     offered (charge_from_grid off)
+//     the home battery's minimum soc; below it the battery only covers peaks,
+//     see site_optimizer_reserve_pass.go
+//   - soc-based grid charging: the start soc as minimum soc; while charging
+//     runs the stop soc as goal once charged, with peak shaving only with the
+//     room below the limit; where it starts later see site_optimizer_soc_pass.go
+//   - grid charging the load management currently refuses is not offered
+//     (charge_from_grid off)
 //   - load management: a loadpoint plans with at most its circuits' power, and
 //     the priorities rank the batteries (c_priority)
 //   - a price tariff set as planner tariff is the grid price the optimizer
@@ -85,6 +86,7 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 	s := site.lms()
 	s.mu.Lock()
 	s.floorRaised = false
+	s.plan = nil
 	s.mu.Unlock()
 
 	if peakOn && limit > 0 && (req.Grid.PMaxImp == 0 || float32(limit) < req.Grid.PMaxImp) {
@@ -97,7 +99,7 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 		switch b.detail.Type {
 		case batteryTypeBattery:
 			site.applyBatteryIdent(&b.cfg, &b.detail)
-			site.applyLmBatteryInputs(&b.cfg, req, peakOn, reserve)
+			site.applyLmBatteryInputs(&b.cfg, req, peakOn, limit, reserve)
 
 			if lmActive && site.lmBatteryCircuit() != nil {
 				b.cfg.CPriority = optimizerPriority(lm.Priority(site.lmBattery()))
@@ -134,8 +136,8 @@ func circuitPower(c api.Circuit) float64 {
 	return res
 }
 
-// applyLmBatteryInputs sets the home battery's minimum soc and grid charge goal
-func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimizer.OptimizationInput, peakOn bool, reserve float64) {
+// applyLmBatteryInputs sets the home battery's minimum soc and grid charge goals
+func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimizer.OptimizationInput, peakOn bool, limit, reserve float64) {
 	if bat.SCapacity <= 0 {
 		return
 	}
@@ -148,9 +150,14 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 
 	wh := func(soc float64) float32 { return bat.SCapacity * float32(soc) / 100 }
 
+	plan := site.newLmPlan(*bat)
+	if req.EtaD > 0 {
+		plan.etaD = req.EtaD
+	}
 	var floor float32
 	if peakOn {
 		floor = wh(reserve)
+		plan.reserve, plan.limit = floor, float32(limit)
 	}
 
 	s := site.lms()
@@ -163,24 +170,34 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 		bat.ChargeFromGrid = false
 	}
 
+	setGoal := func(i int, goal float32) {
+		if len(bat.SGoal) != len(dt) {
+			bat.SGoal = make([]float32, len(dt))
+		}
+		bat.SGoal[i] = max(bat.SGoal[i], goal)
+		plan.grid = append(plan.grid, lmGridGoal{slot: i, level: goal})
+	}
+
 	if socOn && bat.ChargeFromGrid {
 		floor = max(floor, wh(start))
 
 		// while it runs the stop soc as goal, reached as the fork charges; where
 		// it starts later is found by a second pass, see site_optimizer_soc_pass.go
 		if goal := min(wh(stop), top); running && goal > bat.SInitial {
-			if len(bat.SGoal) != len(dt) {
-				bat.SGoal = make([]float32, len(dt))
+			if i := plan.chargeSlot(req.TimeSeries, *bat, 0, bat.SInitial, goal, nil); i >= 0 {
+				if plan.limit <= 0 {
+					i = min(i, slotAfter(dt, site.gridChargeWindow()))
+				}
+				setGoal(i, goal)
 			}
-			i := slotAfter(dt, site.socChargeDuration(*bat, bat.SInitial, goal))
-			bat.SGoal[i] = max(bat.SGoal[i], goal)
 		}
 	}
 
 	// one-time grid charging: the target by the chosen time, or as early as
-	// the charge power can reach it, see site_lm_once.go
+	// the charge power can reach it, see site_lm_once.go. With peak shaving
+	// only what the room below the limit allows.
 	if o := site.gridChargeOnce(); o.Target > 0 && bat.ChargeFromGrid {
-		if goal := wh(o.Target); goal > bat.SInitial {
+		if goal := min(wh(o.Target), top); goal > bat.SInitial {
 			d := time.Until(o.Until)
 			if o.Until.IsZero() {
 				d = site.onceRequiredDuration(o.Target, float64(bat.SInitial/bat.SCapacity*100))
@@ -189,13 +206,27 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 					d = time.Duration(float64(goal-bat.SInitial) / (float64(bat.CMax) * site.identChargeEta()) * float64(time.Hour))
 				}
 			}
-			if len(bat.SGoal) != len(dt) {
-				bat.SGoal = make([]float32, len(dt))
-			}
 			i := slotAfter(dt, max(d, 0))
-			bat.SGoal[i] = max(bat.SGoal[i], min(goal, top))
+			if plan.limit > 0 {
+				// right away, also once the time has passed
+				if o.Until.IsZero() || d <= 0 {
+					if j := plan.chargeSlot(req.TimeSeries, *bat, 0, bat.SInitial, goal, nil); j >= 0 {
+						i = max(i, j)
+					} else {
+						i = len(dt) - 1
+						goal = min(goal, plan.chargeBy(req.TimeSeries, *bat, bat.SInitial, i))
+					}
+				} else {
+					goal = min(goal, plan.chargeBy(req.TimeSeries, *bat, bat.SInitial, i))
+				}
+			}
+			if goal > bat.SInitial {
+				setGoal(i, goal)
+			}
 		}
 	}
+
+	plan.target = min(floor, top)
 
 	// never above the current soc, the optimizer cannot start below its minimum
 	if floor = min(floor, bat.SInitial); floor > bat.SMin {
@@ -205,6 +236,11 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 		s.floorRaised = true
 		s.mu.Unlock()
 	}
+	plan.floor0 = bat.SMin
+
+	s.mu.Lock()
+	s.plan = &plan
+	s.mu.Unlock()
 }
 
 // lmForecastLowest keeps the forecast from calling the battery empty when it
@@ -221,25 +257,6 @@ func (site *Site) lmForecastLowest(low *batteryForecastSlot) *batteryForecastSlo
 		low.limit = false
 	}
 	return low
-}
-
-// socChargeDuration is how long soc-based grid charging takes from one stored
-// energy to another: the fork charges right away at its grid charge power (else
-// the battery's maximum) with the charging efficiency, at most the grid charge
-// window
-func (site *Site) socChargeDuration(bat optimizer.BatteryConfig, from, to float32) time.Duration {
-	window := site.gridChargeWindow()
-
-	power, _ := site.lmBatteryChargePower()
-	if power <= 0 {
-		power = float64(bat.CMax)
-	}
-	if power <= 0 || to <= from {
-		return window
-	}
-
-	d := time.Duration(float64(to-from) / (power * site.identChargeEta()) * float64(time.Hour))
-	return min(d, window)
 }
 
 // slotAfter returns the index of the time step in which d has passed
@@ -266,28 +283,22 @@ func (site *Site) peakShavingConfigured() (bool, float64, float64) {
 }
 
 // lmGridChargeBlocked reports without side effects whether grid charging is
-// currently refused: held off after load management shed it, paused by a
-// peak, or without a known charge power on a circuit
+// currently refused: held off after load management shed it, or without a
+// known charge power on a circuit. A peak pausing it is not: that holds only
+// while the demand exceeds the limit, which the import limit already plans.
 func (site *Site) lmGridChargeBlocked() bool {
-	if site.lmBatteryCircuit() != nil {
-		if power, _ := site.lmBatteryChargePower(); power <= 0 {
-			return true
-		}
-
-		s := site.lms()
-		s.mu.Lock()
-		shedUntil := s.batteryShedUntil
-		s.mu.Unlock()
-
-		if time.Now().Before(shedUntil) {
-			return true
-		}
+	if site.lmBatteryCircuit() == nil {
+		return false
 	}
 
-	p := site.peak()
+	if power, _ := site.lmBatteryChargePower(); power <= 0 {
+		return true
+	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	s := site.lms()
+	s.mu.Lock()
+	shedUntil := s.batteryShedUntil
+	s.mu.Unlock()
 
-	return p.enabled && p.set != nil && (p.demand > p.limit || p.clock.Now().Before(p.chargePause))
+	return time.Now().Before(shedUntil)
 }

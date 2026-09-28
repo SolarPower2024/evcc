@@ -518,7 +518,7 @@
       "timeoutLabel": "Reservation expiry",
       "title": "Advanced settings",
       "gridChargeWindowLabel": "Reach the battery grid charge goal within",
-      "gridChargeWindowHelp": "Optimizer only: for soc-based battery grid charging it plans the stop soc after the charging time at the grid charge power, at most after this time.",
+      "gridChargeWindowHelp": "Optimizer only: for soc-based battery grid charging it plans the stop soc after the charging time at the grid charge power: without peak shaving at most after this time, with it as long as the room below the limit takes.",
       "circuitLabel": "Load management (peak) circuit",
       "circuitHelp": "The circuit holding your peak limit, not the fuse. Only it shows under More → Load management (peak), is lifted by the switch there and rises with follow the peak.",
       "circuitAll": "None – all circuits, none rises along",

@@ -4,52 +4,41 @@ package core
 // charges the battery from the grid once it falls to the start soc, up to the
 // stop soc. The optimizer only knows minimums and cannot plan that switch:
 // given the stop soc as goal it simply stops discharging there, which the fork
-// does not do. So the plan is solved twice:
+// does not do. So the plan is solved again:
 //
-//  1. as requested, the start soc as minimum: the battery discharges down to it
+//  1. as requested (after the reserve pass, see site_optimizer_reserve_pass.go):
+//     the battery discharges down to the start soc
 //  2. from the slot it reaches the start soc on, with the plan's state then as
-//     starting point and the stop soc as goal after the charging time
+//     starting point and the stop soc as goal once the fork has charged it,
+//     with peak shaving only with the room below the limit
 //
 // and joined. The plan then shows the discharge to the start soc and the grid
 // charge to the stop soc as they will happen; whether it charges again later
 // is up to the optimizer. Only the plan changes, nothing is switched.
 
 import (
-	"context"
-	"net/http"
-
-	"github.com/evcc-io/evcc/util/sponsor"
 	optimizer "github.com/evcc-io/optimizer/client"
 )
 
-// socPassStart returns the home battery and the first slot at whose end its
-// plan reaches the start soc, -1 without soc-based grid charging to plan
-func (site *Site) socPassStart(req *optimizer.OptimizationInput, details requestDetails, res *optimizer.OptimizationResult) (home, slot int, goal float32) {
+// socPassStart returns the first slot at whose end the home battery's plan
+// reaches the start soc and the stop soc, -1 without soc-based grid charging to
+// plan
+func (site *Site) socPassStart(req *optimizer.OptimizationInput, home int, res *optimizer.OptimizationResult) (slot int, goal float32) {
 	s := site.lms()
 	s.mu.Lock()
 	on, running, start, stop := s.socChargeEnabled, s.socChargeRunning, s.socChargeStart, s.socChargeStop
 	s.mu.Unlock()
 
 	// running: the stop soc is a goal of the first pass already
-	if !on || running || len(res.Batteries) != len(req.Batteries) {
-		return -1, -1, 0
-	}
-
-	home = -1
-	for i, d := range details.BatteryDetails {
-		if d.Type != batteryTypeBattery || i >= len(req.Batteries) {
-			continue
-		}
-		if home >= 0 {
-			return -1, -1, 0 // one home battery only
-		}
-		home = i
-	}
-	if home < 0 || !req.Batteries[home].ChargeFromGrid || req.Batteries[home].SCapacity <= 0 {
-		return -1, -1, 0
+	if !on || running || home < 0 || home >= len(req.Batteries) || home >= len(res.Batteries) {
+		return -1, 0
 	}
 
 	bat := req.Batteries[home]
+	if !bat.ChargeFromGrid || bat.SCapacity <= 0 {
+		return -1, 0
+	}
+
 	top := bat.SMax
 	if top <= 0 {
 		top = bat.SCapacity
@@ -57,23 +46,23 @@ func (site *Site) socPassStart(req *optimizer.OptimizationInput, details request
 	startWh := bat.SCapacity * float32(start) / 100
 	goal = min(bat.SCapacity*float32(stop)/100, top)
 
-	// the start soc must be the minimum: a peak shaving reserve above it keeps
-	// the battery from ever getting there
+	// the start soc must be reachable: a floor above it keeps the battery from
+	// ever getting there
 	if bat.SMin > startWh+1 || goal <= startWh {
-		return -1, -1, 0
+		return -1, 0
 	}
 
 	for i, v := range res.Batteries[home].StateOfCharge {
 		if v <= startWh+1 {
 			// a second pass needs some slots left
 			if i+1 >= len(req.TimeSeries.Dt)-2 {
-				return -1, -1, 0
+				return -1, 0
 			}
-			return home, i, goal
+			return i, goal
 		}
 	}
 
-	return -1, -1, 0
+	return -1, 0
 }
 
 // socPassRequest is the request for the rest of the horizon after slot k
@@ -143,63 +132,68 @@ func socPassJoin(res *optimizer.OptimizationResult, res2 optimizer.OptimizationR
 	}
 }
 
-// lmSocChargePass solves the rest of the horizon again from where the battery
-// reaches the start soc of soc-based grid charging and joins both plans. The
-// goal is added to the request, so the published request shows it. On any
-// error the first plan stays.
-func (site *Site) lmSocChargePass(client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, details requestDetails, res *optimizer.OptimizationResult) {
-	if res == nil || (res.Status != optimizer.Optimal && res.Status != optimizer.Feasible) {
-		return
+// socPassGoals are the goals of the second pass (indexed from slot k+1): the
+// stop soc in slot g and, after it, the floor raised by what the grid charge
+// adds below it, until pv has refilled the floor anyway
+func socPassGoals(goals []float32, k, g int, stop float32, floor []float32, target float32) []float32 {
+	from := k + 1
+	goals[g-from] = max(goals[g-from], stop)
+	if floor == nil || g >= len(floor) {
+		return goals
 	}
 
-	home, k, goal := site.socPassStart(req, details, res)
+	raised := min(target, max(stop, floor[g]))
+	for i := g + 1; i < len(floor) && i-from < len(goals); i++ {
+		raised = max(floor[i], min(target, raised+floor[i]-floor[i-1]))
+		goals[i-from] = max(goals[i-from], raised)
+	}
+	return goals
+}
+
+// lmSocChargePass solves the rest of the horizon again from where the battery
+// reaches the start soc of soc-based grid charging and joins both plans. The
+// goals are added to the request, so the published request shows them. On any
+// error the plan before stays.
+func (site *Site) lmSocChargePass(client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, home int, plan lmPlan, floor []float32, res *optimizer.OptimizationResult) {
+	k, stop := site.socPassStart(req, home, res)
 	if k < 0 {
 		return
 	}
 
+	bat := req.Batteries[home]
+	soc := res.Batteries[home].StateOfCharge
+	g := plan.chargeSlot(req.TimeSeries, bat, k+1, soc[k], stop, others(res, home, len(req.TimeSeries.Dt)))
+	if g < 0 {
+		site.log.DEBUG.Println("optimizer: soc grid charge pass: no room below the limit within the horizon")
+		return
+	}
+	if plan.limit <= 0 {
+		g = min(g, k+1+slotAfter(req.TimeSeries.Dt[k+1:], site.gridChargeWindow()))
+	}
+
 	req2 := socPassRequest(*req, res, k)
-	bat := req2.Batteries[home]
-	i := slotAfter(req2.TimeSeries.Dt, site.socChargeDuration(bat, bat.SInitial, goal))
-	if len(bat.SGoal) != len(req2.TimeSeries.Dt) {
-		bat.SGoal = make([]float32, len(req2.TimeSeries.Dt))
+	b := &req2.Batteries[home]
+	if len(b.SGoal) != len(req2.TimeSeries.Dt) {
+		b.SGoal = make([]float32, len(req2.TimeSeries.Dt))
 	}
-	bat.SGoal[i] = max(bat.SGoal[i], goal)
-	req2.Batteries[home] = bat
+	b.SGoal = socPassGoals(b.SGoal, k, g, stop, floor, plan.target)
 
-	resp, err := client.PostOptimizeChargeScheduleWithResponse(context.TODO(), req2, func(_ context.Context, r *http.Request) error {
-		if sponsor.IsAuthorizedForApi() {
-			r.Header.Set("Authorization", "Bearer "+sponsor.Token)
-		}
-		return nil
-	})
-	if err != nil || resp.StatusCode() != http.StatusOK || resp.JSON200 == nil {
-		site.log.DEBUG.Printf("optimizer: soc grid charge pass: %v", cmpErr(err, resp))
-		return
-	}
-	res2 := *resp.JSON200
-	if (res2.Status != optimizer.Optimal && res2.Status != optimizer.Feasible) || len(res2.Batteries) != len(res.Batteries) {
-		site.log.DEBUG.Printf("optimizer: soc grid charge pass: %s", res2.Status)
+	res2, err := lmSolve(client, req2)
+	if err != nil || !lmPlanValid(req2, home, res2) {
+		site.log.DEBUG.Printf("optimizer: soc grid charge pass: %v", passErr(err, res2))
 		return
 	}
 
-	socPassJoin(res, res2, k)
+	socPassJoin(res, *res2, k)
 
-	// the goal as part of the request, for the optimizer page
-	b := &req.Batteries[home]
-	if len(b.SGoal) != len(req.TimeSeries.Dt) {
-		b.SGoal = make([]float32, len(req.TimeSeries.Dt))
+	// the goals as part of the request, for the optimizer page
+	rb := &req.Batteries[home]
+	if len(rb.SGoal) != len(req.TimeSeries.Dt) {
+		rb.SGoal = make([]float32, len(req.TimeSeries.Dt))
 	}
-	b.SGoal[k+1+i] = max(b.SGoal[k+1+i], goal)
+	for i, v := range b.SGoal {
+		rb.SGoal[k+1+i] = max(rb.SGoal[k+1+i], v)
+	}
 
-	site.log.DEBUG.Printf("optimizer: soc grid charge planned from slot %d, stop soc by slot %d", k+1, k+1+i)
-}
-
-func cmpErr(err error, resp *optimizer.PostOptimizeChargeScheduleResponse) any {
-	if err != nil {
-		return err
-	}
-	if resp != nil {
-		return resp.Status()
-	}
-	return "no response"
+	site.log.DEBUG.Printf("optimizer: soc grid charge planned from slot %d, stop soc by slot %d", k+1, g)
 }
