@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"slices"
 	"testing"
 	"time"
 
@@ -92,16 +91,15 @@ func TestLmOptimizerInputsPeakAndGridCharge(t *testing.T) {
 	site.applyLmOptimizerInputs(&req, batteries)
 	assert.Equal(t, float32(4000), batteries[0].cfg.SMin)
 
-	// running: stop soc as goal once charged, 3000 Wh at the battery's 5000 W
-	// and 90% = 1125 Wh a quarter hour, in the 3rd
+	// running: charged as the fork does, slot by slot, 3000 Wh at the battery's
+	// 5000 W and 90% = 1125 Wh a quarter hour, the stop soc in the 3rd
 	s.socChargeRunning = true
 	batteries = []optimizerBattery{homeBattery()}
 	site.applyLmOptimizerInputs(&req, batteries)
 	bat = batteries[0].cfg
 	require.Len(t, bat.SGoal, 16)
-	i := slices.IndexFunc(bat.SGoal, func(g float32) bool { return g > 0 })
-	assert.Equal(t, float32(8000), bat.SGoal[i])
-	assert.Equal(t, 2, i)
+	assert.Equal(t, []float32{6125, 7250, 8000}, bat.SGoal[:3])
+	assert.Zero(t, bat.SGoal[3])
 
 	// below the floor: the minimum is the current soc
 	batteries = []optimizerBattery{homeBattery()}

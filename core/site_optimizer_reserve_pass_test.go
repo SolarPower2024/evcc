@@ -56,13 +56,19 @@ func TestLmPlanChargeSlot(t *testing.T) {
 		ts.Ft = append(ts.Ft, 0)
 	}
 	bat := optimizer.BatteryConfig{SCapacity: 10000, SMax: 10000, CMax: 5000, DMax: 5000}
-	p := lmPlan{devMin: 500, power: 5000, controlled: true, limit: 2000, etaC: 0.9, etaD: 0.9}
+	p := lmPlan{devMin: 500, reserve: 3500, power: 5000, controlled: true, limit: 2000, etaC: 0.9, etaD: 0.9}
 
 	// 4 peak slots of 250 Wh excess each: 3000 - 4 * 278 = 1889 Wh, then 1500 W
 	// room: 337.5 Wh a slot, 4000 Wh after 7 more slots
 	assert.Equal(t, 10, p.chargeSlot(ts, bat, 0, 3000, 4000, nil))
 	assert.Equal(t, -1, p.chargeSlot(ts, bat, 0, 3000, 9000, nil), "not within the horizon")
-	assert.InDelta(t, 1889, p.chargeBy(ts, bat, 3000, 3), 1, "only covering the peaks")
+	assert.InDelta(t, 1889, p.chargeBy(ts, bat, 3000, 3), 1, "below the reserve only covering the peaks")
+
+	// above the reserve a paused grid charge leaves the battery free: 833 Wh a
+	// slot down to the battery's minimum
+	p.reserve = 1000
+	assert.InDelta(t, 500, p.chargeBy(ts, bat, 3000, 3), 1, "free above the reserve")
+	p.reserve = 3500
 
 	p.limit = 0
 	assert.Equal(t, 0, p.chargeSlot(ts, bat, 0, 3000, 4000, nil), "no peak shaving: 1125 Wh a slot")
@@ -135,21 +141,51 @@ func TestSocPassGoals(t *testing.T) {
 	floor := []float32{3500, 3000, 2500, 2000, 2000, 2000, 2500, 3000, 3500, 3500}
 
 	// stop soc at the floor target: held there
-	goals := socPassGoals(make([]float32, 8), 1, 4, 3500, floor, 3500)
+	goals := socPassGoals(make([]float32, 8), 1, 4, 3500, nil, floor, 3500)
 	assert.Equal(t, []float32{0, 0, 3500, 3500, 3500, 3500, 3500, 3500}, goals)
 
 	// below it: raised by the grid charge, following the floor's changes up to it
-	goals = socPassGoals(make([]float32, 8), 1, 4, 3000, floor, 3500)
+	goals = socPassGoals(make([]float32, 8), 1, 4, 3000, nil, floor, 3500)
 	assert.Equal(t, []float32{0, 0, 3000, 3000, 3500, 3500, 3500, 3500}, goals)
 
 	// peaks after the charge lower it again
 	floor = []float32{3500, 3000, 2500, 2000, 2000, 1500, 1000, 1000, 1000, 1000}
-	goals = socPassGoals(make([]float32, 8), 1, 4, 3000, floor, 3500)
+	goals = socPassGoals(make([]float32, 8), 1, 4, 3000, nil, floor, 3500)
 	assert.Equal(t, []float32{0, 0, 3000, 2500, 2000, 2000, 2000, 2000}, goals)
 
 	// without a floor only the stop soc
-	goals = socPassGoals(make([]float32, 8), 1, 4, 3000, nil, 3500)
+	goals = socPassGoals(make([]float32, 8), 1, 4, 3000, nil, nil, 3500)
 	assert.Equal(t, []float32{0, 0, 3000, 0, 0, 0, 0, 0}, goals)
+
+	// the charge levels before it, as the fork charges from slot 2 on
+	goals = socPassGoals(make([]float32, 8), 1, 4, 3000, []float32{2200, 2600, 3000}, nil, 3500)
+	assert.Equal(t, []float32{2200, 2600, 3000, 0, 0, 0, 0, 0}, goals)
+}
+
+// The charge levels follow the fork slot by slot; capped they end with the goal.
+func TestLmPlanChargeLevels(t *testing.T) {
+	ts := optimizer.TimeSeries{Dt: quarterHours(6), Gt: make([]float32, 6), Ft: make([]float32, 6)}
+	bat := optimizer.BatteryConfig{SCapacity: 10000, SMax: 10000, CMax: 5000, DMax: 5000}
+	p := lmPlan{power: 4000, etaC: 1, etaD: 1}
+
+	levels, i := p.chargeLevels(ts, bat, 1, 2000, 4500, nil)
+	assert.Equal(t, 3, i)
+	assert.Equal(t, []float32{3000, 4000, 4500}, levels)
+
+	assert.Equal(t, []float32{3000, 4500}, capLevels(levels, 1, 2, 4500), "by slot 2 at the latest")
+	assert.Equal(t, levels, capLevels(levels, 1, 5, 4500), "later: unchanged")
+}
+
+// A forced run requested while one runs is remembered and run once after it.
+func TestLmOptimizeAgain(t *testing.T) {
+	site := &Site{log: util.NewLogger("test")}
+	site.lmOptimizeLater(time.Minute)
+	assert.False(t, site.lms().optimizeAgain.Load(), "a periodic run waits for the next slot")
+
+	site.lmOptimizeLater(0)
+	assert.True(t, site.lms().optimizeAgain.Load())
+	site.lmOptimizeAgain()
+	assert.False(t, site.lms().optimizeAgain.Load(), "run once")
 }
 
 func TestLmPlanValid(t *testing.T) {
@@ -265,16 +301,4 @@ func TestLmGridChargeBlockedPeak(t *testing.T) {
 	setPeakShaving(site, 2000, 35)
 	site.peak().demand = 5000
 	assert.False(t, site.lmGridChargeBlocked())
-}
-
-// A forced run requested while one runs is remembered and run once after it.
-func TestLmOptimizeAgain(t *testing.T) {
-	site := &Site{log: util.NewLogger("test")}
-	site.lmOptimizeLater(time.Minute)
-	assert.False(t, site.lms().optimizeAgain.Load(), "a periodic run waits for the next slot")
-
-	site.lmOptimizeLater(0)
-	assert.True(t, site.lms().optimizeAgain.Load())
-	site.lmOptimizeAgain()
-	assert.False(t, site.lms().optimizeAgain.Load(), "run once")
 }

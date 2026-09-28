@@ -129,6 +129,7 @@ type scenarioSettings struct {
 	once              gridChargeOnce
 	peakDemand        float64 // current grid demand, above the limit refuses grid charging
 	chargePower       float64 // W, 0 = unknown
+	chargeEntity      bool    // charge power set through an entity, else grid charging is switched
 	withBatteryMeters bool    // capacity known for the one-time duration
 }
 
@@ -139,6 +140,9 @@ func (s scenarioSettings) site() *Site {
 		site.peak().demand = s.peakDemand
 	}
 	site.peak().chargePower = s.chargePower
+	if s.chargeEntity {
+		site.peak().chargeSet = func(float64) error { return nil }
+	}
 
 	lms := site.lms()
 	if s.start > 0 {
@@ -314,7 +318,7 @@ func TestLmOptimizerScenarios(t *testing.T) {
 				r := run(t, winter, 20, set, opts{})
 				bat := r.req.Batteries[0]
 				require.Len(t, bat.SGoal, len(r.req.TimeSeries.Dt))
-				i := slices.IndexFunc(bat.SGoal, func(g float32) bool { return g > 0 })
+				i := slices.IndexFunc(bat.SGoal, func(g float32) bool { return g >= scenarioCapacity*0.4-1 })
 				require.GreaterOrEqual(t, i, 0)
 				assert.LessOrEqual(t, i, slotAfter(r.req.TimeSeries.Dt, time.Duration(window*float64(time.Hour))), "within the window")
 				assert.InDelta(t, scenarioCapacity*0.4, bat.SGoal[i], 1)
@@ -581,6 +585,27 @@ func TestLmOptimizerScenarios(t *testing.T) {
 		}
 	})
 
+	// running grid charging charges from the first slot on as the fork does, so
+	// the suggestion is to charge (limit 4 kW, reserve 45%, grid charging 35/50%)
+	t.Run("running grid charging charges now", func(t *testing.T) {
+		set := scenarioSettings{limit: 4000, reserve: 45, start: 35, stop: 50, running: true, chargePower: scenarioPower, chargeEntity: true}
+		r := run(t, winter, 33, set, opts{})
+		details := requestDetails{BatteryDetails: []batteryDetail{{Type: batteryTypeBattery}}}
+		r.site.lmOptimizerPasses(client, &r.req, details, r.res)
+
+		s := r.soc(0)
+		assert.Greater(t, r.res.Batteries[0].ChargingPower[0], float32(0), "charges in the first slot")
+		i := slices.IndexFunc(s, func(v float32) bool { return pct(v) >= 49.9 })
+		require.GreaterOrEqual(t, i, 0, "reaches the stop soc")
+		for j := i; j < len(s); j++ {
+			if pct(s[j]) < 44.9 {
+				assert.Failf(t, "below the reserve after charging", "step %d: %.1f%%", j, pct(s[j]))
+				break
+			}
+		}
+		t.Logf("stop soc at step %d", i)
+	})
+
 	// below the reserve only what exceeds the peak limit leaves the battery,
 	// never charging while over the limit; without peaks it stops at the floor
 	t.Run("reserve for peaks", func(t *testing.T) {
@@ -591,15 +616,20 @@ func TestLmOptimizerScenarios(t *testing.T) {
 
 		for _, c := range []struct {
 			limit, reserve, start, stop float64
-			peaks                       bool
+			peaks, switched             bool
 		}{
-			{2500, 35, 0, 0, true},
-			{2500, 35, 25, 35, true},
-			{2500, 20, 30, 50, true},
-			{10000, 35, 25, 35, false},
+			{2500, 35, 0, 0, true, false},
+			{2500, 35, 25, 35, true, false},
+			{2500, 20, 30, 50, true, false},
+			{2500, 20, 30, 50, true, true},
+			{10000, 35, 25, 35, false, false},
 		} {
-			t.Run(ftoa(c.limit)+"/"+ftoa(c.reserve)+"/"+ftoa(c.start), func(t *testing.T) {
-				set := scenarioSettings{limit: c.limit, reserve: c.reserve, start: c.start, stop: c.stop, chargePower: scenarioPower}
+			name := ftoa(c.limit) + "/" + ftoa(c.reserve) + "/" + ftoa(c.start)
+			if c.switched {
+				name += "/switched"
+			}
+			t.Run(name, func(t *testing.T) {
+				set := scenarioSettings{limit: c.limit, reserve: c.reserve, start: c.start, stop: c.stop, chargePower: scenarioPower, chargeEntity: !c.switched}
 				r := run(t, day, 50, set, opts{goalMayMiss: true})
 				first := sumOf(r.res.GridImportOvershoot)
 
@@ -614,7 +644,8 @@ func TestLmOptimizerScenarios(t *testing.T) {
 					if prev < reserve-10 {
 						assert.LessOrEqual(t, rb.DischargingPower[i], excess+20, "more than the excess below the reserve at step %d", i)
 					}
-					if at(r.res.GridImportOvershoot, i) > 5 {
+					// switched grid charging draws its full power, the limit is the circuit's call
+					if at(r.res.GridImportOvershoot, i) > 5 && !c.switched {
 						assert.LessOrEqual(t, rb.ChargingPower[i], float32(5), "charging over the limit at step %d", i)
 					}
 					prev = s[i]
@@ -623,10 +654,13 @@ func TestLmOptimizerScenarios(t *testing.T) {
 				low := pct(slices.Min(s))
 				over := sumOf(r.res.GridImportOvershoot)
 				t.Logf("lowest %.0f%%, over the limit %.0f Wh (first pass %.0f Wh)", low, over, first)
-				if c.peaks {
+				switch {
+				case c.peaks && !c.switched:
 					assert.Less(t, low, max(c.reserve, c.start), "the floor covers the peaks")
 					assert.LessOrEqual(t, over, first+1)
-				} else {
+				case c.peaks:
+					assert.Less(t, low, max(c.reserve, c.start), "the floor covers the peaks")
+				default:
 					assert.GreaterOrEqual(t, low, max(c.reserve, c.start)-0.1, "stops at the floor")
 				}
 			})

@@ -359,12 +359,14 @@ settings as inputs, so the plan matches what the fork will actually do, see
   While charging runs the stop soc is a goal of the first solve. A floor above
   the start soc keeps the battery from getting there. A floor raised this way
   is not shown as "leer" in the battery forecast, the battery's own minimum is.
-- grid charging goals are placed where the fork gets there: at the grid charge
+- grid charging goals follow the charge slot by slot as the fork does it (so
+  the plan, and the suggestion, charge while it runs): at the grid charge
   power (else the battery's maximum) with the charging efficiency, with peak
   shaving only with the room below the limit (a charge power set through an
   entity is trimmed to it, at least 500 W; a switched one pauses above the
-  limit), paused while the demand exceeds it and the battery covers the peak.
-  Without peak shaving at most the grid charge window.
+  limit), paused while the demand exceeds it and the battery covers the peak
+  (below the reserve the excess, above it freely). Without peak shaving at
+  most the grid charge window.
 - the plan is solved again right away when soc-based grid charging starts or
   stops, and a forced run (a changed setting) arriving while one runs is run
   right after it instead of waiting for the next slot

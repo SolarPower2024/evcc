@@ -181,12 +181,17 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 	if socOn && bat.ChargeFromGrid {
 		floor = max(floor, wh(start))
 
-		// while it runs the stop soc as goal, reached as the fork charges; where
-		// it starts later is found by a second pass, see site_optimizer_soc_pass.go
+		// while it runs the charge as the fork does it, slot by slot up to the
+		// stop soc, so the plan charges now as well; where it starts later is
+		// found by a second pass, see site_optimizer_soc_pass.go
 		if goal := min(wh(stop), top); running && goal > bat.SInitial {
-			if i := plan.chargeSlot(req.TimeSeries, *bat, 0, bat.SInitial, goal, nil); i >= 0 {
+			if levels, i := plan.chargeLevels(req.TimeSeries, *bat, 0, bat.SInitial, goal, nil); i >= 0 {
 				if plan.limit <= 0 {
 					i = min(i, slotAfter(dt, site.gridChargeWindow()))
+					levels = capLevels(levels, 0, i, goal)
+				}
+				for j, v := range levels[:len(levels)-1] {
+					bat.SGoal = setLevel(bat.SGoal, len(dt), j, v)
 				}
 				setGoal(i, goal)
 			}
@@ -257,6 +262,17 @@ func (site *Site) lmForecastLowest(low *batteryForecastSlot) *batteryForecastSlo
 		low.limit = false
 	}
 	return low
+}
+
+// setLevel raises the goal of slot i to v, the goals sized to n steps
+func setLevel(goals []float32, n, i int, v float32) []float32 {
+	if len(goals) != n {
+		goals = make([]float32, n)
+	}
+	if i < n {
+		goals[i] = max(goals[i], v)
+	}
+	return goals
 }
 
 // slotAfter returns the index of the time step in which d has passed

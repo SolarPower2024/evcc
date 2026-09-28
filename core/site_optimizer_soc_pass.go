@@ -133,10 +133,16 @@ func socPassJoin(res *optimizer.OptimizationResult, res2 optimizer.OptimizationR
 }
 
 // socPassGoals are the goals of the second pass (indexed from slot k+1): the
-// stop soc in slot g and, after it, the floor raised by what the grid charge
-// adds below it, until pv has refilled the floor anyway
-func socPassGoals(goals []float32, k, g int, stop float32, floor []float32, target float32) []float32 {
+// charge levels as the fork charges (from slot k+1 on), the stop soc in slot g
+// and, after it, the floor raised by what the grid charge adds below it, until
+// pv has refilled the floor anyway
+func socPassGoals(goals []float32, k, g int, stop float32, levels, floor []float32, target float32) []float32 {
 	from := k + 1
+	for j, v := range levels {
+		if j < len(goals) {
+			goals[j] = max(goals[j], v)
+		}
+	}
 	goals[g-from] = max(goals[g-from], stop)
 	if floor == nil || g >= len(floor) {
 		return goals
@@ -162,13 +168,14 @@ func (site *Site) lmSocChargePass(client *optimizer.ClientWithResponses, req *op
 
 	bat := req.Batteries[home]
 	soc := res.Batteries[home].StateOfCharge
-	g := plan.chargeSlot(req.TimeSeries, bat, k+1, soc[k], stop, others(res, home, len(req.TimeSeries.Dt)))
+	levels, g := plan.chargeLevels(req.TimeSeries, bat, k+1, soc[k], stop, others(res, home, len(req.TimeSeries.Dt)))
 	if g < 0 {
 		site.log.DEBUG.Println("optimizer: soc grid charge pass: no room below the limit within the horizon")
 		return
 	}
 	if plan.limit <= 0 {
 		g = min(g, k+1+slotAfter(req.TimeSeries.Dt[k+1:], site.gridChargeWindow()))
+		levels = capLevels(levels, k+1, g, stop)
 	}
 
 	req2 := socPassRequest(*req, res, k)
@@ -176,7 +183,7 @@ func (site *Site) lmSocChargePass(client *optimizer.ClientWithResponses, req *op
 	if len(b.SGoal) != len(req2.TimeSeries.Dt) {
 		b.SGoal = make([]float32, len(req2.TimeSeries.Dt))
 	}
-	b.SGoal = socPassGoals(b.SGoal, k, g, stop, floor, plan.target)
+	b.SGoal = socPassGoals(b.SGoal, k, g, stop, levels, floor, plan.target)
 
 	res2, err := lmSolve(client, req2)
 	if err != nil || !lmPlanValid(req2, home, res2) {

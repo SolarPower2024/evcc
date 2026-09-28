@@ -98,11 +98,16 @@ func (p lmPlan) gridCharge(ts optimizer.TimeSeries, bat optimizer.BatteryConfig,
 }
 
 // chargeStep is the stored energy after slot i of grid charging from en: while
-// a peak pauses it, the battery covers what exceeds the limit
+// a peak pauses it, the battery covers what exceeds the limit, above the
+// reserve it runs freely
 func (p lmPlan) chargeStep(ts optimizer.TimeSeries, bat optimizer.BatteryConfig, i int, en float32, ev []float32) float32 {
 	h := float32(ts.Dt[i]) / 3600
 	if net := at(ts.Gt, i) - at(ts.Ft, i) + at(ev, i); p.limit > 0 && net > p.limit*h {
-		en = max(min(en, p.devMin), en-min(net-p.limit*h, bat.DMax*h)/p.etaD)
+		drain := net - p.limit*h
+		if en > p.reserve+1 {
+			drain = net
+		}
+		en = max(min(en, p.devMin), en-min(drain, bat.DMax*h)/p.etaD)
 	}
 	en += p.gridCharge(ts, bat, i, ev)
 	if bat.SMax > 0 {
@@ -111,15 +116,34 @@ func (p lmPlan) chargeStep(ts optimizer.TimeSeries, bat optimizer.BatteryConfig,
 	return en
 }
 
+// chargeLevels is the stored energy after each slot from `from` on while grid
+// charging from en runs up to goal, as the fork charges, and the slot it gets
+// there; -1 if it never does within the horizon
+func (p lmPlan) chargeLevels(ts optimizer.TimeSeries, bat optimizer.BatteryConfig, from int, en, goal float32, ev []float32) ([]float32, int) {
+	var levels []float32
+	for i := from; i < len(ts.Dt); i++ {
+		if en = p.chargeStep(ts, bat, i, en, ev); en >= goal-1 {
+			return append(levels, goal), i
+		}
+		levels = append(levels, en)
+	}
+	return nil, -1
+}
+
 // chargeSlot is the slot from which on grid charging from en reaches goal, -1
 // if it never does within the horizon
 func (p lmPlan) chargeSlot(ts optimizer.TimeSeries, bat optimizer.BatteryConfig, from int, en, goal float32, ev []float32) int {
-	for i := from; i < len(ts.Dt); i++ {
-		if en = p.chargeStep(ts, bat, i, en, ev); en >= goal-1 {
-			return i
-		}
+	_, i := p.chargeLevels(ts, bat, from, en, goal, ev)
+	return i
+}
+
+// capLevels ends charge levels starting at slot from with the goal by slot
+// last at the latest
+func capLevels(levels []float32, from, last int, goal float32) []float32 {
+	if n := last - from + 1; n > 0 && n < len(levels) {
+		levels = append(levels[:n-1:n-1], goal)
 	}
-	return -1
+	return levels
 }
 
 // chargeBy is the stored energy grid charging from en reaches by slot until
