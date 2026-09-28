@@ -162,6 +162,17 @@ export interface LmPriority {
 }
 
 // custom: advanced load management settings, see core/site_lm_advanced.go
+export interface LmHomeProfile {
+  /** File name of the upload. */
+  name: string;
+  /** Time of the upload. */
+  uploaded: string;
+  /** Months the file gave, 1..12, the others take the nearest. */
+  months: number[];
+  /** Average kWh per day by month. */
+  daily: number[];
+}
+
 export interface LmAdvanced {
   /** Peak reserve soc band in %. */
   hysteresis: number;
@@ -179,6 +190,8 @@ export interface LmAdvanced {
   peakCap: number;
   /** Home consumption forecast per weekday. */
   homeWeekday?: boolean;
+  /** Home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load profile. */
+  homeForecast?: number;
   /** Cycles after which a load ignoring its limit is no longer counted on, 0 = off. */
   followCycles: number;
   gridChargeWindow: number;
@@ -505,6 +518,8 @@ export interface State {
   lmShedProtected?: string[];
   /** Advanced load management settings in effect. */
   lmAdvanced?: LmAdvanced;
+  /** Uploaded load profile for the home consumption forecast, null = none. */
+  lmHomeProfile?: LmHomeProfile | null;
   /** Home Assistant counter of the export under the second feed-in tariff (EEG), empty = off. */
   feedInEegEntity?: string;
   /** Current price of the second feed-in tariff. */

@@ -68,21 +68,57 @@
 				</select>
 			</FormRow>
 
-			<!-- custom: home consumption forecast for the optimizer, see core/site_load_weekday.go -->
+			<!-- custom: home consumption forecast for the optimizer, see core/site_load_weekday.go and core/site_load_manual.go -->
 			<FormRow
-				id="lmAdvanced-homeWeekday"
-				:label="$t('config.lmadvanced.homeWeekdayLabel')"
-				:help="$t('config.lmadvanced.homeWeekdayHelp')"
+				id="lmAdvanced-homeForecast"
+				:label="$t('config.lmadvanced.homeForecastLabel')"
+				:help="$t('config.lmadvanced.homeForecastHelp')"
 			>
 				<select
-					id="lmAdvanced-homeWeekday"
-					v-model.number="values.homeWeekday"
+					id="lmAdvanced-homeForecast"
+					v-model.number="values.homeForecast"
 					class="form-select"
-					data-testid="lmadvanced-homeWeekday"
+					data-testid="lmadvanced-homeForecast"
 				>
-					<option :value="0">{{ $t("config.lmadvanced.homeWeekdayOff") }}</option>
-					<option :value="1">{{ $t("config.lmadvanced.homeWeekdayOn") }}</option>
+					<option :value="0">{{ $t("config.lmadvanced.homeForecastEvcc") }}</option>
+					<option :value="1">{{ $t("config.lmadvanced.homeForecastWeekday") }}</option>
+					<option :value="2">{{ $t("config.lmadvanced.homeForecastManual") }}</option>
 				</select>
+			</FormRow>
+			<FormRow
+				v-if="values.homeForecast === 2"
+				id="lmAdvanced-homeProfile"
+				:label="$t('config.lmadvanced.homeProfileLabel')"
+				:help="$t('config.lmadvanced.homeProfileHelp')"
+			>
+				<p v-if="homeProfile" class="small mb-2" data-testid="lmadvanced-homeProfile-info">
+					{{ homeProfileInfo }}
+					<a :href="homeProfileUrl" download="lastprofil.csv">{{
+						$t("config.lmadvanced.homeProfileDownload")
+					}}</a>
+					·
+					<button
+						type="button"
+						class="btn btn-link btn-sm p-0 align-baseline text-danger"
+						data-testid="lmadvanced-homeProfile-delete"
+						@click="deleteHomeProfile"
+					>
+						{{ $t("config.lmadvanced.homeProfileDelete") }}
+					</button>
+				</p>
+				<p v-else class="small text-warning mb-2" data-testid="lmadvanced-homeProfile-none">
+					{{ $t("config.lmadvanced.homeProfileNone") }}
+				</p>
+				<input
+					id="lmAdvanced-homeProfile"
+					ref="homeProfileFile"
+					type="file"
+					accept=".csv,.txt,text/csv,text/plain"
+					class="form-control"
+					data-testid="lmadvanced-homeProfile"
+					:disabled="uploading"
+					@change="uploadHomeProfile"
+				/>
 			</FormRow>
 			<FormRow
 				id="lmAdvanced-percentile"
@@ -176,6 +212,7 @@ export default {
 			initialCircuit: "",
 			percentile: 0,
 			initialPercentile: 0,
+			uploading: false,
 		};
 	},
 	computed: {
@@ -188,6 +225,25 @@ export default {
 			return res.includes(this.initialPercentile)
 				? res
 				: [...res, this.initialPercentile].sort((a, b) => a - b);
+		},
+		// uploaded load profile, see core/site_load_manual.go
+		homeProfile() {
+			return store.state?.lmHomeProfile || null;
+		},
+		homeProfileInfo() {
+			const p = this.homeProfile;
+			const months =
+				p.months?.length === 12
+					? this.$t("config.lmadvanced.homeProfileAllMonths")
+					: (p.months || []).join(", ");
+			return this.$t("config.lmadvanced.homeProfileInfo", {
+				name: p.name,
+				date: this.fmtDayMonthYear(new Date(p.uploaded)),
+				months,
+			});
+		},
+		homeProfileUrl() {
+			return `${api.defaults.baseURL}lmhomeprofile`;
 		},
 		percentileChanged() {
 			return this.percentile !== this.initialPercentile;
@@ -217,7 +273,7 @@ export default {
 			const values = {};
 			FIELDS.forEach((f) => (values[f.name] = state[f.name] ?? f.default));
 			values.phases = state.phases ?? 3;
-			values.homeWeekday = state.homeWeekday ? 1 : 0;
+			values.homeForecast = state.homeForecast ?? (state.homeWeekday ? 1 : 0);
 
 			this.saving = false;
 			this.error = "";
@@ -227,6 +283,33 @@ export default {
 			this.initialCircuit = this.circuit;
 			this.percentile = store.state?.profilePercentile ?? 0;
 			this.initialPercentile = this.percentile;
+		},
+		async uploadHomeProfile(event) {
+			const file = event.target.files?.[0];
+			if (!file) return;
+
+			this.uploading = true;
+			this.error = "";
+			try {
+				await api.post("lmhomeprofile", await file.text(), {
+					params: { name: file.name },
+					headers: { "Content-Type": "text/csv" },
+				});
+			} catch (e) {
+				this.error = this.$t("config.lmadvanced.homeProfileInvalid", {
+					error: e?.response?.data?.error || e.message,
+				});
+			}
+			this.uploading = false;
+			event.target.value = "";
+		},
+		async deleteHomeProfile() {
+			this.error = "";
+			try {
+				await api.delete("lmhomeprofile");
+			} catch (e) {
+				this.error = e?.response?.data?.error || e.message;
+			}
 		},
 		invalidField() {
 			return FIELDS.find((f) => {
