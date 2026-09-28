@@ -287,7 +287,8 @@ energy of the last 8 weeks, recent days counting more (half-life 4 days):
 1. the profile, interpolated between the month middles and scaled to the level
    of the last weeks (factor 0.1 to 10)
 2. the last weeks' own profile per day type, slots evened out with their
-   neighbours
+   neighbours; a day with up to 6 slots missing (restart, clock change) has
+   them filled from its neighbours, days with more are left out
 3. both mixed: the last weeks count 0.5 while the profile fits them, up to 0.9
    the more its shape (correlation) or level differs, less while the history is
    shorter than 14 days

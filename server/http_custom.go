@@ -172,8 +172,8 @@ func lmHomeProfileUploadHandler(site site.API) http.HandlerFunc {
 		if name == "" {
 			name = "lastprofil.csv"
 		}
-		if len(name) > 100 {
-			name = name[:100]
+		if r := []rune(name); len(r) > 100 {
+			name = string(r[:100])
 		}
 
 		if err := site.SetLmHomeProfile(name, data); err != nil {

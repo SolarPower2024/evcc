@@ -203,7 +203,7 @@ func parseHomeLoadProfile(data []byte) (homeLoadProfile, error) {
 		types []int
 	}
 
-	header := strings.Split(lines[0], sep)
+	header := trimEmpty(strings.Split(lines[0], sep))
 	if len(header) < 2 {
 		return res, errors.New("header: expected a time column and at least one month column")
 	}
@@ -254,6 +254,12 @@ func parseHomeLoadProfile(data []byte) (homeLoadProfile, error) {
 
 	for r, line := range rows {
 		cells := strings.Split(line, sep)
+		if len(cells) > len(header) {
+			// empty cells after the last column, as spreadsheets may write them
+			if extra := trimEmpty(cells[len(header):]); len(extra) == 0 {
+				cells = cells[:len(header)]
+			}
+		}
 		if len(cells) != len(header) {
 			return res, fmt.Errorf("row %d: %d values, expected %d", r+2, len(cells), len(header))
 		}
@@ -316,6 +322,14 @@ func parseHomeLoadProfile(data []byte) (homeLoadProfile, error) {
 	return res, nil
 }
 
+// trimEmpty drops empty cells at the end
+func trimEmpty(cells []string) []string {
+	for len(cells) > 0 && strings.Trim(strings.TrimSpace(cells[len(cells)-1]), `"`) == "" {
+		cells = cells[:len(cells)-1]
+	}
+	return cells
+}
+
 // normalizeProfileTime returns a time cell as hh:mm, "" if it is none
 func normalizeProfileTime(s string) string {
 	parts := strings.Split(strings.Trim(strings.TrimSpace(s), `"`), ":")
@@ -362,8 +376,45 @@ func (site *Site) homeProfileManual(col *metrics.Collector, minLen int) ([]float
 // homeDay is a past day of measured home power in W per slot
 type homeDay struct {
 	date  time.Time
-	watts [96]float64
-	slots int
+	sum   [96]float64 // W, summed over the slots of the same time
+	count [96]int     // two on the day the clocks go back
+	watts [96]float64 // the day's power, see complete
+}
+
+// complete averages the slots and fills single missing ones (a restart, the
+// day the clocks go forward) from their neighbours. False if more than 6 are
+// missing.
+func (d *homeDay) complete() bool {
+	var given []int
+	for i := range 96 {
+		if d.count[i] > 0 {
+			d.watts[i] = d.sum[i] / float64(d.count[i])
+			given = append(given, i)
+		}
+	}
+	if len(given) < 90 {
+		return false
+	}
+
+	for i := range 96 {
+		if d.count[i] > 0 {
+			continue
+		}
+		// nearest given slots before and after, around midnight
+		prev, next := -1, -1
+		for k := 1; k < 96 && (prev < 0 || next < 0); k++ {
+			if prev < 0 && d.count[(i-k+96)%96] > 0 {
+				prev = k
+			}
+			if next < 0 && d.count[(i+k)%96] > 0 {
+				next = k
+			}
+		}
+		a, b := d.watts[(i-prev+96)%96], d.watts[(i+next)%96]
+		d.watts[i] = a + (b-a)*float64(prev)/float64(prev+next)
+	}
+
+	return true
 }
 
 // homeManualForecast is the home power forecast in W for n slots from start,
@@ -392,14 +443,15 @@ func homeManualForecast(p *homeLoadProfile, hist []metrics.MeterSlot, start time
 			d = &homeDay{date: date}
 			byDate[date] = d
 		}
-		d.watts[slotOfDay(s.Start)] = s.Energy * 4000 // kWh per quarter hour to W
-		d.slots++
+		i := slotOfDay(s.Start)
+		d.sum[i] += s.Energy * 4000 // kWh per quarter hour to W
+		d.count[i]++
 	}
 
 	// complete days only, a restart may leave a few slots out
 	var days []*homeDay
 	for _, d := range byDate {
-		if d.slots >= 90 {
+		if d.complete() {
 			days = append(days, d)
 		}
 	}

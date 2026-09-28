@@ -73,6 +73,11 @@ func TestParseHomeLoadProfile(t *testing.T) {
 	assert.Equal(t, p.Watts[6], p.Watts[5])
 	assert.Equal(t, p.Watts[0], p.Watts[11])
 
+	// a spreadsheet's empty cells after the last column
+	p, err = parseHomeLoadProfile([]byte(strings.ReplaceAll(profileCsv(";", []string{"1"}, 24, func(c, r int) string { return "300" }), "\n", ";;\n")))
+	require.NoError(t, err)
+	assert.Equal(t, 300.0, p.Watts[0][0][95])
+
 	// a single day type takes the other one
 	p, err = parseHomeLoadProfile([]byte(profileCsv("\t", []string{"03-werktag"}, 24, func(c, r int) string { return "500" })))
 	require.NoError(t, err)
@@ -217,6 +222,17 @@ func TestHomeManualForecast(t *testing.T) {
 		assert.Greater(t, high[24], avg[24])
 	})
 
+	t.Run("missing slots are not zero", func(t *testing.T) {
+		var hist []metrics.MeterSlot
+		for _, s := range history(start, 28, func(time.Time) float64 { return 1000 }) {
+			if i := slotOfDay(s.Start); i < 8 || i >= 12 { // 02:00 to 03:00 missing every day
+				hist = append(hist, s)
+			}
+		}
+		res := homeManualForecast(p, hist, start, 96, 0)
+		assert.InDelta(t, res[50], res[56], 20, "02:00 like 00:30")
+	})
+
 	t.Run("incomplete days are left out", func(t *testing.T) {
 		var hist []metrics.MeterSlot
 		for _, s := range history(start, 28, func(time.Time) float64 { return 5000 }) {
@@ -227,6 +243,37 @@ func TestHomeManualForecast(t *testing.T) {
 		res := homeManualForecast(p, hist, start, 1, 0)
 		assert.InDelta(t, shape(48), res[0], 1e-6)
 	})
+}
+
+func TestHomeDayComplete(t *testing.T) {
+	var d homeDay
+	for i := range 96 {
+		if i >= 8 && i < 11 { // three missing slots
+			continue
+		}
+		d.sum[i], d.count[i] = float64(100*i), 1
+	}
+	d.sum[20], d.count[20] = 2*2000+1000, 2 // the hour the clocks go back: two slots of the same time
+
+	require.True(t, d.complete())
+	assert.Equal(t, []float64{800, 900, 1000, 1100}, d.watts[8:12], "filled between the neighbours")
+	assert.Equal(t, 2500.0, d.watts[20], "averaged")
+
+	// missing around midnight
+	d = homeDay{}
+	for i := 1; i < 95; i++ {
+		d.sum[i], d.count[i] = 1000, 1
+	}
+	require.True(t, d.complete())
+	assert.Equal(t, 1000.0, d.watts[0])
+	assert.Equal(t, 1000.0, d.watts[95])
+
+	// too many missing
+	d = homeDay{}
+	for i := range 89 {
+		d.sum[i], d.count[i] = 1000, 1
+	}
+	assert.False(t, d.complete())
 }
 
 func TestHomeForecastSetting(t *testing.T) {
