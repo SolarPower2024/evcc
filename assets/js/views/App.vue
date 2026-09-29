@@ -68,6 +68,7 @@ export default defineComponent({
 	data: () => {
 		return {
 			reconnectTimeout: null as number | null,
+			reconnectAttempts: 0,
 			ws: null as WebSocket | null,
 			authNotConfigured: false,
 			currentVersion: undefined as string | undefined,
@@ -186,10 +187,13 @@ export default defineComponent({
 		},
 		reconnect() {
 			this.clearReconnectTimeout();
+			// quick first retry, then back off
+			const delay = this.reconnectAttempts === 0 ? 250 : 2500;
 			this.reconnectTimeout = window.setTimeout(() => {
+				this.reconnectAttempts++;
 				this.disconnect();
 				this.connect();
-			}, 2500);
+			}, delay);
 		},
 		disconnect() {
 			if (this.ws) {
@@ -226,6 +230,7 @@ export default defineComponent({
 			};
 			this.ws.onopen = () => {
 				console.log("websocket connected");
+				this.reconnectAttempts = 0;
 				window.app.setOnline();
 			};
 			this.ws.onclose = () => {
