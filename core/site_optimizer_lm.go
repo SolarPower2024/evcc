@@ -143,10 +143,7 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 	}
 
 	dt := req.TimeSeries.Dt
-	top := bat.SMax
-	if top <= 0 {
-		top = bat.SCapacity
-	}
+	top := bat.SMax // upstream sets it to the capacity when there are no soc limits
 
 	wh := func(soc float64) float32 { return bat.SCapacity * float32(soc) / 100 }
 

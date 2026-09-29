@@ -8,6 +8,7 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/circuit"
 	"github.com/evcc-io/evcc/core/lm"
+	"github.com/evcc-io/evcc/core/types"
 	"github.com/evcc-io/evcc/tariff"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
@@ -46,6 +47,18 @@ func setPeakShaving(site *Site, limit, reserve float64) {
 
 // Without circuits, peak shaving and soc-based grid charging the request stays
 // exactly as upstream builds it.
+// Contract: the fork's optimizer passes cap every soc goal and floor at SMax and
+// no longer fall back to the capacity themselves. They rely on upstream setting
+// SMax to the capacity for a battery without soc limits (evcc PR 34129).
+func TestLmSMaxFromUpstream(t *testing.T) {
+	site := &Site{log: util.NewLogger("foo")}
+	capacity, soc := 10.0, 50.0
+	dev := config.NewStaticDevice(config.Named{}, api.Meter(&struct{ api.Meter }{}))
+
+	req, _ := site.batteryRequest(dev, types.Measurement{Capacity: &capacity, Soc: &soc}, nil, 8, 15*time.Minute)
+	assert.Equal(t, req.SCapacity, req.SMax)
+}
+
 func TestLmOptimizerInputsInert(t *testing.T) {
 	config.Reset()
 	t.Cleanup(config.Reset)

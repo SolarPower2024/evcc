@@ -110,10 +110,7 @@ func (p lmPlan) chargeStep(ts optimizer.TimeSeries, bat optimizer.BatteryConfig,
 		en = max(min(en, p.devMin), en-min(drain, bat.DMax*h)/p.etaD)
 	}
 	en += p.gridCharge(ts, bat, i, ev)
-	if bat.SMax > 0 {
-		en = min(en, bat.SMax)
-	}
-	return en
+	return min(en, bat.SMax)
 }
 
 // chargeLevels is the stored energy after each slot from `from` on while grid
@@ -252,9 +249,7 @@ func (p lmPlan) floor(req *optimizer.OptimizationInput, home int, res *optimizer
 		}
 
 		z = max(p.devMin, z)
-		if bat.SMax > 0 {
-			z = min(z, bat.SMax)
-		}
+		z = min(z, bat.SMax)
 		if out[i] = min(p.target, z); out[i] < p.floor0-1 {
 			lowered = true
 		}
@@ -302,7 +297,7 @@ func lmPlanValid(req optimizer.OptimizationInput, home int, res *optimizer.Optim
 	bat := req.Batteries[home]
 	lo, hi := min(bat.SMin, bat.SInitial)-50, max(bat.SMax, bat.SInitial)+50
 	for _, v := range res.Batteries[home].StateOfCharge {
-		if v < lo || bat.SMax > 0 && v > hi {
+		if v < lo || v > hi {
 			return false
 		}
 	}

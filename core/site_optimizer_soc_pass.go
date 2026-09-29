@@ -39,10 +39,7 @@ func (site *Site) socPassStart(req *optimizer.OptimizationInput, home int, res *
 		return -1, 0
 	}
 
-	top := bat.SMax
-	if top <= 0 {
-		top = bat.SCapacity
-	}
+	top := bat.SMax // upstream sets it to the capacity when there are no soc limits
 	startWh := bat.SCapacity * float32(start) / 100
 	goal = min(bat.SCapacity*float32(stop)/100, top)
 
