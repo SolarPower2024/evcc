@@ -41,7 +41,7 @@ type DynamicConfig struct {
 	Soc        SocConfig        `json:"soc"`
 	UI         UIConfig         `json:"ui"`
 
-	Currents1pConfig `mapstructure:",squash"` // custom: 1p current limits, see config_custom.go
+	PhaseSwitchConfig `mapstructure:",squash"` // custom: phase switching settings, see config_custom.go
 }
 
 // UIConfig holds display-only settings. Not used in control logic.
@@ -125,7 +125,7 @@ func (payload DynamicConfig) Apply(lp API) error {
 	}
 
 	if err == nil {
-		err = payload.applyCurrents1p(lp) // custom: see config_custom.go
+		err = payload.applyPhaseSwitch(lp) // custom: see config_custom.go
 	}
 
 	return err

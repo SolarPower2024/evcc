@@ -1,46 +1,63 @@
 package core
 
-// Custom extension: separate current limits for 1p charging on loadpoints with
-// phase switching. The regular min and max current stay the 3p limits, the 1p
-// values only apply while charging on one phase, 0 = use the regular value.
+// Custom extension: phase switching settings of loadpoints with 1p/3p switching.
 //
-// Phase scaling uses both: scaling up to 3p needs the 1p maximum exhausted and
-// the 3p minimum reached, scaling down happens below the 3p minimum. After a
-// switch the limits of the new phase count apply right away.
-//
+// Separate current limits for 1p charging: the regular min and max current stay
+// the 3p limits, the 1p values only apply while charging on one phase, 0 = use
+// the regular value. Phase scaling uses both: scaling up to 3p needs the 1p
+// maximum exhausted and the 3p minimum reached, scaling down happens below the
+// 3p minimum. After a switch the limits of the new phase count apply right away.
 // Built after evcc PR 32505, with the same names, settings keys and config
 // fields, so an upstream version can take over the values. Without phase
 // switching the regular limits already are the 1p limits and the 1p values are
 // ignored.
+//
+// Separate delays for switching phases: how long the surplus has to allow 3p
+// before scaling up, and how long it has to be short of the 3p minimum before
+// scaling down. 0 = the enable and disable delay, as upstream. Starting and
+// stopping charging keep the enable and disable delay.
 
 import (
 	"cmp"
 	"errors"
+	"time"
 
 	"github.com/evcc-io/evcc/core/keys"
 )
 
-// phaseCurrents1p holds the 1p current limits, embedded in Loadpoint
-type phaseCurrents1p struct {
-	minCurrent1p float64 // 1p override for minCurrent, 0 = use minCurrent
-	maxCurrent1p float64 // 1p override for maxCurrent, 0 = use maxCurrent
+// phaseSwitchSettings holds the phase switching settings, embedded in Loadpoint
+type phaseSwitchSettings struct {
+	minCurrent1p      float64       // 1p override for minCurrent, 0 = use minCurrent
+	maxCurrent1p      float64       // 1p override for maxCurrent, 0 = use maxCurrent
+	phaseScale3pDelay time.Duration // delay before scaling up, 0 = enable delay
+	phaseScale1pDelay time.Duration // delay before scaling down, 0 = disable delay
 }
 
-// restoreCurrents1p restores the 1p limits from the settings
-func (lp *Loadpoint) restoreCurrents1p() {
+// restorePhaseSwitch restores the phase switching settings
+func (lp *Loadpoint) restorePhaseSwitch() {
 	if v, err := lp.settings.Float(keys.MinCurrent1p); err == nil && v > 0 {
 		lp.minCurrent1p = v
 	}
 	if v, err := lp.settings.Float(keys.MaxCurrent1p); err == nil && v > 0 {
 		lp.maxCurrent1p = v
 	}
+	if v, err := lp.settings.Int(keys.PhaseScale3pDelay); err == nil && v > 0 {
+		lp.phaseScale3pDelay = time.Duration(v)
+	}
+	if v, err := lp.settings.Int(keys.PhaseScale1pDelay); err == nil && v > 0 {
+		lp.phaseScale1pDelay = time.Duration(v)
+	}
 }
 
-// publishCurrents1p publishes the 1p limits
-func (lp *Loadpoint) publishCurrents1p() {
+// publishPhaseSwitch publishes the phase switching settings
+func (lp *Loadpoint) publishPhaseSwitch() {
 	minCurrent, maxCurrent := lp.GetCurrents1p()
 	lp.publish(keys.MinCurrent1p, minCurrent)
 	lp.publish(keys.MaxCurrent1p, maxCurrent)
+
+	up, down := lp.GetPhaseDelays()
+	lp.publish(keys.PhaseScale3pDelay, up)
+	lp.publish(keys.PhaseScale1pDelay, down)
 }
 
 // currents1pPhases returns the active phases if 1p limits are set, else 0. Without
@@ -106,6 +123,57 @@ func (lp *Loadpoint) SetCurrents1p(minCurrent, maxCurrent float64) error {
 		lp.maxCurrent1p = maxCurrent
 		lp.publish(keys.MaxCurrent1p, maxCurrent)
 		lp.settings.SetFloat(keys.MaxCurrent1p, maxCurrent)
+	}
+
+	return nil
+}
+
+// phaseScaleDelay returns the delay before switching to the given phases: the
+// phase delay if set, else the enable delay for 3p and the disable delay for 1p
+func (lp *Loadpoint) phaseScaleDelay(phases int) time.Duration {
+	up, down := lp.GetPhaseDelays()
+
+	if phases == 1 {
+		if down > 0 {
+			return down
+		}
+		return lp.GetDisableDelay()
+	}
+
+	if up > 0 {
+		return up
+	}
+	return lp.GetEnableDelay()
+}
+
+// GetPhaseDelays returns the delays before scaling up and down (0 = enable/disable delay)
+func (lp *Loadpoint) GetPhaseDelays() (time.Duration, time.Duration) {
+	lp.RLock()
+	defer lp.RUnlock()
+	return lp.phaseScale3pDelay, lp.phaseScale1pDelay
+}
+
+// SetPhaseDelays sets the delays before scaling up and down (0 = enable/disable delay)
+func (lp *Loadpoint) SetPhaseDelays(up, down time.Duration) error {
+	lp.Lock()
+	defer lp.Unlock()
+
+	if up < 0 || down < 0 {
+		return errors.New("delay must not be negative")
+	}
+
+	if up != lp.phaseScale3pDelay {
+		lp.log.DEBUG.Println("set phase scale 3p delay:", up)
+		lp.phaseScale3pDelay = up
+		lp.publish(keys.PhaseScale3pDelay, up)
+		lp.settings.SetInt(keys.PhaseScale3pDelay, int64(up))
+	}
+
+	if down != lp.phaseScale1pDelay {
+		lp.log.DEBUG.Println("set phase scale 1p delay:", down)
+		lp.phaseScale1pDelay = down
+		lp.publish(keys.PhaseScale1pDelay, down)
+		lp.settings.SetInt(keys.PhaseScale1pDelay, int64(down))
 	}
 
 	return nil

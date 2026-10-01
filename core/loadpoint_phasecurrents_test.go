@@ -2,6 +2,7 @@ package core
 
 import (
 	"testing"
+	"time"
 
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/benbjohnson/clock"
@@ -30,22 +31,22 @@ func phaseCurrentsLoadpoint(t *testing.T, phases int, min1p, max1p float64) *Loa
 	phaseCharger.EXPECT().Phases1p3p(gomock.Any()).Return(nil).AnyTimes()
 
 	return &Loadpoint{
-		log:             util.NewLogger("foo"),
-		bus:             evbus.New(),
-		clock:           clock.NewMock(),
-		chargeMeter:     newChargeMeter(&Null{}),
-		chargeRater:     &Null{},
-		chargeTimer:     &Null{},
-		progress:        NewProgress(0, 10),
-		wakeUpTimer:     NewTimer(),
-		mode:            api.ModePV,
-		minCurrent:      8,
-		maxCurrent:      16,
-		phaseCurrents1p: phaseCurrents1p{minCurrent1p: min1p, maxCurrent1p: max1p},
-		phases:          phases,
-		measuredPhases:  phases,
-		enabled:         true,
-		status:          api.StatusC,
+		log:                 util.NewLogger("foo"),
+		bus:                 evbus.New(),
+		clock:               clock.NewMock(),
+		chargeMeter:         newChargeMeter(&Null{}),
+		chargeRater:         &Null{},
+		chargeTimer:         &Null{},
+		progress:            NewProgress(0, 10),
+		wakeUpTimer:         NewTimer(),
+		mode:                api.ModePV,
+		minCurrent:          8,
+		maxCurrent:          16,
+		phaseSwitchSettings: phaseSwitchSettings{minCurrent1p: min1p, maxCurrent1p: max1p},
+		phases:              phases,
+		measuredPhases:      phases,
+		enabled:             true,
+		status:              api.StatusC,
 		charger: struct {
 			*api.MockCharger
 			*api.MockPhaseSwitcher
@@ -144,7 +145,7 @@ func TestSetCurrents1p(t *testing.T) {
 
 	// restored from the settings into a fresh loadpoint
 	restored := NewLoadpoint(util.NewLogger("bar"), store)
-	restored.restoreCurrents1p()
+	restored.restorePhaseSwitch()
 	minCurrent, maxCurrent = restored.GetCurrents1p()
 	assert.Equal(t, 6.0, minCurrent, "restored")
 	assert.Equal(t, 20.0, maxCurrent, "restored")
@@ -170,7 +171,7 @@ func TestCurrents1pConfig(t *testing.T) {
 	require.NoError(t, dynamic.Apply(lp))
 
 	assert.Equal(t, 8.0, lp.GetMinCurrent())
-	assert.Equal(t, loadpoint.Currents1pConfig{MinCurrent1p: 6, MaxCurrent1p: 20}, loadpoint.Currents1pConfigOf(lp))
+	assert.Equal(t, loadpoint.PhaseSwitchConfig{MinCurrent1p: 6, MaxCurrent1p: 20}, loadpoint.PhaseSwitchConfigOf(lp))
 }
 
 // TestCurrents1pInertWhenUnused pins that without 1p values the regular limits
@@ -184,4 +185,94 @@ func TestCurrents1pInertWhenUnused(t *testing.T) {
 
 	assert.Equal(t, 8.0, lp.effectiveMinCurrent())
 	assert.Equal(t, 16.0, lp.effectiveMaxCurrent())
+}
+
+func TestPhaseScaleDelay(t *testing.T) {
+	lp := phaseCurrentsLoadpoint(t, 1, 0, 0)
+	lp.Enable.Delay, lp.Disable.Delay = time.Minute, 3*time.Minute
+
+	// unset: enable delay up, disable delay down, as upstream
+	assert.Equal(t, time.Minute, lp.phaseScaleDelay(3))
+	assert.Equal(t, 3*time.Minute, lp.phaseScaleDelay(1))
+
+	lp.phaseScale3pDelay, lp.phaseScale1pDelay = 5*time.Minute, 4*time.Minute
+	assert.Equal(t, 5*time.Minute, lp.phaseScaleDelay(3))
+	assert.Equal(t, 4*time.Minute, lp.phaseScaleDelay(1))
+}
+
+func TestPvScalePhasesDelays(t *testing.T) {
+	// 3p 8-16A, 1p 6-17A: up from 5.5 kW after the phase delay of 5 minutes,
+	// not after the enable delay of 1 minute; down below 5.5 kW after 4 minutes
+	lp := phaseCurrentsLoadpoint(t, 1, 6, 17)
+	lp.Enable.Delay, lp.Disable.Delay = time.Minute, time.Minute
+	lp.phaseScale3pDelay, lp.phaseScale1pDelay = 5*time.Minute, 4*time.Minute
+	clk := lp.clock.(*clock.Mock)
+
+	scale := func(available float64) int {
+		t.Helper()
+		lp.chargePower = currentToPower(lp.effectiveMinCurrent(), lp.ActivePhases())
+		return lp.pvScalePhases(lp.chargePower-available, lp.effectiveMinCurrent(), lp.effectiveMaxCurrent(), true)
+	}
+
+	assert.Equal(t, 0, scale(6000), "timer starts")
+	clk.Add(time.Minute)
+	assert.Equal(t, 0, scale(6000), "enable delay passed, phase delay not")
+	clk.Add(3 * time.Minute)
+	assert.Equal(t, 0, scale(6000), "4 minutes")
+
+	// a dip below the threshold restarts the wait
+	assert.Equal(t, 0, scale(5000))
+	clk.Add(2 * time.Minute)
+	assert.Equal(t, 0, scale(6000), "timer restarted")
+	clk.Add(4 * time.Minute)
+	assert.Equal(t, 0, scale(6000), "4 minutes after the restart")
+	clk.Add(time.Minute)
+	assert.Equal(t, 3, scale(6000), "5 minutes after the restart")
+
+	// down after its own delay, the settle time after the switch has passed
+	lp.phases, lp.measuredPhases = 3, 3
+	lp.phasesSwitched = clk.Now().Add(-2 * time.Minute)
+	assert.Equal(t, 0, scale(5300), "timer starts")
+	clk.Add(3 * time.Minute)
+	assert.Equal(t, 0, scale(5300), "3 minutes")
+	clk.Add(time.Minute)
+	assert.Equal(t, 1, scale(5300), "4 minutes")
+}
+
+func TestPhaseDelaysSettings(t *testing.T) {
+	store := settings.NewMemorySettings()
+	lp := NewLoadpoint(util.NewLogger("foo"), store)
+
+	require.NoError(t, lp.SetPhaseDelays(5*time.Minute, 4*time.Minute))
+	assert.Error(t, lp.SetPhaseDelays(-time.Second, 0))
+
+	restored := NewLoadpoint(util.NewLogger("bar"), store)
+	restored.restorePhaseSwitch()
+	up, down := restored.GetPhaseDelays()
+	assert.Equal(t, 5*time.Minute, up)
+	assert.Equal(t, 4*time.Minute, down)
+
+	// through the config as the ui sends it, in ns
+	lp = phaseCurrentsLoadpoint(t, 3, 0, 0)
+	lp.settings = settings.NewMemorySettings()
+	dynamic, _, err := loadpoint.SplitConfig(map[string]any{
+		"title": "Wallbox", "minCurrent": 8, "maxCurrent": 16,
+		"phaseScale3pDelay": int64(5 * time.Minute), "phaseScale1pDelay": int64(4 * time.Minute),
+	})
+	require.NoError(t, err)
+	require.NoError(t, dynamic.Apply(lp))
+	cfg := loadpoint.PhaseSwitchConfigOf(lp)
+	assert.Equal(t, float64(5*time.Minute), cfg.PhaseScale3pDelay)
+	assert.Equal(t, float64(4*time.Minute), cfg.PhaseScale1pDelay)
+
+	// a field cleared in the ui arrives as "" and means unset
+	dynamic, _, err = loadpoint.SplitConfig(map[string]any{
+		"title": "Wallbox", "minCurrent": 8, "maxCurrent": 16,
+		"phaseScale3pDelay": "", "phaseScale1pDelay": nil, "minCurrent1p": "", "maxCurrent1p": nil,
+	})
+	require.NoError(t, err)
+	require.NoError(t, dynamic.Apply(lp))
+	up, down = lp.GetPhaseDelays()
+	assert.Zero(t, up)
+	assert.Zero(t, down)
 }

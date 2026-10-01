@@ -123,7 +123,7 @@ type Loadpoint struct {
 	priority                 int      // Priority
 	minCurrent               float64  // PV mode: start current	Min+PV mode: min current
 	maxCurrent               float64  // Max allowed current. Physically ensured by the charger
-	phaseCurrents1p                   // custom: 1p current limits, see core/loadpoint_phasecurrents.go
+	phaseSwitchSettings               // custom: 1p currents and phase delays, see core/loadpoint_phasecurrents.go
 	phasesConfigured         int      // Charger configured phase mode 0/1/3
 	limitSoc                 int      // Session limit for soc
 	limitEnergy              float64  // Session limit for energy
@@ -398,7 +398,7 @@ func (lp *Loadpoint) restoreSettings() {
 	if v, err := lp.settings.Float(keys.MinCurrent); err == nil && v > 0 {
 		lp.setMinCurrent(v)
 	}
-	lp.restoreCurrents1p() // custom: see core/loadpoint_phasecurrents.go
+	lp.restorePhaseSwitch() // custom: see core/loadpoint_phasecurrents.go
 	if v, err := lp.settings.Float(keys.MaxCurrent); err == nil && v > 0 {
 		lp.setMaxCurrent(v)
 	}
@@ -775,7 +775,7 @@ func (lp *Loadpoint) Prepare(site site.API, uiChan chan<- util.Param, pushChan c
 	lp.publish(keys.Priority, lp.GetPriority())
 	lp.publish(keys.MinCurrent, lp.GetMinCurrent())
 	lp.publish(keys.MaxCurrent, lp.GetMaxCurrent())
-	lp.publishCurrents1p() // custom: see core/loadpoint_phasecurrents.go
+	lp.publishPhaseSwitch() // custom: see core/loadpoint_phasecurrents.go
 
 	lp.publish(keys.EnableThreshold, lp.Enable.Threshold)
 	lp.publish(keys.DisableThreshold, lp.Disable.Threshold)
@@ -1538,7 +1538,7 @@ func (lp *Loadpoint) fastChargingPhases() (bool, error) {
 	// a fixed phase configuration is not subject to load management, hence no buffer.
 	if targetPhases == 3 && phases == 1 &&
 		(lp.phasesConfigured == 3 || lp.circuitAllowsPhases(3, phaseScaleUpBuffer*lp.effectiveMinCurrentFor(3))) { // custom: 3p limits
-		if !lp.phaseTimerElapsed(lp.GetEnableDelay(), phaseScale3p) {
+		if !lp.phaseTimerElapsed(lp.phaseScaleDelay(3), phaseScale3p) { // custom: phase delay
 			return true, nil
 		}
 
@@ -1606,7 +1606,7 @@ func (lp *Loadpoint) pvScalePhases(sitePower, minCurrent, maxCurrent float64, ma
 
 	// scale down phases
 	if scalable {
-		if lp.phaseTimerElapsed(lp.GetDisableDelay(), phaseScale1p) {
+		if lp.phaseTimerElapsed(lp.phaseScaleDelay(1), phaseScale1p) { // custom: phase delay
 			if err := lp.scalePhases(1); err != nil {
 				// a charger may report it cannot switch phases right now
 				// (api.ErrNotAvailable); assume a failed switch and stay silent
@@ -1641,7 +1641,7 @@ func (lp *Loadpoint) pvScalePhases(sitePower, minCurrent, maxCurrent float64, ma
 	if targetCurrent := powerToCurrent(availablePower, maxPhases); targetCurrent >= minCurrentMaxPhases && scalable {
 		lp.log.DEBUG.Printf("available power %.0fW > %.0fW min %dp threshold", availablePower, float64(maxPhases)*Voltage*minCurrentMaxPhases, maxPhases)
 
-		if lp.phaseTimerElapsed(lp.GetEnableDelay(), phaseScale3p) {
+		if lp.phaseTimerElapsed(lp.phaseScaleDelay(3), phaseScale3p) { // custom: phase delay
 			if err := lp.scalePhases(3); err != nil {
 				// a charger may report it cannot switch phases right now
 				// (api.ErrNotAvailable); assume a failed switch and stay silent

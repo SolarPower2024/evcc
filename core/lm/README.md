@@ -125,10 +125,10 @@ Keep these in mind when merging a new evcc version:
 | `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateBatteryIdent`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (INFO, no ui notification), see `circuit_custom.go` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
-| `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes; 1p current limits: `phaseCurrents1p` field, restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` per phase count |
+| `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes; 1p current limits: `phaseCurrents1p` field, restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` per phase count, the three phase timers take `phaseScaleDelay` |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split into a variant per phase count (as in evcc PR 32505), min/max power use it |
-| `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `Currents1pConfig` embedded in the dynamic config, applied after min/max current, read back for the ui |
-| `assets/js/components/Config/LoadpointModal.vue` | 1p current fields, regular range labelled 3-phase while they are shown |
+| `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` embedded in the dynamic config, applied after min/max current, read back for the ui |
+| `assets/js/components/Config/LoadpointModal.vue` | 1p current and phase delay fields, regular range labelled 3-phase while they are shown, unset values shown empty |
 | `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `core/site/api.go` | embeds `CustomAPI`, one line |
@@ -152,7 +152,7 @@ Everything else lives in files of its own: `core/lm/`, `core/circuit/circuit_cus
 `core/site/api_custom.go`, `server/http_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`
 and the new Vue components, and the charger template `homeassistant-stages.yaml`.
 
-## Current limits for 1p and 3p
+## Phase switching: current limits for 1p and 3p, delays
 
 A loadpoint with phase switching can have its own min and max current for 1p
 charging, under *Elektrik* in the loadpoint settings. The regular range is then
@@ -169,6 +169,14 @@ diff.
 - fast charging and battery boost check the circuit with the 3p minimum
 - without 1p values nothing changes: no phase lookup, the regular limits apply
   as upstream (`TestCurrents1pInertWhenUnused`, upstream's own tests unchanged)
+
+Next to them, two optional delays: how long the surplus has to allow 3p before
+scaling up, and how long it has to be short of the 3p minimum before scaling
+down. Empty = the enable and disable delay, as upstream; starting and stopping
+charging keep those. The fast charging scale-up delay uses the up delay too. A
+dip in between restarts the wait. As every timer they are checked once per
+cycle, so a switch comes up to one interval after the delay. The config takes
+them as plain numbers in ns, since the ui sends a cleared field as "".
 
 See `core/loadpoint_phasecurrents.go`.
 
