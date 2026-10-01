@@ -10,6 +10,10 @@ package charger
 // change is stagedelay old, so a surplus hovering around a stage boundary does
 // not toggle the switches every cycle. Switching on from off is not delayed,
 // the loadpoint's own enable delay already applies there.
+//
+// A heater with its own thermostat draws nothing while the switches stay on.
+// With a power sensor, a draw up to standbypower then reports ready instead of
+// heating, as upstream's switch socket does.
 
 import (
 	"context"
@@ -49,6 +53,7 @@ type SwitchStages struct {
 	stagePower float64
 	delay      time.Duration
 	power      func() (float64, error) // optional measurement
+	standby    float64                 // measured power up to this counts as idle
 	lp         loadpoint.API
 
 	mu      sync.Mutex
@@ -66,6 +71,7 @@ func NewSwitchStagesFromConfig(ctx context.Context, other map[string]any) (api.C
 		StagePower              float64
 		StageDelay              time.Duration
 		Power                   *plugin.Config
+		StandbyPower            float64
 		Energy                  *plugin.Config
 		measurement.Temperature `mapstructure:",squash"` // optional, for heating devices
 	}
@@ -103,6 +109,7 @@ func NewSwitchStagesFromConfig(ctx context.Context, other map[string]any) (api.C
 	}
 
 	c := NewSwitchStages(&cc.embed, stages, cc.StagePower, cc.StageDelay, power)
+	c.standby = max(cc.StandbyPower, 0)
 
 	energy, err := cc.Energy.FloatGetter(ctx)
 	if err != nil {
@@ -269,11 +276,22 @@ func (c *SwitchStages) Status() (api.ChargeStatus, error) {
 		return api.StatusNone, err
 	}
 
-	if countOn(states) > 0 {
-		return api.StatusC, nil
+	if countOn(states) == 0 {
+		return api.StatusB, nil
 	}
 
-	return api.StatusB, nil
+	// switched on, but the thermostat may have cut the heater
+	if c.power != nil {
+		p, err := c.CurrentPower()
+		if err != nil {
+			return api.StatusNone, err
+		}
+		if p == 0 {
+			return api.StatusB, nil
+		}
+	}
+
+	return api.StatusC, nil
 }
 
 // Enabled implements the api.Charger interface
@@ -352,10 +370,14 @@ func (c *SwitchStages) GetMinMaxPower() (float64, float64, error) {
 var _ api.Meter = (*SwitchStages)(nil)
 
 // CurrentPower implements the api.Meter interface: the measurement if configured,
-// else the stages switched on
+// standby ignored, else the stages switched on
 func (c *SwitchStages) CurrentPower() (float64, error) {
 	if c.power != nil {
-		return c.power()
+		p, err := c.power()
+		if p <= c.standby {
+			p = 0
+		}
+		return p, err
 	}
 
 	states, err := c.states()

@@ -217,6 +217,51 @@ func TestSwitchStagesStatusAndPower(t *testing.T) {
 	_ = f
 }
 
+func TestSwitchStagesThermostat(t *testing.T) {
+	// switches on, the heater's own thermostat cut out: ready, not heating
+	c, _, _ := stagesCharger(t, 0)
+	c.standby = 15
+
+	var measured float64
+	c.power = func() (float64, error) { return measured, nil }
+
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	require.NoError(t, c.Enable(true))
+
+	for _, tc := range []struct {
+		measured float64
+		status   api.ChargeStatus
+		power    float64
+	}{
+		{0, api.StatusB, 0},
+		{12, api.StatusB, 0}, // standby draw of the electronics
+		{15, api.StatusB, 0},
+		{2950, api.StatusC, 2950},
+		{8900, api.StatusC, 8900},
+	} {
+		measured = tc.measured
+		s, err := c.Status()
+		require.NoError(t, err)
+		assert.Equal(t, tc.status, s, "%.0fW", tc.measured)
+
+		p, err := c.CurrentPower()
+		require.NoError(t, err)
+		assert.Equal(t, tc.power, p, "%.0fW", tc.measured)
+	}
+
+	// still enabled for evcc: the switches decide, not the draw
+	measured = 0
+	ok, err := c.Enabled()
+	require.NoError(t, err)
+	assert.True(t, ok)
+
+	// without a sensor nothing is known about the thermostat
+	c.power = nil
+	s, err := c.Status()
+	require.NoError(t, err)
+	assert.Equal(t, api.StatusC, s)
+}
+
 func TestSwitchStagesFailure(t *testing.T) {
 	c, f, _ := stagesCharger(t, 0)
 

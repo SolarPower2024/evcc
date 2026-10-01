@@ -166,6 +166,10 @@ all stages are set in one loadpoint cycle. Switching down is immediate, a higher
 stage waits until the last change is the delay old (default 1 minute), and
 switching on from off is left to the loadpoint's enable delay. The loadpoint's
 phases must match the wiring, one stage per phase means 3 phases.
+A heater with its own thermostat draws nothing while the switches stay on. With
+a power sensor, a draw up to the standby power (default 15 W) then reports
+ready instead of heating and counts as 0 W; the loadpoint stays enabled, and
+evcc's pv control for heaters already works from the power actually drawn.
 `TestStagesCircuitStepsDown` and `TestStagesGiveWayToHigherPriority` walk
 through it with the real loadpoint.
 

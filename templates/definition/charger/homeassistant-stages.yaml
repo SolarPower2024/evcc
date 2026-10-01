@@ -72,6 +72,17 @@ params:
       en: Total power of all stages, optional
     service: homeassistant/entities?uri={uri}&insecure={insecure}&domain=sensor
     example: sensor.heater_power
+  - name: standbypower
+    description:
+      de: Standby-Leistung
+      en: Standby power
+    help:
+      de: Bis zu dieser gemessenen Leistung gilt der Heizstab als bereit statt heizend, z. B. wenn sein Thermostat abgeschaltet hat. Nur mit Leistungsmessung.
+      en: Up to this measured power the heater counts as ready instead of heating, e.g. when its thermostat has cut out. Only with a power sensor.
+    unit: W
+    type: int
+    default: 15
+    advanced: true
   - name: stagedelay
     description:
       de: Wartezeit für höhere Stufe
@@ -103,6 +114,7 @@ render: |
   type: switchstages
   stagepower: {{ .stagepower }}
   stagedelay: {{ .stagedelay }}
+  standbypower: {{ .standbypower }}
   stages:
   {{- range $switch := list .switch1 .switch2 .switch3 }}
   {{- if $switch }}
