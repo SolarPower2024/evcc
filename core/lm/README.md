@@ -145,9 +145,29 @@ Keep these in mind when merging a new evcc version:
 Everything else lives in files of its own: `core/lm/`, `core/circuit/circuit_custom.go`, `core/site_lm.go`, `core/site_lm_guard.go`,
 `core/site_lm_advanced.go`, `core/site_load_manual.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
 `core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
-`core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `core/keys/site_custom.go`,
+`core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/keys/site_custom.go`,
 `core/site/api_custom.go`, `server/http_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`
-and the new Vue components.
+and the new Vue components, and the charger template `homeassistant-stages.yaml`.
+
+## Heater in stages
+
+A heater with one switch per stage, e.g. a 3 x 3 kW heating rod switched per
+phase, runs as one loadpoint instead of one switch loadpoint per stage. It is
+set up as heater with the template *Home Assistant Heizstab in Stufen*:
+switches for up to three stages, the power per stage, optionally a power
+sensor and the delay before a higher stage.
+
+The charger (`charger/switchstages.go`) reports one stage as minimum and all
+stages as maximum power (upstream's `api.PowerLimiter`), and switches on as
+many whole stages as fit into the current evcc sets. It is not a switch device,
+so load management treats it as a regulated load: an overload or a load with a
+higher priority steps it down stage by stage instead of shedding it whole, and
+all stages are set in one loadpoint cycle. Switching down is immediate, a higher
+stage waits until the last change is the delay old (default 1 minute), and
+switching on from off is left to the loadpoint's enable delay. The loadpoint's
+phases must match the wiring, one stage per phase means 3 phases.
+`TestStagesCircuitStepsDown` and `TestStagesGiveWayToHigherPriority` walk
+through it with the real loadpoint.
 
 ## Shed guard
 

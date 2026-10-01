@@ -1,0 +1,150 @@
+# custom: heater switched in stages, see charger/switchstages.go
+template: homeassistant-stages
+products:
+  - brand: Home Assistant
+    description:
+      de: Heizstab in Stufen
+      en: Heater in stages
+group: heatinggeneric
+requirements:
+  evcc: ["skiptest"]
+  description:
+    de: |
+      Ein Heizstab mit einem Schalter je Stufe, z. B. je Phase. evcc schaltet so viele ganze Stufen ein, wie in die freigegebene Leistung passen, und regelt alle Stufen in einem Ladepunkt.
+      Im Ladepunkt die Phasen so einstellen, wie die Stufen angeschlossen sind: eine Stufe je Phase = 3 Phasen. Min.- und Max.-Strom ergeben sich aus den Stufen, ein kleinerer Max.-Strom begrenzt die Stufenzahl.
+    en: |
+      A heater with one switch per stage, e.g. per phase. evcc switches on as many whole stages as fit into the released power and controls all stages in one loadpoint.
+      Set the loadpoint's phases to match how the stages are wired: one stage per phase = 3 phases. Min and max current follow from the stages, a lower max current limits the number of stages.
+auth:
+  type: homeassistant
+  params: [uri, insecure]
+params:
+  - name: uri
+    description:
+      de: Home Assistant URI
+      en: Home Assistant URI
+    example: http://homeassistant.local:8123
+    help:
+      en: " " # overwrite default
+      de: " " # overwrite default
+    service: homeassistant/instances
+    required: true
+  - name: token
+    deprecated: true
+  - name: home
+    deprecated: true
+  - name: insecure
+  - name: switch1
+    description:
+      de: Schalter Stufe 1
+      en: Switch stage 1
+    service: homeassistant/entities?uri={uri}&insecure={insecure}&domain=switch
+    example: switch.heater_l1
+    required: true
+  - name: switch2
+    description:
+      de: Schalter Stufe 2
+      en: Switch stage 2
+    service: homeassistant/entities?uri={uri}&insecure={insecure}&domain=switch
+    example: switch.heater_l2
+  - name: switch3
+    description:
+      de: Schalter Stufe 3
+      en: Switch stage 3
+    service: homeassistant/entities?uri={uri}&insecure={insecure}&domain=switch
+    example: switch.heater_l3
+  - name: stagepower
+    description:
+      de: Leistung je Stufe
+      en: Power per stage
+    help:
+      de: Leistung einer eingeschalteten Stufe. Ohne Leistungsmessung gilt Stufen × Leistung als Verbrauch.
+      en: Power of one stage when on. Without a power sensor, stages × power counts as consumption.
+    unit: W
+    type: int
+    default: 3000
+  - name: power
+    description:
+      de: Entity ID für Leistungsmessung
+      en: Entity ID for power measurement
+    help:
+      de: Gesamtleistung aller Stufen, optional
+      en: Total power of all stages, optional
+    service: homeassistant/entities?uri={uri}&insecure={insecure}&domain=sensor
+    example: sensor.heater_power
+  - name: stagedelay
+    description:
+      de: Wartezeit für höhere Stufe
+      en: Delay before a higher stage
+    help:
+      de: Eine höhere Stufe wird erst eingeschaltet, wenn die letzte Änderung so lange her ist. Abschalten geschieht sofort. 0 = ohne Wartezeit.
+      en: A higher stage is only switched on once the last change is this old. Switching down is immediate. 0 = no delay.
+    type: duration
+    default: 1m
+    advanced: true
+  - name: temp
+    description:
+      de: Entity ID für Temperaturmessung
+      en: Entity ID for temperature measurement
+    service: homeassistant/entities?uri={uri}&insecure={insecure}&domain=sensor
+    example: sensor.boiler_temperature
+    advanced: true
+  - name: limittemp
+    description:
+      de: Entity ID für Temperaturbegrenzung
+      en: Entity ID for temperature limit
+    help:
+      de: Im Gerät konfigurierte Begrenzung
+      en: Limit configured in the device
+    service: homeassistant/entities?uri={uri}&insecure={insecure}&domain=sensor
+    example: sensor.boiler_target_temperature
+    advanced: true
+render: |
+  type: switchstages
+  stagepower: {{ .stagepower }}
+  stagedelay: {{ .stagedelay }}
+  stages:
+  {{- range $switch := list .switch1 .switch2 .switch3 }}
+  {{- if $switch }}
+    - enabled:
+        source: homeassistant
+        uri: {{ $.uri }}
+        home: {{ $.home }} # deprecated
+        insecure: {{ $.insecure }}
+        entity: {{ $switch }}
+      enable:
+        source: homeassistant
+        uri: {{ $.uri }}
+        home: {{ $.home }} # deprecated
+        insecure: {{ $.insecure }}
+        entity: {{ $switch }}
+  {{- end }}
+  {{- end }}
+  {{- if .power }}
+  power:
+    source: homeassistant
+    uri: {{ .uri }}
+    home: {{ .home }} # deprecated
+    insecure: {{ .insecure }}
+    entity: {{ .power }}
+  {{- end }}
+  {{- if .temp }}
+  temp:
+    source: homeassistant
+    uri: {{ .uri }}
+    home: {{ .home }} # deprecated
+    insecure: {{ .insecure }}
+    entity: {{ .temp }}
+  {{- end }}
+  {{- if .limittemp }}
+  limittemp:
+    source: homeassistant
+    uri: {{ .uri }}
+    home: {{ .home }} # deprecated
+    insecure: {{ .insecure }}
+    entity: {{ .limittemp }}
+  {{- end }}
+  features:
+  - heating
+  - integrateddevice
+  icon: waterheater
