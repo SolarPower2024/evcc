@@ -125,7 +125,10 @@ Keep these in mind when merging a new evcc version:
 | `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateBatteryIdent`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (INFO, no ui notification), see `circuit_custom.go` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
-| `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes |
+| `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes; 1p current limits: `phaseCurrents1p` field, restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` per phase count |
+| `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split into a variant per phase count (as in evcc PR 32505), min/max power use it |
+| `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `Currents1pConfig` embedded in the dynamic config, applied after min/max current, read back for the ui |
+| `assets/js/components/Config/LoadpointModal.vue` | 1p current fields, regular range labelled 3-phase while they are shown |
 | `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `core/site/api.go` | embeds `CustomAPI`, one line |
@@ -145,9 +148,29 @@ Keep these in mind when merging a new evcc version:
 Everything else lives in files of its own: `core/lm/`, `core/circuit/circuit_custom.go`, `core/site_lm.go`, `core/site_lm_guard.go`,
 `core/site_lm_advanced.go`, `core/site_load_manual.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
 `core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
-`core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/keys/site_custom.go`,
+`core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go`, `core/keys/site_custom.go`,
 `core/site/api_custom.go`, `server/http_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`
 and the new Vue components, and the charger template `homeassistant-stages.yaml`.
+
+## Current limits for 1p and 3p
+
+A loadpoint with phase switching can have its own min and max current for 1p
+charging, under *Elektrik* in the loadpoint settings. The regular range is then
+the 3p range, empty 1p fields fall back to it. Built after evcc PR 32505 (closed
+upstream, to be taken up after splitting power and current controlled devices),
+with the same names, settings keys and config fields, so an upstream version
+can take over the values. Written against the current phase logic, not the old
+diff.
+
+- scaling up to 3p needs the 1p maximum exhausted and the surplus at the 3p
+  minimum; scaling down happens below the 3p minimum, if the 1p minimum is
+  reached, else the loadpoint disables as upstream
+- after a switch the limits of the new phase count apply right away
+- fast charging and battery boost check the circuit with the 3p minimum
+- without 1p values nothing changes: no phase lookup, the regular limits apply
+  as upstream (`TestCurrents1pInertWhenUnused`, upstream's own tests unchanged)
+
+See `core/loadpoint_phasecurrents.go`.
 
 ## Heater in stages
 

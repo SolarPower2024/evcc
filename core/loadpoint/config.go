@@ -40,6 +40,8 @@ type DynamicConfig struct {
 	Thresholds ThresholdsConfig `json:"thresholds"`
 	Soc        SocConfig        `json:"soc"`
 	UI         UIConfig         `json:"ui"`
+
+	Currents1pConfig `mapstructure:",squash"` // custom: 1p current limits, see config_custom.go
 }
 
 // UIConfig holds display-only settings. Not used in control logic.
@@ -120,6 +122,10 @@ func (payload DynamicConfig) Apply(lp API) error {
 		case payload.MaxCurrent != 0:
 			err = lp.SetMaxCurrent(payload.MaxCurrent)
 		}
+	}
+
+	if err == nil {
+		err = payload.applyCurrents1p(lp) // custom: see config_custom.go
 	}
 
 	return err

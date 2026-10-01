@@ -123,6 +123,7 @@ type Loadpoint struct {
 	priority                 int      // Priority
 	minCurrent               float64  // PV mode: start current	Min+PV mode: min current
 	maxCurrent               float64  // Max allowed current. Physically ensured by the charger
+	phaseCurrents1p                   // custom: 1p current limits, see core/loadpoint_phasecurrents.go
 	phasesConfigured         int      // Charger configured phase mode 0/1/3
 	limitSoc                 int      // Session limit for soc
 	limitEnergy              float64  // Session limit for energy
@@ -397,6 +398,7 @@ func (lp *Loadpoint) restoreSettings() {
 	if v, err := lp.settings.Float(keys.MinCurrent); err == nil && v > 0 {
 		lp.setMinCurrent(v)
 	}
+	lp.restoreCurrents1p() // custom: see core/loadpoint_phasecurrents.go
 	if v, err := lp.settings.Float(keys.MaxCurrent); err == nil && v > 0 {
 		lp.setMaxCurrent(v)
 	}
@@ -773,6 +775,7 @@ func (lp *Loadpoint) Prepare(site site.API, uiChan chan<- util.Param, pushChan c
 	lp.publish(keys.Priority, lp.GetPriority())
 	lp.publish(keys.MinCurrent, lp.GetMinCurrent())
 	lp.publish(keys.MaxCurrent, lp.GetMaxCurrent())
+	lp.publishCurrents1p() // custom: see core/loadpoint_phasecurrents.go
 
 	lp.publish(keys.EnableThreshold, lp.Enable.Threshold)
 	lp.publish(keys.DisableThreshold, lp.Disable.Threshold)
@@ -1508,7 +1511,7 @@ func (lp *Loadpoint) fastChargingPhases() (bool, error) {
 	}
 
 	targetPhases := 3
-	if !lp.circuitAllowsPhases(3, lp.effectiveMinCurrent()) {
+	if !lp.circuitAllowsPhases(3, lp.effectiveMinCurrentFor(3)) { // custom: 3p limits
 		targetPhases = 1
 	}
 
@@ -1534,7 +1537,7 @@ func (lp *Loadpoint) fastChargingPhases() (bool, error) {
 	// scale up: delayed and buffered against immediately undoing a scale down.
 	// a fixed phase configuration is not subject to load management, hence no buffer.
 	if targetPhases == 3 && phases == 1 &&
-		(lp.phasesConfigured == 3 || lp.circuitAllowsPhases(3, phaseScaleUpBuffer*lp.effectiveMinCurrent())) {
+		(lp.phasesConfigured == 3 || lp.circuitAllowsPhases(3, phaseScaleUpBuffer*lp.effectiveMinCurrentFor(3))) { // custom: 3p limits
 		if !lp.phaseTimerElapsed(lp.GetEnableDelay(), phaseScale3p) {
 			return true, nil
 		}
@@ -1591,9 +1594,10 @@ func (lp *Loadpoint) pvScalePhases(sitePower, minCurrent, maxCurrent float64, ma
 		// while charging, scaling down only helps if 1p is sustainable, otherwise it
 		// merely delays the pv disable timer by the phase timer duration. Without a
 		// disable to wait for, scaling down is the only way to reduce power (#33208).
-		useful := !lp.enabled || !lp.charging() || !mayDisable || powerToCurrent(availablePower, 1) >= minCurrent
+		min1pCurrent := lp.effectiveMinCurrentFor(1) // custom: 1p limits, see core/loadpoint_phasecurrents.go
+		useful := !lp.enabled || !lp.charging() || !mayDisable || powerToCurrent(availablePower, 1) >= min1pCurrent
 		if insufficient && !useful {
-			lp.log.DEBUG.Printf("available power %.0fW < %.0fW min 1p threshold, disabling instead of scaling down", availablePower, Voltage*minCurrent)
+			lp.log.DEBUG.Printf("available power %.0fW < %.0fW min 1p threshold, disabling instead of scaling down", availablePower, Voltage*min1pCurrent)
 		}
 
 		// scaling down also frees load management headroom for min power on activePhases
@@ -1628,12 +1632,14 @@ func (lp *Loadpoint) pvScalePhases(sitePower, minCurrent, maxCurrent float64, ma
 	target1pCurrent := powerToCurrent(availablePower, 1)
 
 	// scaling up is pointless unless load management allows min current and power on maxPhases
+	// custom: minCurrent and maxCurrent are the 1p limits here, scaling up needs the 3p minimum
+	minCurrentMaxPhases := lp.effectiveMinCurrentFor(maxPhases)
 	scalable = maxPhases > 1 && phases < maxPhases && target1pCurrent > maxCurrent &&
-		maxCurrent >= minCurrent && lp.circuitAllowsPhases(maxPhases, minCurrent)
+		maxCurrent >= minCurrent && lp.circuitAllowsPhases(maxPhases, minCurrentMaxPhases)
 
 	// scale up phases
-	if targetCurrent := powerToCurrent(availablePower, maxPhases); targetCurrent >= minCurrent && scalable {
-		lp.log.DEBUG.Printf("available power %.0fW > %.0fW min %dp threshold", availablePower, float64(maxPhases)*Voltage*minCurrent, maxPhases)
+	if targetCurrent := powerToCurrent(availablePower, maxPhases); targetCurrent >= minCurrentMaxPhases && scalable {
+		lp.log.DEBUG.Printf("available power %.0fW > %.0fW min %dp threshold", availablePower, float64(maxPhases)*Voltage*minCurrentMaxPhases, maxPhases)
 
 		if lp.phaseTimerElapsed(lp.GetEnableDelay(), phaseScale3p) {
 			if err := lp.scalePhases(3); err != nil {
@@ -1699,10 +1705,10 @@ func (lp *Loadpoint) boostPower(batteryPower float64) float64 {
 	// bridge the power gap between 1p max and 3p min so pvScalePhases can trigger a scale-up
 	if lp.hasPhaseSwitching() && lp.phaseSwitchCompleted() && lp.site.GetBatteryMaxDischargePower() != nil {
 		if activePhases, maxPhases := lp.ActivePhases(), lp.MaxActivePhases(); activePhases < maxPhases &&
-			lp.circuitAllowsPhases(maxPhases, lp.effectiveMinCurrent()) {
+			lp.circuitAllowsPhases(maxPhases, lp.effectiveMinCurrentFor(maxPhases)) { // custom: limits per phases
 			// max power actually achievable on the active phases
 			activeMaxPower := min(lp.EffectiveMaxPower(), Voltage*lp.effectiveMaxCurrent()*float64(activePhases))
-			delta += max(0, Voltage*lp.effectiveMinCurrent()*float64(maxPhases)-activeMaxPower)
+			delta += max(0, Voltage*lp.effectiveMinCurrentFor(maxPhases)*float64(maxPhases)-activeMaxPower)
 		}
 	}
 
@@ -1781,6 +1787,11 @@ func (lp *Loadpoint) pvMaxCurrent(sitePower, batteryPower float64, batteryBuffer
 	var scaledTo int
 	if lp.hasPhaseSwitching() && lp.phaseSwitchCompleted() {
 		scaledTo = lp.pvScalePhases(sitePower, minCurrent, maxCurrent, mayDisable)
+
+		// custom: the limits of the new phase count apply, see core/loadpoint_phasecurrents.go
+		if scaledTo > 0 {
+			minCurrent, maxCurrent = lp.effectiveMinCurrentFor(scaledTo), lp.effectiveMaxCurrentFor(scaledTo)
+		}
 	}
 
 	// calculate target charge current from delta power and actual current
@@ -1809,11 +1820,18 @@ func (lp *Loadpoint) pvMaxCurrent(sitePower, batteryPower float64, batteryBuffer
 	if !alwaysCharge && lp.enabled && targetCurrent < minCurrent {
 		projectedSitePower := sitePower
 		projectedPhases := activePhases
+		projectedMinCurrent := minCurrent // custom: see core/loadpoint_phasecurrents.go
 		if lp.hasPhaseSwitching() && !lp.phaseTimer.IsZero() {
 			// calculate site power after a phase switch from activePhases phases -> 1 phase
 			// notes: activePhases can be 1, 2 or 3 and phaseTimer can only be active if lp current is already at minCurrent
 			projectedSitePower -= Voltage * minCurrent * float64(activePhases-1)
 			projectedPhases = 1
+
+			// custom: on 1p the 1p minimum applies, see core/loadpoint_phasecurrents.go
+			if min1p := lp.effectiveMinCurrentFor(1); min1p != minCurrent {
+				projectedSitePower -= Voltage * (minCurrent - min1p)
+				projectedMinCurrent = min1p
+			}
 		}
 		// a continuous device consuming less than its min power demand keeps the
 		// remainder out of site power, hiding insufficient surplus until it ramps
@@ -1822,7 +1840,7 @@ func (lp *Loadpoint) pvMaxCurrent(sitePower, batteryPower float64, batteryBuffer
 			projectedSitePower += max(0, currentToPower(minCurrent, lp.minActivePhases())-lp.chargePower)
 		}
 
-		disableThreshold := lp.pvDisableThreshold(minCurrent, projectedPhases)
+		disableThreshold := lp.pvDisableThreshold(projectedMinCurrent, projectedPhases) // custom: projectedMinCurrent
 
 		// kick off disable sequence, unless climater keep-alive is holding
 		// charging at minCurrent — otherwise the "pausing soon" badge would
