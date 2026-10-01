@@ -711,10 +711,13 @@
         "charging": "Ladepunkt hinzufügen",
         "heating": "Heizung hinzufügen"
       },
+      "phaseDelayHelp": "Optional. So lange muss der Überschuss für 3 Phasen reichen bzw. fehlen, bevor umgeschaltet wird. Leer = Einschaltverzögerung ({enableDelay}) bzw. Ausschaltverzögerung ({disableDelay}). Start und Stopp des Ladens bleiben bei diesen.",
       "phases1p": "1-phasig",
       "phases3p": "3-phasig",
       "phasesAutomatic": "Automatische Phasen",
       "phasesAutomaticHelp": "Deine Wallbox unterstützt automatisches Umschalten zwischen 1- und 3-phasigem Laden. In der Hauptansicht kannst du das Phasenverhalten während des Ladens anpassen.",
+      "phaseScale1pDelayLabel": "Verzögerung auf 1 Phase",
+      "phaseScale3pDelayLabel": "Verzögerung auf 3 Phasen",
       "phasesHelp": "Anzahl der angeschlossenen Phasen.",
       "phasesLabel": "Phasen",
       "pollIntervalDanger": "Regelmäßiges Abfragen des Fahrzeuges kann dazu führen, dass die Fahrzeugbatterie entleert wird. Einige Fahrzeughersteller sperren das Laden in solchen Fällen auch aktiv. Nicht empfohlen! Verwende diese Einstellung nur, wenn du dir der Risiken bewusst bist.",

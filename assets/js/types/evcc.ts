@@ -774,6 +774,8 @@ export interface ConfigLoadpoint {
   maxCurrent: number;
   minCurrent1p?: number; // custom: 1p current limits, 0/empty = minCurrent
   maxCurrent1p?: number; // custom: 1p current limits, 0/empty = maxCurrent
+  phaseScale3pDelay?: number; // custom: ns before scaling up, 0/empty = enable delay
+  phaseScale1pDelay?: number; // custom: ns before scaling down, 0/empty = disable delay
   smartCostLimit: number | null;
   planEnergy?: number;
   planTime?: string;

@@ -404,8 +404,12 @@
 								</div>
 							</div>
 
-							<!-- custom: 1p current limits, see core/loadpoint_phasecurrents.go -->
-							<div v-if="showCurrent1p" class="row mb-4" data-testid="loadpoint-currents-1p">
+							<!-- custom: 1p currents and phase delays, see core/loadpoint_phasecurrents.go -->
+							<div
+								v-if="showCurrent1p"
+								class="row mb-4"
+								data-testid="loadpoint-currents-1p"
+							>
 								<FormRow
 									id="loadpointMinCurrent1p"
 									:label="$t('config.loadpoint.minCurrent1pLabel')"
@@ -454,6 +458,60 @@
 								</FormRow>
 								<div class="col-12 form-text evcc-gray hyphenate">
 									{{ $t("config.loadpoint.current1pHelp") }}
+								</div>
+							</div>
+
+							<div
+								v-if="showCurrent1p"
+								class="row mb-4"
+								data-testid="loadpoint-phase-delays"
+							>
+								<FormRow
+									id="loadpointPhaseScale3pDelay"
+									:label="$t('config.loadpoint.phaseScale3pDelayLabel')"
+									class="col-sm-6 mb-sm-0"
+									optional
+								>
+									<PropertyField
+										id="loadpointPhaseScale3pDelay"
+										v-model="values.phaseScale3pDelay"
+										type="Duration"
+										legacy-duration
+										unit="minute"
+										size="w-50 w-sm-100"
+									/>
+								</FormRow>
+
+								<FormRow
+									id="loadpointPhaseScale1pDelay"
+									:label="$t('config.loadpoint.phaseScale1pDelayLabel')"
+									class="col-sm-6 mb-0"
+									optional
+								>
+									<PropertyField
+										id="loadpointPhaseScale1pDelay"
+										v-model="values.phaseScale1pDelay"
+										type="Duration"
+										legacy-duration
+										unit="minute"
+										size="w-50 w-sm-100"
+									/>
+								</FormRow>
+								<div class="col-12 form-text evcc-gray hyphenate">
+									{{
+										$t("config.loadpoint.phaseDelayHelp", {
+											enableDelay: fmtDurationNs(
+												values.thresholds.enable.delay,
+												true,
+												"m"
+											),
+											disableDelay: fmtDurationNs(
+												values.thresholds.disable.delay,
+												true,
+												"m"
+											),
+										})
+									}}
 								</div>
 							</div>
 						</template>
@@ -1008,6 +1066,7 @@ export default {
 			try {
 				const res = await api.get(`config/loadpoints/${this.id}`);
 				this.values = deepClone(res.data);
+				this.emptyUnsetPhaseSwitch(); // custom: 0 = unset, shown empty
 				this.updateSolarMode();
 				this.updatePhases();
 				this.rebaseline();
@@ -1133,6 +1192,20 @@ export default {
 				this.solarMode = "default";
 			} else {
 				this.solarMode = "custom";
+			}
+		},
+		// custom: unset phase switching values (0) are shown as empty fields
+		emptyUnsetPhaseSwitch() {
+			const keys = [
+				"minCurrent1p",
+				"maxCurrent1p",
+				"phaseScale3pDelay",
+				"phaseScale1pDelay",
+			] as const;
+			for (const key of keys) {
+				if (!this.values[key]) {
+					this.values[key] = undefined;
+				}
 			}
 		},
 		// custom: the regular range is the 3p one while the 1p fields are shown

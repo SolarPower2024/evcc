@@ -711,10 +711,13 @@
         "charging": "Add charging point",
         "heating": "Add heater"
       },
+      "phaseDelayHelp": "Optional. How long the surplus has to allow or miss 3 phases before switching. Empty = enable delay ({enableDelay}) or disable delay ({disableDelay}). Starting and stopping charging keep those.",
       "phases1p": "1-phase",
       "phases3p": "3-phase",
       "phasesAutomatic": "Automatic phases",
       "phasesAutomaticHelp": "Your charger supports automatic switching between 1- and 3-phase charging. In the main screen you can adjust phase behaviour while charging.",
+      "phaseScale1pDelayLabel": "Delay to 1 phase",
+      "phaseScale3pDelayLabel": "Delay to 3 phases",
       "phasesHelp": "Number of phases connected.",
       "phasesLabel": "Phases",
       "pollIntervalDanger": "Regularly querying the vehicle may drain the vehicle battery. Some vehicle manufacturers may actively prevent charging in this case. Not recommended! Only use this if you're aware of the risks.",
