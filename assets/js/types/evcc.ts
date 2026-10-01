@@ -772,6 +772,8 @@ export interface ConfigLoadpoint {
   phasesConfigured: number;
   minCurrent: number;
   maxCurrent: number;
+  minCurrent1p?: number; // custom: 1p current limits, 0/empty = minCurrent
+  maxCurrent1p?: number; // custom: 1p current limits, 0/empty = maxCurrent
   smartCostLimit: number | null;
   planEnergy?: number;
   planTime?: string;

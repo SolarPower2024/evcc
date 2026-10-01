@@ -676,6 +676,7 @@
         "charging": "Charger saved. Creating charging point …",
         "heating": "Heating device saved. Creating heater …"
       },
+      "current1pHelp": "Optional, only applies while charging on 1 phase. Empty = values above. Switching to 3 phases only happens once 1-phase is exhausted and the surplus reaches the 3-phase minimum current.",
       "currentRangeHelp": {
         "charging": "Typical: 6-16 A for 11 kW, 6-32 A for 22 kW chargers (3-phase).",
         "heating": "Depends on the rated power of the heating device (see data sheet)."
@@ -693,10 +694,15 @@
       "energyMeterHelp": "Additional meter if the charger doesn't have an integrated one.",
       "energyMeterLabel": "Energy meter",
       "estimateLabel": "Interpolate charge level between API updates",
+      "maxCurrent1pHelp": "Must be at least the 1-phase minimum current.",
+      "maxCurrent1pLabel": "Maximum current 1-phase",
+      "maxCurrent3pLabel": "Maximum current 3-phase",
       "maxCurrentHelp": "Must be greater than minimum current.",
       "maxCurrentLabel": "Maximum current",
       "maxTempHelp": "Must be greater than minimum temperature.",
       "maxTempLabel": "Maximum temperature",
+      "minCurrent1pLabel": "Minimum current 1-phase",
+      "minCurrent3pLabel": "Minimum current 3-phase",
       "minCurrentHelp": "Only go below 6 A if you know what you're doing.",
       "minCurrentLabel": "Minimum current",
       "minTempLabel": "Minimum temperature",

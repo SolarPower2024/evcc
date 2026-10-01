@@ -676,6 +676,7 @@
         "charging": "Wallbox gespeichert. Ladepunkt wird erstellt …",
         "heating": "Heizgerät gespeichert. Heizung wird erstellt …"
       },
+      "current1pHelp": "Optional, gilt nur beim Laden mit 1 Phase. Leer = Werte oben. Auf 3 Phasen wird erst umgeschaltet, wenn 1-phasig ausgereizt ist und der Überschuss den 3-phasigen Mindeststrom erreicht.",
       "currentRangeHelp": {
         "charging": "Typisch: 6-16 A bei 11 kW, 6-32 A bei 22 kW Wallboxen (3-phasig).",
         "heating": "Abhängig von der Nennleistung des Heizgeräts (siehe Datenblatt)."
@@ -693,10 +694,15 @@
       "energyMeterHelp": "Zusätzlicher Zähler, wenn die Wallbox keinen integrierten hat.",
       "energyMeterLabel": "Energiezähler",
       "estimateLabel": "Ladestand zwischen API-Updates interpolieren",
+      "maxCurrent1pHelp": "Muss mindestens dem 1-phasigen Mindeststrom entsprechen.",
+      "maxCurrent1pLabel": "Maximaler Strom 1-phasig",
+      "maxCurrent3pLabel": "Maximaler Strom 3-phasig",
       "maxCurrentHelp": "Muss größer als der Mindeststrom sein.",
       "maxCurrentLabel": "Maximaler Strom",
       "maxTempHelp": "Muss größer als die Mindesttemperatur sein.",
       "maxTempLabel": "Maximaltemperatur",
+      "minCurrent1pLabel": "Minimaler Strom 1-phasig",
+      "minCurrent3pLabel": "Minimaler Strom 3-phasig",
       "minCurrentHelp": "Gehe nur unter 6 A, wenn du weißt, was du tust.",
       "minCurrentLabel": "Minimaler Strom",
       "minTempLabel": "Mindesttemperatur",

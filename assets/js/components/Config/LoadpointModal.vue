@@ -360,7 +360,7 @@
 							<div class="row mb-4">
 								<FormRow
 									id="loadpointMinCurrent"
-									:label="$t('config.loadpoint.minCurrentLabel')"
+									:label="currentLabel('min')"
 									class="col-sm-6 mb-sm-0"
 									:warning="minCurrentWarning"
 								>
@@ -381,7 +381,7 @@
 
 								<FormRow
 									id="loadpointMaxCurrent"
-									:label="$t('config.loadpoint.maxCurrentLabel')"
+									:label="currentLabel('max')"
 									class="col-sm-6 mb-0"
 									:warning="maxCurrentWarning"
 								>
@@ -401,6 +401,59 @@
 								</FormRow>
 								<div class="col-12 form-text evcc-gray hyphenate">
 									{{ $t(`config.loadpoint.currentRangeHelp.${loadpointType}`) }}
+								</div>
+							</div>
+
+							<!-- custom: 1p current limits, see core/loadpoint_phasecurrents.go -->
+							<div v-if="showCurrent1p" class="row mb-4" data-testid="loadpoint-currents-1p">
+								<FormRow
+									id="loadpointMinCurrent1p"
+									:label="$t('config.loadpoint.minCurrent1pLabel')"
+									class="col-sm-6 mb-sm-0"
+									optional
+								>
+									<div class="d-flex align-items-center gap-2">
+										<PropertyField
+											id="loadpointMinCurrent1p"
+											v-model="values.minCurrent1p"
+											type="Float"
+											unit="A"
+											size="w-50 w-sm-100"
+										/>
+										<span
+											v-if="values.minCurrent1p"
+											class="evcc-gray text-nowrap power-hint"
+										>
+											≈ {{ fmtPhasePower(values.minCurrent1p, 1) }}
+										</span>
+									</div>
+								</FormRow>
+
+								<FormRow
+									id="loadpointMaxCurrent1p"
+									:label="$t('config.loadpoint.maxCurrent1pLabel')"
+									class="col-sm-6 mb-0"
+									:warning="maxCurrent1pWarning"
+									optional
+								>
+									<div class="d-flex align-items-center gap-2">
+										<PropertyField
+											id="loadpointMaxCurrent1p"
+											v-model="values.maxCurrent1p"
+											type="Float"
+											unit="A"
+											size="w-50 w-sm-100"
+										/>
+										<span
+											v-if="values.maxCurrent1p"
+											class="evcc-gray text-nowrap power-hint"
+										>
+											≈ {{ fmtPhasePower(values.maxCurrent1p, 1) }}
+										</span>
+									</div>
+								</FormRow>
+								<div class="col-12 form-text evcc-gray hyphenate">
+									{{ $t("config.loadpoint.current1pHelp") }}
 								</div>
 							</div>
 						</template>
@@ -828,12 +881,26 @@ export default {
 				? this.$t("config.loadpoint.minCurrentHelp")
 				: undefined;
 		},
+		// custom: 1p current limits, see core/loadpoint_phasecurrents.go
+		showCurrent1p() {
+			return this.chargerSupports1p3p && !this.chargerIsSwitchDevice;
+		},
+		maxCurrent1pWarning() {
+			const { minCurrent, minCurrent1p, maxCurrent1p } = this.values;
+			return maxCurrent1p && maxCurrent1p < (minCurrent1p || minCurrent)
+				? this.$t("config.loadpoint.maxCurrent1pHelp")
+				: undefined;
+		},
 		maxCurrentWarning() {
 			return this.values.maxCurrent < this.values.minCurrent
 				? this.$t("config.loadpoint.maxCurrentHelp")
 				: undefined;
 		},
 		minPhases() {
+			// custom: with its own 1p minimum the regular minimum is the 3p one
+			if (this.showCurrent1p && this.values.minCurrent1p && !this.values.phasesConfigured) {
+				return 3;
+			}
 			return this.values.phasesConfigured || 1;
 		},
 		maxPhases() {
@@ -1067,6 +1134,12 @@ export default {
 			} else {
 				this.solarMode = "custom";
 			}
+		},
+		// custom: the regular range is the 3p one while the 1p fields are shown
+		currentLabel(kind: "min" | "max") {
+			return this.showCurrent1p
+				? this.$t(`config.loadpoint.${kind}Current3pLabel`)
+				: this.$t(`config.loadpoint.${kind}CurrentLabel`);
 		},
 		updatePhases() {
 			const { phasesConfigured } = this.values;
