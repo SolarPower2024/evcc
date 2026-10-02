@@ -1,13 +1,22 @@
-# Weekly look at what evcc changed since the fork's last merge. Read only
-# towards evcc: it fetches evcc's master, merges it inside the runner (nothing
-# is pushed anywhere), runs the tests and reports in one issue of this
-# repository. The report carries no issue numbers or mentions, so nothing
-# links back to evcc's repository.
+# Fridays at noon: what evcc changed since the fork's last merge. Read only
+# towards evcc: it fetches evcc's master and never writes to evcc's repository.
+#
+# The review (.github/upstream-check/review.mjs) goes into the issue
+# "evcc-Update-Check": a) what changed, b) fork features evcc may now have
+# itself, c) which evcc commits cause merge conflicts, d) the PRs to open. The
+# merge itself is tested in the runner.
+#
+# With the secret UPDATE_TOKEN (a token of this repository with contents, pull
+# requests and workflows write) it also keeps the PR "evcc-Update" open: the
+# branch evcc-update holds evcc's master, the PR shows the conflicts and is
+# merged into load-peak-features once they are resolved. GITHUB_TOKEN cannot
+# do that, as evcc's commits touch workflow files. No issue numbers, mentions
+# or links of evcc's repository go into any text.
 name: evcc update check
 
 on:
   schedule:
-    - cron: "0 5 * * 1" # Mondays 05:00 UTC
+    - cron: "0 10 * * 5" # Fridays 10:00 UTC = 12:00 summer time, 11:00 winter time
   workflow_dispatch:
 
 permissions:
@@ -36,85 +45,72 @@ jobs:
           git remote set-url --push upstream DISABLED-never-push-to-evcc
           git fetch --no-tags upstream master
 
-      - name: Merge in the runner
-        id: merge
+      - name: Review
+        id: review
         run: |
-          git config user.name "update check"
-          git config user.email "update-check@localhost"
-          base=$(git merge-base HEAD upstream/master)
-          echo "count=$(git rev-list --count HEAD..upstream/master)" >>"$GITHUB_OUTPUT"
-
-          # evcc files the fork changes, and which of them evcc changed since
-          git diff --name-only --diff-filter=M "$base" HEAD >/tmp/fork-touched.txt
-          git diff --name-only "$base" upstream/master >/tmp/evcc-changed.txt
-          grep -Fxf /tmp/fork-touched.txt /tmp/evcc-changed.txt >/tmp/touched-changed.txt || true
-
-          # subjects without issue numbers, mentions or links
-          git log --format='- %s' HEAD..upstream/master \
-            | sed -E 's/ ?\(?#[0-9]+\)?//g; s/@/(at)/g; s#https?://[^ ]*##g' >/tmp/subjects.txt
-
-          if git merge --no-edit --no-ff upstream/master >/tmp/merge.log 2>&1; then
-            echo "conflicts=" >>"$GITHUB_OUTPUT"
-          else
-            echo "conflicts=$(git diff --name-only --diff-filter=U | tr '\n' ' ')" >>"$GITHUB_OUTPUT"
-            git merge --abort
-          fi
+          node .github/upstream-check/review.mjs upstream/master /tmp/summary.json >/tmp/report.md
+          echo "count=$(jq .count /tmp/summary.json)" >>"$GITHUB_OUTPUT"
+          echo "conflicts=$(jq '.conflicts | length' /tmp/summary.json)" >>"$GITHUB_OUTPUT"
 
       - name: Test the merge
-        id: test
-        if: steps.merge.outputs.conflicts == '' && steps.merge.outputs.count != '0'
+        if: steps.review.outputs.count != '0' && steps.review.outputs.conflicts == '0'
         run: |
+          git -c user.name="update check" -c user.email="update-check@localhost" merge --no-edit --no-ff upstream/master
           mkdir -p dist && touch dist/empty
-          if go build ./... >/tmp/test.log 2>&1 && CGO_ENABLED=0 go test -tags=release ./... >>/tmp/test.log 2>&1; then
-            echo "result=grün" >>"$GITHUB_OUTPUT"
-          else
-            echo "result=rot" >>"$GITHUB_OUTPUT"
-            grep -E '^(FAIL|---|ok )|cannot|undefined' /tmp/test.log | grep -v '^ok ' | head -40 >/tmp/failures.txt
+          {
+            echo
+            echo "## Tests nach dem Merge"
+            echo
+            if go build ./... >/tmp/test.log 2>&1 && CGO_ENABLED=0 go test -tags=release ./... >>/tmp/test.log 2>&1; then
+              echo "Grün: Build und alle Tests (evcc und Fork)."
+            else
+              echo "Rot:"
+              echo
+              echo '```'
+              grep -E '^(--- FAIL|FAIL|panic:)|_test.go:[0-9]+:|\.go:[0-9]+:[0-9]+:' /tmp/test.log | sed -E 's/#([0-9]+)/evcc PR \1/g' | head -40
+              echo '```'
+            fi
+          } >>/tmp/report.md
+
+      - name: Update PR
+        if: steps.review.outputs.count != '0'
+        env:
+          UPDATE_TOKEN: ${{ secrets.UPDATE_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$UPDATE_TOKEN" ]; then
+            printf '\n## Update-PR\n\nNicht angelegt: das Secret UPDATE_TOKEN fehlt.\n' >>/tmp/report.md
+            exit 0
           fi
+          if grep -qE '#[0-9]|evcc-io/' /tmp/report.md; then
+            echo "report refers to evcc's repository, no PR"; exit 1
+          fi
+          export GH_TOKEN="$UPDATE_TOKEN"
+          git push --force "https://x-access-token:${UPDATE_TOKEN}@github.com/${GH_REPO}.git" upstream/master:refs/heads/evcc-update
+          title="evcc-Update: $(jq .count /tmp/summary.json) Commits"
+          number=$(gh pr list --head evcc-update --base load-peak-features --state open --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "$title" --body-file /tmp/report.md
+          else
+            gh pr create --head evcc-update --base load-peak-features --title "$title" --body-file /tmp/report.md
+          fi
+          printf '\n## Update-PR\n\nAktualisiert: %s\n' "$title" >>/tmp/report.md
 
       - name: Report
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # this repository only: with evcc fetched as a second remote gh must not guess
           GH_REPO: ${{ github.repository }}
-          COUNT: ${{ steps.merge.outputs.count }}
-          CONFLICTS: ${{ steps.merge.outputs.conflicts }}
-          RESULT: ${{ steps.test.outputs.result }}
         run: |
+          if grep -qE '#[0-9]|evcc-io/' /tmp/report.md; then
+            echo "report refers to evcc's repository, not posted"; exit 1
+          fi
+          cat /tmp/report.md >>"$GITHUB_STEP_SUMMARY"
           title="evcc-Update-Check"
-          {
-            echo "Stand $(date -u '+%Y-%m-%d %H:%M') UTC, automatisch erstellt."
-            echo
-            echo "**Neue evcc-Commits seit dem letzten Merge:** $COUNT"
-            if [ "$COUNT" = "0" ]; then
-              echo
-              echo "Nichts zu tun."
-            else
-              echo
-              if [ -n "$CONFLICTS" ]; then
-                echo "**Merge-Konflikte:** $CONFLICTS"
-              else
-                echo "**Merge-Konflikte:** keine"
-                echo
-                echo "**Tests nach dem Merge:** $RESULT"
-                [ -s /tmp/failures.txt ] && { echo; echo '```'; cat /tmp/failures.txt; echo '```'; }
-              fi
-              echo
-              echo "**Von evcc geänderte Dateien, in denen der Fork Hooks hat:**"
-              if [ -s /tmp/touched-changed.txt ]; then sed 's/^/- /' /tmp/touched-changed.txt; else echo "keine"; fi
-              echo
-              echo "<details><summary>Commits</summary>"
-              echo
-              head -200 /tmp/subjects.txt
-              echo
-              echo "</details>"
-            fi
-          } >/tmp/body.md
-
           number=$(gh issue list --state open --search "in:title $title" --json number,title \
             --jq ".[] | select(.title == \"$title\") | .number" | head -1)
           if [ -n "$number" ]; then
-            gh issue edit "$number" --body-file /tmp/body.md
+            gh issue edit "$number" --body-file /tmp/report.md
           else
-            gh issue create --title "$title" --body-file /tmp/body.md
+            gh issue create --title "$title" --body-file /tmp/report.md
           fi
