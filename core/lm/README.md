@@ -468,8 +468,12 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 ## Taking in a new evcc version
 
-The issue *evcc-Update-Check* (weekly, see [Tests](#tests)) shows beforehand
-how many commits are new, whether they conflict and whether the tests pass.
+Every Friday the issue *evcc-Update-Check* reviews the new evcc commits (see
+[Tests](#tests)): what changed, which fork features evcc may now have itself,
+which evcc commit causes which conflict, and whether the merge passes the
+tests. With the secret `UPDATE_TOKEN` the PR *evcc-Update* (branch
+`evcc-update` = evcc's master) is kept open as well; conflicts can then be
+resolved on it and it is merged with a merge commit.
 
 1. `git fetch upstream --tags` and merge evcc's **master** into
    `load-peak-features` (release branches only hold backports already in
@@ -523,10 +527,16 @@ repository):
   the ui checks (format, lint, types, i18n, vitest, build) and a shuffled run
   that reports but does not block.
 - `custom-image.yml` builds an add-on image from a tag only after these passed.
-- `upstream-check.yml` every Monday: fetches evcc's master read only, merges it
-  inside the runner without pushing, runs the tests and updates the issue
-  *evcc-Update-Check* (new commits, conflicts, test result, evcc files with
-  hooks that evcc changed).
+- `upstream-check.yml` Fridays at noon (10:00 UTC): fetches evcc's master read
+  only and runs the review `.github/upstream-check/review.mjs` into the issue
+  *evcc-Update-Check*: a) the commits by area and the evcc files with fork
+  hooks that changed, b) fork features evcc may now have itself (evcc PRs the
+  fork waits for, names of the feature in evcc's added code, listed in
+  `watch.json`; hints that need a review), c) each conflicting file with the
+  evcc commit causing it (found with `git merge-tree`, commit by commit), d)
+  the PRs to open. Without conflicts the merge is built and tested. With the
+  secret `UPDATE_TOKEN` it also keeps the PR *evcc-Update* open. Never writes
+  to evcc's repository; "#123" in evcc's subjects becomes "evcc PR 123".
 
 **Locally** the Go tests run in WSL (no Windows firewall prompts), the ui checks
 in a checkout with `node_modules`. Live checks of a build with a simulated Home
