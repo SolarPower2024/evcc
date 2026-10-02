@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/core/lm"
+	"github.com/evcc-io/evcc/core/peak"
 	"github.com/evcc-io/evcc/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,8 +16,8 @@ func TestLmAdvancedSettings(t *testing.T) {
 	site := &Site{log: util.NewLogger("test")}
 
 	// defaults
-	assert.Equal(t, lm.DefaultHysteresis, site.peakHysteresis())
-	assert.Equal(t, lm.DefaultFreeValue, site.peakFreeValue())
+	assert.Equal(t, peak.DefaultHysteresis, site.peakHysteresis())
+	assert.Equal(t, peak.DefaultFreeValue, site.peakFreeValue())
 	assert.Equal(t, lm.DefaultHoldOff, site.lmHoldOff())
 	assert.Equal(t, lm.DefaultTimeout, site.lmTimeout())
 	assert.Equal(t, lm.DefaultPhases, site.lmBatteryPhases())

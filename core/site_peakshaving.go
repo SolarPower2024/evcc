@@ -15,7 +15,9 @@ package core
 // sensor, else from the grid power of each cycle.
 //
 // evcc only computes the setpoint and writes it to a number entity; the actual
-// discharge is done by the Home Assistant automation reading that entity.
+// discharge is done by the Home Assistant automation reading that entity. The
+// window, the allowed power and the setpoint are computed in core/peak; this
+// file feeds it and handles the settings, Home Assistant and the battery mode.
 
 import (
 	"context"
@@ -31,6 +33,7 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm"
+	"github.com/evcc-io/evcc/core/peak"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
@@ -44,32 +47,6 @@ const (
 	minPeakLimit  = 2000.0 // W
 	maxPeakLimit  = 20000.0
 	peakLimitStep = 500.0
-
-	// a setpoint stays in place for a whole cycle, at the end of a window it
-	// reaches into the next one
-	peakCycle = 30 * time.Second
-
-	// a sample older than this does not carry over into a new window
-	peakMaxGap = 2 * time.Minute
-
-	// from this minute of the window on the allowed power no longer grows: close
-	// to the end, a clock off by a few seconds could move a large draw into the
-	// next window
-	defaultPeakFreeze = 12 * time.Minute
-
-	// the allowed power is at most this multiple of the limit
-	defaultPeakCap = 2.0
-
-	// an energy counter standing still while the grid power says this much was
-	// drawn over peakMaxGap has stopped updating
-	peakStaleWs = 20 * 3600.0 // 20Wh
-)
-
-// where the energy drawn in the window comes from
-const (
-	peakSourceMeter  = "meter"  // grid meter's import counter
-	peakSourceEntity = "entity" // Home Assistant energy sensor
-	peakSourcePower  = "power"  // grid power of each cycle
 )
 
 // peakState is the runtime state of peak shaving
@@ -107,27 +84,13 @@ type peakState struct {
 	chargeSet      func(float64) error
 	chargeSetpoint float64 // last computed setpoint in W, 0 = not charging
 
-	// current metering window, for the 15 minute average
-	windowStart time.Time
-	meteredFrom time.Time // start of metering in this window, later than windowStart after a restart
-	windowWs    float64   // accumulated grid energy in Ws
-	demandWs    float64   // the same without the battery
-	lastSample  time.Time
-	windowAvg   float64 // average grid power of the running window in W
-	allowed     float64 // grid power that keeps the window average at the limit in W
-	frozen      float64 // allowed power at the freeze minute
-	isFrozen    bool
+	meter  peak.Meter // the running 15 minute window
+	window peak.State // its state after the last sample
 
 	// energy counters for the window, in the order they are used
 	gridEnergy   *float64                // grid meter import in kWh, from this cycle
 	energyEntity string                  // Home Assistant energy sensor
 	energyGet    func() (float64, error) // resolved from energyEntity, kWh
-
-	source       string    // source of the last sample
-	lastEnergy   float64   // counter at the last sample in kWh, valid if source is a counter
-	unmovedWs    float64   // drawn according to the grid power while the counter stood still
-	unmovedSince time.Time // the counter has not moved since
-	stale        bool      // counter stopped updating, grid power used for the rest of the window
 
 	months      []peakMonth // statistics, newest first, see site_peak_stats.go
 	monthsDirty bool
@@ -374,7 +337,7 @@ func (site *Site) peakFreeValue() float64 {
 	if v := site.LoadManagement.PeakShaving.FreeValue; v > 0 {
 		return v
 	}
-	return lm.DefaultFreeValue
+	return peak.DefaultFreeValue
 }
 
 // peakFreeze returns the minute of the window from which the allowed power no
@@ -383,7 +346,7 @@ func (site *Site) peakFreeze() time.Duration {
 	if v := site.advanced().PeakFreeze; v != nil {
 		return time.Duration(*v) * time.Minute
 	}
-	return defaultPeakFreeze
+	return peak.DefaultFreeze
 }
 
 // peakCap returns the maximum allowed power as a multiple of the limit
@@ -391,7 +354,7 @@ func (site *Site) peakCap() float64 {
 	if v := site.advanced().PeakCap; v != nil {
 		return *v
 	}
-	return defaultPeakCap
+	return peak.DefaultCap
 }
 
 func (site *Site) peakHysteresis() float64 {
@@ -401,7 +364,7 @@ func (site *Site) peakHysteresis() float64 {
 	if v := site.LoadManagement.PeakShaving.Hysteresis; v > 0 {
 		return v
 	}
-	return lm.DefaultHysteresis
+	return peak.DefaultHysteresis
 }
 
 // peakShavingActive reports whether the battery is currently held back for peaks.
@@ -427,7 +390,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 	site.applyCircuitLimits() // load management switch and follow circuit, see site_lm_switch.go
 
 	s.mu.Lock()
-	enabled, limit, reserve, set, allowed := s.enabled, s.limit, s.reserve, s.set, s.allowed
+	enabled, limit, reserve, set, allowed := s.enabled, s.limit, s.reserve, s.set, s.window.Allowed
 	// read by peakPausesGridCharge later in the same cycle
 	s.demand = state.gridPower + state.battery.Power
 	s.mu.Unlock()
@@ -453,14 +416,8 @@ func (site *Site) updatePeakShaving(state siteState) {
 	hyst := site.peakHysteresis()
 
 	s.mu.Lock()
-	// below the reserve the battery is for peaks only; the band keeps a
-	// fluctuating soc from flapping across the boundary
-	switch {
-	case soc <= reserve:
-		s.shaving = true
-	case soc >= reserve+hyst:
-		s.shaving = false
-	}
+	// below the reserve the battery is for peaks only
+	s.shaving = peak.Reserved(s.shaving, soc, reserve, hyst)
 	shaving := s.shaving
 	s.mu.Unlock()
 
@@ -474,7 +431,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 		value = 0
 
 	case shaving:
-		value = peakSetpoint(state.gridPower, state.battery.Power, allowed)
+		value = peak.Setpoint(state.gridPower, state.battery.Power, allowed)
 	}
 
 	// log the start of a peak, not every cycle of it
@@ -503,40 +460,6 @@ func (site *Site) updatePeakShaving(state siteState) {
 	s.mu.Lock()
 	s.handedBack = false
 	s.mu.Unlock()
-}
-
-// peakSetpoint returns the battery power needed to keep the grid draw at or
-// below the allowed power, see peakAllowed.
-//
-// It deliberately does not use the grid power on its own. The grid meter already
-// reflects whatever the battery is doing, so feeding that back would make the
-// controller chase its own output: it would shave, see a compliant grid value,
-// stop shaving, see the peak return, and oscillate every cycle. Adding the
-// battery power back recovers the demand as it would be without the battery,
-// which is a fixed quantity the setpoint can be derived from. evcc counts
-// discharging as positive and charging as negative, so both directions are
-// handled by the same sum. Whole watts are plenty, and some number entities
-// reject fractions.
-func peakSetpoint(gridPower, batteryPower, allowed float64) float64 {
-	return math.Max(0, math.Round(gridPower+batteryPower-allowed))
-}
-
-// peakAllowed returns the grid power that may be drawn for the rest of the window
-// with the window average still ending at the limit. Energy left unused earlier
-// allows more, energy drawn above the limit allows less, down to nothing once the
-// window's budget is spent.
-func peakAllowed(limit, usedWs float64, elapsed time.Duration) float64 {
-	budget := limit*lm.PeakWindow.Seconds() - usedWs
-	remaining := lm.PeakWindow - elapsed
-
-	// the part of the cycle reaching into the next window gets that window's
-	// budget, rather than squeezing this window's rest into a few seconds
-	if remaining < peakCycle {
-		budget += limit * (peakCycle - remaining).Seconds()
-		remaining = peakCycle
-	}
-
-	return max(0, budget/remaining.Seconds())
 }
 
 // writePeakValue writes the setpoint
@@ -612,18 +535,18 @@ func (site *Site) peakEnergy() (float64, string) {
 	s.mu.Unlock()
 
 	if meter != nil {
-		return *meter, peakSourceMeter
+		return *meter, peak.SourceMeter
 	}
 
 	if get != nil {
 		v, err := get()
 		if err == nil {
-			return v, peakSourceEntity
+			return v, peak.SourceEntity
 		}
 		site.log.WARN.Printf("peak shaving: energy %s: %v, using the grid power", entity, err)
 	}
 
-	return 0, peakSourcePower
+	return 0, peak.SourcePower
 }
 
 // setPeakGridEnergy takes the grid meter's import counter of this cycle, nil if
@@ -637,129 +560,31 @@ func (site *Site) setPeakGridEnergy(kWh *float64) {
 	s.gridEnergy = kWh
 }
 
-// drawn returns the energy drawn since the last sample in Ws. A counter is used
-// when it was read now and last time from the same source, the grid power fills
-// in otherwise. Must be called with the lock held.
-func (s *peakState) drawn(now time.Time, imported, energy float64, source string) float64 {
-	powerWs := imported * now.Sub(s.lastSample).Seconds()
-
-	if source == peakSourcePower || source != s.source || s.stale {
-		return powerWs
-	}
-
-	switch d := (energy - s.lastEnergy) * 3600e3; {
-	case d < 0:
-		// counter reset or replaced
-		return powerWs
-
-	case d > 0:
-		s.unmovedWs, s.unmovedSince = 0, time.Time{}
-		return d
-	}
-
-	// the counter stands still: nothing drawn, or it is late and catches up
-	// with its next step. If it does not, the grid power takes over.
-	if powerWs == 0 {
-		return 0
-	}
-	if s.unmovedSince.IsZero() {
-		s.unmovedSince = s.lastSample
-	}
-	s.unmovedWs += powerWs
-
-	if s.unmovedWs < peakStaleWs || now.Sub(s.unmovedSince) <= peakMaxGap {
-		return 0
-	}
-
-	s.stale = true
-	return s.unmovedWs
-}
-
-// updatePeakWindow tracks the grid energy of the running 15 minute metering
-// window, which is what a demand charge is billed on, and the grid power allowed
-// for the rest of it. A completed window goes into the monthly statistics, with
-// the battery power added back for the demand without it.
+// updatePeakWindow meters the running 15 minute window with the energy source of
+// this cycle and keeps the grid power it allows. A completed window goes into the
+// monthly statistics.
 func (site *Site) updatePeakWindow(gridPower, batteryPower float64) {
 	s := site.peak()
 	energy, source := site.peakEnergy()
-	now := s.clock.Now()
-	freeze, capFactor := site.peakFreeze(), site.peakCap()
-
-	// clock-aligned windows, matching how the meter registers them
-	start := now.Truncate(lm.PeakWindow)
-
-	// only the import direction contributes to the demand peak
-	imported := math.Max(0, gridPower)
+	set := peak.Settings{Freeze: site.peakFreeze(), Cap: site.peakCap()}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	set.Limit = s.limit
+	w := s.meter.Update(peak.Sample{Now: s.clock.Now(), GridPower: gridPower, BatteryPower: batteryPower, Energy: energy, Source: source}, set)
+	if c := w.Completed; c != nil {
+		s.recordPeakWindow(c.Start, c.DrawnWs, c.DemandWs)
+	}
+	s.window = w
+	s.mu.Unlock()
 
-	var drawn, demand float64
-	if !s.lastSample.IsZero() {
-		wasStale := s.stale
-		drawn = s.drawn(now, imported, energy, source)
-		demand = max(0, drawn+batteryPower*now.Sub(s.lastSample).Seconds())
-
-		if s.stale && !wasStale {
-			site.log.WARN.Printf("peak shaving: the %s energy counter stopped updating, using the grid power until the window ends", source)
-		}
+	if w.StaleNow {
+		site.log.WARN.Printf("peak shaving: the %s energy counter stopped updating, using the grid power until the window ends", source)
 	}
 
-	if !s.windowStart.Equal(start) {
-		// a sample from the previous window carries over: the part of the
-		// interval since the boundary is metered, the rest was the last window's
-		if !s.lastSample.IsZero() && s.lastSample.Before(start) && now.Sub(s.lastSample) <= peakMaxGap {
-			after := now.Sub(start).Seconds() / now.Sub(s.lastSample).Seconds()
-
-			// only a window metered from its start counts for the statistics
-			if s.meteredFrom.Equal(s.windowStart) && !s.windowStart.IsZero() {
-				s.recordPeakWindow(s.windowStart, s.windowWs+drawn*(1-after), s.demandWs+demand*(1-after))
-			}
-
-			s.meteredFrom = start
-			s.windowWs, s.demandWs = drawn*after, demand*after
-		} else {
-			s.meteredFrom = now
-			s.windowWs, s.demandWs = 0, 0
-		}
-
-		s.windowStart = start
-		s.isFrozen = false
-		s.stale = false
-		s.unmovedWs, s.unmovedSince = 0, time.Time{}
-	} else {
-		s.windowWs += drawn
-		s.demandWs += demand
-	}
-
-	s.lastSample = now
-	s.source, s.lastEnergy = source, energy
-	if s.stale {
-		source = peakSourcePower
-	}
-
-	if metered := now.Sub(s.meteredFrom).Seconds(); metered > 0 {
-		s.windowAvg = s.windowWs / metered
-	}
-
-	// what evcc did not see, after a start or a gap, is counted at the limit:
-	// assuming less could spend a budget that was already used
-	used := s.windowWs + s.limit*s.meteredFrom.Sub(start).Seconds()
-	elapsed := now.Sub(start)
-	allowed := min(peakAllowed(s.limit, used, elapsed), s.limit*capFactor)
-
-	if elapsed >= freeze {
-		if !s.isFrozen {
-			s.frozen, s.isFrozen = allowed, true
-		}
-		allowed = min(allowed, s.frozen)
-	}
-	s.allowed = allowed
-
-	site.publish(keys.PeakShavingWindowAvg, s.windowAvg)
-	site.publish(keys.PeakShavingAllowed, s.allowed)
-	site.publish(keys.PeakShavingSource, source)
-	site.publish(keys.PeakShavingWindowEnd, start.Add(lm.PeakWindow))
+	site.publish(keys.PeakShavingWindowAvg, w.Avg)
+	site.publish(keys.PeakShavingAllowed, w.Allowed)
+	site.publish(keys.PeakShavingSource, w.Source)
+	site.publish(keys.PeakShavingWindowEnd, w.End())
 }
 
 // peakPausesGridCharge reports whether grid charging has to give way to peak
