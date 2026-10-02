@@ -138,7 +138,7 @@ Keep these in mind when merging a new evcc version:
 | `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` so a forced run arriving during a run is not dropped |
 | `server/http.go` | `addCustomSiteRoutes`, one call; a route colliding with an evcc route is left out and logged |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
-| `assets/js/views/Config.vue` | load management details section and its modals |
+| `assets/js/views/Config.vue` | load management details section, its dialogs (`LmConfigModals.vue`), EEG tariff card and add button |
 | `assets/js/views/App.vue` | mounts the load management overview and the peak statistics |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | "Lastmanagement" and "Peak Shaving" entries |
 | `assets/js/components/Config/TariffCard.vue` | EEG counter summary in the EEG card |
