@@ -1,263 +1,279 @@
-# Load management extensions
+# Fork extensions: load management, battery and peak shaving
 
-Custom additions on top of upstream evcc's circuits. Everything here is inert
-until configured, so an unconfigured installation behaves exactly like upstream.
+What this fork (SolarPower2024/evcc, branch `load-peak-features`) adds on top
+of evcc. Everything is inert until configured, so an unconfigured installation
+behaves exactly like evcc. Everything is set up in the ui; the few yaml keys
+still read (`site.loadmanagement`) are fallbacks only and not needed.
 
-## 1. Priority-based shedding
+Part 1 describes the features, part 2 how the fork is kept maintainable.
 
-Upstream circuits serve requests first come, first served. A shed priority puts
-an order on that: **lower is shed first**, the default `0` puts every load on
-the same level.
+**Part 1: features**
 
-One priority ranks everything: a loadpoint's regular (upstream) `priority`
-decides pv surplus, shedding and, once planned charging shares circuit
-capacity, the planner alike. The battery has no upstream priority; it keeps a
-value of its own on the same 0-10 scale.
+1. [Load management priorities](#1-load-management-priorities)
+2. [Battery in load management](#2-battery-in-load-management)
+3. [Switch devices](#3-switch-devices)
+4. [Heater in stages](#4-heater-in-stages)
+5. [Shed guard](#5-shed-guard)
+6. [Loads not following their limit](#6-loads-not-following-their-limit)
+7. [Load management circuit and switch](#7-load-management-circuit-and-switch)
+8. [Overview](#8-overview)
+9. [Phase switching: 1p currents and delays](#9-phase-switching-1p-currents-and-delays)
+10. [Battery grid charging by soc and one-time](#10-battery-grid-charging-by-soc-and-one-time)
+11. [Peak shaving](#11-peak-shaving)
+12. [Battery profiles](#12-battery-profiles)
+13. [Home consumption forecast](#13-home-consumption-forecast)
+14. [Battery identification](#14-battery-identification)
+15. [Second feed-in tariff (EEG)](#15-second-feed-in-tariff-eeg)
+16. [Optimizer inputs](#16-optimizer-inputs)
+17. [Advanced settings](#17-advanced-settings)
 
-All of them are set in the ui under *Lastmanagement-Details → Prioritäten*, for
-every loadpoint on a circuit and for the home battery once it is assigned to
-one. A loadpoint's value there is its regular priority (also editable in the
-loadpoint settings), the battery's is stored in the `lmPriorities` setting,
-with `loadmanagement.battery.priority` in yaml as fallback.
-They are sorted there by drag, top = highest. A drag renumbers all loads by
-their order from the bottom: 0, 1, 2 and so on, at most 10, see
-`assets/js/utils/lmPriorityOrder.ts`.
+**Part 2: maintenance**
 
-Earlier the loadpoints had a separate load management priority. Those values
-set in the ui are taken over into the loadpoints' priority once, logged, see `core/site_lm_priority.go`. That changes the pv
-surplus order accordingly.
+- [Rules](#rules)
+- [Upstream touch points](#upstream-touch-points)
+- [Own files](#own-files)
+- [Taking in a new evcc version](#taking-in-a-new-evcc-version)
+- [Tests](#tests)
 
-### How it works
+---
 
-All of it lives in one `lm.Manager` per site (`site.lmm()`), which its
-loadpoints reach through the site (`lp.lmm()`); the package keeps no state of
-its own.
+## 1. Load management priorities
 
-A load whose request the circuit denies records the denied amount as unserved
-demand. Loads with a lower priority then get that amount withheld from their own
-budget and give way on their next update, which frees the power for the
-higher-priority load one cycle later.
+evcc's circuits serve requests first come, first served. A priority puts an
+order on that: **lower is shed first**. With all loads on the same priority
+(the default) nothing changes compared to evcc.
 
-The higher-priority load never gets to exceed the circuit limit - it only claims
-power that has actually been freed. Because evcc updates one loadpoint per cycle,
-a full shed takes up to `interval x number of loadpoints`.
+One priority ranks everything: a loadpoint's regular priority decides pv
+surplus and shedding alike. The battery has no evcc priority and keeps a value
+of its own on the same 0-10 scale. All are set under *Lastmanagement-Details →
+Prioritäten* by drag, top = highest; a drag renumbers the loads from the bottom
+0, 1, 2 and so on, at most 10 (`assets/js/utils/lmPriorityOrder.ts`). A
+loadpoint's value is its regular priority, also editable in the loadpoint
+settings; the battery's is stored in `lmPriorities`. Older versions had a
+separate load management priority per loadpoint; those values were taken over
+into the regular priority once (`core/site_lm_priority.go`).
 
-Recovery is not a separate mechanism and there is no restore pass in reverse
-order. The same reserve does both jobs: power that frees up stays withheld from
-the lower-priority loads for as long as a higher-priority load records unmet
-demand, so it goes up the priority ladder first. Only once nobody above is short
-does the reserve fall to zero and the lower-priority loads take the rest back.
-Each rung of that ladder costs one cycle. `TestRecoveryFavoursHigherPriority`
-walks through it.
+How it works (`core/lm/lm.go`): a load whose request the circuit denies records
+the denied amount as unserved demand. Loads with a lower priority get that
+amount withheld from their own budget and give way on their next update, which
+frees the power for the higher priority load one cycle later. A higher priority
+load never exceeds the circuit limit, it only claims power that was freed. As
+evcc updates one loadpoint per cycle, a full shed takes up to
+`interval × number of loadpoints`. In an overload a load keeps what it draws
+while the loads below it draw enough to cover the excess, so shedding starts at
+the bottom.
 
-Two caveats on the way back up:
+Recovery uses the same reserve: freed power stays withheld from lower loads
+while a higher one records unmet demand, so it goes up the ladder first, one
+rung per cycle (`TestRecoveryFavoursHigherPriority`). A load that is off and not
+asking holds no claim until its first request.
 
-- A load that is off and not asking records no demand, so it does not hold a
-  claim on freed capacity. It registers one on the first cycle it does ask,
-  which is one cycle before it is served.
-- The battery's `holdoff` deliberately breaks the ordering: after being shed it
-  waits out the timer even if capacity frees up earlier, because stopping it
-  frees exactly the power that would make it start again.
+All state lives in one `lm.Manager` per site (`site.lmm()`); loadpoints reach it
+through their site (`lp.lmm()`). The check runs inside evcc's `setLimit` through
+`lmCircuit` (`core/loadpoint_lm.go`), which keeps evcc's calculation and adds
+the priorities, switch devices and the shed guard.
 
 ## 2. Battery in load management
 
-The home battery's grid charging power counts against a circuit and is switched
-off when the budget runs out. A battery driven through mode scripts can only be
-on or off, so the full expected charge power has to fit.
+The home battery's grid charging takes part in load management once it is on a
+circuit:
 
-```yaml
-site:
-  loadmanagement:
-    timeout: 10m # unserved demand expiry, must outlast a full round-robin
-    battery:
-      circuit: main # the circuit the battery draws from, empty = not managed
-      priority: 0 # shed before everything else
-      power: 5000 # expected grid charge power in W, 0 = sum of maxchargepower
-      phases: 3 # for current accounting
-      holdoff: 5m # wait before retrying after a shed
-```
+| Setting | Where | Default |
+| --- | --- | --- |
+| circuit the battery draws from | Lastmanagement-Details → Batterie-Stromkreis | none = not managed |
+| priority | Lastmanagement-Details → Prioritäten | 0 |
+| expected grid charge power | Lastmanagement-Details → Batterie-Netzladen | sum of the battery meters' max charge power |
+| entity for the charge power | Lastmanagement-Details → Batterie-Netzladen | none = on/off charging |
+| phases, wait after a shed, reservation expiry | Lastmanagement-Details → Erweitert | 3, 5 min, 10 min |
 
-`power` falls back to the sum of the battery meters' `maxchargepower`. Without
-either, the battery is not gated and a warning is logged once.
+A battery switched through mode scripts is on or off, so the whole expected
+charge power has to fit into the circuit. Without a known charge power, grid
+charging on a circuit stays off and a warning is logged once. With a charge
+power entity, evcc writes the grid charge power instead: the expected power,
+trimmed to what fits below the peak limit and into the circuit, at least 500 W.
+After a shed, grid charging waits for the hold-off, as stopping it frees exactly
+the power that would let it start again. See `core/site_lm.go`.
 
-The `holdoff` prevents flapping: stopping the battery frees exactly the power
-that made it start again.
+## 3. Switch devices
 
-## 3. Soc-based grid charging
+A switch device (smart plug, heater switch) draws its full power or nothing.
+evcc would switch a 3 kW heater on with 1.6 kW to spare, as that is still above
+the minimum current, and the circuit would stay overloaded. Here it only
+switches on when its whole power fits, against the circuit's power and current
+limits alike. Its power is, in this order: the measurement while it draws, the
+configured *Leistung* (template *Home Assistant Switch*, `ratedpower`), the last
+measurement, the nominal maximum current on one phase. Without a power sensor
+the configured power is also reported as its power while on. See
+`core/loadpoint_lm.go` and `charger/switchsocket_lm.go`.
 
-A switch plus a start and a stop soc, independent of the price-based
-`batteryGridChargeLimit`. Configured in the UI under **Hausbatterie**, persisted
-in settings, and also available via the api:
+## 4. Heater in stages
 
-```
-POST /api/batterysocgridcharge/{true|false}
-POST /api/batterysocgridchargestart/{soc}
-POST /api/batterysocgridchargestop/{soc}
-```
+A heater with one switch per stage, e.g. 3 × 3 kW switched per phase, runs as
+one loadpoint (template *Home Assistant Heizstab in Stufen*: up to three
+switches, power per stage, optional power sensor, delay before a higher
+stage). The charger (`charger/switchstages.go`) reports one stage as minimum
+and all as maximum power and switches on as many whole stages as fit. It is no
+switch device, so load management steps it down stage by stage instead of
+shedding it whole. Down is immediate, a higher stage waits until the last
+change is the delay old (default 1 min), switching on from off follows the
+loadpoint's enable delay. The loadpoint's phases must match the wiring. A
+thermostat that cut out (draw up to the standby power, default 15 W) reports
+ready and counts as 0 W. `TestStagesCircuitStepsDown`,
+`TestStagesGiveWayToHigherPriority`.
 
-Charging starts once the soc is at or below the start value and continues until
-the stop value is reached. It goes through the same battery mode path as
-price-based grid charging, so a Home Assistant battery triggers its `modeCharge`
-script as usual. The battery's own `maxsoc` still applies on top as a hard
-ceiling.
+## 5. Shed guard
 
-## Maintenance rules
+*Lastmanagement-Details → Abwurfschutz*: a protected loadpoint that load
+management switched off stays off for the set minutes (0 = off, up to 120), so
+a heater does not flap around the limit. Only switching off a running load
+counts: a switch losing its budget or a wallbox pushed below its minimum. While
+held off it asks for nothing. Changes apply to a running guard right away. See
+`core/lm/guard.go`, `core/site_lm_guard.go`.
 
-Every fork feature follows these, so that taking in a new evcc version stays cheap:
+## 6. Loads not following their limit
 
-1. **Inputs, not overrides.** Feed our settings into upstream mechanisms (circuit
-   checks, optimizer request, planner, regular setters) instead of overwriting
-   upstream decisions afterwards. An unavoidable override stays in one named hook
-   with the reason next to it. The only one today: `updateBatteryModePeakAware`
-   keeps the battery in normal mode below the peak reserve.
-2. **Upstream first.** Check whether evcc has the capability or an open PR for it.
-   When upstream ships an equivalent, switch to it and remove ours.
-3. **Own files, few hooks.** Logic lives in own files. Upstream files only get
-   `// custom:` hook lines, all listed below. Upstream logic is called, not copied.
-4. **Contract tests.** Each hook has a test pinning the upstream behaviour it
-   relies on, and that the fork is inert while its features are off:
-   `TestForkInertWhenUnused`, `TestSetLimitUsesLmCircuit`,
-   `TestEqualPrioritiesAreUpstream`, `TestPeakReserveKeepsExternalMode`.
+Shedding from the bottom relies on the lower loads giving way. Each cycle
+compares what every load draws with what it was last allowed (the battery: its
+grid charge limit). A load above it (tolerance 300 W or 10 %) on an overloaded
+circuit counts a cycle; after the set cycles (*Erweitert*, default 3, 0 = off)
+it is no longer counted on and the next load up is cut. It is counted on again
+once it follows. See `core/lm/follow.go`, `core/site_lm_follow.go`.
 
-## Upstream touch points
+## 7. Load management circuit and switch
 
-Keep these in mind when merging a new evcc version:
+*Erweitert → Stromkreis Lastmanagement (Peak)* names the circuit whose power
+limit is the peak, beside one for the fuse or the agreed connection power.
+Chosen, only it is shown in the overview, lifted by the switch and raised by
+follow the peak; none = all circuits, nothing raised (`lmCircuit`).
 
-| File | Change |
-| --- | --- |
-| `core/site.go` | `lm` import, `LoadManagement` (yaml) and `custom` fields, `restoreCustom` at the end of `restoreSettings`, `updateCustom` after `updatePower`, `setPeakGridEnergy` in `updateGridMeter`, `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of upstream's calls |
-| `core/circuit/circuit.go` | over power logged via `overPowerLog()` (INFO, no ui notification), see `circuit_custom.go` |
-| `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
-| `core/loadpoint.go` | `loadpointCustom` field (see `core/loadpoint_lm.go`), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lp.lmm().Peek*` probes; 1p current limits: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` per phase count, the three phase timers take `phaseScaleDelay` |
-| `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split into a variant per phase count (as in evcc PR 32505), min/max power use it |
-| `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` embedded in the dynamic config, applied after min/max current, read back for the ui |
-| `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue` (1p currents, phase delays), regular range labelled 3-phase while it is shown, 3p minimum for the power hint |
-| `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
-| `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
-| `core/site/api.go` | embeds `CustomAPI`, one line |
-| `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff role: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
-| `assets/js/components/Config/TariffModal.vue` | `feedInEeg` offers the price templates |
-| `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
-| `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` so a forced run arriving during a run is not dropped |
-| `server/http.go` | `addCustomSiteRoutes`, one call; a route colliding with an evcc route is left out and logged |
-| `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
-| `assets/js/views/Config.vue` | load management details section, its dialogs (`LmConfigModals.vue`), EEG tariff card and add button |
-| `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` (overview, peak statistics) |
-| `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` ("Lastmanagement", "Peak Shaving") |
-| `assets/js/components/Config/TariffCard.vue` | EEG counter summary in the EEG card |
-| `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
-| `assets/js/types/evcc.ts` | `State` and `ConfigLoadpoint` extend the fork's types in `evcc-lm.ts`, re-exported; `feedInEeg` tariff type |
-| `i18n/de.json`, `i18n/en.json` | texts |
+*Mehr → Lastmanagement (Peak) → Lastmanagement* off lifts that circuit's power
+limit (without one, all circuits') at runtime, so loads and battery grid
+charging are no longer throttled for it. Fuse current limits, a HEMS limit
+(§14a) and peak shaving keep applying; circuits whose limit comes from a plugin
+are left alone. On restores the configured or followed limit. Survives a
+restart (`lmOff`). See `core/site_lm_switch.go`.
 
-Everything else lives in files of its own: `core/lm/`, `core/peak/`, `core/circuit/circuit_custom.go`, `core/site_lm.go`, `core/site_lm_guard.go`,
-`core/site_lm_advanced.go`, `core/site_load_manual.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
-`core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
-`core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go`, `core/keys/site_custom.go`,
-`core/site/api_custom.go`, `server/http_custom.go`, `core/site_optimizer_lm.go`, `core/site_lm_once.go`, `core/site_lm_priority.go`, `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`
-and the new Vue components, and the charger template `homeassistant-stages.yaml`.
+## 8. Overview
 
-## Phase switching: current limits for 1p and 3p, delays
+*Mehr → Lastmanagement (Peak)* shows circuit load, peak shaving, battery grid
+charging, every load with its state (running, throttled, shed and held off
+until, waiting with what it needs and what is free, paused) and the last 20
+events. Published as `lmStatus` at the end of every cycle
+(`core/site_lm_status.go`, records in `core/lm/status.go`); it never feeds back
+into decisions.
+
+## 9. Phase switching: 1p currents and delays
 
 A loadpoint with phase switching can have its own min and max current for 1p
-charging, under *Elektrik* in the loadpoint settings. The regular range is then
-the 3p range, empty 1p fields fall back to it. Built after evcc PR 32505 (closed
-upstream, to be taken up after splitting power and current controlled devices),
-with the same names, settings keys and config fields, so an upstream version
-can take over the values. Written against the current phase logic, not the old
-diff.
+(loadpoint settings, *Elektrik*); the regular range is then the 3p range and
+empty 1p fields fall back to it. Same names, settings keys and config fields as
+evcc PR 32505, so an evcc version can take the values over.
 
-- scaling up to 3p needs the 1p maximum exhausted and the surplus at the 3p
-  minimum; scaling down happens below the 3p minimum, if the 1p minimum is
-  reached, else the loadpoint disables as upstream
+- scaling up needs the 1p maximum exhausted and the surplus at the 3p minimum;
+  scaling down happens below the 3p minimum if the 1p minimum is reached, else
+  the loadpoint disables as in evcc
 - after a switch the limits of the new phase count apply right away
 - fast charging and battery boost check the circuit with the 3p minimum
-- without 1p values nothing changes: no phase lookup, the regular limits apply
-  as upstream (`TestCurrents1pInertWhenUnused`, upstream's own tests unchanged)
+- without 1p values nothing changes (`TestCurrents1pInertWhenUnused`)
 
-Next to them, two optional delays: how long the surplus has to allow 3p before
-scaling up, and how long it has to be short of the 3p minimum before scaling
-down. Empty = the enable and disable delay, as upstream; starting and stopping
-charging keep those. The fast charging scale-up delay uses the up delay too. A
-dip in between restarts the wait. As every timer they are checked once per
-cycle, so a switch comes up to one interval after the delay. The config takes
-them as plain numbers in ns, since the ui sends a cleared field as "".
+Two optional delays: how long the surplus has to allow 3p before scaling up and
+be short of it before scaling down; empty = enable and disable delay as in
+evcc. Starting and stopping charging keep those. The config takes them in ns,
+as the ui sends a cleared field as "". See `core/loadpoint_phasecurrents.go`.
 
-See `core/loadpoint_phasecurrents.go`.
+## 10. Battery grid charging by soc and one-time
 
-## Heater in stages
+*Netzladen nach Ladestand* (battery page): a switch with a start and a stop
+soc, independent of evcc's price limit. Charging starts at or below the start
+soc and runs until the stop soc, through evcc's battery mode path, so a Home
+Assistant battery runs its `modeCharge` script; the battery's `maxsoc` still
+applies. Survives a restart halfway.
 
-A heater with one switch per stage, e.g. a 3 x 3 kW heating rod switched per
-phase, runs as one loadpoint instead of one switch loadpoint per stage. It is
-set up as heater with the template *Home Assistant Heizstab in Stufen*:
-switches for up to three stages, the power per stage, optionally a power
-sensor and the delay before a higher stage.
+*Einmalig laden* (battery page): charges once up to a soc and switches itself
+off, right away or by a time at the cheapest slots before it (evcc's planner on
+the planner tariff; right away once the time passed or the duration is
+unknown). Cancelled when the battery is removed. See `core/site_lm_once.go`.
 
-The charger (`charger/switchstages.go`) reports one stage as minimum and all
-stages as maximum power (upstream's `api.PowerLimiter`), and switches on as
-many whole stages as fit into the current evcc sets. It is not a switch device,
-so load management treats it as a regulated load: an overload or a load with a
-higher priority steps it down stage by stage instead of shedding it whole, and
-all stages are set in one loadpoint cycle. Switching down is immediate, a higher
-stage waits until the last change is the delay old (default 1 minute), and
-switching on from off is left to the loadpoint's enable delay. The loadpoint's
-phases must match the wiring, one stage per phase means 3 phases.
-A heater with its own thermostat draws nothing while the switches stay on. With
-a power sensor, a draw up to the standby power (default 15 W) then reports
-ready instead of heating and counts as 0 W; the loadpoint stays enabled, and
-evcc's pv control for heaters already works from the power actually drawn.
-`TestStagesCircuitStepsDown` and `TestStagesGiveWayToHigherPriority` walk
-through it with the real loadpoint.
-
-## Shed guard
-
-A loadpoint that load management had to switch off can be held off for a set
-time, so a heater does not flap while the demand hovers around the limit. The
-minutes (0 = off, up to 120) and the protected loadpoints are set under
-Lastmanagement-Details → Abwurfschutz:
+Both pass the same gate as price-based grid charging: the circuit
+([2](#2-battery-in-load-management)) and a running peak
+([11](#11-peak-shaving)).
 
 ```
-POST /api/lmshedguard/{minutes}
-POST /api/lmshedprotect/{loadpoint}/{true|false}
+POST   /api/batterysocgridcharge/{true|false}
+POST   /api/batterysocgridchargestart/{soc}
+POST   /api/batterysocgridchargestop/{soc}
+POST   /api/batterygridchargeonce/{soc}[/{hh:mm}]
+DELETE /api/batterygridchargeonce
 ```
 
-Only switching off a running load counts as a shed: a switch that loses its
-whole budget, or a wallbox pushed below its minimum current. A load that could
-not start for lack of power is not held off. While held off, the loadpoint asks
-for nothing, so lower priority loads may use the power. Changing the minutes or
-the protection applies to a running guard right away. The guard is in
-`core/lm/guard.go`, applied in `lmCircuit` (`core/loadpoint_lm.go`), the settings
-in `core/site_lm_guard.go`.
+## 11. Peak shaving
 
-## Advanced settings
+A capacity tariff bills the month's highest 15 minute average. The battery's
+lower soc range is held back as a reserve for such peaks. Set on the battery
+page (*Lastspitzenkappung*: on/off, limit, reserve) and under
+*Lastmanagement-Details → Peak Shaving* (entity for the discharge setpoint,
+energy counter, follow the peak).
 
-Hysteresis, free value, grid charge hold-off, reservation expiry, battery
-phases, the peak budget's freeze minute and cap and the cycles for loads not
-following their limit are set under Lastmanagement-Details → Erweitert
-(`POST /api/lmadvanced/{name}/{value}`). A value set there overrides the yaml
-value, which overrides the default. See `core/site_lm_advanced.go`.
+Above the reserve the discharge controller gets the free value (default
+10000 W) and the battery runs as usual. Below it, the battery only covers what
+exceeds the allowed grid power: setpoint = `max(0, grid + battery − allowed)`.
+The battery power is added back because the grid meter already reflects the
+controller's own output; using the grid alone oscillates
+(`TestPeakSetpointIsStable`). evcc only writes the setpoint to a number entity;
+a Home Assistant automation does the discharge. A 2 % hysteresis keeps the soc
+from flapping across the reserve.
 
-## Loads not following their limit
+The limit applies to the clock-aligned 15 minute window: `allowed` =
+`(limit × 15 min − energy drawn so far) / time left`, so energy left unused
+earlier allows more and a short spike is only covered when the window would end
+above the limit. It is at most `cap × limit` (default 2), stops growing from the
+freeze minute (default 12) as a meter clock off by seconds could move a late
+draw into the next window, and the last cycle borrows the next window's
+budget. What evcc did not see, after a start or a gap, counts at the limit.
 
-In an overload a load keeps its power while the loads below it could free the
-excess. That only works if they give way. Each cycle `lm.CheckFollowing` compares
-what every load draws with what it was last allowed (`lm.Record`, for the battery
-its grid charge limit). A load above its limit (tolerance 300W or 10%) on an
-overloaded circuit counts a cycle; after the set cycles (Erweitert, default 3,
-0 = off) it is no longer counted on, so the next load up the priority order is
-cut. It is counted on again once it draws what it was allowed. See
-`core/lm/follow.go` and `core/site_lm_follow.go`.
+The energy drawn comes from the grid meter's import counter, else a Home
+Assistant energy sensor (kWh or Wh), else the grid power. A failed or backward
+reading is replaced by the grid power for that interval; a counter standing
+still while the grid power says more than 20 Wh in 2 minutes is replaced for
+the rest of the window (`peakShavingSource`).
 
-## Battery profiles
+Below the reserve the battery is kept in normal mode, as hold would block the
+discharge controller; a battery mode set from outside through the api stays.
+While the demand without the battery exceeds the limit, grid charging pauses
+and stays off for the hold-off, so it cannot add to the peak.
 
-Named sets of settings, e.g. summer and winter, set up under
-Lastmanagement-Details → Profile and picked on the battery page. A profile can
-hold soc grid charging (on/off, start, stop), battery usage (priority, buffer and
-buffer start soc, discharge lock in fast and planned charging), peak shaving
-(on/off, reserve, limit) and the solar share of each wallbox. Values not ticked
-are left alone. Applying goes through the regular setters; priority, buffer and
-buffer start soc are checked as a combination first and then set bottom up,
-since evcc checks each against the other two. The type is in
-`core/lm/profile` (no dependencies, so the site api can use it), the rest in
+The window, the allowed power, the setpoint and the hysteresis are in
+`core/peak`, which knows nothing about the site and has its own tests;
+`core/site_peakshaving.go` feeds it and handles settings, Home Assistant and the
+battery mode.
+
+**Follow the peak**: once the month has a peak above the limit, shaving below it
+saves nothing. Followed, the limit rises to the month's peak minus a buffer
+(0-5 kW, default 0.5 kW) and never below the limit set by hand; a new month
+starts there again. The load management circuit rises along. See
+`core/site_peak_follow.go`.
+
+**Statistics** (*Mehr → Peak Shaving*): per month the highest quarter hour with
+and without the battery and how often it covered a peak; only quarter hours
+metered from their start count, kept for 24 months (`peakMonths`,
+`core/site_peak_stats.go`).
+
+**Capacity tariff** (*Lastmanagement-Details → Leistungstarif*): price per kW
+and year up to a threshold, a higher one above, at least a minimum and a share
+of the agreed power; zero price = off. Each month's cost with and without the
+battery and the saving are shown with the statistics. Prefilled with the
+Austrian draft for 2027 (33.82 EUR/kW/year up to 10 kW, double above, at least
+20 % of the agreed power and 2 kW). See `core/site_peak_tariff.go`.
+
+## 12. Battery profiles
+
+Named sets of settings (e.g. summer, winter) under *Lastmanagement-Details →
+Profile*, picked on the battery page. A profile can hold soc grid charging, the
+battery usage (priority, buffer and buffer start soc, discharge lock), peak
+shaving (on/off, reserve, limit) and each wallbox's solar share; values not
+ticked are left alone. Applied through the regular setters; priority, buffer
+and buffer start soc are checked together and set bottom up, as evcc checks
+each against the other two. Type in `core/lm/profile`, the rest in
 `core/site_lm_profiles.go`.
 
 ```
@@ -266,273 +282,214 @@ DELETE /api/lmprofile/{id}
 POST   /api/lmprofile/{id}/apply
 ```
 
-## Overview
+## 13. Home consumption forecast
 
-Mehr → Lastmanagement shows what load management is doing: circuit load, peak
-shaving, battery grid charging, every load with its state (running, throttled,
-shed and held off until, waiting with what it needs and what is free, paused)
-and the last 20 events. `core/lm/status.go` records each load's last request
-and the events, `core/site_lm_status.go` publishes `lmStatus` at the end of
-every cycle (from `updateBatteryModePeakAware`). Nothing in there feeds back
-into the decisions.
+*Erweitert → Verbrauchsprognose* (`homeForecast`): evcc forecasts the home base
+load for the optimizer from the last 28 days per quarter hour.
 
-## Peak statistics
+- *Nach Wochentag* takes each day from the same weekday of the last 8 weeks; a
+  weekday without complete data falls back to evcc's forecast
+  (`core/site_load_weekday.go`).
+- *Manuell* uses an uploaded csv load profile: average home power per quarter
+  hour (or hour) per month, working days and weekends apart (`01-werktag`,
+  `01-wochenende`) or together (`01`); missing day types take the other one,
+  missing months the nearest. It is mixed with the measured energy of the last
+  8 weeks (recent days count more, half-life 4 days): the profile scaled to the
+  recent level, the recent profile per day type, weighted 0.5 while the profile
+  fits and up to 0.9 the more it differs, and a deviation over 25 % in the last
+  3 hours carries over and fades out. Without a usable profile evcc's forecast
+  applies (`core/site_load_manual.go`, `POST/DELETE/GET /api/lmhomeprofile`).
 
-Mehr → Peak Shaving shows, per month, the highest quarter hour average with the
-battery (grid draw) and without it (grid draw plus battery power, charging
-counts negative), and how often the battery started covering a peak. Only
-quarter hours metered from their start count. Kept for 24 months in
-`peakMonths`, see `core/site_peak_stats.go`.
+*Sicherheitszuschlag Verbrauch* sets evcc's `profilePercentile`: a higher
+percentile per quarter hour instead of the mean, for all of these profiles.
 
-## Follow the peak
+## 14. Battery identification
 
-Lastmanagement-Details → Peak Shaving. A capacity tariff bills the month's
-highest quarter hour, so once the month already has a peak above the limit,
-shaving below it saves nothing and only drains the battery. With follow the
-peak on, the limit rises to the month's peak (with the battery) minus a buffer
-(0-5 kW, default 0.5 kW, rounded down to 100 W, at most 20 kW) and never below
-the limit set by hand, the base. A new month starts at the base again. Setting
-the limit by hand, or by a profile, while following sets the base; switching
-off returns to it. See `core/site_peak_follow.go`.
+*Lastmanagement-Details → Batterie-Vermessung* learns the usable capacity and
+round trip efficiency from evcc's stored 15 minute battery slots of the last 60
+days: charging runs over at least 20 % soc give capacity / η, discharging runs
+capacity × η; from the medians of at least 3 runs each, capacity = √(kc × kd)
+and round trip = kd / kc. Runs with a soc jump, a gap or reverse flow are left
+out. Plausible: 50-120 % of the configured capacity, 60-100 % round trip.
+Refreshed every 6 hours. With *Gemessene Werte verwenden* the optimizer and
+one-time grid charging use the measured values. See
+`core/site_battery_ident.go`.
 
-The load management (peak) circuit, when chosen, rises along: it gets the
-raised limit, never less than its configured value, and its configured value
-back with the next month or when following stops. See `core/site_lm_switch.go`.
+## 15. Second feed-in tariff (EEG)
 
-## Load management (peak) circuit
+Part of the export goes to an energy community at a fixed price, the rest gets
+the regular feed-in tariff. Tariffs: *Einspeisevergütung EEG hinzufügen* below
+the feed-in tariff (fixed price, 0 allowed); its card sets the Home Assistant
+counter of the EEG export (kWh, Wh or MWh).
 
-Lastmanagement-Details → Erweitert → *Stromkreis Lastmanagement (Peak)*: the
-circuit whose power limit is the peak, beside a circuit for the fuse or the
-agreed connection power. Chosen, only it is shown under Mehr → Lastmanagement
-(Peak), lifted by the switch and raised by follow the peak; none = all circuits,
-nothing raised. Stored in `lmCircuit`, published as `lmOff.circuit`; lm3/lm4
-chose it as the follow the peak circuit (`peakFollowCircuit`), taken over once.
+- the counter is recorded per 15 minute slot by a collector of group `meter`
+  (`feedin-eeg`), which evcc keeps out of every balance; a changed counter
+  starts a fresh recording
+- the EEG price is stored per slot in `tariffs_eeg`
+- `GET /api/feedinsplit?from&to&aggregate` returns per bucket: export, EEG,
+  regular = export − EEG, and the revenue of both
+- only counters are used; pv control, load management and peak shaving are
+  untouched
 
-## Load management switch
+The display on evcc's new energy page (evcc PR 33989) is prepared separately.
+See `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`.
 
-Mehr → Lastmanagement (Peak) → *Lastmanagement*. Off lifts the power limit of
-the load management (peak) circuit, without one of all circuits, at runtime (`SetMaxPower(0)`, unlimited), so loadpoints and the
-battery's grid charging are no longer throttled or shed for them; the
-configuration stays unchanged. Current limits (fuses), a HEMS consumption limit
-(§14a) and battery peak shaving keep applying. Switching on restores the
-configured limits (or the raised one of follow the peak). Survives a restart
-(`lmOff`). Circuits whose limit comes from a plugin are left alone and listed.
-Circuit limits changed at runtime are published with their configured values
-in `lmOff.limits`, so the overview shows them.
+## 16. Optimizer inputs
 
-## Home consumption forecast
+The optimizer plans battery and vehicle charging and today advises (soc
+forecast, suggestions). The fork gives it its settings as inputs, so the plan
+matches what the fork will do (`core/site_optimizer_lm.go`):
 
-Lastmanagement-Details → Erweitert → *Verbrauchsprognose*, stored as
-`homeForecast` in the advanced settings (0 evcc, 1 per weekday, 2 manual; an
-older `homeWeekday` = 1 still reads as per weekday). evcc forecasts the home
-base load for the optimizer from the average of the last 28 days per quarter
-hour.
-
-*Nach Wochentag* takes each forecast day from the same weekday of the last 8
-weeks instead, so weekends and working days keep their own shape; a weekday
-without complete data falls back to the average. See `core/site_load_weekday.go`.
-
-*Manuell* uses an uploaded load profile (issue 10): a csv with the average home
-power in W per quarter hour (or hour) for each month, working days and weekends
-apart or together (columns `01-werktag`, `01-wochenende` or `01`). Missing day
-types take the other one, missing months the nearest given month. It is stored
-as `lmHomeProfile` in the settings (`POST/DELETE/GET /api/lmhomeprofile`, the
-GET returns it as csv again). The forecast mixes it with the measured home
-energy of the last 8 weeks, recent days counting more (half-life 4 days):
-
-1. the profile, interpolated between the month middles and scaled to the level
-   of the last weeks (factor 0.1 to 10)
-2. the last weeks' own profile per day type, slots evened out with their
-   neighbours; a day with up to 6 slots missing (restart, clock change) has
-   them filled from its neighbours, days with more are left out
-3. both mixed: the last weeks count 0.5 while the profile fits them, up to 0.9
-   the more its shape (correlation) or level differs, less while the history is
-   shorter than 14 days
-4. a deviation of the last 3 hours of more than 25 % carries over into the next
-   hours and fades out (a third after 2 hours)
-
-Without a profile or on errors evcc's own forecast applies. See
-`core/site_load_manual.go`, one call in `homeProfile` (`core/site_load_predictor.go`).
-
-*Sicherheitszuschlag Verbrauch* sets upstream's `profilePercentile` (API only
-upstream): a higher percentile per quarter hour instead of the mean, for both
-profiles, the heating devices' profiles and, with a load profile, the last
-weeks' part.
-
-## Battery identification
-
-Lastmanagement-Details → *Batterie-Vermessung*. The usable capacity and the
-round trip efficiency are learned from the 15 minute slots evcc stores for each
-battery (energy charged and discharged, soc at the slot start) over the last 60
-days: a charging run over at least 20 % soc gives the energy put in per 100 %
-(capacity / η), a discharging run the energy taken out (capacity × η). From the
-medians of at least 3 runs each: capacity = √(kc × kd), round trip = kd / kc.
-Runs with a soc jump, a gap or flow the other way are left out; an hour idle
-ends a run. Plausible: 50-120 % of the configured capacity, 60-100 % round
-trip. Refreshed every 6 hours, see `core/site_battery_ident.go`.
-
-With *Gemessene Werte verwenden* on, the optimizer request gets the measured
-capacity (all stored energies scaled, the soc values stay) and one-time grid
-charging plans with the measured capacity and charging efficiency. The
-optimizer's own efficiency is one value for batteries and vehicles and stays.
-
-## Capacity tariff
-
-Lastmanagement-Details → Leistungstarif. The month's highest quarter hour is
-billed per kW and year up to a threshold, at a higher price above it, and at
-least a minimum and a share of the agreed power; a zero price is off. For each
-recorded month the cost with the battery (grid draw) and without it is
-published in `peakTariff` and shown under Mehr → Peak Shaving with the saving,
-negative when grid charging raised the peak. Prefilled with the Austrian draft
-for 2027: 33.82 EUR/kW/year up to 10 kW, double above, at least 20% of the
-agreed power and 2 kW. See `core/site_peak_tariff.go`.
-
-## Second feed-in tariff (EEG)
-
-Part of the export can go to an energy community (EEG) at a fixed price, the rest
-gets the standard feed-in tariff. Tariff settings: "Einspeisevergütung EEG
-hinzufügen" below the feed-in tariff (fixed price, 0 allowed), its card sets the
-Home Assistant counter of the EEG export (kWh, Wh or MWh).
-
-- The counter is recorded per 15 minute slot by a collector of group `meter`
-  (`feedin-eeg`), which upstream keeps out of every balance. A changed counter
-  starts a fresh recording, so the jump between two counters never counts.
-- The EEG price is persisted per slot in `tariffs_eeg`.
-- `GET /api/feedinsplit?from&to&aggregate` returns per bucket: export (grid
-  meter), EEG (counter), standard = export minus EEG (clamped at 0), and the
-  revenue of both, priced slot by slot.
-- Only counters are used. The grid meter power that drives PV control, load
-  management and peak shaving is untouched; self-consumption and the solar
-  share of sessions stay valued at the standard feed-in tariff.
-- The display on the new energy page (evcc PR 33989, not released yet) is
-  prepared separately; until then the data is recorded and available via the
-  api.
-
-Without a counter nothing runs and evcc behaves as upstream.
-
-## Optimizer
-
-The optimizer plans battery and vehicle charging and, today, advises: its
-result is the battery soc forecast and the suggestions. The fork gives it its
-settings as inputs, so the plan matches what the fork will actually do, see
-`core/site_optimizer_lm.go`:
-
-- peak shaving: peak limit as hard grid import limit (`p_max_imp`), reserve
-  as the home battery's minimum soc (`s_min`) in the first solve. Below the
-  reserve the fork discharges only what exceeds the limit and keeps what
-  charges there for peaks, a rule the optimizer cannot state. Where the first
-  plan leaves peaks uncovered, or the battery is below the floor now, the plan
-  is solved again (`core/site_optimizer_reserve_pass.go`) with the battery's
-  own minimum and a floor per slot (`s_goal`) that follows the fork: lowered
-  by the peaks it covers (above the reserve a peak pausing grid charging leaves
-  the battery free), raised by what really charges (pv surplus less what the
-  vehicles take, running and one-time grid charging), never by grid charging
-  the optimizer only chooses. The floor is checked against that plan once more
-  and solved a third time where it drifted. Without peaks the plan stops at the
-  floor as before.
-- soc-based grid charging (only while switched on and grid charging is
-  allowed): start soc as minimum soc. The optimizer only knows minimums, given
-  the stop soc as goal it would just stop discharging there, which the fork
-  does not do. So from the slot the battery reaches the start soc the rest is
-  solved again (`core/site_optimizer_soc_pass.go`) with the plan's state as
-  starting point and the stop soc as goal once the fork has charged it, and
-  joined. What the charge adds below the floor stays there until pv refills it.
-  While charging runs the stop soc is a goal of the first solve. A floor above
-  the start soc keeps the battery from getting there. A floor raised this way
-  is not shown as "leer" in the battery forecast, the battery's own minimum is.
-- grid charging goals follow the charge slot by slot as the fork does it (so
-  the plan, and the suggestion, charge while it runs): at the grid charge
-  power (else the battery's maximum) with the charging efficiency, with peak
-  shaving only with the room below the limit (a charge power set through an
-  entity is trimmed to it, at least 500 W; a switched one pauses above the
-  limit), paused while the demand exceeds it and the battery covers the peak
-  (below the reserve the excess, above it freely). Without peak shaving at
-  most the grid charge window.
-- the plan is solved again right away when soc-based grid charging starts or
-  stops, and a forced run (a changed setting) arriving while one runs is run
-  right after it instead of waiting for the next slot
-- one-time grid charging: its target as goal at the chosen time (with peak
-  shaving at most what the room allows by then), or right away when the charge
-  power can reach it
+- peak shaving: the limit as hard grid import limit (`p_max_imp`), the reserve
+  as minimum soc (`s_min`) in the first solve. Where that plan leaves peaks
+  uncovered, or the battery is below the floor now, it is solved again
+  (`core/site_optimizer_reserve_pass.go`) with the battery's own minimum and a
+  floor per slot (`s_goal`) that follows the fork: lowered by the peaks it
+  covers, raised by what really charges (pv surplus less what vehicles take,
+  running and one-time grid charging), never by grid charging the optimizer
+  only chooses. The floor is checked once more and solved a third time where it
+  drifted.
+- soc-based grid charging: the start soc as minimum; from the slot the battery
+  reaches it the rest is solved again (`core/site_optimizer_soc_pass.go`) with
+  the stop soc as goal, as the optimizer only knows minimums. While charging
+  runs the stop soc is a goal of the first solve.
+- grid charging goals follow the charge slot by slot as the fork does it, at the
+  grid charge power with the charging efficiency; with peak shaving only with
+  the room below the limit, paused while a peak runs.
+- one-time grid charging: the target as goal at the chosen time, or right away.
 - grid charging refused right now (shed hold-off, unknown charge power on a
-  circuit) is not offered (`charge_from_grid`); a peak running now is not a
-  refusal, the import limit plans it
-- every further solve is checked (solved, complete, the battery within its
-  bounds, not more over the limit); otherwise the plan before stays
-- load management: a loadpoint plans with at most its circuits' power, the
-  priorities 0-3/4-6/7-10 become `c_priority` 0/1/2
-- a price tariff set as planner tariff (*Tarife → Planer-Vorhersage*) is the
-  grid price the optimizer plans with (`p_N`); statistics, costs and sessions
-  keep the grid tariff. With real prices close to the feed-in price (10 ct vs
-  9 ct) the optimizer never discharges: evcc's end value keeps stored energy
-  at least the feed-in price / 0.9, so discharging needs a grid price of about
-  1.25 × feed-in. A fixed planning price of 12 ct makes it discharge down to
-  the floor. Note the planner tariff also drives vehicle plans and smart cost
-  limits, so a fixed one would hide a dynamic grid tariff's cheap slots.
+  circuit) is not offered (`charge_from_grid`).
+- load management: a loadpoint plans with at most its circuits' power,
+  priorities 0-3/4-6/7-10 become `c_priority` 0/1/2.
+- a price tariff set as planner tariff is the grid price the optimizer plans
+  with (`p_N`); statistics and costs keep the grid tariff. With real prices
+  close to the feed-in price the optimizer never discharges (stored energy is
+  valued at least feed-in / 0.9, so discharging needs about 1.25 × feed-in); a
+  fixed planning price fixes that, but also drives vehicle plans and smart cost
+  limits.
+- every further solve is checked (solved, complete, battery within its bounds,
+  not more over the limit), otherwise the plan before stays.
+- the plan is solved again when soc-based grid charging starts or stops, and a
+  forced run arriving during a run follows right after it.
 
-Without circuits, peak shaving, soc-based and one-time grid charging the
-request is unchanged. The optimizer's automatic mode (evcc PR 32881, not
-released yet) additionally needs a gate at execution; that is prepared
-separately on top of these inputs.
+Without circuits, peak shaving and soc or one-time grid charging the request is
+unchanged. The optimizer's automatic mode (evcc PR 32881) needs a gate at
+execution, prepared separately on top of these inputs.
 
-`TestLmOptimizerReplay` sends a recorded request with these inputs to a
-running optimizer (`OPTIMIZER_REPLAY`, `OPTIMIZER_URI`, optional
-`REPLAY_SETTINGS`, `REPLAY_GRID_PRICE`, `REPLAY_SOC`) and checks the plan.
-`TestLmOptimizerScenarios` (`OPTIMIZER_URI` only) solves synthetic days (winter,
-summer, cheap night, negative and low prices, vehicles, horizons up to 408
-steps) and checks: soc never below the minimum, import within the limit or
-reported, energy balance, goals reached, no grid charging while refused.
+## 17. Advanced settings
 
-## One-time grid charging
+*Lastmanagement-Details → Erweitert* (`POST /api/lmadvanced/{name}/{value}`,
+`core/site_lm_advanced.go`). A value set there wins over the yaml fallback,
+which wins over the default; unset values are not stored, so a changed default
+applies.
 
-Battery page, below *Netzladen nach Ladestand*: grid-charges once up to the
-chosen soc and switches itself off, right away or by a time of day at the
-cheapest slots before it (upstream planner on the planner tariff, right away
-once the time passed or when the duration is unknown). It survives a restart,
-can be cancelled and passes the same gate as the soc-based grid charging, see
-`core/site_lm_once.go`.
+| Name | Setting | Default | Range |
+| --- | --- | --- | --- |
+| `hysteresis` | soc band of the peak reserve | 2 % | 0-20 |
+| `freeValue` | setpoint for "discharge freely" | 10000 W | 1-100000 |
+| `holdOff` | wait after battery grid charging was stopped | 5 min | 1-60 |
+| `timeout` | expiry of unserved demand | 10 min | 1-60 |
+| `phases` | battery phases for current accounting | 3 | 1-3 |
+| `peakFreeze` | minute from which the peak budget no longer grows | 12 | 1-14 |
+| `peakCap` | allowed grid power at most × limit | 2 | 1-10 |
+| `followCycles` | cycles until a load not following is ignored | 3 | 0-20, 0 = off |
+| `gridChargeWindow` | hours to reach the stop soc in the plan | 3 | 1-24 |
+| `homeForecast` | home forecast: evcc, per weekday, manual | 0 | 0-2 |
 
-## 4. Peak shaving
+Also there: the load management circuit ([7](#7-load-management-circuit-and-switch))
+and evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
 
-The window, the allowed power, the setpoint and the reserve hysteresis are
-computed in `core/peak`, which knows nothing about the site and is tested on
-its own; `core/site_peakshaving.go` feeds it one sample per cycle and handles
-the settings, Home Assistant and the battery mode. The battery's lower soc range is reserved for
-grid demand peaks; above the reserve the controller is told it may discharge
-freely. The setpoint is `max(0, gridPower + batteryPower - allowed)`. The battery
-power is added back because the grid meter already reflects the controller's own
-output, and using it directly oscillates. `TestPeakSetpointIsStable` (in
-`core/peak`) pins that
-down.
+---
 
-The limit applies to the average of the clock-aligned 15 minute window, which is
-what the demand charge is billed on. `allowed` is the grid power that keeps the
-window's average at the limit: `(limit × 15 min − energy drawn so far) / time
-left`. Energy left unused earlier allows more, so a short spike is only covered
-when the window as a whole would end above the limit. Three bounds:
+## Rules
 
-- `allowed` is at most `cap × limit` (default 2).
-- From the freeze minute on (default 12) it no longer grows, only falls: a
-  meter clock off by a few seconds could otherwise move a large late draw into
-  the next window.
-- The last cycle of a window reaches into the next one, so the time left is at
-  least 30s, filled up with the next window's budget.
+Every fork feature follows these, so taking in a new evcc version stays cheap:
 
-What evcc did not see, after a start or a gap over 2 minutes at a window
-boundary, counts at the limit.
+1. **Inputs, not overrides.** Feed settings into evcc's mechanisms (circuit
+   checks, optimizer request, planner, regular setters) instead of overwriting
+   its decisions. The one override, `updateBatteryModePeakAware`, keeps the
+   battery in normal mode below the peak reserve.
+2. **evcc first.** Check whether evcc has the capability or an open PR. When
+   evcc ships an equivalent, switch to it and remove ours; where the result
+   differs, decide explicitly.
+3. **Own files, few hooks.** Logic lives in own files; evcc's files only get
+   `// custom:` hook lines, all listed below. evcc's logic is called, not
+   copied. In the ui, fork parts are own components mounted with one tag.
+4. **Contract tests.** Each hook has a test pinning the evcc behaviour it relies
+   on, and that the fork is inert while unused.
 
-The energy drawn in the window comes from, in this order:
+## Upstream touch points
 
-1. the grid meter's import counter, when the meter has one
-2. a Home Assistant energy sensor (kWh or Wh), set under Lastmanagement-Details
-   → Peak Shaving (`POST /api/peakshavingenergyentity/{entity}`)
-3. the grid power of each cycle
+Every change in an evcc file. Check these when merging a new evcc version.
 
-A counter reading that fails, or goes backwards, is replaced by the grid power
-for that interval. A counter that stands still is taken as late at first; once
-the grid power says more than 20Wh were drawn over more than 2 minutes, the
-grid power is used for the rest of the window. `peakShavingSource` shows which
-one is in use.
+| File | Change |
+| --- | --- |
+| `core/site.go` | `lm` import; `LoadManagement` (yaml) and `custom` fields; `restoreCustom` in `restoreSettings`; `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter`; `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
+| `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
+| `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
+| `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
+| `core/site/api.go` | embeds `CustomAPI` |
+| `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`; two `lp.lmm().Peek*` probes; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor`, the phase timers take `phaseScaleDelay` |
+| `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split per phase count (as in evcc PR 32505), min/max power use it |
+| `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui |
+| `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
+| `charger/switchsocket.go` | `RatedPower` config field |
+| `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
+| `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
+| `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged |
+| `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
+| `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
+| `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
+| `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
+| `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown |
+| `assets/js/components/Config/TariffCard.vue`, `TariffModal.vue` | EEG counter in the EEG card, price templates for `feedInEeg`, planner price hint |
+| `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
+| `assets/js/types/evcc.ts` | `State`/`ConfigLoadpoint` extend the types in `evcc-lm.ts`; `feedInEeg` tariff type |
+| `i18n/de.json`, `i18n/en.json` | added texts only |
 
-While the reserve is held, the battery is forced into normal mode and grid
-charging is blocked, since charging from the grid would create the peak.
+## Own files
+
+| Area | Files |
+| --- | --- |
+| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_switch.go`, `core/site_lm_advanced.go`, `core/circuit/circuit_custom.go` |
+| switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `templates/definition/charger/homeassistant-stages.yaml` |
+| phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
+| grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
+| profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
+| forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
+| battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
+| EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go` |
+| optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go` |
+| api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
+| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `FeedInEegSummary`, `PhaseSwitchFields`) |
+| build | `.github/workflows/custom-image.yml` |
+
+## Taking in a new evcc version
+
+1. `git fetch upstream --tags` and merge evcc's **master** into
+   `load-peak-features` (release branches only hold backports already in
+   master). If the newest master does not build, merge the last commit that does.
+2. Resolve conflicts with the touch point table above. Also check whether evcc
+   changed the logic the fork builds on (circuits, battery mode, tariffs,
+   optimizer, phase switching) where nothing conflicts.
+3. Rule 2: look through the new evcc commits for functions equal or similar to
+   the fork's; take evcc's where the result is the same and remove ours.
+4. Run all tests (see below), then the live checks.
+5. Never press GitHub's "Sync fork" on `load-peak-features`: on conflicts it
+   offers "Discard commits".
+
+## Tests
+
+Contract tests pin the evcc behaviour the hooks rely on and that the fork is
+inert while unused: `TestForkInertWhenUnused`, `TestSetLimitUsesLmCircuit`,
+`TestEqualPrioritiesAreUpstream`, `TestPeakReserveKeepsExternalMode`,
+`TestLoadpointUsesSiteLoadManagement`, `TestCurrents1pInertWhenUnused`,
+`TestMergeRoutesKeepsUpstream`, `TestLmSMaxFromUpstream`.
+
+The fork's Go tests live next to the code in `core`, `core/lm`, `core/peak`,
+`core/lm/profile`, `core/circuit`, `core/metrics`, `core/loadpoint`, `charger`
+and `server`. Two optimizer tests only run against a running optimizer:
+`TestLmOptimizerScenarios` (`OPTIMIZER_URI`) solves synthetic days and checks
+soc bounds, import limit, energy balance and goals; `TestLmOptimizerReplay`
+(`OPTIMIZER_REPLAY`, `OPTIMIZER_URI`) replays a recorded request.
