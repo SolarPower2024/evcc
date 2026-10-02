@@ -360,7 +360,11 @@
 							<div class="row mb-4">
 								<FormRow
 									id="loadpointMinCurrent"
-									:label="currentLabel('min')"
+									:label="
+										$t(
+											`config.loadpoint.minCurrent${showCurrent1p ? '3p' : ''}Label`
+										)
+									"
 									class="col-sm-6 mb-sm-0"
 									:warning="minCurrentWarning"
 								>
@@ -381,7 +385,11 @@
 
 								<FormRow
 									id="loadpointMaxCurrent"
-									:label="currentLabel('max')"
+									:label="
+										$t(
+											`config.loadpoint.maxCurrent${showCurrent1p ? '3p' : ''}Label`
+										)
+									"
 									class="col-sm-6 mb-0"
 									:warning="maxCurrentWarning"
 								>
@@ -405,115 +413,7 @@
 							</div>
 
 							<!-- custom: 1p currents and phase delays, see core/loadpoint_phasecurrents.go -->
-							<div
-								v-if="showCurrent1p"
-								class="row mb-4"
-								data-testid="loadpoint-currents-1p"
-							>
-								<FormRow
-									id="loadpointMinCurrent1p"
-									:label="$t('config.loadpoint.minCurrent1pLabel')"
-									class="col-sm-6 mb-sm-0"
-									optional
-								>
-									<div class="d-flex align-items-center gap-2">
-										<PropertyField
-											id="loadpointMinCurrent1p"
-											v-model="values.minCurrent1p"
-											type="Float"
-											unit="A"
-											size="w-50 w-sm-100"
-										/>
-										<span
-											v-if="values.minCurrent1p"
-											class="evcc-gray text-nowrap power-hint"
-										>
-											≈ {{ fmtPhasePower(values.minCurrent1p, 1) }}
-										</span>
-									</div>
-								</FormRow>
-
-								<FormRow
-									id="loadpointMaxCurrent1p"
-									:label="$t('config.loadpoint.maxCurrent1pLabel')"
-									class="col-sm-6 mb-0"
-									:warning="maxCurrent1pWarning"
-									optional
-								>
-									<div class="d-flex align-items-center gap-2">
-										<PropertyField
-											id="loadpointMaxCurrent1p"
-											v-model="values.maxCurrent1p"
-											type="Float"
-											unit="A"
-											size="w-50 w-sm-100"
-										/>
-										<span
-											v-if="values.maxCurrent1p"
-											class="evcc-gray text-nowrap power-hint"
-										>
-											≈ {{ fmtPhasePower(values.maxCurrent1p, 1) }}
-										</span>
-									</div>
-								</FormRow>
-								<div class="col-12 form-text evcc-gray hyphenate">
-									{{ $t("config.loadpoint.current1pHelp") }}
-								</div>
-							</div>
-
-							<div
-								v-if="showCurrent1p"
-								class="row mb-4"
-								data-testid="loadpoint-phase-delays"
-							>
-								<FormRow
-									id="loadpointPhaseScale3pDelay"
-									:label="$t('config.loadpoint.phaseScale3pDelayLabel')"
-									class="col-sm-6 mb-sm-0"
-									optional
-								>
-									<PropertyField
-										id="loadpointPhaseScale3pDelay"
-										v-model="values.phaseScale3pDelay"
-										type="Duration"
-										legacy-duration
-										unit="minute"
-										size="w-50 w-sm-100"
-									/>
-								</FormRow>
-
-								<FormRow
-									id="loadpointPhaseScale1pDelay"
-									:label="$t('config.loadpoint.phaseScale1pDelayLabel')"
-									class="col-sm-6 mb-0"
-									optional
-								>
-									<PropertyField
-										id="loadpointPhaseScale1pDelay"
-										v-model="values.phaseScale1pDelay"
-										type="Duration"
-										legacy-duration
-										unit="minute"
-										size="w-50 w-sm-100"
-									/>
-								</FormRow>
-								<div class="col-12 form-text evcc-gray hyphenate">
-									{{
-										$t("config.loadpoint.phaseDelayHelp", {
-											enableDelay: fmtDurationNs(
-												values.thresholds.enable.delay,
-												true,
-												"m"
-											),
-											disableDelay: fmtDurationNs(
-												values.thresholds.disable.delay,
-												true,
-												"m"
-											),
-										})
-									}}
-								</div>
-							</div>
+							<PhaseSwitchFields v-if="showCurrent1p" :values="values" />
 						</template>
 
 						<div v-if="showCircuit">
@@ -751,6 +651,7 @@ import DeviceRefBox from "./DeviceRefBox.vue";
 import NewDeviceButton from "./NewDeviceButton.vue";
 import InvalidReferenceAlert from "./InvalidReferenceAlert.vue";
 import CreateFlowStatus from "./CreateFlowStatus.vue";
+import PhaseSwitchFields, { emptyUnsetPhaseSwitch } from "./PhaseSwitchFields.vue"; // custom
 import { handleError, customChargerName, createDeviceUtils } from "./DeviceModal";
 import { getModal, openModal, replaceModal, closeModal } from "@/configModal";
 import {
@@ -811,6 +712,7 @@ export default {
 		NewDeviceButton,
 		InvalidReferenceAlert,
 		CreateFlowStatus,
+		PhaseSwitchFields,
 	},
 	mixins: [formatter],
 	props: {
@@ -943,12 +845,6 @@ export default {
 		showCurrent1p() {
 			return this.chargerSupports1p3p && !this.chargerIsSwitchDevice;
 		},
-		maxCurrent1pWarning() {
-			const { minCurrent, minCurrent1p, maxCurrent1p } = this.values;
-			return maxCurrent1p && maxCurrent1p < (minCurrent1p || minCurrent)
-				? this.$t("config.loadpoint.maxCurrent1pHelp")
-				: undefined;
-		},
 		maxCurrentWarning() {
 			return this.values.maxCurrent < this.values.minCurrent
 				? this.$t("config.loadpoint.maxCurrentHelp")
@@ -1066,7 +962,7 @@ export default {
 			try {
 				const res = await api.get(`config/loadpoints/${this.id}`);
 				this.values = deepClone(res.data);
-				this.emptyUnsetPhaseSwitch(); // custom: 0 = unset, shown empty
+				emptyUnsetPhaseSwitch(this.values); // custom: 0 = unset, shown empty
 				this.updateSolarMode();
 				this.updatePhases();
 				this.rebaseline();
@@ -1193,26 +1089,6 @@ export default {
 			} else {
 				this.solarMode = "custom";
 			}
-		},
-		// custom: unset phase switching values (0) are shown as empty fields
-		emptyUnsetPhaseSwitch() {
-			const keys = [
-				"minCurrent1p",
-				"maxCurrent1p",
-				"phaseScale3pDelay",
-				"phaseScale1pDelay",
-			] as const;
-			for (const key of keys) {
-				if (!this.values[key]) {
-					this.values[key] = undefined;
-				}
-			}
-		},
-		// custom: the regular range is the 3p one while the 1p fields are shown
-		currentLabel(kind: "min" | "max") {
-			return this.showCurrent1p
-				? this.$t(`config.loadpoint.${kind}Current3pLabel`)
-				: this.$t(`config.loadpoint.${kind}CurrentLabel`);
 		},
 		updatePhases() {
 			const { phasesConfigured } = this.values;

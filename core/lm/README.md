@@ -128,7 +128,7 @@ Keep these in mind when merging a new evcc version:
 | `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes; 1p current limits: `phaseCurrents1p` field, restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` per phase count, the three phase timers take `phaseScaleDelay` |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split into a variant per phase count (as in evcc PR 32505), min/max power use it |
 | `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` embedded in the dynamic config, applied after min/max current, read back for the ui |
-| `assets/js/components/Config/LoadpointModal.vue` | 1p current and phase delay fields, regular range labelled 3-phase while they are shown, unset values shown empty |
+| `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue` (1p currents, phase delays), regular range labelled 3-phase while it is shown, 3p minimum for the power hint |
 | `charger/switchsocket.go` | `RatedPower` config field, stands in for a missing power sensor |
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `core/site/api.go` | embeds `CustomAPI`, one line |
