@@ -32,3 +32,27 @@ func TestNamePatternMatchesUiDevices(t *testing.T) {
 		assert.Equal(t, want, got, path)
 	}
 }
+
+// TestMergeRoutesKeepsUpstream: a custom route colliding with an upstream one by
+// name or by method and path is left out, upstream's stays
+func TestMergeRoutesKeepsUpstream(t *testing.T) {
+	upstream := func(w http.ResponseWriter, r *http.Request) {}
+	routes := map[string]route{
+		"limit": {"POST", "/limit/{value:[0-9]+}", upstream},
+		"state": {"GET", "/state", upstream},
+	}
+
+	left := mergeRoutes(routes, map[string]route{
+		"limit":     {"POST", "/other/{value:[0-9]+}", nil}, // same name
+		"mystate":   {"GET", "/state", nil},                 // same method and path
+		"poststate": {"POST", "/state", nil},                // other method: fine
+		"new":       {"POST", "/new/{value:[0-9]+}", nil},   // fine
+	})
+
+	assert.Equal(t, []string{"limit", "mystate"}, left)
+	assert.Equal(t, "/limit/{value:[0-9]+}", routes["limit"].Pattern)
+	assert.NotNil(t, routes["limit"].HandlerFunc)
+	assert.NotContains(t, routes, "mystate")
+	assert.Contains(t, routes, "poststate")
+	assert.Contains(t, routes, "new")
+}

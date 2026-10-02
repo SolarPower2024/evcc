@@ -136,7 +136,7 @@ Keep these in mind when merging a new evcc version:
 | `assets/js/components/Config/TariffModal.vue` | `feedInEeg` offers the price templates |
 | `core/site_load_predictor.go` | `homeProfileManual` and `homeProfileByWeekday` calls in `homeProfile` |
 | `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` so a forced run arriving during a run is not dropped |
-| `server/http.go` | merges `customSiteRoutes`, one loop |
+| `server/http.go` | `addCustomSiteRoutes`, one call; a route colliding with an evcc route is left out and logged |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
 | `assets/js/views/Config.vue` | load management details section and its modals |
 | `assets/js/views/App.vue` | mounts the load management overview and the peak statistics |
