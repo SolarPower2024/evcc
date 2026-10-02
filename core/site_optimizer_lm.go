@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/api"
-	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/util/config"
 	optimizer "github.com/evcc-io/optimizer/client"
 )
@@ -102,7 +101,7 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 			site.applyLmBatteryInputs(&b.cfg, req, peakOn, limit, reserve)
 
 			if lmActive && site.lmBatteryCircuit() != nil {
-				b.cfg.CPriority = optimizerPriority(lm.Priority(site.lmBattery()))
+				b.cfg.CPriority = optimizerPriority(site.lmm().Priority(site.lmBattery()))
 			}
 
 		case batteryTypeLoadpoint, batteryTypeVehicle:
@@ -119,7 +118,7 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 				b.cfg.CMax = float32(power)
 			}
 
-			b.cfg.CPriority = optimizerPriority(lm.Priority(lp))
+			b.cfg.CPriority = optimizerPriority(site.lmm().Priority(lp))
 		}
 	}
 }

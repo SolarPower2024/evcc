@@ -40,63 +40,57 @@ type Event struct {
 // maxEvents is how many events the log keeps
 const maxEvents = 20
 
-var (
+// status is the Manager's record for the overview
+type status struct {
 	statusMu  sync.Mutex
-	decisions = make(map[Load]Decision)
+	decisions map[Load]Decision
 	events    []Event
-)
+}
 
 // Record keeps a load's request and what it was allowed. It returns whether the
 // load just became throttled: running, but allowed less than it asked for.
-func Record(l Load, requested, allowed float64, running bool, now time.Time) (throttledNow bool) {
-	statusMu.Lock()
-	defer statusMu.Unlock()
+func (m *Manager) Record(l Load, requested, allowed float64, running bool, now time.Time) (throttledNow bool) {
+	m.statusMu.Lock()
+	defer m.statusMu.Unlock()
 
 	// a few watts are rounding, not throttling
 	throttled := running && requested > 0 && allowed < requested-50
 
-	prev := decisions[l]
-	decisions[l] = Decision{Requested: requested, Allowed: allowed, Throttled: throttled, At: now}
+	prev := m.decisions[l]
+	m.decisions[l] = Decision{Requested: requested, Allowed: allowed, Throttled: throttled, At: now}
 
 	return throttled && !prev.Throttled
 }
 
 // LastDecision returns a load's last recorded request
-func LastDecision(l Load) (Decision, bool) {
-	statusMu.Lock()
-	defer statusMu.Unlock()
+func (m *Manager) LastDecision(l Load) (Decision, bool) {
+	m.statusMu.Lock()
+	defer m.statusMu.Unlock()
 
-	d, ok := decisions[l]
+	d, ok := m.decisions[l]
 	return d, ok
 }
 
 // AddEvent adds an event to the log, dropping the oldest beyond maxEvents
-func AddEvent(e Event) {
-	statusMu.Lock()
-	defer statusMu.Unlock()
+func (m *Manager) AddEvent(e Event) {
+	m.statusMu.Lock()
+	defer m.statusMu.Unlock()
 
-	events = append(events, e)
-	if len(events) > maxEvents {
-		events = events[len(events)-maxEvents:]
+	m.events = append(m.events, e)
+	if len(m.events) > maxEvents {
+		m.events = m.events[len(m.events)-maxEvents:]
 	}
 }
 
 // Events returns the log, newest first
-func Events() []Event {
-	statusMu.Lock()
-	defer statusMu.Unlock()
+func (m *Manager) Events() []Event {
+	m.statusMu.Lock()
+	defer m.statusMu.Unlock()
 
-	res := make([]Event, len(events))
-	for i, e := range events {
-		res[len(events)-1-i] = e
+	res := make([]Event, len(m.events))
+	for i, e := range m.events {
+		res[len(m.events)-1-i] = e
 	}
 
 	return res
-}
-
-func resetStatus() {
-	statusMu.Lock()
-	defer statusMu.Unlock()
-	clear(decisions)
-	events = nil
 }

@@ -39,7 +39,7 @@ func (site *Site) restoreLmGuard() {
 		s.mu.Unlock()
 	}
 
-	lm.SetGuardLookup(site.lmGuardLookup)
+	site.lmm().SetGuardLookup(site.lmGuardLookup)
 
 	site.publishLmGuard()
 }

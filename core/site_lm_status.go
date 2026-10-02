@@ -52,7 +52,7 @@ func (site *Site) publishLmStatus(gridCharge bool) {
 	site.publishLmPriorities()
 
 	now := time.Now()
-	res := lmStatus{Loads: make([]lmLoadStatus, 0), Events: lm.Events()}
+	res := lmStatus{Loads: make([]lmLoadStatus, 0), Events: site.lmm().Events()}
 
 	if site.lmBatteryCircuit() != nil {
 		res.Loads = append(res.Loads, site.lmBatteryStatus(now, gridCharge))
@@ -75,11 +75,11 @@ func (site *Site) publishLmStatus(gridCharge bool) {
 		st := lmLoadStatus{
 			Name:      name,
 			Title:     lp.GetTitle(),
-			Priority:  lm.Priority(lp),
+			Priority:  site.lmm().Priority(lp),
 			Protected: protected,
 			Power:     lp.GetChargePower(),
 		}
-		st.State, st.Requested, st.Allowed, st.Until = lmLoadpointState(lp, st.Power, now)
+		st.State, st.Requested, st.Allowed, st.Until = lmLoadpointState(site.lmm(), lp, st.Power, now)
 
 		res.Loads = append(res.Loads, st)
 	}
@@ -88,13 +88,13 @@ func (site *Site) publishLmStatus(gridCharge bool) {
 }
 
 // lmLoadpointState derives what a loadpoint is doing from its last decision
-func lmLoadpointState(lp lm.Load, power float64, now time.Time) (string, float64, float64, *time.Time) {
-	if left := lm.Guarded(lp, now); left > 0 {
+func lmLoadpointState(m *lm.Manager, lp lm.Load, power float64, now time.Time) (string, float64, float64, *time.Time) {
+	if left := m.Guarded(lp, now); left > 0 {
 		until := now.Add(left)
 		return lmStateShed, 0, 0, &until
 	}
 
-	d, ok := lm.LastDecision(lp)
+	d, ok := m.LastDecision(lp)
 
 	switch {
 	case power > 0 && ok && d.Throttled:
@@ -116,7 +116,7 @@ func (site *Site) lmBatteryStatus(now time.Time, gridCharge bool) lmLoadStatus {
 	st := lmLoadStatus{
 		Name:     lmBatteryName,
 		Battery:  true,
-		Priority: lm.Priority(bat),
+		Priority: site.lmm().Priority(bat),
 		State:    lmStateOff,
 	}
 

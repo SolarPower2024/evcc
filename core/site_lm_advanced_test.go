@@ -11,8 +11,6 @@ import (
 )
 
 func TestLmAdvancedSettings(t *testing.T) {
-	lm.Reset()
-	t.Cleanup(lm.Reset)
 
 	site := &Site{log: util.NewLogger("test")}
 

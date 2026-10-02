@@ -12,11 +12,12 @@ import (
 	"github.com/evcc-io/evcc/api"
 )
 
-var (
+// follow is the Manager's record of loads not following their limit
+type follow struct {
 	followMu     sync.Mutex
 	followLookup func() int
-	following    = make(map[Load]*followState)
-)
+	following    map[Load]*followState
+}
 
 type followState struct {
 	cycles  int // cycles in a row above its limit on an overloaded circuit
@@ -33,10 +34,10 @@ type FollowChange struct {
 
 // SetFollowCycles installs the lookup returning after how many cycles a load
 // not following its limit is no longer counted on, 0 = never
-func SetFollowCycles(f func() int) {
-	followMu.Lock()
-	defer followMu.Unlock()
-	followLookup = f
+func (m *Manager) SetFollowCycles(f func() int) {
+	m.followMu.Lock()
+	defer m.followMu.Unlock()
+	m.followLookup = f
 }
 
 // followTolerance is what a load may draw above its limit without counting as
@@ -59,11 +60,11 @@ func overloaded(c api.Circuit) bool {
 }
 
 // ignored reports whether l is no longer counted on to give way
-func ignored(l Load) bool {
-	followMu.Lock()
-	defer followMu.Unlock()
+func (m *Manager) ignored(l Load) bool {
+	m.followMu.Lock()
+	defer m.followMu.Unlock()
 
-	s, ok := following[l]
+	s, ok := m.following[l]
 	return ok && s.ignored
 }
 
@@ -71,10 +72,10 @@ func ignored(l Load) bool {
 // Called once per cycle, it returns the loads whose state changed. A load counts
 // a cycle while it draws more than allowed and its circuit is overloaded; it is
 // counted on again as soon as it draws what it was allowed.
-func CheckFollowing() []FollowChange {
-	followMu.Lock()
-	f := followLookup
-	followMu.Unlock()
+func (m *Manager) CheckFollowing() []FollowChange {
+	m.followMu.Lock()
+	f := m.followLookup
+	m.followMu.Unlock()
 
 	n := 0
 	if f != nil {
@@ -90,8 +91,8 @@ func CheckFollowing() []FollowChange {
 	}
 
 	var samples []sample
-	for _, e := range snapshot() {
-		d, ok := LastDecision(e.load)
+	for _, e := range m.snapshot() {
+		d, ok := m.LastDecision(e.load)
 		if !ok {
 			continue
 		}
@@ -101,8 +102,8 @@ func CheckFollowing() []FollowChange {
 		samples = append(samples, sample{e.load, power, d.Allowed, over, over && overloaded(e.circuit)})
 	}
 
-	followMu.Lock()
-	defer followMu.Unlock()
+	m.followMu.Lock()
+	defer m.followMu.Unlock()
 
 	var res []FollowChange
 	seen := make(map[Load]bool, len(samples))
@@ -110,10 +111,10 @@ func CheckFollowing() []FollowChange {
 	for _, s := range samples {
 		seen[s.load] = true
 
-		st, ok := following[s.load]
+		st, ok := m.following[s.load]
 		if !ok {
 			st = new(followState)
-			following[s.load] = st
+			m.following[s.load] = st
 		}
 
 		switch {
@@ -142,18 +143,11 @@ func CheckFollowing() []FollowChange {
 		}
 	}
 
-	for l := range following {
+	for l := range m.following {
 		if !seen[l] {
-			delete(following, l)
+			delete(m.following, l)
 		}
 	}
 
 	return res
-}
-
-func resetFollowing() {
-	followMu.Lock()
-	defer followMu.Unlock()
-	clear(following)
-	followLookup = nil
 }

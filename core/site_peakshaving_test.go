@@ -275,8 +275,6 @@ func TestPeakAllowed(t *testing.T) {
 // peakWindowSite returns a site with a mock clock at the given minute of a window
 func peakWindowSite(t *testing.T, minute int) (*Site, *clock.Mock) {
 	t.Helper()
-	lm.Reset()
-	t.Cleanup(lm.Reset)
 
 	clk := clock.NewMock()
 	clk.Set(time.Date(2026, 9, 25, 10, minute, 0, 0, time.UTC))

@@ -16,7 +16,6 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/coordinator"
 	"github.com/evcc-io/evcc/core/keys"
-	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/planner"
@@ -119,7 +118,7 @@ type Loadpoint struct {
 	priority                 int      // Priority
 	minCurrent               float64  // PV mode: start current	Min+PV mode: min current
 	maxCurrent               float64  // Max allowed current. Physically ensured by the charger
-	phaseSwitchSettings               // custom: 1p currents and phase delays, see core/loadpoint_phasecurrents.go
+	loadpointCustom                   // custom: see core/loadpoint_lm.go
 	phasesConfigured         int      // Charger configured phase mode 0/1/3
 	limitSoc                 int      // Session limit for soc
 	limitEnergy              float64  // Session limit for energy
@@ -1466,7 +1465,7 @@ func (lp *Loadpoint) circuitAllowsPhases(phases int, minCurrent float64) bool {
 
 	minPower := currentToPower(minCurrent, phases)
 	// custom: probe only, must not be recorded as demand
-	powerLimit := lm.PeekPower(lp, lp.circuit, lp.chargePower, minPower)
+	powerLimit := lp.lmm().PeekPower(lp, lp.circuit, lp.chargePower, minPower)
 	if powerLimit < minPower {
 		lp.log.DEBUG.Printf("available circuit power %.0fW < %.0fW min %dp power", powerLimit, minPower, phases)
 		return false
@@ -1621,7 +1620,7 @@ func (lp *Loadpoint) pvScalePhases(sitePower, minCurrent, maxCurrent float64, ma
 	// load management may cap the 1p current far below the theoretical maximum
 	if lp.circuit != nil {
 		// custom: probe only, must not be recorded as demand
-		maxCurrent = lm.PeekCurrent(lp, lp.circuit, lp.actualMaxChargeCurrent(), maxCurrent)
+		maxCurrent = lp.lmm().PeekCurrent(lp, lp.circuit, lp.actualMaxChargeCurrent(), maxCurrent)
 	}
 
 	maxPhases := lp.MaxActivePhases()

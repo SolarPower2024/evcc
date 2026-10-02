@@ -106,26 +106,44 @@ type record struct {
 	updated time.Time
 }
 
-var (
+// Manager is the load management of one site: the loads' unserved demand, the
+// shed guard, the overview's status and which loads follow their limit. The
+// site owns it, its loadpoints reach it through the site.
+type Manager struct {
 	mu      sync.Mutex
-	reg     = make(map[Load]*record)
-	timeout = DefaultTimeout
+	reg     map[Load]*record
+	timeout time.Duration
 	lookup  func(Load) (int, bool)
-)
+
+	guard
+	status
+	follow
+}
+
+// New returns an empty load management
+func New() *Manager {
+	return &Manager{
+		reg:     make(map[Load]*record),
+		timeout: DefaultTimeout,
+		guard:   guard{shedAt: make(map[Load]time.Time)},
+		status:  status{decisions: make(map[Load]Decision)},
+		follow:  follow{following: make(map[Load]*followState)},
+	}
+}
 
 // SetPriorityLookup installs a lookup whose answer takes precedence over a
 // load's own LmPriority. The site uses it for the priorities set in the ui.
-func SetPriorityLookup(f func(Load) (int, bool)) {
-	mu.Lock()
-	defer mu.Unlock()
-	lookup = f
+func (m *Manager) SetPriorityLookup(f func(Load) (int, bool)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.lookup = f
 }
 
 // Priority returns the effective shed priority of a load
-func Priority(l Load) int {
-	mu.Lock()
-	f := lookup
-	mu.Unlock()
+func (m *Manager) Priority(l Load) int {
+	m.mu.Lock()
+	f := m.lookup
+	m.mu.Unlock()
 
 	// called without holding mu, the lookup may take locks of its own
 	if f != nil {
@@ -138,35 +156,23 @@ func Priority(l Load) int {
 }
 
 // SetTimeout sets how long an unserved demand keeps reserving headroom
-func SetTimeout(d time.Duration) {
-	mu.Lock()
-	defer mu.Unlock()
+func (m *Manager) SetTimeout(d time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	if d <= 0 {
 		d = DefaultTimeout
 	}
-	timeout = d
+	m.timeout = d
 }
 
 // Forget drops a load's unserved demand. For a load that stops asking for power
 // without passing through ValidatePower again, whose reservation would otherwise
 // keep lower priority loads throttled until it expires.
-func Forget(l Load) {
-	mu.Lock()
-	defer mu.Unlock()
-	delete(reg, l)
-}
-
-// Reset drops all recorded demand, shed guards and status. Intended for tests.
-func Reset() {
-	mu.Lock()
-	clear(reg)
-	lookup = nil
-	mu.Unlock()
-
-	resetGuard()
-	resetStatus()
-	resetFollowing()
+func (m *Manager) Forget(l Load) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.reg, l)
 }
 
 // competes reports whether loads on the two circuits draw through a shared
@@ -185,23 +191,23 @@ func competes(a, b api.Circuit) bool {
 
 // remember stores a load's unserved demand. A nil power or current leaves the
 // respective value untouched, as the two are recorded by separate calls.
-func remember(c api.Circuit, l Load, prio int, power, current *float64) {
-	mu.Lock()
-	defer mu.Unlock()
+func (m *Manager) remember(c api.Circuit, l Load, prio int, power, current *float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	now := time.Now()
 
 	// drop demand of loads that stopped reporting
-	for k, v := range reg {
-		if now.Sub(v.updated) > timeout {
-			delete(reg, k)
+	for k, v := range m.reg {
+		if now.Sub(v.updated) > m.timeout {
+			delete(m.reg, k)
 		}
 	}
 
-	r, ok := reg[l]
+	r, ok := m.reg[l]
 	if !ok {
 		r = new(record)
-		reg[l] = r
+		m.reg[l] = r
 	}
 
 	r.circuit = c
@@ -224,15 +230,15 @@ type entry struct {
 
 // snapshot returns the live records. Taken under the lock so that the loads'
 // own methods can be called afterwards without holding it.
-func snapshot() []entry {
-	mu.Lock()
-	defer mu.Unlock()
+func (m *Manager) snapshot() []entry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	now := time.Now()
-	res := make([]entry, 0, len(reg))
+	res := make([]entry, 0, len(m.reg))
 
-	for l, r := range reg {
-		if now.Sub(r.updated) <= timeout {
+	for l, r := range m.reg {
+		if now.Sub(r.updated) <= m.timeout {
 			res = append(res, entry{l, *r})
 		}
 	}
@@ -243,7 +249,7 @@ func snapshot() []entry {
 // below returns what the loads with a priority below prio draw on circuits
 // competing with c, i.e. what shedding them could free. The calling load's own
 // draw is passed in rather than queried, as it may hold its own lock.
-func below(entries []entry, c api.Circuit, prio int, self Load, selfPower, selfCurrent float64) (float64, float64) {
+func (m *Manager) below(entries []entry, c api.Circuit, prio int, self Load, selfPower, selfCurrent float64) (float64, float64) {
 	var power, current float64
 
 	for _, e := range entries {
@@ -258,7 +264,7 @@ func below(entries []entry, c api.Circuit, prio int, self Load, selfPower, selfC
 		}
 
 		// a load not following its limit would not give way either
-		if ignored(e.load) {
+		if m.ignored(e.load) {
 			continue
 		}
 
@@ -292,8 +298,8 @@ func headroom(c api.Circuit) (float64, float64) {
 // A reservation only counts while it can be met: the free headroom plus what
 // the loads below the reserving one draw has to cover it. Otherwise shedding
 // them would not let it run anyway, and the power would just sit idle.
-func reserved(c api.Circuit, self Load, prio int, selfPower, selfCurrent float64) (float64, float64) {
-	entries := snapshot()
+func (m *Manager) reserved(c api.Circuit, self Load, prio int, selfPower, selfCurrent float64) (float64, float64) {
+	entries := m.snapshot()
 
 	var power, current float64
 
@@ -303,7 +309,7 @@ func reserved(c api.Circuit, self Load, prio int, selfPower, selfCurrent float64
 		}
 
 		freePower, freeCurrent := headroom(e.circuit)
-		lowerPower, lowerCurrent := below(entries, e.circuit, e.prio, self, selfPower, selfCurrent)
+		lowerPower, lowerCurrent := m.below(entries, e.circuit, e.prio, self, selfPower, selfCurrent)
 
 		if e.power > 0 && freePower+lowerPower >= e.power {
 			power += e.power
@@ -318,11 +324,11 @@ func reserved(c api.Circuit, self Load, prio int, selfPower, selfCurrent float64
 
 // Reserved returns the power reserved for loads with a higher priority than the
 // given load. Exposed for logging and diagnostics.
-func Reserved(l Load, c api.Circuit) (float64, float64) {
+func (m *Manager) Reserved(l Load, c api.Circuit) (float64, float64) {
 	if c == nil || l == nil {
 		return 0, 0
 	}
-	return reserved(c, l, Priority(l), l.GetChargePower(), l.GetMaxPhaseCurrent())
+	return m.reserved(c, l, m.Priority(l), l.GetChargePower(), l.GetMaxPhaseCurrent())
 }
 
 // unmet returns what a load has to be left once the circuit capped its request:
@@ -340,48 +346,48 @@ func unmet(old, new, allowed float64) float64 {
 // ValidatePower caps a power request against the circuit while withholding the
 // headroom reserved for higher-priority loads, and records what the circuit
 // denied so that lower-priority loads give way.
-func ValidatePower(l Load, c api.Circuit, old, new float64) float64 {
+func (m *Manager) ValidatePower(l Load, c api.Circuit, old, new float64) float64 {
 	if c == nil {
 		return new
 	}
 
 	capped := c.ValidatePower(old, new)
 	need := unmet(old, new, capped)
-	remember(c, l, Priority(l), &need, nil)
+	m.remember(c, l, m.Priority(l), &need, nil)
 
-	return peekPower(l, c, old, new, &capped)
+	return m.peekPower(l, c, old, new, &capped)
 }
 
 // ValidateCurrent caps a current request against the circuit while withholding
 // the headroom reserved for higher-priority loads, and records what the circuit
 // denied so that lower-priority loads give way.
-func ValidateCurrent(l Load, c api.Circuit, old, new float64) float64 {
+func (m *Manager) ValidateCurrent(l Load, c api.Circuit, old, new float64) float64 {
 	if c == nil {
 		return new
 	}
 
 	capped := c.ValidateCurrent(old, new)
 	need := unmet(old, new, capped)
-	remember(c, l, Priority(l), nil, &need)
+	m.remember(c, l, m.Priority(l), nil, &need)
 
-	return peekCurrent(l, c, old, new, &capped)
+	return m.peekCurrent(l, c, old, new, &capped)
 }
 
 // PeekPower caps a power request like ValidatePower but records no demand.
 // Use it for what-if probes such as phase scaling, where the requested value is
 // a theoretical maximum rather than an actual need.
-func PeekPower(l Load, c api.Circuit, old, new float64) float64 {
+func (m *Manager) PeekPower(l Load, c api.Circuit, old, new float64) float64 {
 	if c == nil {
 		return new
 	}
-	return peekPower(l, c, old, new, nil)
+	return m.peekPower(l, c, old, new, nil)
 }
 
 // peekPower is PeekPower reusing the circuit's answer without a reserve when
 // the caller already has it, so the circuit is not asked (and logs) twice
-func peekPower(l Load, c api.Circuit, old, new float64, capped *float64) float64 {
-	prio := Priority(l)
-	reserve, _ := reserved(c, l, prio, old, 0)
+func (m *Manager) peekPower(l Load, c api.Circuit, old, new float64, capped *float64) float64 {
+	prio := m.Priority(l)
+	reserve, _ := m.reserved(c, l, prio, old, 0)
 
 	// ValidatePower caps at old + (maxPower - circuit power). Lowering old by the
 	// reserve therefore caps at old + (maxPower - circuit power - reserve), which
@@ -398,7 +404,7 @@ func peekPower(l Load, c api.Circuit, old, new float64, capped *float64) float64
 
 	// cutting into what the load draws right now: the loads below it go first
 	if keep := min(old, new); res < keep {
-		lower, _ := below(snapshot(), c, prio, l, old, 0)
+		lower, _ := m.below(m.snapshot(), c, prio, l, old, 0)
 		res = max(res, min(keep, c.ValidatePower(old-reserve+lower, keep)))
 	}
 
@@ -406,17 +412,17 @@ func peekPower(l Load, c api.Circuit, old, new float64, capped *float64) float64
 }
 
 // PeekCurrent caps a current request like ValidateCurrent but records no demand
-func PeekCurrent(l Load, c api.Circuit, old, new float64) float64 {
+func (m *Manager) PeekCurrent(l Load, c api.Circuit, old, new float64) float64 {
 	if c == nil {
 		return new
 	}
-	return peekCurrent(l, c, old, new, nil)
+	return m.peekCurrent(l, c, old, new, nil)
 }
 
 // peekCurrent is PeekCurrent reusing the circuit's answer, see peekPower
-func peekCurrent(l Load, c api.Circuit, old, new float64, capped *float64) float64 {
-	prio := Priority(l)
-	_, reserve := reserved(c, l, prio, 0, old)
+func (m *Manager) peekCurrent(l Load, c api.Circuit, old, new float64, capped *float64) float64 {
+	prio := m.Priority(l)
+	_, reserve := m.reserved(c, l, prio, 0, old)
 
 	var res float64
 	if reserve == 0 && capped != nil {
@@ -427,7 +433,7 @@ func peekCurrent(l Load, c api.Circuit, old, new float64, capped *float64) float
 
 	// cutting into what the load draws right now: the loads below it go first
 	if keep := min(old, new); res < keep {
-		_, lower := below(snapshot(), c, prio, l, 0, old)
+		_, lower := m.below(m.snapshot(), c, prio, l, 0, old)
 		res = max(res, min(keep, c.ValidateCurrent(old-reserve+lower, keep)))
 	}
 

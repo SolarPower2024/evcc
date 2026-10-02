@@ -28,6 +28,7 @@ type simLoad struct {
 
 type sim struct {
 	t     *testing.T
+	lm    *lm.Manager
 	c     api.Circuit
 	meter *gridMeter
 	base  float64
@@ -38,7 +39,6 @@ type sim struct {
 
 func newSim(t *testing.T, base float64) *sim {
 	t.Helper()
-	lm.Reset()
 
 	m := &gridMeter{}
 	c, err := circuit.New(util.NewLogger("test"), "main", 0, 10000, m, 0)
@@ -49,7 +49,7 @@ func newSim(t *testing.T, base float64) *sim {
 	}
 
 	return &sim{
-		t: t, c: c, meter: m, base: base,
+		t: t, lm: lm.New(), c: c, meter: m, base: base,
 		loads: []*simLoad{
 			mk("lp-1", 1, 3680, 1380), // car, lowest
 			mk("lp-2", 2, 3000, 0),
@@ -83,7 +83,7 @@ func (s *sim) cycle() {
 
 	if l.min > 0 {
 		// regulated: takes what it gets down to its minimum
-		allowed := lm.ValidatePower(l, s.c, l.power, l.rated)
+		allowed := s.lm.ValidatePower(l, s.c, l.power, l.rated)
 		if allowed < l.min {
 			allowed = 0
 		}
@@ -92,7 +92,7 @@ func (s *sim) cycle() {
 	}
 
 	// switch: its full power or nothing
-	if allowed := lm.ValidatePower(l, s.c, l.power, l.rated); allowed < l.rated {
+	if allowed := s.lm.ValidatePower(l, s.c, l.power, l.rated); allowed < l.rated {
 		l.power = 0
 	} else {
 		l.power = l.rated

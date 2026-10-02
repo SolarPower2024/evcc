@@ -10,26 +10,27 @@ import (
 	"time"
 )
 
-var (
+// guard is the Manager's shed guard state
+type guard struct {
 	guardMu     sync.Mutex
 	guardLookup func(Load) time.Duration
-	shedAt      = make(map[Load]time.Time)
-)
+	shedAt      map[Load]time.Time
+}
 
 // SetGuardLookup installs the lookup returning how long a load stays off after
 // it was shed, 0 for a load that is not protected
-func SetGuardLookup(f func(Load) time.Duration) {
-	guardMu.Lock()
-	defer guardMu.Unlock()
-	guardLookup = f
+func (m *Manager) SetGuardLookup(f func(Load) time.Duration) {
+	m.guardMu.Lock()
+	defer m.guardMu.Unlock()
+	m.guardLookup = f
 }
 
 // guardDuration is called without holding guardMu, the lookup may take locks of
 // its own
-func guardDuration(l Load) time.Duration {
-	guardMu.Lock()
-	f := guardLookup
-	guardMu.Unlock()
+func (m *Manager) guardDuration(l Load) time.Duration {
+	m.guardMu.Lock()
+	f := m.guardLookup
+	m.guardMu.Unlock()
 
 	if f == nil {
 		return 0
@@ -39,15 +40,15 @@ func guardDuration(l Load) time.Duration {
 
 // Shed records that load management switched l off at now and returns how long
 // it stays off, 0 if it is not protected
-func Shed(l Load, now time.Time) time.Duration {
-	d := guardDuration(l)
+func (m *Manager) Shed(l Load, now time.Time) time.Duration {
+	d := m.guardDuration(l)
 	if d <= 0 {
 		return 0
 	}
 
-	guardMu.Lock()
-	defer guardMu.Unlock()
-	shedAt[l] = now
+	m.guardMu.Lock()
+	defer m.guardMu.Unlock()
+	m.shedAt[l] = now
 
 	return d
 }
@@ -55,29 +56,22 @@ func Shed(l Load, now time.Time) time.Duration {
 // Guarded returns how long l stays off at now, 0 once it may run again. The
 // duration is looked up on every call, so changing it or lifting the protection
 // in the ui applies to a running guard right away.
-func Guarded(l Load, now time.Time) time.Duration {
-	guardMu.Lock()
-	at, ok := shedAt[l]
-	guardMu.Unlock()
+func (m *Manager) Guarded(l Load, now time.Time) time.Duration {
+	m.guardMu.Lock()
+	at, ok := m.shedAt[l]
+	m.guardMu.Unlock()
 
 	if !ok {
 		return 0
 	}
 
-	if left := at.Add(guardDuration(l)).Sub(now); left > 0 {
+	if left := at.Add(m.guardDuration(l)).Sub(now); left > 0 {
 		return left
 	}
 
-	guardMu.Lock()
-	delete(shedAt, l)
-	guardMu.Unlock()
+	m.guardMu.Lock()
+	delete(m.shedAt, l)
+	m.guardMu.Unlock()
 
 	return 0
-}
-
-func resetGuard() {
-	guardMu.Lock()
-	defer guardMu.Unlock()
-	clear(shedAt)
-	guardLookup = nil
 }

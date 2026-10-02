@@ -37,8 +37,9 @@ const (
 
 // lmState is the runtime state of the load management extensions
 type lmState struct {
-	once     sync.Once // defaults
-	warnOnce sync.Once // incomplete battery config warning
+	once     sync.Once   // defaults
+	m        *lm.Manager // the load management of this site
+	warnOnce sync.Once   // incomplete battery config warning
 	mu       sync.Mutex
 
 	socChargeEnabled bool    // soc-based grid charging switch
@@ -113,10 +114,16 @@ func (site *Site) updateCustom(state siteState) {
 // lms returns the load management state, applying defaults on first use
 func (site *Site) lms() *lmState {
 	site.custom.lm.once.Do(func() {
+		site.custom.lm.m = lm.New()
 		site.custom.lm.socChargeStart = defaultSocChargeStart
 		site.custom.lm.socChargeStop = defaultSocChargeStop
 	})
 	return &site.custom.lm
+}
+
+// lmm returns the load management of this site
+func (site *Site) lmm() *lm.Manager {
+	return site.lms().m
 }
 
 // restoreLmSettings restores the persisted load management settings
@@ -151,7 +158,7 @@ func (site *Site) restoreLmSettings() {
 		s.mu.Unlock()
 	}
 
-	lm.SetPriorityLookup(site.lmPriorityLookup)
+	site.lmm().SetPriorityLookup(site.lmPriorityLookup)
 	site.restoreGridChargeOnce()
 	site.unifyLmPriorities()
 
@@ -381,7 +388,7 @@ func (site *Site) batteryCircuitAllows() bool {
 	bat := site.lmBattery()
 
 	// records the battery's unserved demand, so loads below its priority give way
-	allowed := lm.ValidatePower(bat, c, bat.GetChargePower(), want)
+	allowed := site.lmm().ValidatePower(bat, c, bat.GetChargePower(), want)
 	if allowed >= want {
 		return true
 	}
@@ -393,7 +400,7 @@ func (site *Site) batteryCircuitAllows() bool {
 	s.mu.Unlock()
 
 	site.log.DEBUG.Printf("battery grid charge: load management allows %.0fW of %.0fW, holding off for %s", allowed, want, holdOff)
-	lm.AddEvent(lm.Event{At: time.Now(), Type: lm.EventGridChargeDenied, A: allowed, B: want})
+	site.lmm().AddEvent(lm.Event{At: time.Now(), Type: lm.EventGridChargeDenied, A: allowed, B: want})
 
 	return false
 }
@@ -414,7 +421,7 @@ func (site *Site) batteryGridChargeRequested(rate api.Rate) bool {
 	if !socActive && !onceActive && !site.batteryGridChargeActive(rate) || site.peakPausesGridCharge() {
 		// release what the battery had reserved on the circuit, lower priority
 		// loads would otherwise stay throttled until the reservation expires
-		lm.Forget(site.lmBattery())
+		site.lmm().Forget(site.lmBattery())
 		site.writeChargeValue(0)
 		site.recordBatteryLimit(0, 0)
 		return false
@@ -444,7 +451,7 @@ func (site *Site) batteryGridChargeRequested(rate api.Rate) bool {
 // recordBatteryLimit keeps what the battery may grid-charge with, which load
 // management compares with what it draws, see core/lm/follow.go
 func (site *Site) recordBatteryLimit(requested, allowed float64) {
-	lm.Record(site.lmBattery(), requested, allowed, allowed > 0, time.Now())
+	site.lmm().Record(site.lmBattery(), requested, allowed, allowed > 0, time.Now())
 }
 
 // minGridChargePower is the smallest grid charge setpoint worth switching the
@@ -471,7 +478,7 @@ func (site *Site) batteryChargeSetpoint() float64 {
 	// records what the circuit denies, so loads below the battery give way
 	if c := site.lmBatteryCircuit(); c != nil {
 		bat := site.lmBattery()
-		power = min(power, lm.ValidatePower(bat, c, bat.GetChargePower(), power))
+		power = min(power, site.lmm().ValidatePower(bat, c, bat.GetChargePower(), power))
 	}
 
 	power = math.Floor(power)
@@ -723,7 +730,7 @@ func (site *Site) lmPriorities() []lmPriority {
 	if site.lmBatteryCircuit() != nil {
 		res = append(res, lmPriority{
 			Name:     lmBatteryName,
-			Priority: lm.Priority(site.lmBattery()),
+			Priority: site.lmm().Priority(site.lmBattery()),
 			Battery:  true,
 		})
 	}
@@ -737,7 +744,7 @@ func (site *Site) lmPriorities() []lmPriority {
 		res = append(res, lmPriority{
 			Name:     dev.Config().Name,
 			Title:    lp.GetTitle(),
-			Priority: lm.Priority(lp),
+			Priority: site.lmm().Priority(lp),
 		})
 	}
 

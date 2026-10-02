@@ -44,23 +44,23 @@ func TestBatteryNotFollowing(t *testing.T) {
 	sc.withCircuit(9000, heater, 1) // 3000W heater + 6250W battery on 9000W
 	sc.site.peak().limit = 7000     // leaves 3000W for charging at 4000W demand
 
-	heaterAllowed := func() float64 { return lm.ValidatePower(heater, sc.circuit, 3000, 3000) }
+	heaterAllowed := func() float64 { return sc.site.lmm().ValidatePower(heater, sc.circuit, 3000, 3000) }
 
 	for i := range 3 {
-		lm.Record(heater, 3000, heaterAllowed(), true, time.Now())
+		sc.site.lmm().Record(heater, 3000, heaterAllowed(), true, time.Now())
 		assert.Equal(t, 3000.0, heaterAllowed(), "cycle %d: the battery is expected to give way", i+1)
 
 		sc.cycle(15, 10250, -6250)
 		assert.Equal(t, 3000.0, val(sc.charge))
 
-		d, _ := lm.LastDecision(sc.site.lmBattery())
+		d, _ := sc.site.lmm().LastDecision(sc.site.lmBattery())
 		assert.Equal(t, 3000.0, d.Allowed, "the battery's limit is recorded")
 	}
 
 	assert.Equal(t, 2750.0, heaterAllowed(), "no longer counting on the battery")
 
 	var found bool
-	for _, e := range lm.Events() {
+	for _, e := range sc.site.lmm().Events() {
 		found = found || e.Type == lm.EventNotFollowing && e.A == 6250 && e.B == 3000
 	}
 	assert.True(t, found, "event for the overview")

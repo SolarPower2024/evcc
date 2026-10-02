@@ -11,7 +11,6 @@ import (
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/circuit"
-	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
 	"github.com/stretchr/testify/assert"
@@ -63,7 +62,6 @@ type scenario struct {
 // expected grid charge power of 6250 W
 func newScenario(t *testing.T) *scenario {
 	t.Helper()
-	lm.Reset()
 	Voltage = 230
 
 	sc := &scenario{t: t}
@@ -82,8 +80,8 @@ func newScenario(t *testing.T) *scenario {
 	s.chargePower = 6250
 	s.set = func(v float64) error { sc.peak = &v; return nil }
 
-	lm.SetPriorityLookup(site.lmPriorityLookup)
-	lm.SetFollowCycles(site.lmFollowCycles)
+	site.lmm().SetPriorityLookup(site.lmPriorityLookup)
+	site.lmm().SetFollowCycles(site.lmFollowCycles)
 
 	return sc
 }
@@ -301,7 +299,7 @@ func TestScenarioCircuitOnOff(t *testing.T) {
 		assert.False(t, sc.cycle(20, 3000, 0), "hold-off")
 
 		// same priority: the wallbox keeps its power
-		assert.Equal(t, 7000.0, lm.ValidatePower(wallbox, sc.circuit, 7000, 7000))
+		assert.Equal(t, 7000.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 7000, 7000))
 	})
 
 	t.Run("does not fit, battery outranks wallbox", func(t *testing.T) {
@@ -312,7 +310,7 @@ func TestScenarioCircuitOnOff(t *testing.T) {
 		assert.False(t, sc.cycle(20, 3000, 0))
 
 		// the wallbox gives way by what the battery is missing: 1250 W
-		allowed := lm.ValidatePower(wallbox, sc.circuit, 7000, 7000)
+		allowed := sc.site.lmm().ValidatePower(wallbox, sc.circuit, 7000, 7000)
 		assert.Equal(t, 5750.0, allowed)
 		wallbox.power = allowed
 
@@ -323,7 +321,7 @@ func TestScenarioCircuitOnOff(t *testing.T) {
 		// charging stops at the stop soc and the wallbox gets everything back
 		sc.site.battery.Power = 0
 		assert.False(t, sc.cycle(80, 3000, 0))
-		assert.Equal(t, 7000.0, lm.ValidatePower(wallbox, sc.circuit, 5750, 7000))
+		assert.Equal(t, 7000.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 5750, 7000))
 	})
 
 	t.Run("already charging is not re-checked against itself", func(t *testing.T) {

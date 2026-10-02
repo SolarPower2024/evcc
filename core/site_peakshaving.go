@@ -488,7 +488,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 	s.mu.Unlock()
 
 	if started {
-		lm.AddEvent(lm.Event{At: s.clock.Now(), Type: lm.EventPeak, A: state.gridPower + state.battery.Power, B: limit})
+		site.lmm().AddEvent(lm.Event{At: s.clock.Now(), Type: lm.EventPeak, A: state.gridPower + state.battery.Power, B: limit})
 	}
 
 	// published explicitly rather than left for the ui to infer from the value:
@@ -787,7 +787,7 @@ func (site *Site) peakPausesGridCharge() bool {
 	if s.demand > s.limit {
 		if !now.Before(s.chargePause) {
 			site.log.DEBUG.Printf("battery grid charge: paused, demand %.0fW exceeds the %.0fW peak limit", s.demand, s.limit)
-			lm.AddEvent(lm.Event{At: now, Type: lm.EventGridChargePaused, A: s.demand, B: s.limit})
+			site.lmm().AddEvent(lm.Event{At: now, Type: lm.EventGridChargePaused, A: s.demand, B: s.limit})
 		}
 		s.chargePause = now.Add(site.lmHoldOff())
 		return true
