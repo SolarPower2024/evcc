@@ -20,7 +20,6 @@ package core
 // file feeds it and handles the settings, Home Assistant and the battery mode.
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -60,7 +59,7 @@ type peakState struct {
 	reserve     float64 // soc below which the battery is reserved for peaks
 	entity      string  // Home Assistant number entity receiving the setpoint
 	chargePower float64 // assumed grid charge power in W, 0 = derive it
-	circuit     string  // circuit the battery draws from, empty = fall back to yaml
+	circuit     string  // circuit the battery draws from, empty = not managed
 
 	shaving    bool // hysteresis state: below the reserve
 	covering   bool // covering a peak right now, for the event log
@@ -174,38 +173,18 @@ func (site *Site) restorePeakSettings() {
 
 // peakURI returns the Home Assistant endpoint. Running as an add-on, the
 // supervisor provides both the endpoint and the token, so nothing has to be
-// configured; elsewhere the uri has to come from the yaml config.
+// configured.
 func (site *Site) peakURI() (string, error) {
-	if uri := site.LoadManagement.PeakShaving.URI; uri != "" {
-		return uri, nil
-	}
-
 	if os.Getenv(homeassistant.SupervisorToken) != "" {
 		return homeassistant.SupervisorURI, nil
 	}
 
-	return "", errors.New("no Home Assistant connection: running outside the add-on requires site.loadmanagement.peakshaving.uri")
+	return "", errors.New("no Home Assistant connection: only available in the Home Assistant add-on")
 }
 
-// rebuildPeakSetter resolves the output from the configured entity, or from the
-// full plugin config when one is given
+// rebuildPeakSetter resolves the output from the configured entity
 func (site *Site) rebuildPeakSetter() error {
 	s := site.peak()
-
-	// an explicit plugin config wins and is resolved once
-	if cfg := site.LoadManagement.PeakShaving.Set; cfg != nil {
-		set, err := cfg.FloatSetter(context.TODO(), "peakshaving")
-		if err != nil {
-			return fmt.Errorf("output: %w", err)
-		}
-
-		s.mu.Lock()
-		s.set = set
-		s.handedBack = false
-		s.mu.Unlock()
-
-		return nil
-	}
 
 	s.mu.Lock()
 	entity := s.entity
@@ -287,7 +266,7 @@ func (site *Site) haConnection() (*homeassistant.Connection, error) {
 		return nil, err
 	}
 
-	return homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", site.LoadManagement.PeakShaving.Insecure)
+	return homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", false)
 }
 
 // numberSetter returns a setter writing to a Home Assistant number entity
@@ -334,9 +313,6 @@ func (site *Site) peakFreeValue() float64 {
 	if v := site.advanced().FreeValue; v != nil {
 		return *v
 	}
-	if v := site.LoadManagement.PeakShaving.FreeValue; v > 0 {
-		return v
-	}
 	return peak.DefaultFreeValue
 }
 
@@ -360,9 +336,6 @@ func (site *Site) peakCap() float64 {
 func (site *Site) peakHysteresis() float64 {
 	if v := site.advanced().Hysteresis; v != nil {
 		return *v
-	}
-	if v := site.LoadManagement.PeakShaving.Hysteresis; v > 0 {
-		return v
 	}
 	return peak.DefaultHysteresis
 }
@@ -896,7 +869,7 @@ func (site *Site) GetPeakShavingChargePower() float64 {
 }
 
 // SetPeakShavingChargePower sets the assumed grid charge power in W. Zero falls
-// back to the yaml config and then to the battery meters' maxchargepower.
+// back to the battery meters' maxchargepower.
 func (site *Site) SetPeakShavingChargePower(power float64) error {
 	if power < 0 || power > maxPeakLimit {
 		return fmt.Errorf("charge power must be between 0 and %.0fW", maxPeakLimit)
@@ -931,7 +904,7 @@ func (site *Site) GetPeakShavingCircuit() string {
 
 // SetPeakShavingCircuit assigns the battery to a circuit. That link is what
 // makes the battery take part in load management and what the grid charge gate
-// checks against; an empty value falls back to the yaml config.
+// checks against; empty takes it out of load management.
 func (site *Site) SetPeakShavingCircuit(name string) error {
 	if name != "" {
 		if _, err := config.Circuits().ByName(name); err != nil {

@@ -2,8 +2,9 @@
 
 What this fork (SolarPower2024/evcc, branch `load-peak-features`) adds on top
 of evcc. Everything is inert until configured, so an unconfigured installation
-behaves exactly like evcc. Everything is set up in the ui; the few yaml keys
-still read (`site.loadmanagement`) are fallbacks only and not needed.
+behaves exactly like evcc. Everything is set up in the ui, nothing in
+`evcc.yaml`; Home Assistant is reached through the add-on's supervisor
+connection.
 
 Part 1 describes the features, part 2 how the fork is kept maintainable.
 
@@ -379,9 +380,8 @@ execution, prepared separately on top of these inputs.
 ## 17. Advanced settings
 
 *Lastmanagement-Details → Erweitert* (`POST /api/lmadvanced/{name}/{value}`,
-`core/site_lm_advanced.go`). A value set there wins over the yaml fallback,
-which wins over the default; unset values are not stored, so a changed default
-applies.
+`core/site_lm_advanced.go`). A value set there wins over the default; unset
+values are not stored, so a changed default applies.
 
 | Name | Setting | Default | Range |
 | --- | --- | --- | --- |
@@ -425,7 +425,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `lm` import; `LoadManagement` (yaml) and `custom` fields; `restoreCustom` in `restoreSettings`; `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter`; `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
+| `core/site.go` | `custom` field; `restoreCustom` in `restoreSettings`; `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter`; `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |

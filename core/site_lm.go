@@ -207,10 +207,10 @@ func (b *batteryLoad) GetTitle() string {
 	return "battery"
 }
 
-// LmPriority returns the configured shed priority on the same scale as the
-// loadpoints' priority: lower is shed first
+// LmPriority is the battery's priority without one set in the ui: shed first,
+// the value set in the ui comes through lmPriorityLookup
 func (b *batteryLoad) LmPriority() int {
-	return b.site.LoadManagement.Battery.Priority
+	return 0
 }
 
 func (b *batteryLoad) GetCircuit() api.Circuit {
@@ -245,12 +245,7 @@ func (site *Site) lmBattery() *batteryLoad {
 // lmBatteryCircuit returns the circuit the home battery draws from, nil when the
 // battery is not part of load management
 func (site *Site) lmBatteryCircuit() api.Circuit {
-	// the ui setting wins; the yaml key stays for setups configured that way
 	ref := site.GetPeakShavingCircuit()
-	if ref == "" {
-		ref = site.LoadManagement.Battery.CircuitRef
-	}
-
 	if ref == "" {
 		return nil
 	}
@@ -281,9 +276,6 @@ func (site *Site) lmHoldOff() time.Duration {
 	if v := site.advanced().HoldOff; v != nil {
 		return time.Duration(*v) * time.Minute
 	}
-	if d := site.LoadManagement.Battery.HoldOff; d > 0 {
-		return d
-	}
 	return lm.DefaultHoldOff
 }
 
@@ -292,16 +284,12 @@ func (site *Site) lmBatteryPhases() int {
 	if v := site.advanced().Phases; v != nil {
 		return int(*v)
 	}
-	if p := site.LoadManagement.Battery.Phases; p > 0 {
-		return p
-	}
 	return lm.DefaultPhases
 }
 
 // charge power sources, reported to the ui so the assumed value is not invisible
 const (
 	chargePowerSourceSetting = "setting" // entered in the ui
-	chargePowerSourceConfig  = "config"  // loadmanagement.battery.power in yaml
 	chargePowerSourceMeter   = "meter"   // the battery meters' maxchargepower
 	chargePowerSourceUnknown = "unknown" // nothing to go by
 )
@@ -319,10 +307,6 @@ const (
 func (site *Site) lmBatteryChargePower() (float64, string) {
 	if p := site.GetPeakShavingChargePower(); p > 0 {
 		return p, chargePowerSourceSetting
-	}
-
-	if p := site.LoadManagement.Battery.Power; p > 0 {
-		return p, chargePowerSourceConfig
 	}
 
 	var res float64
@@ -706,7 +690,7 @@ func (site *Site) lmLoadName(l lm.Load) string {
 
 // lmPriorityLookup returns the battery's priority set in the ui. Loadpoints use
 // their upstream priority, see site_lm_priority.go; a battery without a ui value
-// keeps the yaml one.
+// has the lowest, 0.
 func (site *Site) lmPriorityLookup(l lm.Load) (int, bool) {
 	name := site.lmLoadName(l)
 	if name != lmBatteryName {

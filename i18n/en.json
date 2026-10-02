@@ -480,7 +480,6 @@
       "setpoint": "Current setpoint:",
       "source": {
         "setting": "entered here",
-        "config": "from evcc.yaml",
         "meter": "from the battery configuration",
         "unknown": "unknown"
       },

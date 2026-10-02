@@ -1,8 +1,7 @@
 package core
 
 // Custom extension: the advanced load management settings, set in the ui under
-// Lastmanagement-Details → Erweitert. Each one overrides its yaml value, which
-// in turn overrides the default. Unset values are not stored, so a default
+// Lastmanagement-Details → Erweitert. Each one overrides the default. Unset values are not stored, so a default
 // changed in a later version still applies.
 
 import (
@@ -137,9 +136,6 @@ func (site *Site) homeForecast() int {
 func (site *Site) lmTimeout() time.Duration {
 	if v := site.advanced().Timeout; v != nil {
 		return time.Duration(*v) * time.Minute
-	}
-	if d := site.LoadManagement.Timeout; d > 0 {
-		return d
 	}
 	return lm.DefaultTimeout
 }
