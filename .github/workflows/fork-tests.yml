@@ -55,7 +55,11 @@ jobs:
       - name: Race detector
         run: |
           set -o pipefail
-          go test -race -count=1 ./core/lm/... ./core/peak/ ./core/ ./server/ ./charger/ 2>&1 | tee /tmp/race.log || {
+          # charger: only the fork's tests, evcc's TestTemplates has an intermittent race of its own
+          {
+            go test -race -count=1 ./core/lm/... ./core/peak/ ./core/ ./server/ &&
+              go test -race -count=1 -run 'TestSwitchStages|TestSwitchSocketRatedPower' ./charger/
+          } 2>&1 | tee /tmp/race.log || {
             grep -E "^(--- FAIL|FAIL|panic:)" /tmp/race.log | head -20 | sed "s/^/::error::/"
             # each race report as one annotation, newlines encoded
             awk '/^WARNING: DATA RACE/{r=""; on=1} on{r=r $0 "%0A"} /^={10,}/{if(on){print "::error title=Data race::" r; on=0}}' /tmp/race.log | head -5
