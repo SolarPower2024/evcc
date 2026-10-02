@@ -78,6 +78,56 @@ func TestSwitchAllOrNothing(t *testing.T) {
 	}
 }
 
+// lmPhaseMeter is a circuit meter with phase currents
+type lmPhaseMeter struct{ current float64 }
+
+func (m *lmPhaseMeter) CurrentPower() (float64, error) { return 3 * Voltage * m.current, nil }
+func (m *lmPhaseMeter) Currents() (float64, float64, float64, error) {
+	return m.current, m.current, m.current, nil
+}
+
+// TestSwitchCurrentLimit: a circuit limited by current only (a fuse) keeps a
+// switch off whose current does not fit, and sheds a running one in an over
+// current, as upstream does for every load
+func TestSwitchCurrentLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		grid     float64 // phase current with the switch off
+		charging float64 // measured switch power, 0 = off
+		wantOn   bool
+	}{
+		// 3 kW on one phase = 13.04 A
+		{"fits next to 2.9 A", 2.9, 0, true},
+		{"does not fit next to 3.1 A", 3.1, 0, false},
+		{"running within the fuse", 2, 3000, true},
+		{"running into an over current", 4, 3000, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lm.Reset()
+			Voltage = 230
+
+			m := &lmPhaseMeter{current: tc.grid + tc.charging/230}
+			c, err := circuit.New(util.NewLogger("test"), "fuse", 16, 0, m, 0)
+			require.NoError(t, err)
+			require.NoError(t, c.Update(nil))
+
+			lp := &Loadpoint{
+				log:        util.NewLogger("lp"),
+				clock:      clock.NewMock(),
+				circuit:    c,
+				charger:    &lmSwitch{rated: 3000},
+				maxCurrent: 16,
+				phases:     1,
+			}
+			lp.chargePower = tc.charging
+			lp.enabled = tc.charging > 0
+
+			got := lp.lmLimit(16)
+			assert.Equal(t, tc.wantOn, got > 0, "limit %.3gA", got)
+		})
+	}
+}
+
 func TestSwitchPowerSources(t *testing.T) {
 	lp, _, _ := newSwitchLoadpoint(t, 0, 0)
 
