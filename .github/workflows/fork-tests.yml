@@ -43,11 +43,28 @@ jobs:
       - name: Vet
         run: go vet ./core/... ./charger/ ./server/
 
+      # failures also as annotations, shown on the run page without the log
       - name: Test
-        run: CGO_ENABLED=0 go test -tags=release ./...
+        run: |
+          set -o pipefail
+          CGO_ENABLED=0 go test -tags=release ./... 2>&1 | tee /tmp/test.log || {
+            grep -E "^(--- FAIL|FAIL|panic:)|_test.go:[0-9]+:" /tmp/test.log | head -30 | sed "s/^/::error::/"
+            exit 1
+          }
 
       - name: Race detector
-        run: go test -race -count=1 ./core/lm/... ./core/peak/ ./core/ ./server/ ./charger/
+        run: |
+          set -o pipefail
+          # charger: only the fork's tests, evcc's TestTemplates has an intermittent race of its own
+          {
+            go test -race -count=1 ./core/lm/... ./core/peak/ ./core/ ./server/ &&
+              go test -race -count=1 -run 'TestSwitchStages|TestSwitchSocketRatedPower' ./charger/
+          } 2>&1 | tee /tmp/race.log || {
+            grep -E "^(--- FAIL|FAIL|panic:)" /tmp/race.log | head -20 | sed "s/^/::error::/"
+            # each race report as one annotation, newlines encoded
+            awk '/^WARNING: DATA RACE/{r=""; on=1} on{r=r $0 "%0A"} /^={10,}/{if(on){print "::error title=Data race::" r; on=0}}' /tmp/race.log | head -5
+            exit 1
+          }
 
   order:
     name: Test order
