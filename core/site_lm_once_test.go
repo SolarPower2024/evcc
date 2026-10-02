@@ -78,6 +78,19 @@ func TestGridChargeOnceByTime(t *testing.T) {
 	assert.False(t, site.batteryGridChargeOnceActive())
 }
 
+// Without a battery (removed after the order) the order ends instead of staying
+// active at soc 0 forever.
+func TestGridChargeOnceWithoutBattery(t *testing.T) {
+	site := onceSite(t, 40)
+	require.NoError(t, site.SetBatteryGridChargeOnce(80, time.Time{}))
+
+	site.batteryMeters = nil
+	site.battery.Soc = 0
+
+	assert.False(t, site.batteryGridChargeOnceActive())
+	assert.Zero(t, site.gridChargeOnce().Target, "cancelled")
+}
+
 // As optimizer input: the target as goal, right away at the earliest step.
 func TestGridChargeOnceOptimizerGoal(t *testing.T) {
 	config.Reset()
