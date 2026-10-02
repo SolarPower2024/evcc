@@ -295,9 +295,6 @@ The load management (peak) circuit, when chosen, rises along: it gets the
 raised limit, never less than its configured value, and its configured value
 back with the next month or when following stops. See `core/site_lm_switch.go`.
 
-Open: revisit once circuits are configured in the ui (evcc PR 33077), which may
-set circuit limits at runtime too.
-
 ## Load management (peak) circuit
 
 Lastmanagement-Details → Erweitert → *Stromkreis Lastmanagement (Peak)*: the

@@ -29,10 +29,9 @@ import (
 type Load interface {
 	GetTitle() string
 
-	// LmPriority is the shed priority, lower is shed first. It is deliberately
-	// separate from the loadpoint priority, which governs pv surplus
-	// distribution: the load that should get surplus first is not necessarily
-	// the one that should keep power when the fuse is the constraint.
+	// LmPriority is the shed priority, lower is shed first. For a loadpoint it
+	// is its regular priority, which also ranks pv surplus; the battery has a
+	// value of its own on the same scale.
 	LmPriority() int
 
 	// what the load draws right now, i.e. what shedding it would free

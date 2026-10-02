@@ -675,7 +675,7 @@ func (site *Site) lmLoadName(l lm.Load) string {
 }
 
 // lmPriorityLookup returns the battery's priority set in the ui. Loadpoints use
-// their upstream priority, see site_lm_planner.go; a battery without a ui value
+// their upstream priority, see site_lm_priority.go; a battery without a ui value
 // keeps the yaml one.
 func (site *Site) lmPriorityLookup(l lm.Load) (int, bool) {
 	name := site.lmLoadName(l)
