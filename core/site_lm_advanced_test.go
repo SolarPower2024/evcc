@@ -12,7 +12,6 @@ import (
 )
 
 func TestLmAdvancedSettings(t *testing.T) {
-
 	site := &Site{log: util.NewLogger("test")}
 
 	// defaults

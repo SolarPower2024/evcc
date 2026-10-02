@@ -37,6 +37,7 @@ func onceSite(t *testing.T, soc float64) *Site {
 
 // Right away: charges until the target, then switches itself off.
 func TestGridChargeOnceRightAway(t *testing.T) {
+	noSettingsDB(t)
 	site := onceSite(t, 40)
 
 	require.Error(t, site.SetBatteryGridChargeOnce(30, time.Time{}), "already above")
@@ -60,6 +61,7 @@ func TestGridChargeOnceRightAway(t *testing.T) {
 // By a time: waits for the cheapest slots, charges right away once the time
 // has passed, and can be cancelled.
 func TestGridChargeOnceByTime(t *testing.T) {
+	noSettingsDB(t)
 	site := onceSite(t, 40)
 
 	// 40% -> 80% of 10 kWh at 5 kW with 90% efficiency takes 53 min: far ahead without a tariff the
@@ -81,6 +83,7 @@ func TestGridChargeOnceByTime(t *testing.T) {
 // Without a battery (removed after the order) the order ends instead of staying
 // active at soc 0 forever.
 func TestGridChargeOnceWithoutBattery(t *testing.T) {
+	noSettingsDB(t)
 	site := onceSite(t, 40)
 	require.NoError(t, site.SetBatteryGridChargeOnce(80, time.Time{}))
 
@@ -93,6 +96,7 @@ func TestGridChargeOnceWithoutBattery(t *testing.T) {
 
 // As optimizer input: the target as goal, right away at the earliest step.
 func TestGridChargeOnceOptimizerGoal(t *testing.T) {
+	noSettingsDB(t)
 	config.Reset()
 	t.Cleanup(config.Reset)
 

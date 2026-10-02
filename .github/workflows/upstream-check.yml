@@ -1,0 +1,120 @@
+# Weekly look at what evcc changed since the fork's last merge. Read only
+# towards evcc: it fetches evcc's master, merges it inside the runner (nothing
+# is pushed anywhere), runs the tests and reports in one issue of this
+# repository. The report carries no issue numbers or mentions, so nothing
+# links back to evcc's repository.
+name: evcc update check
+
+on:
+  schedule:
+    - cron: "0 5 * * 1" # Mondays 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: load-peak-features
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Fetch evcc
+        run: |
+          git remote add upstream https://github.com/evcc-io/evcc.git
+          git remote set-url --push upstream DISABLED-never-push-to-evcc
+          git fetch --no-tags upstream master
+
+      - name: Merge in the runner
+        id: merge
+        run: |
+          git config user.name "update check"
+          git config user.email "update-check@localhost"
+          base=$(git merge-base HEAD upstream/master)
+          echo "count=$(git rev-list --count HEAD..upstream/master)" >>"$GITHUB_OUTPUT"
+
+          # evcc files the fork changes, and which of them evcc changed since
+          git diff --name-only --diff-filter=M "$base" HEAD >/tmp/fork-touched.txt
+          git diff --name-only "$base" upstream/master >/tmp/evcc-changed.txt
+          grep -Fxf /tmp/fork-touched.txt /tmp/evcc-changed.txt >/tmp/touched-changed.txt || true
+
+          # subjects without issue numbers, mentions or links
+          git log --format='- %s' HEAD..upstream/master \
+            | sed -E 's/ ?\(?#[0-9]+\)?//g; s/@/(at)/g; s#https?://[^ ]*##g' >/tmp/subjects.txt
+
+          if git merge --no-edit --no-ff upstream/master >/tmp/merge.log 2>&1; then
+            echo "conflicts=" >>"$GITHUB_OUTPUT"
+          else
+            echo "conflicts=$(git diff --name-only --diff-filter=U | tr '\n' ' ')" >>"$GITHUB_OUTPUT"
+            git merge --abort
+          fi
+
+      - name: Test the merge
+        id: test
+        if: steps.merge.outputs.conflicts == '' && steps.merge.outputs.count != '0'
+        run: |
+          mkdir -p dist && touch dist/empty
+          if go build ./... >/tmp/test.log 2>&1 && CGO_ENABLED=0 go test -tags=release ./... >>/tmp/test.log 2>&1; then
+            echo "result=grün" >>"$GITHUB_OUTPUT"
+          else
+            echo "result=rot" >>"$GITHUB_OUTPUT"
+            grep -E '^(FAIL|---|ok )|cannot|undefined' /tmp/test.log | grep -v '^ok ' | head -40 >/tmp/failures.txt
+          fi
+
+      - name: Report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # this repository only: with evcc fetched as a second remote gh must not guess
+          GH_REPO: ${{ github.repository }}
+          COUNT: ${{ steps.merge.outputs.count }}
+          CONFLICTS: ${{ steps.merge.outputs.conflicts }}
+          RESULT: ${{ steps.test.outputs.result }}
+        run: |
+          title="evcc-Update-Check"
+          {
+            echo "Stand $(date -u '+%Y-%m-%d %H:%M') UTC, automatisch erstellt."
+            echo
+            echo "**Neue evcc-Commits seit dem letzten Merge:** $COUNT"
+            if [ "$COUNT" = "0" ]; then
+              echo
+              echo "Nichts zu tun."
+            else
+              echo
+              if [ -n "$CONFLICTS" ]; then
+                echo "**Merge-Konflikte:** $CONFLICTS"
+              else
+                echo "**Merge-Konflikte:** keine"
+                echo
+                echo "**Tests nach dem Merge:** $RESULT"
+                [ -s /tmp/failures.txt ] && { echo; echo '```'; cat /tmp/failures.txt; echo '```'; }
+              fi
+              echo
+              echo "**Von evcc geänderte Dateien, in denen der Fork Hooks hat:**"
+              if [ -s /tmp/touched-changed.txt ]; then sed 's/^/- /' /tmp/touched-changed.txt; else echo "keine"; fi
+              echo
+              echo "<details><summary>Commits</summary>"
+              echo
+              head -200 /tmp/subjects.txt
+              echo
+              echo "</details>"
+            fi
+          } >/tmp/body.md
+
+          number=$(gh issue list --state open --search "in:title $title" --json number,title \
+            --jq ".[] | select(.title == \"$title\") | .number" | head -1)
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body-file /tmp/body.md
+          else
+            gh issue create --title "$title" --body-file /tmp/body.md
+          fi

@@ -15,7 +15,6 @@ import (
 // charge decision is upstream's price limit, the battery mode upstream's, and
 // nothing is written anywhere.
 func TestForkInertWhenUnused(t *testing.T) {
-
 	bat := &scenarioBattery{}
 	site := &Site{
 		log:           util.NewLogger("test"),

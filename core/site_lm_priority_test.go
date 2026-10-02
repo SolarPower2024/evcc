@@ -24,6 +24,7 @@ func addTestLoadpoint(t *testing.T, name string, prio int) *Loadpoint {
 // The loadpoints' load management priorities are taken over into their upstream
 // priority once; the battery keeps its own value.
 func TestUnifyLmPriorities(t *testing.T) {
+	noSettingsDB(t)
 	config.Reset()
 	t.Cleanup(config.Reset)
 	settings.SetBool(keys.LmPrioritiesUnified, false)

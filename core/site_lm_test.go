@@ -14,6 +14,7 @@ import (
 // TestSocChargeRunningSurvivesRestart verifies that soc-based grid charging
 // interrupted by a restart carries on instead of waiting for the start soc again
 func TestSocChargeRunningSurvivesRestart(t *testing.T) {
+	noSettingsDB(t)
 	defer settings.SetBool(keys.BatterySocGridChargeRunning, false)
 
 	before := &Site{log: util.NewLogger("test")}
@@ -37,6 +38,7 @@ func TestSocChargeRunningSurvivesRestart(t *testing.T) {
 // at 6250W although it was given 3000W: the heater above it keeps its power at
 // first and is cut once the battery was ignored for the set cycles
 func TestBatteryNotFollowing(t *testing.T) {
+	noSettingsDB(t)
 	sc := newScenario(t)
 	sc.withDynamicCharge()
 

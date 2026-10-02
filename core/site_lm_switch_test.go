@@ -16,6 +16,7 @@ import (
 )
 
 func TestCircuitLimitWanted(t *testing.T) {
+	noSettingsDB(t)
 	assert.Equal(t, 10000.0, circuitLimitWanted(10000, false, false, 0), "as configured")
 	assert.Equal(t, 0.0, circuitLimitWanted(10000, true, true, 11300), "off: lifted")
 	assert.Equal(t, 11300.0, circuitLimitWanted(10000, false, true, 11300), "follows the peak")
@@ -26,6 +27,7 @@ func TestCircuitLimitWanted(t *testing.T) {
 // limits; follow the peak raises the chosen circuit; both return to the
 // configured values.
 func TestLmSwitchAndFollowCircuit(t *testing.T) {
+	noSettingsDB(t)
 	config.Reset()
 	t.Cleanup(config.Reset)
 	t.Cleanup(func() { _ = settings.Delete(keys.LmCircuit) })
@@ -107,12 +109,15 @@ func TestLmSwitchAndFollowCircuit(t *testing.T) {
 // The circuit chosen for follow the peak in lm3/lm4 becomes the load
 // management circuit.
 func TestLmCircuitTakenOver(t *testing.T) {
+	noSettingsDB(t)
 	config.Reset()
 	t.Cleanup(config.Reset)
-	t.Cleanup(func() {
+	clean := func() {
 		_ = settings.Delete(keys.LmCircuit)
 		_ = settings.Delete(keys.PeakFollowCircuit)
-	})
+	}
+	clean() // the takeover only runs without a load management circuit stored
+	t.Cleanup(clean)
 
 	log := util.NewLogger("test")
 	main, err := circuit.New(log, "peak", 0, 10000, nil, 0)

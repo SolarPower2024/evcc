@@ -33,6 +33,7 @@ func profileCsv(sep string, cols []string, rows int, value func(col, row int) st
 }
 
 func TestParseHomeLoadProfile(t *testing.T) {
+	noSettingsDB(t)
 	var cols []string
 	for m := 1; m <= 12; m++ {
 		cols = append(cols, fmt.Sprintf("%02d-werktag", m), fmt.Sprintf("%02d-wochenende", m))
@@ -114,6 +115,7 @@ func flatProfile(watts func(month, dt, slot int) float64) *homeLoadProfile {
 }
 
 func TestHomeLoadProfileAt(t *testing.T) {
+	noSettingsDB(t)
 	p := flatProfile(func(m, dt, i int) float64 { return float64((m + 1) * 100) })
 
 	// june has 30 days: its value applies at the middle, the 16th 00:00
@@ -138,6 +140,7 @@ func history(start time.Time, days int, watts func(t time.Time) float64) []metri
 }
 
 func TestHomeManualForecast(t *testing.T) {
+	noSettingsDB(t)
 	// a monday noon in mid june
 	start := time.Date(2026, 6, 15, 12, 0, 0, 0, time.Local)
 
@@ -246,6 +249,7 @@ func TestHomeManualForecast(t *testing.T) {
 }
 
 func TestHomeDayComplete(t *testing.T) {
+	noSettingsDB(t)
 	var d homeDay
 	for i := range 96 {
 		if i >= 8 && i < 11 { // three missing slots
@@ -277,6 +281,7 @@ func TestHomeDayComplete(t *testing.T) {
 }
 
 func TestHomeForecastSetting(t *testing.T) {
+	noSettingsDB(t)
 	site := &Site{log: util.NewLogger("test")}
 	assert.Equal(t, homeForecastEvcc, site.homeForecast())
 
@@ -297,6 +302,7 @@ func TestHomeForecastSetting(t *testing.T) {
 }
 
 func TestHomeProfileManualFallback(t *testing.T) {
+	noSettingsDB(t)
 	t.Cleanup(func() { _ = settings.Delete(keys.LmHomeProfile) })
 	col := seedHome(t, 28, func(time.Weekday) float64 { return 1 })
 
