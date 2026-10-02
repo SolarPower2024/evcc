@@ -17,6 +17,7 @@ import (
 func seedHome(t *testing.T, days int, kwh func(time.Weekday) float64) *metrics.Collector {
 	t.Helper()
 	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	t.Cleanup(func() { db.Instance = nil }) // later tests must not write into this database
 	require.NoError(t, metrics.SetupSchema())
 
 	col, err := metrics.NewCollector(metrics.Home, metrics.Home, "")

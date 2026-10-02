@@ -16,6 +16,7 @@ func bp(v bool) *bool       { return &v }
 // TestApplyLmProfile: switching from a summer to a winter profile raises all
 // three battery usage values, which evcc's setters would refuse one by one
 func TestApplyLmProfile(t *testing.T) {
+	noSettingsDB(t)
 	sc := newScenario(t)
 	site := sc.site
 	settings.SetJson(keys.LmProfiles, []profile.Profile{})
