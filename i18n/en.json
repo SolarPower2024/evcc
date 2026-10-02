@@ -1265,11 +1265,11 @@
       "option": {
         "co2": "Add CO₂ forecast",
         "feedIn": "Add grid export tariff",
+        "feedInEeg": "Add EEG export tariff",
         "grid": "Add grid import tariff",
         "planner": "Add planner forecast",
         "solar": "Add solar forecast",
-        "temperature": "Add temperature forecast",
-        "feedInEeg": "Add EEG export tariff"
+        "temperature": "Add temperature forecast"
       },
       "planner": {
         "description": "Advanced setting. Usually not needed as dynamic electricity tariffs or CO₂ forecasts are used automatically. Enables an additional data source that's only used for charge planning, not for statistics and price calculations.",
@@ -1294,11 +1294,11 @@
       "type": {
         "co2": "CO₂ Intensity",
         "feedIn": "Grid Export Price",
+        "feedInEeg": "Grid export tariff EEG",
         "grid": "Grid Import Price",
         "planner": "Planner",
         "solar": "Solar",
-        "temperature": "Temperature Forecast",
-        "feedInEeg": "Grid export tariff EEG"
+        "temperature": "Temperature Forecast"
       },
       "zones": {
         "add": "Add zone",

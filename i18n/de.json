@@ -1265,11 +1265,11 @@
       "option": {
         "co2": "CO₂-Vorhersage hinzufügen",
         "feedIn": "Einspeisevergütung hinzufügen",
+        "feedInEeg": "Einspeisevergütung EEG hinzufügen",
         "grid": "Netzbezugstarif hinzufügen",
         "planner": "Planer-Vorhersage hinzufügen",
         "solar": "Solar-Vorhersage hinzufügen",
-        "temperature": "Temperatur-Vorhersage hinzufügen",
-        "feedInEeg": "Einspeisevergütung EEG hinzufügen"
+        "temperature": "Temperatur-Vorhersage hinzufügen"
       },
       "planner": {
         "description": "Erweiterte Einstellung. Normalerweise nicht nötig, da dynamische Stromtarife oder CO₂-Vorhersagen automatisch verwendet werden. Ermöglicht eine zusätzliche Datenquelle, die nur für die Ladeplanung verwendet wird und nicht für Statistiken und Preisberechnungen.",
@@ -1294,11 +1294,11 @@
       "type": {
         "co2": "CO₂ Vorhersage",
         "feedIn": "Einspeisevergütung",
+        "feedInEeg": "Einspeisevergütung EEG",
         "grid": "Netzbezugspreis",
         "planner": "Planer",
         "solar": "Solar",
-        "temperature": "Temperaturvorhersage",
-        "feedInEeg": "Einspeisevergütung EEG"
+        "temperature": "Temperaturvorhersage"
       },
       "zones": {
         "add": "Zone hinzufügen",
