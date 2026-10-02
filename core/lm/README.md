@@ -536,7 +536,8 @@ repository):
   evcc commit causing it (found with `git merge-tree`, commit by commit), d)
   the PRs to open. Without conflicts the merge is built and tested. With the
   secret `UPDATE_TOKEN` it also keeps the PR *evcc-Update* open. Never writes
-  to evcc's repository; "#123" in evcc's subjects becomes "evcc PR 123".
+  to evcc's repository; issue numbers in evcc's subjects become plain text
+  ("evcc PR" and the number).
 
 **Locally** the Go tests run in WSL (no Windows firewall prompts), the ui checks
 in a checkout with `node_modules`. Live checks of a build with a simulated Home

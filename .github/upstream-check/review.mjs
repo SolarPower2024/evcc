@@ -11,7 +11,8 @@
 // d) the PRs to open: the merge, and a review per feature found in b)
 //
 // No issue numbers, mentions or links of evcc's repository end up in the
-// text: "#123" becomes "evcc PR 123", so nothing refers back to it.
+// text: issue numbers become plain "evcc PR" and the number, so nothing
+// refers back to it.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
