@@ -14,11 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func addTestLoadpoint(t *testing.T, name string, prio, lmPrio int) *Loadpoint {
+func addTestLoadpoint(t *testing.T, name string, prio int) *Loadpoint {
 	t.Helper()
 	lp := NewLoadpoint(util.NewLogger(name), coresettings.NewDatabaseSettingsAdapter(name+"."))
 	lp.SetPriority(prio)
-	lp.LmPrio = lmPrio
 	require.NoError(t, config.Loadpoints().Add(config.NewStaticDevice(config.Named{Name: name}, loadpoint.API(lp))))
 	return lp
 }
@@ -33,9 +32,9 @@ func TestUnifyLmPriorities(t *testing.T) {
 	settings.SetBool(keys.LmPrioritiesUnified, false)
 	t.Cleanup(func() { settings.SetBool(keys.LmPrioritiesUnified, false) })
 
-	wallbox := addTestLoadpoint(t, "db:1", 3, 0) // ui value 7
-	heater := addTestLoadpoint(t, "db:2", 0, 2)  // yaml lmpriority 2
-	pump := addTestLoadpoint(t, "db:3", 5, 0)    // nothing set: keeps its priority
+	wallbox := addTestLoadpoint(t, "db:1", 3) // ui value 7
+	heater := addTestLoadpoint(t, "db:2", 2)  // nothing set: keeps its priority
+	pump := addTestLoadpoint(t, "db:3", 5)    // nothing set: keeps its priority
 
 	site := &Site{log: util.NewLogger("test")}
 	site.lms().prios = map[string]int{"db:1": 7, lmBatteryName: 4}

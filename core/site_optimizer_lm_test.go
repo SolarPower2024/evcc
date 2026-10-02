@@ -144,7 +144,7 @@ func TestLmOptimizerInputsLoadpoint(t *testing.T) {
 	sub, err := circuit.NewConfigurableFromConfig(context.TODO(), map[string]any{"title": "garage", "maxPower": 7000, "parent": "main"})
 	require.NoError(t, err)
 
-	lp := &Loadpoint{log: util.NewLogger("lp"), circuit: sub, LmPrio: 8, priority: 8} // both: before and with one priority
+	lp := &Loadpoint{log: util.NewLogger("lp"), circuit: sub, priority: 8}
 	site := &Site{log: util.NewLogger("test"), loadpoints: []*Loadpoint{lp}}
 
 	id := 0

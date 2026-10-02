@@ -201,7 +201,7 @@ func (b *batteryLoad) GetTitle() string {
 }
 
 // LmPriority returns the configured shed priority on the same scale as the
-// loadpoints' lmpriority: lower is shed first
+// loadpoints' priority: lower is shed first
 func (b *batteryLoad) LmPriority() int {
 	return b.site.LoadManagement.Battery.Priority
 }

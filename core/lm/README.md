@@ -23,9 +23,8 @@ They are sorted there by drag, top = highest. A drag renumbers all loads by
 their order from the bottom: 0, 1, 2 and so on, at most 10, see
 `assets/js/utils/lmPriorityOrder.ts`.
 
-Earlier the loadpoints had a separate `lmpriority`. Those values (from the ui,
-else a non-zero yaml `lmpriority`) are taken over into the loadpoints'
-priority once, logged, see `core/site_lm_priority.go`. That changes the pv
+Earlier the loadpoints had a separate load management priority. Those values
+set in the ui are taken over into the loadpoints' priority once, logged, see `core/site_lm_priority.go`. That changes the pv
 surplus order accordingly.
 
 ### How it works
@@ -125,7 +124,7 @@ Keep these in mind when merging a new evcc version:
 | `core/site.go` | `lm` import, `LoadManagement` (yaml) and `custom` fields, `restoreCustom` at the end of `restoreSettings`, `updateCustom` after `updatePower`, `setPeakGridEnergy` in `updateGridMeter`, `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of upstream's calls |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (INFO, no ui notification), see `circuit_custom.go` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
-| `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes; 1p current limits: `phaseCurrents1p` field, restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` per phase count, the three phase timers take `phaseScaleDelay` |
+| `core/loadpoint.go` | `lm` import, `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes; 1p current limits: `phaseCurrents1p` field, restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` per phase count, the three phase timers take `phaseScaleDelay` |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split into a variant per phase count (as in evcc PR 32505), min/max power use it |
 | `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` embedded in the dynamic config, applied after min/max current, read back for the ui |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue` (1p currents, phase delays), regular range labelled 3-phase while it is shown, 3p minimum for the power hint |
