@@ -126,7 +126,7 @@ func customSiteRoutes(site site.API) map[string]route {
 func lmProfileSaveHandler(site site.API) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var p profile.Profile
-		err := json.NewDecoder(r.Body).Decode(&p)
+		err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&p)
 		if err == nil {
 			p, err = site.SaveLmProfile(p)
 		}

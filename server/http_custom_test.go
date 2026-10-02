@@ -3,8 +3,11 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/evcc-io/evcc/core/lm/profile"
+	"github.com/evcc-io/evcc/core/site"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 )
@@ -55,4 +58,32 @@ func TestMergeRoutesKeepsUpstream(t *testing.T) {
 	assert.NotContains(t, routes, "mystate")
 	assert.Contains(t, routes, "poststate")
 	assert.Contains(t, routes, "new")
+}
+
+// profileSite records the profile the handler saves
+type profileSite struct {
+	site.API
+	saved int
+}
+
+func (s *profileSite) SaveLmProfile(p profile.Profile) (profile.Profile, error) {
+	s.saved++
+	return p, nil
+}
+
+// TestLmProfileBodyLimit: a profile is a few hundred bytes, an oversized body is
+// refused before it is read into memory
+func TestLmProfileBodyLimit(t *testing.T) {
+	s := new(profileSite)
+	h := lmProfileSaveHandler(s)
+
+	w := httptest.NewRecorder()
+	h(w, httptest.NewRequest(http.MethodPost, "/lmprofile", strings.NewReader(`{"name":"Sommer"}`)))
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	big := `{"name":"` + strings.Repeat("x", 100<<10) + `"}`
+	w = httptest.NewRecorder()
+	h(w, httptest.NewRequest(http.MethodPost, "/lmprofile", strings.NewReader(big)))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, 1, s.saved)
 }
