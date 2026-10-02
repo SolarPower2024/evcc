@@ -594,17 +594,7 @@
 				<TelemetryModal :is-sponsor="isSponsor" :telemetry="telemetry" />
 				<OptimizerModal :is-sponsor="isSponsor" />
 				<McpModal />
-				<!-- custom: load management details, see core/lm/README.md -->
-				<PeakShavingModal />
-				<PeakShavingCircuitModal />
-				<LmPrioritiesModal />
-				<LmShedGuardModal />
-				<LmAdvancedModal />
-				<PeakTariffModal />
-				<BatteryIdentModal />
-				<LmProfilesModal />
-				<FeedInEegModal />
-				<GridChargeModal />
+				<LmConfigModals /><!-- custom: see core/lm/README.md -->
 				<ExperimentalModal :experimental="experimental" />
 				<RemoteModal :remote="remote" :is-sponsor="isSponsor" :site-title="siteTitle" />
 				<ModbusProxyModal :is-sponsor="isSponsor" @changed="loadDirty" />
@@ -644,7 +634,6 @@ import "@h2d2/shopicons/es/regular/powersupply";
 import "@h2d2/shopicons/es/regular/receivepayment";
 import "@h2d2/shopicons/es/regular/settings";
 import "@h2d2/shopicons/es/regular/car3";
-import "@h2d2/shopicons/es/regular/lightning"; // custom: load management details section
 import NewDeviceButton from "../components/Config/NewDeviceButton.vue";
 import api from "../api";
 import listDetail from "../mixins/listDetail";
@@ -672,17 +661,8 @@ import OcppModal from "../components/Config/OcppModal.vue";
 import OcppForwarderModal from "../components/Config/OcppForwarderModal.vue";
 import formatter from "../mixins/formatter";
 import GeneralConfig from "../components/Config/GeneralConfig.vue";
-import PeakShavingConfig from "../components/Config/PeakShavingConfig.vue";
-import PeakShavingModal from "../components/Config/PeakShavingModal.vue";
-import PeakShavingCircuitModal from "../components/Config/PeakShavingCircuitModal.vue";
-import LmPrioritiesModal from "../components/Config/LmPrioritiesModal.vue";
-import LmShedGuardModal from "../components/Config/LmShedGuardModal.vue";
-import LmAdvancedModal from "../components/Config/LmAdvancedModal.vue";
-import PeakTariffModal from "../components/Config/PeakTariffModal.vue";
-import BatteryIdentModal from "../components/Config/BatteryIdentModal.vue";
-import LmProfilesModal from "../components/Config/LmProfilesModal.vue";
-import FeedInEegModal from "../components/Config/FeedInEegModal.vue";
-import GridChargeModal from "../components/Config/GridChargeModal.vue";
+import PeakShavingConfig from "../components/Config/PeakShavingConfig.vue"; // custom
+import LmConfigModals from "../components/Config/LmConfigModals.vue"; // custom
 import HemsIcon from "../components/MaterialIcon/Hems.vue";
 import HemsModal from "../components/Config/HemsModal.vue";
 import ShmIcon from "../components/MaterialIcon/Shm.vue";
@@ -801,17 +781,8 @@ export default defineComponent({
 		OcppModal,
 		OcppForwarderModal,
 		GeneralConfig,
-		PeakShavingConfig,
-		PeakShavingModal,
-		PeakShavingCircuitModal,
-		LmPrioritiesModal,
-		LmShedGuardModal,
-		LmAdvancedModal,
-		PeakTariffModal,
-		BatteryIdentModal,
-		LmProfilesModal,
-		FeedInEegModal,
-		GridChargeModal,
+		PeakShavingConfig, // custom
+		LmConfigModals, // custom
 		HemsIcon,
 		HemsModal,
 		ShmModal,
