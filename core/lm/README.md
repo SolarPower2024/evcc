@@ -143,7 +143,8 @@ Keep these in mind when merging a new evcc version:
 | `assets/js/components/BottomTabs/MoreMenu.vue` | "Lastmanagement" and "Peak Shaving" entries |
 | `assets/js/components/Config/TariffCard.vue` | EEG counter summary in the EEG card |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
-| `assets/js/types/evcc.ts`, `i18n/de.json`, `i18n/en.json` | state fields and texts |
+| `assets/js/types/evcc.ts` | `State` and `ConfigLoadpoint` extend the fork's types in `evcc-lm.ts`, re-exported; `feedInEeg` tariff type |
+| `i18n/de.json`, `i18n/en.json` | texts |
 
 Everything else lives in files of its own: `core/lm/`, `core/circuit/circuit_custom.go`, `core/site_lm.go`, `core/site_lm_guard.go`,
 `core/site_lm_advanced.go`, `core/site_load_manual.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
