@@ -29,10 +29,9 @@ import (
 type Load interface {
 	GetTitle() string
 
-	// LmPriority is the shed priority, lower is shed first. It is deliberately
-	// separate from the loadpoint priority, which governs pv surplus
-	// distribution: the load that should get surplus first is not necessarily
-	// the one that should keep power when the fuse is the constraint.
+	// LmPriority is the shed priority, lower is shed first. For a loadpoint it
+	// is its regular priority, which also ranks pv surplus; the battery has a
+	// value of its own on the same scale.
 	LmPriority() int
 
 	// what the load draws right now, i.e. what shedding it would free
@@ -346,10 +345,11 @@ func ValidatePower(l Load, c api.Circuit, old, new float64) float64 {
 		return new
 	}
 
-	need := unmet(old, new, c.ValidatePower(old, new))
+	capped := c.ValidatePower(old, new)
+	need := unmet(old, new, capped)
 	remember(c, l, Priority(l), &need, nil)
 
-	return PeekPower(l, c, old, new)
+	return peekPower(l, c, old, new, &capped)
 }
 
 // ValidateCurrent caps a current request against the circuit while withholding
@@ -360,10 +360,11 @@ func ValidateCurrent(l Load, c api.Circuit, old, new float64) float64 {
 		return new
 	}
 
-	need := unmet(old, new, c.ValidateCurrent(old, new))
+	capped := c.ValidateCurrent(old, new)
+	need := unmet(old, new, capped)
 	remember(c, l, Priority(l), nil, &need)
 
-	return PeekCurrent(l, c, old, new)
+	return peekCurrent(l, c, old, new, &capped)
 }
 
 // PeekPower caps a power request like ValidatePower but records no demand.
@@ -373,7 +374,12 @@ func PeekPower(l Load, c api.Circuit, old, new float64) float64 {
 	if c == nil {
 		return new
 	}
+	return peekPower(l, c, old, new, nil)
+}
 
+// peekPower is PeekPower reusing the circuit's answer without a reserve when
+// the caller already has it, so the circuit is not asked (and logs) twice
+func peekPower(l Load, c api.Circuit, old, new float64, capped *float64) float64 {
 	prio := Priority(l)
 	reserve, _ := reserved(c, l, prio, old, 0)
 
@@ -383,7 +389,12 @@ func PeekPower(l Load, c api.Circuit, old, new float64) float64 {
 	// every level of the parent chain, which over-reserves on nested circuits
 	// whose limit is not the binding one - erring towards less power for the
 	// lower-priority load.
-	res := c.ValidatePower(old-reserve, new)
+	var res float64
+	if reserve == 0 && capped != nil {
+		res = *capped
+	} else {
+		res = c.ValidatePower(old-reserve, new)
+	}
 
 	// cutting into what the load draws right now: the loads below it go first
 	if keep := min(old, new); res < keep {
@@ -399,11 +410,20 @@ func PeekCurrent(l Load, c api.Circuit, old, new float64) float64 {
 	if c == nil {
 		return new
 	}
+	return peekCurrent(l, c, old, new, nil)
+}
 
+// peekCurrent is PeekCurrent reusing the circuit's answer, see peekPower
+func peekCurrent(l Load, c api.Circuit, old, new float64, capped *float64) float64 {
 	prio := Priority(l)
 	_, reserve := reserved(c, l, prio, 0, old)
 
-	res := c.ValidateCurrent(old-reserve, new)
+	var res float64
+	if reserve == 0 && capped != nil {
+		res = *capped
+	} else {
+		res = c.ValidateCurrent(old-reserve, new)
+	}
 
 	// cutting into what the load draws right now: the loads below it go first
 	if keep := min(old, new); res < keep {

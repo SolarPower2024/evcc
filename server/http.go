@@ -215,10 +215,7 @@ func (s *HTTPd) RegisterSiteHandlers(site site.API) {
 		"optimizerchargingstrategy": {"POST", "/optimizerchargingstrategy/{value:[a-z_]+}", stringHandler(site.SetOptimizerChargingStrategy, site.GetOptimizerChargingStrategy)},
 	}
 
-	// custom: routes added by this fork, see server/http_custom.go
-	for name, r := range customSiteRoutes(site) {
-		routes[name] = r
-	}
+	addCustomSiteRoutes(routes, site) // custom: see server/http_custom.go
 
 	for _, r := range routes {
 		api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)

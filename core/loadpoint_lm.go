@@ -14,10 +14,9 @@ import (
 var _ lm.Load = (*Loadpoint)(nil)
 
 // LmPriority returns the loadpoint's load management shed priority: its upstream
-// priority, which also ranks pv surplus and the planner, see
-// core/site_lm_planner.go. Lower is shed first, equal priorities are upstream's
-// first come, first served behaviour. The yaml `lmpriority` is only taken over
-// once into the priority.
+// priority, which also ranks pv surplus, see core/site_lm_priority.go. Lower is
+// shed first, equal priorities are upstream's first come, first served
+// behaviour. The yaml `lmpriority` is only taken over once into the priority.
 func (lp *Loadpoint) LmPriority() int {
 	return lp.EffectivePriority()
 }
@@ -56,17 +55,36 @@ func (lp *Loadpoint) lmCircuit() *lmCircuit {
 }
 
 // ValidateCurrent caps the current with the priorities on top. A switch device
-// cannot be limited, its power decides alone.
+// cannot be limited: it asks for the current its power draws on its phases and
+// gets all or nothing, as for the power below.
 func (c *lmCircuit) ValidateCurrent(old, new float64) float64 {
 	switch {
 	case c.guarded:
 		return 0
-	case c.switchDevice:
+
+	case !c.switchDevice:
+		c.allowedCurrent = lm.ValidateCurrent(c.lp, c.Circuit, old, new)
+		return c.allowedCurrent
+
+	case new <= 0:
+		// staying off asks for nothing, which also clears an earlier demand
+		lm.ValidateCurrent(c.lp, c.Circuit, old, 0)
 		return new
 	}
 
-	c.allowedCurrent = lm.ValidateCurrent(c.lp, c.Circuit, old, new)
-	return c.allowedCurrent
+	// what the switch draws, not the nominal current offered to it
+	phases := c.lp.ActivePhases()
+	old = powerToCurrent(c.lp.chargePower, phases)
+	need := powerToCurrent(c.lp.lmSwitchPower(), phases)
+
+	if allowed := lm.ValidateCurrent(c.lp, c.Circuit, old, need); allowed < need {
+		if c.lp.enabled {
+			c.lp.log.DEBUG.Printf("circuit allows %.3gA, switch needs %.3gA: off", allowed, need)
+		}
+		return 0
+	}
+
+	return new
 }
 
 // ValidatePower caps the power with the priorities on top. A switch device draws

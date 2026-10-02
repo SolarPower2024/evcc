@@ -253,3 +253,34 @@ func TestOnOffLoadGetsItsWholeNeed(t *testing.T) {
 	require.NoError(t, c.Update([]api.CircuitLoad{wallbox, heater}))
 	assert.Equal(t, 3000.0, lm.ValidatePower(heater, c, 0, 3000))
 }
+
+// countingCircuit counts how often the circuit is asked
+type countingCircuit struct {
+	api.Circuit
+	power, current int
+}
+
+func (c *countingCircuit) ValidatePower(old, new float64) float64 {
+	c.power++
+	return c.Circuit.ValidatePower(old, new)
+}
+
+func (c *countingCircuit) ValidateCurrent(old, new float64) float64 {
+	c.current++
+	return c.Circuit.ValidateCurrent(old, new)
+}
+
+// TestValidateAsksCircuitOnce: without a reserve the circuit is asked once per
+// request, not again for the same answer (each answer is a log line upstream)
+func TestValidateAsksCircuitOnce(t *testing.T) {
+	lm.Reset()
+
+	c := &countingCircuit{Circuit: newCircuit(t, 11000)}
+	load := &testLoad{title: "wallbox", circuit: c}
+
+	assert.Equal(t, 2000.0, lm.ValidatePower(load, c, 0, 2000))
+	assert.Equal(t, 1, c.power)
+
+	assert.Equal(t, 8.0, lm.ValidateCurrent(load, c, 0, 8))
+	assert.Equal(t, 1, c.current)
+}

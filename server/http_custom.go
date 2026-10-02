@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,12 +19,44 @@ import (
 	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/site"
 	"github.com/evcc-io/evcc/db"
+	"github.com/evcc-io/evcc/util"
 	"github.com/gorilla/mux"
 )
 
 // namePattern is evcc's own name rule, see nameRE in cmd/setup.go. It includes
 // the colon of device names like db:3.
 const namePattern = "[a-zA-Z0-9_.:-]+"
+
+// addCustomSiteRoutes adds the fork's site routes to upstream's route table. A
+// route upstream already has, by name or by method and path, stays upstream's:
+// after an evcc update that added the same route, ours must not replace it
+// unnoticed.
+func addCustomSiteRoutes(routes map[string]route, site site.API) {
+	for _, name := range mergeRoutes(routes, customSiteRoutes(site)) {
+		util.NewLogger("httpd").ERROR.Printf("custom route %s collides with an evcc route, left out", name)
+	}
+}
+
+// mergeRoutes adds the routes of add to dst that collide with none of dst and
+// returns the names of those left out
+func mergeRoutes(dst, add map[string]route) []string {
+	used := make(map[string]bool, len(dst))
+	for _, r := range dst {
+		used[r.Method+" "+r.Pattern] = true
+	}
+
+	var res []string
+	for name, r := range add {
+		if _, ok := dst[name]; ok || used[r.Method+" "+r.Pattern] {
+			res = append(res, name)
+			continue
+		}
+		dst[name] = r
+	}
+
+	slices.Sort(res)
+	return res
+}
 
 func customSiteRoutes(site site.API) map[string]route {
 	return map[string]route{
@@ -93,7 +126,7 @@ func customSiteRoutes(site site.API) map[string]route {
 func lmProfileSaveHandler(site site.API) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var p profile.Profile
-		err := json.NewDecoder(r.Body).Decode(&p)
+		err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&p)
 		if err == nil {
 			p, err = site.SaveLmProfile(p)
 		}

@@ -2,9 +2,9 @@ package core
 
 // Custom extension: one priority for pv surplus, planner and load management.
 //
-// Loadpoints are ranked by their upstream priority everywhere: pv surplus, the
-// planner sharing circuit capacity and shedding. So the planner never plans a
-// loadpoint first that load management would then shed first. The battery has
+// Loadpoints are ranked by their upstream priority everywhere: pv surplus and
+// shedding (and the planner, once it shares circuit capacity, see PR 2), so a
+// loadpoint that gets surplus first is not the first to be shed. The battery has
 // no upstream priority; it keeps a value of its own on the same 0-10 scale, set
 // in the load management priorities.
 

@@ -130,10 +130,17 @@ func onceUntilText(until time.Time) string {
 }
 
 // batteryGridChargeOnceActive reports whether one-time grid charging charges in
-// this cycle, and ends it once the target soc is reached
+// this cycle, and ends it once the target soc is reached or the battery is gone
 func (site *Site) batteryGridChargeOnceActive() bool {
 	o := site.gridChargeOnce()
 	if o.Target == 0 {
+		return false
+	}
+
+	// without a battery the soc stays 0 and the target is never reached
+	if !site.batteryConfigured() {
+		site.log.INFO.Println("battery grid charge once: no battery, cancelled")
+		site.setGridChargeOnce(gridChargeOnce{})
 		return false
 	}
 
