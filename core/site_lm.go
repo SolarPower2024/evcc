@@ -87,13 +87,36 @@ type lmState struct {
 	identAt  time.Time
 }
 
+// siteCustom is the state of this fork's features, one field in upstream's Site
+type siteCustom struct {
+	lm   lmState
+	peak peakState
+}
+
+// restoreCustom restores the fork's settings, called at the end of upstream's
+// restoreSettings
+func (site *Site) restoreCustom() {
+	site.restoreLmSettings()
+	site.restorePeakSettings()
+	site.restoreFeedInEeg()
+}
+
+// updateCustom runs the fork's per cycle work once the meters are read, before
+// upstream decides on battery grid charging and the battery mode: peak shaving,
+// the export under the second feed-in tariff and the battery identification
+func (site *Site) updateCustom(state siteState) {
+	site.updatePeakShaving(state)
+	site.updateFeedInEeg()
+	site.updateBatteryIdent()
+}
+
 // lms returns the load management state, applying defaults on first use
 func (site *Site) lms() *lmState {
-	site.loadMgmt.once.Do(func() {
-		site.loadMgmt.socChargeStart = defaultSocChargeStart
-		site.loadMgmt.socChargeStop = defaultSocChargeStop
+	site.custom.lm.once.Do(func() {
+		site.custom.lm.socChargeStart = defaultSocChargeStart
+		site.custom.lm.socChargeStop = defaultSocChargeStop
 	})
-	return &site.loadMgmt
+	return &site.custom.lm
 }
 
 // restoreLmSettings restores the persisted load management settings

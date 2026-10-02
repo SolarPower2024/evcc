@@ -282,7 +282,7 @@ func peakWindowSite(t *testing.T, minute int) (*Site, *clock.Mock) {
 	clk.Set(time.Date(2026, 9, 25, 10, minute, 0, 0, time.UTC))
 
 	site := &Site{log: util.NewLogger("test")}
-	site.peakShaving.clock = clk
+	site.custom.peak.clock = clk
 	site.peak().limit = 5000
 
 	return site, clk
