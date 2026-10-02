@@ -58,11 +58,10 @@ func (site *Site) unifyLmPriorities() {
 	settings.SetBool(keys.LmPrioritiesUnified, true)
 }
 
-// lmBatteryPriority is the battery's priority: the value set in the ui, else
-// the yaml one
+// lmBatteryPriority is the battery's priority: the value set in the ui, else 0
 func (site *Site) lmBatteryPriority() int {
 	if prio, ok := site.lmPriorityLookup(site.lmBattery()); ok {
 		return prio
 	}
-	return site.LoadManagement.Battery.Priority
+	return 0
 }

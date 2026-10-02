@@ -17,7 +17,6 @@ import (
 	"github.com/evcc-io/evcc/core/circuit"
 	"github.com/evcc-io/evcc/core/coordinator"
 	"github.com/evcc-io/evcc/core/keys"
-	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/planner"
@@ -68,10 +67,7 @@ type Site struct {
 	ResidualPower float64      `mapstructure:"residualPower"` // PV meter only: household usage. Grid meter: household safety margin
 	Meters        MetersConfig `mapstructure:"meters"`        // Meter references
 	CurtailersRef []string     `mapstructure:"curtailers"`    // Curtailment device references
-
-	// custom: load management, peak shaving and the rest of this fork, see core/site_lm.go
-	LoadManagement lm.Config `mapstructure:"loadmanagement"`
-	custom         siteCustom
+	custom        siteCustom   // custom: this fork's state, see core/site_lm.go
 
 	// meters
 	circuit        api.Circuit                // Circuit

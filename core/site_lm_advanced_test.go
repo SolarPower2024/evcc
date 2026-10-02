@@ -23,13 +23,7 @@ func TestLmAdvancedSettings(t *testing.T) {
 	assert.Equal(t, 12*time.Minute, site.peakFreeze())
 	assert.Equal(t, 2.0, site.peakCap())
 
-	// yaml overrides the default
-	site.LoadManagement.PeakShaving.FreeValue = 8000
-	site.LoadManagement.Battery.HoldOff = 2 * time.Minute
-	assert.Equal(t, 8000.0, site.peakFreeValue())
-	assert.Equal(t, 2*time.Minute, site.lmHoldOff())
-
-	// the ui overrides both
+	// set in the ui
 	require.NoError(t, site.SetLmAdvanced("hysteresis", 0))
 	require.NoError(t, site.SetLmAdvanced("freeValue", 12000))
 	require.NoError(t, site.SetLmAdvanced("holdOff", 10))

@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/api"
-	"github.com/evcc-io/evcc/plugin"
 )
 
 // Load is a participant in the priority-based load management.
@@ -37,34 +36,6 @@ type Load interface {
 	// what the load draws right now, i.e. what shedding it would free
 	GetChargePower() float64
 	GetMaxPhaseCurrent() float64
-}
-
-// Config is the site's load management configuration
-type Config struct {
-	Timeout     time.Duration `mapstructure:"timeout"`     // unserved demand expiry, 0 = default
-	Battery     Battery       `mapstructure:"battery"`     // home battery participation
-	PeakShaving PeakShaving   `mapstructure:"peakshaving"` // demand charge peak shaving
-}
-
-// PeakShaving configures the battery reserve used to cap the grid demand peak.
-// The limit, the reserve soc and the target entity are runtime settings that
-// live in the ui, not here - see core/site_peakshaving.go. Everything below is
-// optional and only needed outside the Home Assistant add-on.
-type PeakShaving struct {
-	URI        string         `mapstructure:"uri"`        // Home Assistant URI, empty = the add-on's supervisor connection
-	Insecure   bool           `mapstructure:"insecure"`   // allow self-signed certificates
-	Set        *plugin.Config `mapstructure:"set"`        // full plugin override, takes precedence over the ui entity
-	FreeValue  float64        `mapstructure:"freevalue"`  // written while above the reserve soc, 0 = peak.DefaultFreeValue
-	Hysteresis float64        `mapstructure:"hysteresis"` // soc band in %, 0 = default
-}
-
-// Battery configures the home battery as a load management participant
-type Battery struct {
-	CircuitRef string        `mapstructure:"circuit"`  // circuit the battery draws from, empty = battery not managed
-	Priority   int           `mapstructure:"priority"` // shed priority, lower is shed first
-	Power      float64       `mapstructure:"power"`    // expected grid charge power in W, 0 = sum of maxchargepower
-	Phases     int           `mapstructure:"phases"`   // phases for current accounting, 0 = default
-	HoldOff    time.Duration `mapstructure:"holdoff"`  // wait before retrying after a shed, 0 = default
 }
 
 const (

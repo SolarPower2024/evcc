@@ -31,7 +31,7 @@ func onceSite(t *testing.T, soc float64) *Site {
 		batteryMeters: []config.Device[api.Meter]{config.NewStaticDevice(config.Named{Name: "bat"}, api.Meter(&capacityBattery{kWh: 10}))},
 	}
 	site.battery.Soc = soc
-	site.LoadManagement.Battery.Power = 5000
+	site.peak().chargePower = 5000
 	return site
 }
 
