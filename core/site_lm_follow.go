@@ -23,7 +23,7 @@ func (site *Site) lmFollowCycles() int {
 
 // checkLmFollowing runs once per cycle, after every load has been limited
 func (site *Site) checkLmFollowing() {
-	for _, c := range lm.CheckFollowing() {
+	for _, c := range site.lmm().CheckFollowing() {
 		name := c.Load.GetTitle()
 
 		if !c.Ignored {
@@ -32,6 +32,6 @@ func (site *Site) checkLmFollowing() {
 		}
 
 		site.log.WARN.Printf("load management: %s draws %.0fW but was allowed %.0fW, no longer counted on to give way", name, c.Power, c.Allowed)
-		lm.AddEvent(lm.Event{At: time.Now(), Type: lm.EventNotFollowing, Load: name, A: c.Power, B: c.Allowed})
+		site.lmm().AddEvent(lm.Event{At: time.Now(), Type: lm.EventNotFollowing, Load: name, A: c.Power, B: c.Allowed})
 	}
 }

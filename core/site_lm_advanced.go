@@ -88,8 +88,8 @@ func (site *Site) restoreLmAdvanced() {
 		s.advMu.Unlock()
 	}
 
-	lm.SetTimeout(site.lmTimeout())
-	lm.SetFollowCycles(site.lmFollowCycles)
+	site.lmm().SetTimeout(site.lmTimeout())
+	site.lmm().SetFollowCycles(site.lmFollowCycles)
 
 	site.publishLmAdvanced()
 	site.publishLmHomeProfile()
@@ -194,7 +194,7 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 	}
 
 	if name == "timeout" {
-		lm.SetTimeout(site.lmTimeout())
+		site.lmm().SetTimeout(site.lmTimeout())
 	}
 	if name == "homeWeekday" || name == "homeForecast" {
 		site.Optimize() // the home demand forecast changed

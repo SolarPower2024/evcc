@@ -7,7 +7,6 @@ import (
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/circuit"
-	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/types"
 	"github.com/evcc-io/evcc/tariff"
 	"github.com/evcc-io/evcc/util"
@@ -135,8 +134,6 @@ func TestLmOptimizerInputsPeakAndGridCharge(t *testing.T) {
 func TestLmOptimizerInputsLoadpoint(t *testing.T) {
 	config.Reset()
 	t.Cleanup(config.Reset)
-	lm.Reset()
-	t.Cleanup(lm.Reset)
 
 	root, err := circuit.New(util.NewLogger("test"), "main", 0, 22000, nil, 0)
 	require.NoError(t, err)

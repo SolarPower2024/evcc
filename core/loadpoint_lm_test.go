@@ -30,7 +30,6 @@ func (m *lmMeter) CurrentPower() (float64, error) { return m.power, nil }
 // the given grid power
 func newSwitchLoadpoint(t *testing.T, rated, grid float64) (*Loadpoint, *lmMeter, api.Circuit) {
 	t.Helper()
-	lm.Reset()
 	Voltage = 230
 
 	m := &lmMeter{power: grid}
@@ -103,7 +102,6 @@ func TestSwitchCurrentLimit(t *testing.T) {
 		{"running into an over current", 4, 3000, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			lm.Reset()
 			Voltage = 230
 
 			m := &lmPhaseMeter{current: tc.grid + tc.charging/230}
@@ -151,7 +149,7 @@ func TestSwitchPowerSources(t *testing.T) {
 
 // guardFor protects the given loadpoints for d
 func guardFor(d time.Duration, lps ...*Loadpoint) {
-	lm.SetGuardLookup(func(l lm.Load) time.Duration {
+	lps[0].lmm().SetGuardLookup(func(l lm.Load) time.Duration {
 		for _, lp := range lps {
 			if l == lp {
 				return d
@@ -250,12 +248,12 @@ func TestShedGuardWallbox(t *testing.T) {
 	// 16 A on three phases, throttled to what fits: not a shed
 	lp.chargePower = 11040
 	assert.InDelta(t, 13.0, wallbox(1000), 0.5, "throttled")
-	assert.Zero(t, lm.Guarded(lp, clk.Now()))
+	assert.Zero(t, lp.lmm().Guarded(lp, clk.Now()))
 
 	// not even the 6 A minimum fits anymore: shed
 	lp.chargePower = 4140
 	assert.Less(t, wallbox(7000), 6.0, "shed")
-	assert.Equal(t, 5*time.Minute, lm.Guarded(lp, clk.Now()))
+	assert.Equal(t, 5*time.Minute, lp.lmm().Guarded(lp, clk.Now()))
 
 	// power is back, the guard holds it off
 	lp.enabled, lp.chargePower = false, 0
@@ -277,13 +275,13 @@ func TestLmStatusSwitch(t *testing.T) {
 	guardFor(3*time.Minute, lp)
 
 	state := func() string {
-		st, _, _, _ := lmLoadpointState(lp, lp.chargePower, clk.Now())
+		st, _, _, _ := lmLoadpointState(lp.lmm(), lp, lp.chargePower, clk.Now())
 		return st
 	}
 
 	// no room to start: waiting, with what it needs and what is free
 	assert.False(t, switchCycle(t, lp, m, c, 8000))
-	st, requested, allowed, _ := lmLoadpointState(lp, lp.chargePower, clk.Now())
+	st, requested, allowed, _ := lmLoadpointState(lp.lmm(), lp, lp.chargePower, clk.Now())
 	assert.Equal(t, lmStateWaiting, st)
 	assert.Equal(t, 3000.0, requested)
 	assert.Equal(t, 2000.0, allowed)
@@ -295,13 +293,13 @@ func TestLmStatusSwitch(t *testing.T) {
 
 	// overload: shed and held off
 	assert.False(t, switchCycle(t, lp, m, c, 12000))
-	st, _, _, until := lmLoadpointState(lp, 0, clk.Now())
+	st, _, _, until := lmLoadpointState(lp.lmm(), lp, 0, clk.Now())
 	assert.Equal(t, lmStateShed, st)
 	if assert.NotNil(t, until) {
 		assert.Equal(t, clk.Now().Add(3*time.Minute), *until)
 	}
 
-	ev := lm.Events()
+	ev := lp.lmm().Events()
 	if assert.Len(t, ev, 1) {
 		assert.Equal(t, lm.EventShed, ev[0].Type)
 		assert.Equal(t, "Heizstab", ev[0].Load)
@@ -333,12 +331,12 @@ func TestLmStatusWallboxThrottled(t *testing.T) {
 		lp.lmLimit(16)
 	}
 
-	st, requested, allowed, _ := lmLoadpointState(lp, lp.chargePower, lp.clock.Now())
+	st, requested, allowed, _ := lmLoadpointState(lp.lmm(), lp, lp.chargePower, lp.clock.Now())
 	assert.Equal(t, lmStateThrottled, st)
 	assert.Equal(t, 11040.0, requested)
 	assert.Equal(t, 9000.0, allowed)
 
-	ev := lm.Events()
+	ev := lp.lmm().Events()
 	if assert.Len(t, ev, 1, "logged once, not every cycle") {
 		assert.Equal(t, lm.EventThrottled, ev[0].Type)
 		assert.Equal(t, 11040.0, ev[0].A)
@@ -394,7 +392,6 @@ func TestSetLimitUsesLmCircuit(t *testing.T) {
 		{"wallbox throttled to what fits", &fakeCharger{}, 3, 1000, true, 13},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			lm.Reset()
 			Voltage = 230
 
 			m := &lmMeter{power: tc.grid}
@@ -416,9 +413,27 @@ func TestSetLimitUsesLmCircuit(t *testing.T) {
 				assert.Equal(t, tc.wantAmps, tc.charger.current)
 			}
 
-			d, ok := lm.LastDecision(lp)
+			d, ok := lp.lmm().LastDecision(lp)
 			require.True(t, ok, "the decision is recorded for the overview")
 			assert.Positive(t, d.Requested)
 		})
 	}
+}
+
+// TestLoadpointUsesSiteLoadManagement: a loadpoint prepared by its site shares
+// the site's load management, so the battery's demand, the priorities and the
+// shed guard set there apply to it; one without a site keeps its own
+func TestLoadpointUsesSiteLoadManagement(t *testing.T) {
+	site := &Site{log: util.NewLogger("test")}
+
+	lp := &Loadpoint{log: util.NewLogger("lp")}
+	lp.site = site
+	assert.Same(t, site.lmm(), lp.lmm())
+
+	other := &Site{log: util.NewLogger("test")}
+	assert.NotSame(t, site.lmm(), other.lmm(), "one per site")
+
+	alone := &Loadpoint{log: util.NewLogger("lp")}
+	assert.Same(t, alone.lmm(), alone.lmm())
+	assert.NotSame(t, site.lmm(), alone.lmm())
 }

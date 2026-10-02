@@ -49,7 +49,7 @@ func newCircuit(t *testing.T, maxPower float64, loads ...api.CircuitLoad) api.Ci
 // TestEqualPrioritiesAreUpstream verifies that loads on the same priority see
 // plain circuit behaviour, i.e. nothing is reserved
 func TestEqualPrioritiesAreUpstream(t *testing.T) {
-	lm.Reset()
+	m := lm.New()
 
 	wallbox := &testLoad{title: "wallbox", prio: 0, power: 11000}
 	c := newCircuit(t, 11000, wallbox)
@@ -57,16 +57,16 @@ func TestEqualPrioritiesAreUpstream(t *testing.T) {
 	heater := &testLoad{title: "heater", prio: 0, circuit: c}
 
 	// circuit is full, the heater gets nothing
-	assert.Equal(t, 0.0, lm.ValidatePower(heater, c, 0, 2000))
+	assert.Equal(t, 0.0, m.ValidatePower(heater, c, 0, 2000))
 
 	// ... and the wallbox keeps everything, as nothing outranks it
-	assert.Equal(t, 11000.0, lm.ValidatePower(wallbox, c, 11000, 11000))
+	assert.Equal(t, 11000.0, m.ValidatePower(wallbox, c, 11000, 11000))
 }
 
 // TestHigherPriorityShedsLower verifies that a denied high-priority load pushes
 // a lower-priority load down by exactly its unserved demand
 func TestHigherPriorityShedsLower(t *testing.T) {
-	lm.Reset()
+	m := lm.New()
 
 	// lower priority is shed first
 	wallbox := &testLoad{title: "wallbox", prio: 1, power: 11000}
@@ -75,34 +75,34 @@ func TestHigherPriorityShedsLower(t *testing.T) {
 	heatpump := &testLoad{title: "heatpump", prio: 5, circuit: c}
 
 	// the full circuit denies the heat pump, which records 2000W of demand
-	assert.Equal(t, 0.0, lm.ValidatePower(heatpump, c, 0, 2000))
+	assert.Equal(t, 0.0, m.ValidatePower(heatpump, c, 0, 2000))
 
 	// the wallbox now has to give up those 2000W
-	assert.Equal(t, 9000.0, lm.ValidatePower(wallbox, c, 11000, 11000))
+	assert.Equal(t, 9000.0, m.ValidatePower(wallbox, c, 11000, 11000))
 
 	// a probe sees the same reserve but records nothing
-	assert.Equal(t, 9000.0, lm.PeekPower(wallbox, c, 11000, 11000))
+	assert.Equal(t, 9000.0, m.PeekPower(wallbox, c, 11000, 11000))
 }
 
 // TestSatisfiedDemandReleasesReserve verifies that the reserve disappears once
 // the high-priority load gets what it asked for
 func TestSatisfiedDemandReleasesReserve(t *testing.T) {
-	lm.Reset()
+	m := lm.New()
 
 	wallbox := &testLoad{title: "wallbox", prio: 1, power: 9000}
 	heatpump := &testLoad{title: "heatpump", prio: 5, power: 2000}
 	c := newCircuit(t, 11000, wallbox, heatpump)
 
 	// the heat pump's 2000W now fit, so nothing is denied
-	assert.Equal(t, 2000.0, lm.ValidatePower(heatpump, c, 2000, 2000))
+	assert.Equal(t, 2000.0, m.ValidatePower(heatpump, c, 2000, 2000))
 
 	// ... and the wallbox may use the remaining budget again
-	assert.Equal(t, 9000.0, lm.ValidatePower(wallbox, c, 9000, 11000))
+	assert.Equal(t, 9000.0, m.ValidatePower(wallbox, c, 9000, 11000))
 }
 
 // TestLowerPriorityIsNotProtected verifies that the reserve only works upwards
 func TestLowerPriorityIsNotProtected(t *testing.T) {
-	lm.Reset()
+	m := lm.New()
 
 	heatpump := &testLoad{title: "heatpump", prio: 5, power: 11000}
 	c := newCircuit(t, 11000, heatpump)
@@ -110,10 +110,10 @@ func TestLowerPriorityIsNotProtected(t *testing.T) {
 	wallbox := &testLoad{title: "wallbox", prio: 1, circuit: c}
 
 	// the wallbox is denied and records demand ...
-	assert.Equal(t, 0.0, lm.ValidatePower(wallbox, c, 0, 2000))
+	assert.Equal(t, 0.0, m.ValidatePower(wallbox, c, 0, 2000))
 
 	// ... but the higher-priority heat pump does not give way for it
-	assert.Equal(t, 11000.0, lm.ValidatePower(heatpump, c, 11000, 11000))
+	assert.Equal(t, 11000.0, m.ValidatePower(heatpump, c, 11000, 11000))
 }
 
 // TestRecoveryFavoursHigherPriority walks through the cycles of a shed and the
@@ -121,7 +121,7 @@ func TestLowerPriorityIsNotProtected(t *testing.T) {
 // is one cycle: a load is validated, draws what it was granted, and the circuit
 // is re-measured.
 func TestRecoveryFavoursHigherPriority(t *testing.T) {
-	lm.Reset()
+	m := lm.New()
 
 	// the wallbox grabbed the whole budget before the heat pump asked for anything
 	wallbox := &testLoad{title: "wallbox", prio: 1, power: 11000}
@@ -131,7 +131,7 @@ func TestRecoveryFavoursHigherPriority(t *testing.T) {
 	// cycle: validate the load, let it draw the result, re-measure the circuit
 	run := func(l *testLoad, want float64) float64 {
 		t.Helper()
-		got := lm.ValidatePower(l, c, l.power, want)
+		got := m.ValidatePower(l, c, l.power, want)
 		l.power = got
 		require.NoError(t, c.Update([]api.CircuitLoad{wallbox, heatpump}))
 		return got
@@ -161,7 +161,7 @@ func TestRecoveryFavoursHigherPriority(t *testing.T) {
 // TestCurrentReserveIsSeparate verifies that current and power demand are
 // tracked independently, as a circuit may limit either or both
 func TestCurrentReserveIsSeparate(t *testing.T) {
-	lm.Reset()
+	m := lm.New()
 
 	c, err := circuit.New(util.NewLogger("test"), "test", 16, 0, nil, 0)
 	require.NoError(t, err)
@@ -172,33 +172,32 @@ func TestCurrentReserveIsSeparate(t *testing.T) {
 	heater := &testLoad{title: "heater", prio: 5, circuit: c}
 
 	// the current limit denies the heater 6A
-	assert.Equal(t, 0.0, lm.ValidateCurrent(heater, c, 0, 6))
+	assert.Equal(t, 0.0, m.ValidateCurrent(heater, c, 0, 6))
 
 	// the wallbox gives up those 6A ...
-	assert.Equal(t, 10.0, lm.ValidateCurrent(wallbox, c, 16, 16))
+	assert.Equal(t, 10.0, m.ValidateCurrent(wallbox, c, 16, 16))
 
 	// ... while the unconfigured power limit stays unreserved
-	assert.Equal(t, 11000.0, lm.ValidatePower(wallbox, c, 11000, 11000))
+	assert.Equal(t, 11000.0, m.ValidatePower(wallbox, c, 11000, 11000))
 }
 
 // TestPriorityLookupOverrides verifies that a priority set via the lookup wins
 // over the load's own, and that loads the lookup does not know keep theirs
 func TestPriorityLookupOverrides(t *testing.T) {
-	lm.Reset()
-	defer lm.Reset()
+	m := lm.New()
 
 	wallbox := &testLoad{title: "wallbox", prio: 5}
 	heater := &testLoad{title: "heater", prio: 3}
 
-	lm.SetPriorityLookup(func(l lm.Load) (int, bool) {
+	m.SetPriorityLookup(func(l lm.Load) (int, bool) {
 		if l == lm.Load(wallbox) {
 			return 1, true
 		}
 		return 0, false
 	})
 
-	assert.Equal(t, 1, lm.Priority(wallbox))
-	assert.Equal(t, 3, lm.Priority(heater))
+	assert.Equal(t, 1, m.Priority(wallbox))
+	assert.Equal(t, 3, m.Priority(heater))
 
 	// the overridden priority is what shedding acts on: the heater now outranks
 	// the wallbox, although by their own priorities it would be the other way round
@@ -206,14 +205,14 @@ func TestPriorityLookupOverrides(t *testing.T) {
 	c := newCircuit(t, 11000, wallbox)
 	heater.circuit = c
 
-	assert.Equal(t, 0.0, lm.ValidatePower(heater, c, 0, 2000))
-	assert.Equal(t, 9000.0, lm.ValidatePower(wallbox, c, 11000, 11000))
+	assert.Equal(t, 0.0, m.ValidatePower(heater, c, 0, 2000))
+	assert.Equal(t, 9000.0, m.ValidatePower(wallbox, c, 11000, 11000))
 }
 
 // TestForgetReleasesReservation verifies that a load which stopped asking for
 // power no longer throttles loads below it
 func TestForgetReleasesReservation(t *testing.T) {
-	lm.Reset()
+	m := lm.New()
 
 	wallbox := &testLoad{title: "wallbox", prio: 1, power: 11000}
 	c := newCircuit(t, 11000, wallbox)
@@ -221,12 +220,12 @@ func TestForgetReleasesReservation(t *testing.T) {
 	battery := &testLoad{title: "battery", prio: 5, circuit: c}
 
 	// the denied battery reserves 5000W, the wallbox has to give way
-	assert.Equal(t, 0.0, lm.ValidatePower(battery, c, 0, 5000))
-	assert.Equal(t, 6000.0, lm.ValidatePower(wallbox, c, 11000, 11000))
+	assert.Equal(t, 0.0, m.ValidatePower(battery, c, 0, 5000))
+	assert.Equal(t, 6000.0, m.ValidatePower(wallbox, c, 11000, 11000))
 
 	// once the battery no longer wants to charge, the wallbox gets it all back
-	lm.Forget(battery)
-	assert.Equal(t, 11000.0, lm.ValidatePower(wallbox, c, 11000, 11000))
+	m.Forget(battery)
+	assert.Equal(t, 11000.0, m.ValidatePower(wallbox, c, 11000, 11000))
 }
 
 // TestOnOffLoadGetsItsWholeNeed is the regression test for a higher-priority
@@ -234,7 +233,7 @@ func TestForgetReleasesReservation(t *testing.T) {
 // 2000W free it takes nothing of a 3000W need, so the lower-priority wallbox has
 // to leave the whole 3000W free, not just the 1000W that were missing.
 func TestOnOffLoadGetsItsWholeNeed(t *testing.T) {
-	lm.Reset()
+	m := lm.New()
 
 	wallbox := &testLoad{title: "wallbox", prio: 1, power: 9000}
 	c := newCircuit(t, 11000, wallbox)
@@ -242,16 +241,16 @@ func TestOnOffLoadGetsItsWholeNeed(t *testing.T) {
 	heater := &testLoad{title: "heater", prio: 5, circuit: c}
 
 	// all or nothing: capped below its need, the heater stays off
-	assert.Less(t, lm.ValidatePower(heater, c, 0, 3000), 3000.0)
+	assert.Less(t, m.ValidatePower(heater, c, 0, 3000), 3000.0)
 
 	// the wallbox makes room for the full 3000W
-	allowed := lm.ValidatePower(wallbox, c, 9000, 9000)
+	allowed := m.ValidatePower(wallbox, c, 9000, 9000)
 	assert.Equal(t, 8000.0, allowed)
 
 	// next cycle the heater fits
 	wallbox.power = allowed
 	require.NoError(t, c.Update([]api.CircuitLoad{wallbox, heater}))
-	assert.Equal(t, 3000.0, lm.ValidatePower(heater, c, 0, 3000))
+	assert.Equal(t, 3000.0, m.ValidatePower(heater, c, 0, 3000))
 }
 
 // countingCircuit counts how often the circuit is asked
@@ -273,14 +272,14 @@ func (c *countingCircuit) ValidateCurrent(old, new float64) float64 {
 // TestValidateAsksCircuitOnce: without a reserve the circuit is asked once per
 // request, not again for the same answer (each answer is a log line upstream)
 func TestValidateAsksCircuitOnce(t *testing.T) {
-	lm.Reset()
+	m := lm.New()
 
 	c := &countingCircuit{Circuit: newCircuit(t, 11000)}
 	load := &testLoad{title: "wallbox", circuit: c}
 
-	assert.Equal(t, 2000.0, lm.ValidatePower(load, c, 0, 2000))
+	assert.Equal(t, 2000.0, m.ValidatePower(load, c, 0, 2000))
 	assert.Equal(t, 1, c.power)
 
-	assert.Equal(t, 8.0, lm.ValidateCurrent(load, c, 0, 8))
+	assert.Equal(t, 8.0, m.ValidateCurrent(load, c, 0, 8))
 	assert.Equal(t, 1, c.current)
 }

@@ -9,13 +9,12 @@ import (
 )
 
 func TestShedGuard(t *testing.T) {
-	lm.Reset()
-	t.Cleanup(lm.Reset)
+	m := lm.New()
 
 	protected, other := &testLoad{title: "heater"}, &testLoad{title: "other"}
 
 	guard := 5 * time.Minute
-	lm.SetGuardLookup(func(l lm.Load) time.Duration {
+	m.SetGuardLookup(func(l lm.Load) time.Duration {
 		if l == protected {
 			return guard
 		}
@@ -25,23 +24,23 @@ func TestShedGuard(t *testing.T) {
 	now := time.Now()
 
 	// a load that is not protected is not held off
-	assert.Zero(t, lm.Shed(other, now))
-	assert.Zero(t, lm.Guarded(other, now))
+	assert.Zero(t, m.Shed(other, now))
+	assert.Zero(t, m.Guarded(other, now))
 
-	assert.Equal(t, guard, lm.Shed(protected, now))
-	assert.Equal(t, guard, lm.Guarded(protected, now))
-	assert.Equal(t, time.Second, lm.Guarded(protected, now.Add(guard-time.Second)))
-	assert.Zero(t, lm.Guarded(protected, now.Add(guard)), "runs again once the guard is over")
+	assert.Equal(t, guard, m.Shed(protected, now))
+	assert.Equal(t, guard, m.Guarded(protected, now))
+	assert.Equal(t, time.Second, m.Guarded(protected, now.Add(guard-time.Second)))
+	assert.Zero(t, m.Guarded(protected, now.Add(guard)), "runs again once the guard is over")
 
 	// the guard is over for good, not just at that moment
-	assert.Zero(t, lm.Guarded(protected, now))
+	assert.Zero(t, m.Guarded(protected, now))
 
 	// a changed duration applies to a running guard
-	lm.Shed(protected, now)
+	m.Shed(protected, now)
 	guard = 10 * time.Minute
-	assert.Equal(t, 4*time.Minute, lm.Guarded(protected, now.Add(6*time.Minute)))
+	assert.Equal(t, 4*time.Minute, m.Guarded(protected, now.Add(6*time.Minute)))
 
 	// lifting the protection releases it right away
 	guard = 0
-	assert.Zero(t, lm.Guarded(protected, now.Add(time.Minute)))
+	assert.Zero(t, m.Guarded(protected, now.Add(time.Minute)))
 }

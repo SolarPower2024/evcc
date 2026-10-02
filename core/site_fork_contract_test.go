@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/api"
-	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
 	"github.com/stretchr/testify/assert"
@@ -16,8 +15,6 @@ import (
 // charge decision is upstream's price limit, the battery mode upstream's, and
 // nothing is written anywhere.
 func TestForkInertWhenUnused(t *testing.T) {
-	lm.Reset()
-	t.Cleanup(lm.Reset)
 
 	bat := &scenarioBattery{}
 	site := &Site{

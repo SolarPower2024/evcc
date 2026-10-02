@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/evcc-io/evcc/core/keys"
-	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	coresettings "github.com/evcc-io/evcc/core/settings"
 	"github.com/evcc-io/evcc/db/settings"
@@ -27,8 +26,6 @@ func addTestLoadpoint(t *testing.T, name string, prio int) *Loadpoint {
 func TestUnifyLmPriorities(t *testing.T) {
 	config.Reset()
 	t.Cleanup(config.Reset)
-	lm.Reset()
-	t.Cleanup(lm.Reset)
 	settings.SetBool(keys.LmPrioritiesUnified, false)
 	t.Cleanup(func() { settings.SetBool(keys.LmPrioritiesUnified, false) })
 
@@ -38,7 +35,7 @@ func TestUnifyLmPriorities(t *testing.T) {
 
 	site := &Site{log: util.NewLogger("test")}
 	site.lms().prios = map[string]int{"db:1": 7, lmBatteryName: 4}
-	lm.SetPriorityLookup(site.lmPriorityLookup)
+	site.lmm().SetPriorityLookup(site.lmPriorityLookup)
 
 	site.unifyLmPriorities()
 
@@ -48,8 +45,8 @@ func TestUnifyLmPriorities(t *testing.T) {
 	assert.Equal(t, map[string]int{lmBatteryName: 4}, site.lms().prios)
 
 	// shedding follows the upstream priority, the battery its own value
-	assert.Equal(t, 7, lm.Priority(wallbox))
-	assert.Equal(t, 4, lm.Priority(site.lmBattery()))
+	assert.Equal(t, 7, site.lmm().Priority(wallbox))
+	assert.Equal(t, 4, site.lmm().Priority(site.lmBattery()))
 
 	// once only
 	site.lms().prios = map[string]int{"db:1": 1}

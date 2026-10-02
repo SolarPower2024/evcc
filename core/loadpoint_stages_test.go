@@ -7,7 +7,6 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/charger"
 	"github.com/evcc-io/evcc/core/circuit"
-	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/util"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +17,6 @@ import (
 // 10 kW circuit, with switches kept in a js vm
 func newStagesLoadpoint(t *testing.T, vm string) (*Loadpoint, api.Charger, *lmMeter) {
 	t.Helper()
-	lm.Reset()
 	Voltage = 230
 
 	var stages []any
@@ -138,7 +136,7 @@ func TestStagesGiveWayToHigherPriority(t *testing.T) {
 	wallbox.priority = 5
 	wallbox.minCurrent, wallbox.maxCurrent = 6, 10
 
-	lm.SetPriorityLookup(func(l lm.Load) (int, bool) { return l.LmPriority(), true })
+	wallbox.lmOwn = heater.lmm() // one load management for both
 
 	heaterPower := func() float64 {
 		p, err := c.(api.Meter).CurrentPower()

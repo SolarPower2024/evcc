@@ -29,6 +29,10 @@ surplus order accordingly.
 
 ### How it works
 
+All of it lives in one `lm.Manager` per site (`site.lmm()`), which its
+loadpoints reach through the site (`lp.lmm()`); the package keeps no state of
+its own.
+
 A load whose request the circuit denies records the denied amount as unserved
 demand. Loads with a lower priority then get that amount withheld from their own
 budget and give way on their next update, which frees the power for the
@@ -124,7 +128,7 @@ Keep these in mind when merging a new evcc version:
 | `core/site.go` | `lm` import, `LoadManagement` (yaml) and `custom` fields, `restoreCustom` at the end of `restoreSettings`, `updateCustom` after `updatePower`, `setPeakGridEnergy` in `updateGridMeter`, `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of upstream's calls |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (INFO, no ui notification), see `circuit_custom.go` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
-| `core/loadpoint.go` | `lm` import, `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes; 1p current limits: `phaseCurrents1p` field, restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` per phase count, the three phase timers take `phaseScaleDelay` |
+| `core/loadpoint.go` | `loadpointCustom` field (see `core/loadpoint_lm.go`), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lp.lmm().Peek*` probes; 1p current limits: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` per phase count, the three phase timers take `phaseScaleDelay` |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split into a variant per phase count (as in evcc PR 32505), min/max power use it |
 | `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` embedded in the dynamic config, applied after min/max current, read back for the ui |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue` (1p currents, phase delays), regular range labelled 3-phase while it is shown, 3p minimum for the power hint |
