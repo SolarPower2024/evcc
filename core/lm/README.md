@@ -122,7 +122,7 @@ Keep these in mind when merging a new evcc version:
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `lm` import, `LoadManagement`/`loadMgmt`/`peakShaving` fields, two restore calls, `batteryGridChargeRequested`, `updatePeakShaving`, `updateBatteryIdent`, `updateBatteryModePeakAware`, `setPeakGridEnergy` in `updateGridMeter` |
+| `core/site.go` | `lm` import, `LoadManagement` (yaml) and `custom` fields, `restoreCustom` at the end of `restoreSettings`, `updateCustom` after `updatePower`, `setPeakGridEnergy` in `updateGridMeter`, `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of upstream's calls |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (INFO, no ui notification), see `circuit_custom.go` |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` |
 | `core/loadpoint.go` | `lm` import, `LmPrio` field (yaml fallback), `setLimit` checks against `lp.lmCircuit()` instead of `lp.circuit` (upstream calculation unchanged) and calls `done`, two `lm.Peek*` probes; 1p current limits: `phaseCurrents1p` field, restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` per phase count, the three phase timers take `phaseScaleDelay` |

@@ -135,14 +135,14 @@ type peakState struct {
 
 // peak returns the peak shaving state, applying defaults on first use
 func (site *Site) peak() *peakState {
-	site.peakShaving.once.Do(func() {
-		site.peakShaving.limit = defaultPeakLimit
-		site.peakShaving.reserve = defaultPeakReserve
-		if site.peakShaving.clock == nil {
-			site.peakShaving.clock = clock.New()
+	site.custom.peak.once.Do(func() {
+		site.custom.peak.limit = defaultPeakLimit
+		site.custom.peak.reserve = defaultPeakReserve
+		if site.custom.peak.clock == nil {
+			site.custom.peak.clock = clock.New()
 		}
 	})
-	return &site.peakShaving
+	return &site.custom.peak
 }
 
 // restorePeakSettings restores the persisted peak shaving settings and resolves

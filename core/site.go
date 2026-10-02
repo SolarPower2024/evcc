@@ -69,10 +69,9 @@ type Site struct {
 	Meters        MetersConfig `mapstructure:"meters"`        // Meter references
 	CurtailersRef []string     `mapstructure:"curtailers"`    // Curtailment device references
 
-	// custom: load management priorities and battery participation, see core/site_lm.go
+	// custom: load management, peak shaving and the rest of this fork, see core/site_lm.go
 	LoadManagement lm.Config `mapstructure:"loadmanagement"`
-	loadMgmt       lmState
-	peakShaving    peakState
+	custom         siteCustom
 
 	// meters
 	circuit        api.Circuit                // Circuit
@@ -515,10 +514,7 @@ func (site *Site) restoreSettings() error {
 	site.publish(keys.OptimizerChargingStrategy, site.GetOptimizerChargingStrategy())
 	site.publish(keys.OptimizerChargingStrategies, optimizerChargingStrategies)
 
-	// custom: load management, see core/site_lm.go
-	site.restoreLmSettings()
-	site.restorePeakSettings()
-	site.restoreFeedInEeg() // custom: second feed-in tariff, see core/site_feedin_eeg.go
+	site.restoreCustom() // custom: see core/site_lm.go
 
 	// drop legacy accumulator-based forecast settings (now stored via metrics collector)
 	settings.Delete("solarAccForecast")
@@ -1082,9 +1078,7 @@ func (site *Site) updateGridMeter() error {
 		c.AddEnergy(mm.Energy, mm.ReturnEnergy, mm.Power)
 	}
 
-	// custom: the import counter meters the peak shaving window
-	site.setPeakGridEnergy(mm.Energy)
-
+	site.setPeakGridEnergy(mm.Energy) // custom: peak shaving window, see core/site_peakshaving.go
 	site.publish(keys.Grid, mm)
 
 	return nil
@@ -1288,21 +1282,14 @@ func (site *Site) update(lp updater) {
 		go site.optimizerUpdateAsync(tariff.SlotDuration)
 
 		site.updatePower(lp, state, totalChargePower, consumption, feedin)
-
-		// custom: peak shaving, see core/site_peakshaving.go
-		site.updatePeakShaving(state)
-		// custom: export under a second feed-in tariff, see core/site_feedin_eeg.go
-		site.updateFeedInEeg()
-		// custom: battery capacity and efficiency, see core/site_battery_ident.go
-		site.updateBatteryIdent()
+		site.updateCustom(state) // custom: see core/site_lm.go
 	}
 
 	// smart grid charging
 	rate := site.currentRate(consumption)
 
 	// update battery after reading meters to ensure that (modbus) connection is open
-	// custom: adds soc-based grid charging and the load management gate, see core/site_lm.go
-	batteryGridChargeActive := site.batteryGridChargeRequested(rate)
+	batteryGridChargeActive := site.batteryGridChargeRequested(rate) // custom: soc-based, one-time, lm gate, see core/site_lm.go
 	site.publish(keys.BatteryGridChargeActive, batteryGridChargeActive)
 
 	// grid discharge (feed-in arbitrage) uses the feed-in rate, not the grid rate
@@ -1317,8 +1304,7 @@ func (site *Site) update(lp updater) {
 	site.publish(keys.BatteryGridDischargeActive, batteryGridDischargeActive)
 	site.publish(keys.BatteryGridDischargeActive, batteryGridDischargeActive)
 
-	// custom: peak shaving forces normal mode, see core/site_peakshaving.go
-	site.updateBatteryModePeakAware(batteryGridChargeActive, batteryGridDischargeActive, rate)
+	site.updateBatteryModePeakAware(batteryGridChargeActive, batteryGridDischargeActive, rate) // custom: see core/site_peakshaving.go
 
 	// re-evaluate against the updated loadpoint state
 	site.publishSuggestions()
