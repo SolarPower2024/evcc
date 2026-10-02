@@ -70,6 +70,19 @@ func TestHomeProfileByWeekday(t *testing.T) {
 		}
 		assert.Equal(t, want, v, "slot %d", i)
 	}
+
+	// the hook in upstream's homeProfile: per weekday only when chosen
+	site.collectors = map[string]*metrics.Collector{metrics.Home: col}
+	t.Cleanup(func() { _ = site.SetLmAdvanced("homeForecast", 0) })
+
+	upstream, err := site.homeProfile(2 * 96)
+	require.NoError(t, err)
+	assert.NotEqual(t, res, upstream, "evcc's own forecast by default")
+
+	require.NoError(t, site.SetLmAdvanced("homeForecast", 1))
+	hooked, err := site.homeProfile(2 * 96)
+	require.NoError(t, err)
+	assert.Equal(t, res, hooked)
 }
 
 // A weekday without data takes the regular 28 day profile.

@@ -20,6 +20,22 @@ import (
 // homeWeekdayWeeks is how many weeks back the weekday profiles reach
 const homeWeekdayWeeks = 8
 
+// homeProfileCustom returns the home base load of the forecast chosen under
+// Verbrauchsprognose: the uploaded load profile (falling back to evcc's own
+// forecast when it cannot be used) or the profile per weekday. ok is false for
+// evcc's own forecast.
+func (site *Site) homeProfileCustom(col *metrics.Collector, minLen int) ([]float64, bool, error) {
+	switch site.homeForecast() {
+	case homeForecastManual:
+		res, ok := site.homeProfileManual(col, minLen)
+		return res, ok, nil
+	case homeForecastWeekday:
+		res, err := site.homeProfileByWeekday(col, minLen)
+		return res, true, err
+	}
+	return nil, false, nil
+}
+
 // homeWeekday reports whether the home forecast is taken per weekday
 func (site *Site) homeWeekday() bool {
 	return site.homeForecast() == homeForecastWeekday

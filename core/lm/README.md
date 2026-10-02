@@ -134,7 +134,7 @@ Keep these in mind when merging a new evcc version:
 | `core/site/api.go` | embeds `CustomAPI`, one line |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff role: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `assets/js/components/Config/TariffModal.vue` | `feedInEeg` offers the price templates |
-| `core/site_load_predictor.go` | `homeProfileManual` and `homeProfileByWeekday` calls in `homeProfile` |
+| `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `applyLmOptimizerInputs` where the optimizer request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` so a forced run arriving during a run is not dropped |
 | `server/http.go` | `addCustomSiteRoutes`, one call; a route colliding with an evcc route is left out and logged |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
