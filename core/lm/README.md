@@ -149,7 +149,7 @@ Keep these in mind when merging a new evcc version:
 | `assets/js/types/evcc.ts` | `State` and `ConfigLoadpoint` extend the fork's types in `evcc-lm.ts`, re-exported; `feedInEeg` tariff type |
 | `i18n/de.json`, `i18n/en.json` | texts |
 
-Everything else lives in files of its own: `core/lm/`, `core/circuit/circuit_custom.go`, `core/site_lm.go`, `core/site_lm_guard.go`,
+Everything else lives in files of its own: `core/lm/`, `core/peak/`, `core/circuit/circuit_custom.go`, `core/site_lm.go`, `core/site_lm_guard.go`,
 `core/site_lm_advanced.go`, `core/site_load_manual.go`, `core/site_lm_status.go`, `core/site_lm_profiles.go`, `core/site_lm_follow.go`,
 `core/site_peak_stats.go`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`,
 `core/site_peakshaving.go`, `core/loadpoint_lm.go`, `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go`, `core/keys/site_custom.go`,
@@ -494,11 +494,15 @@ can be cancelled and passes the same gate as the soc-based grid charging, see
 
 ## 4. Peak shaving
 
-See `core/site_peakshaving.go`. The battery's lower soc range is reserved for
+The window, the allowed power, the setpoint and the reserve hysteresis are
+computed in `core/peak`, which knows nothing about the site and is tested on
+its own; `core/site_peakshaving.go` feeds it one sample per cycle and handles
+the settings, Home Assistant and the battery mode. The battery's lower soc range is reserved for
 grid demand peaks; above the reserve the controller is told it may discharge
 freely. The setpoint is `max(0, gridPower + batteryPower - allowed)`. The battery
 power is added back because the grid meter already reflects the controller's own
-output, and using it directly oscillates. `TestPeakSetpointIsStable` pins that
+output, and using it directly oscillates. `TestPeakSetpointIsStable` (in
+`core/peak`) pins that
 down.
 
 The limit applies to the average of the clock-aligned 15 minute window, which is

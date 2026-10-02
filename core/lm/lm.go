@@ -54,21 +54,9 @@ type PeakShaving struct {
 	URI        string         `mapstructure:"uri"`        // Home Assistant URI, empty = the add-on's supervisor connection
 	Insecure   bool           `mapstructure:"insecure"`   // allow self-signed certificates
 	Set        *plugin.Config `mapstructure:"set"`        // full plugin override, takes precedence over the ui entity
-	FreeValue  float64        `mapstructure:"freevalue"`  // written while above the reserve soc, 0 = default
+	FreeValue  float64        `mapstructure:"freevalue"`  // written while above the reserve soc, 0 = peak.DefaultFreeValue
 	Hysteresis float64        `mapstructure:"hysteresis"` // soc band in %, 0 = default
 }
-
-const (
-	// DefaultFreeValue signals the discharge controller that the battery may be
-	// used without restriction, i.e. the soc is above the peak shaving reserve
-	DefaultFreeValue = 10000.0
-
-	// DefaultHysteresis keeps a fluctuating soc from flapping across the reserve
-	DefaultHysteresis = 2.0
-
-	// PeakWindow is the metering interval a demand charge is billed on
-	PeakWindow = 15 * time.Minute
-)
 
 // Battery configures the home battery as a load management participant
 type Battery struct {

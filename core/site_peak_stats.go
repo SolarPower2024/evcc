@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/core/keys"
-	"github.com/evcc-io/evcc/core/lm"
+	"github.com/evcc-io/evcc/core/peak"
 	"github.com/evcc-io/evcc/db/settings"
 )
 
@@ -57,7 +57,7 @@ func (s *peakState) peakMonthOf(t time.Time) *peakMonth {
 // recordPeakWindow takes a completed quarter hour into its month. Must be called
 // with the lock held.
 func (s *peakState) recordPeakWindow(start time.Time, drawnWs, demandWs float64) {
-	window := lm.PeakWindow.Seconds()
+	window := peak.Window.Seconds()
 	m := s.peakMonthOf(start)
 
 	if avg := drawnWs / window; avg > m.Peak {
