@@ -139,8 +139,8 @@ Keep these in mind when merging a new evcc version:
 | `server/http.go` | `addCustomSiteRoutes`, one call; a route colliding with an evcc route is left out and logged |
 | `assets/js/views/Battery.vue` | mounts the new cards, profile selection at the bottom |
 | `assets/js/views/Config.vue` | load management details section, its dialogs (`LmConfigModals.vue`), EEG tariff card and add button |
-| `assets/js/views/App.vue` | mounts the load management overview and the peak statistics |
-| `assets/js/components/BottomTabs/MoreMenu.vue` | "Lastmanagement" and "Peak Shaving" entries |
+| `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` (overview, peak statistics) |
+| `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` ("Lastmanagement", "Peak Shaving") |
 | `assets/js/components/Config/TariffCard.vue` | EEG counter summary in the EEG card |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
 | `assets/js/types/evcc.ts` | `State` and `ConfigLoadpoint` extend the fork's types in `evcc-lm.ts`, re-exported; `feedInEeg` tariff type |

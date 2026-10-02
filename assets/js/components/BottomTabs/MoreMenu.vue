@@ -68,26 +68,7 @@
 		>
 			{{ $t("main.vehicleSettings.menu") }}
 		</button>
-		<!-- custom: load management overview, see core/site_lm_status.go -->
-		<button
-			v-if="hasLoadManagement"
-			type="button"
-			class="dropdown-item"
-			data-testid="more-lm-overview"
-			@click="openModalById('lmOverviewModal')"
-		>
-			{{ $t("lmoverview.menu") }}
-		</button>
-		<!-- custom: monthly peak statistics, see core/site_peak_stats.go -->
-		<button
-			v-if="hasPeakShaving"
-			type="button"
-			class="dropdown-item"
-			data-testid="more-peak-stats"
-			@click="openModalById('peakStatsModal')"
-		>
-			{{ $t("peakstats.menu") }}
-		</button>
+		<LmMoreMenuItems /><!-- custom: see components/LoadManagement -->
 		<router-link class="dropdown-item" to="/config" active-class="active">
 			<span v-if="showConfigBadge" class="circle-badge me-1" :class="badgeClass"></span>
 			{{ $t("config.main.title") }}
@@ -117,13 +98,14 @@ import {
 	isNewVersionUnacknowledged,
 } from "@/utils/version";
 import settings from "@/settings";
-import store from "@/store";
+import LmMoreMenuItems from "../LoadManagement/MoreMenuItems.vue"; // custom
 import { isUserConfigError } from "@/utils/fatal";
 import { defineComponent, type PropType } from "vue";
 import type { FatalError, Sponsor, AuthProviders, Vehicle } from "@/types/evcc";
 
 export default defineComponent({
 	name: "MoreMenu",
+	components: { LmMoreMenuItems }, // custom
 	props: {
 		open: { type: Boolean, default: false },
 		vehicles: { type: Object as PropType<Record<string, Vehicle>>, default: () => ({}) },
@@ -188,12 +170,6 @@ export default defineComponent({
 		hasVehicles() {
 			return Object.keys(this.vehicles).length > 0;
 		},
-		hasLoadManagement() {
-			return !!store.state?.lmStatus;
-		},
-		hasPeakShaving() {
-			return !!store.state?.peakShavingEntity || !!store.state?.peakMonths?.length;
-		},
 	},
 	methods: {
 		handleAuthRequired() {
@@ -222,9 +198,6 @@ export default defineComponent({
 				document.getElementById("vehicleSettingsModal") as HTMLElement
 			);
 			modal.show();
-		},
-		openModalById(id: string) {
-			Modal.getOrCreateInstance(document.getElementById(id) as HTMLElement).show();
 		},
 		openNativeSettings() {
 			sendToApp({ type: "settings" });
