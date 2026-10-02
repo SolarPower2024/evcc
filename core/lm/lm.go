@@ -310,15 +310,6 @@ func (m *Manager) reserved(c api.Circuit, self Load, prio int, selfPower, selfCu
 	return power, current
 }
 
-// Reserved returns the power reserved for loads with a higher priority than the
-// given load. Exposed for logging and diagnostics.
-func (m *Manager) Reserved(l Load, c api.Circuit) (float64, float64) {
-	if c == nil || l == nil {
-		return 0, 0
-	}
-	return m.reserved(c, l, m.Priority(l), l.GetChargePower(), l.GetMaxPhaseCurrent())
-}
-
 // unmet returns what a load has to be left once the circuit capped its request:
 // the whole increase, not only the part that was capped. A load that switches
 // on in full or not at all, like a battery or a heater, takes nothing of a
