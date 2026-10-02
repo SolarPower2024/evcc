@@ -17,16 +17,9 @@ import (
 func (site *Site) homeProfile(minLen int) ([]float64, error) {
 	col := site.collectors[metrics.Home]
 
-	// custom: from an uploaded load profile, see core/site_load_manual.go
-	if site.homeForecast() == homeForecastManual {
-		if res, ok := site.homeProfileManual(col, minLen); ok {
-			return res, nil
-		}
-	}
-
-	// custom: per weekday, see core/site_load_weekday.go
-	if site.homeWeekday() {
-		return site.homeProfileByWeekday(col, minLen)
+	// custom: uploaded load profile or per weekday, see core/site_load_weekday.go
+	if res, ok, err := site.homeProfileCustom(col, minLen); ok {
+		return res, err
 	}
 
 	base, err := col.EnergyProfile(now.BeginningOfDay().AddDate(0, 0, -28))
