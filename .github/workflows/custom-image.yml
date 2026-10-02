@@ -10,7 +10,8 @@
 #   git tag v0.315.0-lm1 && git push origin v0.315.0-lm1
 # That produces ghcr.io/<owner>/evcc-custom:0.315.0-lm1, which is what belongs
 # in the addon's config.yaml. Pushes to the branch build nothing, a version is
-# only built when it is tagged (or started by hand).
+# only built when it is tagged (or started by hand), and only once the fork
+# tests passed.
 name: Custom image
 
 on:
@@ -23,8 +24,14 @@ permissions:
   packages: write
 
 jobs:
+  # an image is only built from a state that passes all tests
+  tests:
+    name: Tests
+    uses: ./.github/workflows/fork-tests.yml
+
   build:
     name: Build and push
+    needs: tests
     runs-on: ubuntu-latest
 
     steps:
