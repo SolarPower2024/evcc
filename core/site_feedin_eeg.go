@@ -120,6 +120,11 @@ func (site *Site) applyFeedInEegEntity(entity string, changed bool) error {
 	if entity != "" {
 		conn, err := site.haConnection()
 		if err != nil {
+			// keep the name, so the ui shows what is configured, as for the peak entities
+			s := site.eeg()
+			s.mu.Lock()
+			s.entity, s.get = entity, nil
+			s.mu.Unlock()
 			return err
 		}
 		// GetFloatState converts Wh and MWh to kWh
