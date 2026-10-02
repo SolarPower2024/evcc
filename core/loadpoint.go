@@ -109,10 +109,6 @@ type Loadpoint struct {
 	Title       string         `mapstructure:"title"`    // UI title
 	Priority    int            `mapstructure:"priority"` // Priority
 
-	// custom: load management shed priority, independent of the pv surplus
-	// priority above. Lower is shed first, see core/lm.
-	LmPrio int `mapstructure:"lmpriority"`
-
 	// from yaml, deprecated
 	GuardDuration_ time.Duration `mapstructure:"guardduration"` // ignored, present for compatibility
 	Phases_        int           `mapstructure:"phases"`        // ignored, present for compatibility

@@ -68,7 +68,7 @@ func TestEqualPrioritiesAreUpstream(t *testing.T) {
 func TestHigherPriorityShedsLower(t *testing.T) {
 	lm.Reset()
 
-	// lower lmpriority is shed first
+	// lower priority is shed first
 	wallbox := &testLoad{title: "wallbox", prio: 1, power: 11000}
 	c := newCircuit(t, 11000, wallbox)
 
