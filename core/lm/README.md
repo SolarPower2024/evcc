@@ -416,7 +416,8 @@ Every fork feature follows these, so taking in a new evcc version stays cheap:
    `// custom:` hook lines, all listed below. evcc's logic is called, not
    copied. In the ui, fork parts are own components mounted with one tag.
 4. **Contract tests.** Each hook has a test pinning the evcc behaviour it relies
-   on, and that the fork is inert while unused.
+   on, and that the fork is inert while unused; `TestForkHooksInPlace` checks
+   that every hook is still in place, see [Tests](#tests).
 
 ## Upstream touch points
 
@@ -467,6 +468,9 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 ## Taking in a new evcc version
 
+The issue *evcc-Update-Check* (weekly, see [Tests](#tests)) shows beforehand
+how many commits are new, whether they conflict and whether the tests pass.
+
 1. `git fetch upstream --tags` and merge evcc's **master** into
    `load-peak-features` (release branches only hold backports already in
    master). If the newest master does not build, merge the last commit that does.
@@ -475,21 +479,56 @@ Every change in an evcc file. Check these when merging a new evcc version.
    optimizer, phase switching) where nothing conflicts.
 3. Rule 2: look through the new evcc commits for functions equal or similar to
    the fork's; take evcc's where the result is the same and remove ours.
-4. Run all tests (see below), then the live checks.
+4. Push: the fork tests run on GitHub; then the live checks.
 5. Never press GitHub's "Sync fork" on `load-peak-features`: on conflicts it
    offers "Discard commits".
 
 ## Tests
 
-Contract tests pin the evcc behaviour the hooks rely on and that the fork is
-inert while unused: `TestForkInertWhenUnused`, `TestSetLimitUsesLmCircuit`,
-`TestEqualPrioritiesAreUpstream`, `TestPeakReserveKeepsExternalMode`,
-`TestLoadpointUsesSiteLoadManagement`, `TestCurrents1pInertWhenUnused`,
-`TestMergeRoutesKeepsUpstream`, `TestLmSMaxFromUpstream`.
+**Contract tests** pin what the hooks rely on and that the fork is inert while
+unused:
 
-The fork's Go tests live next to the code in `core`, `core/lm`, `core/peak`,
+- `TestForkHooksInPlace` parses every touched evcc file and checks that each
+  hook from the table above is still there (Go: in the right function; ui: the
+  mount). A hook lost in a merge fails here, while all other tests would stay
+  green. A new hook gets a line in its table.
+- `TestForkInertWhenUnused`, `TestEqualPrioritiesAreUpstream`,
+  `TestCurrents1pInertWhenUnused`, `TestLmSMaxFromUpstream`: without
+  configuration the fork changes nothing.
+- `TestSetLimitUsesLmCircuit`, `TestPeakReserveKeepsExternalMode`,
+  `TestLoadpointUsesSiteLoadManagement`, `TestMergeRoutesKeepsUpstream`: the
+  hooks act on evcc's real control path.
+- `TestRestoreCustomAfterRestart`: every fork setting survives a restart.
+- `TestCustomRoutesMatch`: every api route reaches its handler; a new route
+  needs a sample request there.
+
+**Feature tests** live next to the code in `core`, `core/lm`, `core/peak`,
 `core/lm/profile`, `core/circuit`, `core/metrics`, `core/loadpoint`, `charger`
-and `server`. Two optimizer tests only run against a running optimizer:
-`TestLmOptimizerScenarios` (`OPTIMIZER_URI`) solves synthetic days and checks
-soc bounds, import limit, energy balance and goals; `TestLmOptimizerReplay`
-(`OPTIMIZER_REPLAY`, `OPTIMIZER_URI`) replays a recorded request.
+and `server`; many replay logged situations. Two optimizer tests only run
+against a running optimizer: `TestLmOptimizerScenarios` (`OPTIMIZER_URI`)
+solves synthetic days and checks soc bounds, import limit, energy balance and
+goals; `TestLmOptimizerReplay` (`OPTIMIZER_REPLAY`, `OPTIMIZER_URI`) replays a
+recorded request.
+
+Tests touching the settings store call `noSettingsDB` (keeps it in memory, as
+evcc's `newDeleteTestSite` leaves its database open) and `keepSettings`
+(restores it afterwards), see `core/fork_helpers_test.go`. A test opening a
+database closes it again. The fork's tests pass in any order (`-shuffle=on`).
+
+**On GitHub** (`.github/workflows/`, standard runners, free for a public
+repository):
+
+- `fork-tests.yml` on every push and pull request: build, vet, the whole Go
+  testsuite (evcc's and the fork's), the race detector on the fork's packages,
+  the ui checks (format, lint, types, i18n, vitest, build) and a shuffled run
+  that reports but does not block.
+- `custom-image.yml` builds an add-on image from a tag only after these passed.
+- `upstream-check.yml` every Monday: fetches evcc's master read only, merges it
+  inside the runner without pushing, runs the tests and updates the issue
+  *evcc-Update-Check* (new commits, conflicts, test result, evcc files with
+  hooks that evcc changed).
+
+**Locally** the Go tests run in WSL (no Windows firewall prompts), the ui checks
+in a checkout with `node_modules`. Live checks of a build with a simulated Home
+Assistant and the ui checks with headless Edge stay local, as GitHub cannot
+reach the test instances.
