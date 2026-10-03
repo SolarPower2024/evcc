@@ -161,6 +161,7 @@ func (site *Site) restoreLmSettings() {
 	site.lmm().SetPriorityLookup(site.lmPriorityLookup)
 	site.restoreGridChargeOnce()
 	site.unifyLmPriorities()
+	site.dropOldLmPriority()
 
 	site.restoreLmGuard()
 	site.restoreLmAdvanced()

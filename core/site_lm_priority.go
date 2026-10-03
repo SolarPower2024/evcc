@@ -12,6 +12,7 @@ import (
 	"maps"
 
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/config"
 )
@@ -67,4 +68,29 @@ func (site *Site) lmBatteryPriority() int {
 		return prio
 	}
 	return 0
+}
+
+// dropOldLmPriority removes the old lmpriority key from the stored loadpoint
+// configs. The ui only merges into a stored config and could never remove it.
+// Runs after unifyLmPriorities has taken the value over.
+func (site *Site) dropOldLmPriority() {
+	for _, dev := range config.Loadpoints().Devices() {
+		cd, ok := dev.(config.ConfigurableDevice[loadpoint.API])
+		if !ok {
+			continue // yaml loadpoint, only the user can edit evcc.yaml
+		}
+
+		conf := cd.Config()
+		if _, ok := conf.Other["lmpriority"]; !ok {
+			continue
+		}
+
+		delete(conf.Other, "lmpriority")
+		if err := cd.Update(conf.Other, cd.Instance()); err != nil {
+			site.log.ERROR.Printf("load management: %s: removing old lmpriority: %v", conf.Name, err)
+			continue
+		}
+
+		site.log.INFO.Printf("load management: %s: old lmpriority removed from the stored loadpoint config", conf.Name)
+	}
 }

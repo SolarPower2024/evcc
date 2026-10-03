@@ -53,7 +53,8 @@ loadpoint's value is its regular priority, also editable in the loadpoint
 settings; the battery's is stored in `lmPriorities`. Older versions had a
 separate load management priority per loadpoint; those values were taken over
 into the regular priority once (`core/site_lm_priority.go`). An old `lmpriority`
-key still in a stored loadpoint config is accepted (field `LmPrio_`).
+key still in a stored loadpoint config is accepted (field `LmPrio_`), taken over
+and then removed from the config at start (`dropOldLmPriority`).
 
 How it works (`core/lm/lm.go`): a load whose request the circuit denies records
 the denied amount as unserved demand. Loads with a lower priority get that

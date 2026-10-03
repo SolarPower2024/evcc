@@ -7,9 +7,11 @@ import (
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	coresettings "github.com/evcc-io/evcc/core/settings"
+	"github.com/evcc-io/evcc/db"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
+	"github.com/evcc-io/evcc/util/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -78,4 +80,39 @@ func TestLoadpointConfigOldLmPriority(t *testing.T) {
 	lp, err := NewLoadpointFromConfig(util.NewLogger("test"), nil, nil, static)
 	require.NoError(t, err)
 	assert.Equal(t, 6, lp.LmPrio_)
+}
+
+// The old lmpriority key is removed from a stored loadpoint config, the other
+// keys stay
+func TestDropOldLmPriority(t *testing.T) {
+	prev := db.Instance
+	t.Cleanup(func() { db.Instance = prev })
+	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	config.Reset()
+	t.Cleanup(config.Reset)
+	require.NoError(t, config.Chargers().Add(config.NewStaticDevice(config.Named{Name: "charger"}, api.Charger(api.NewMockCharger(gomock.NewController(t))))))
+
+	conf, err := config.AddConfig(templates.Loadpoint, map[string]any{"charger": "charger", "title": "Heizstab", "priority": 2, "lmpriority": 6})
+	require.NoError(t, err)
+
+	_, static, err := loadpoint.SplitConfig(conf.Named().Other)
+	require.NoError(t, err)
+	lp, err := NewLoadpointFromConfig(util.NewLogger("test"), coresettings.NewConfigSettingsAdapter(util.NewLogger("test"), &conf), nil, static)
+	require.NoError(t, err)
+	require.NoError(t, config.Loadpoints().Add(config.NewConfigurableDevice[loadpoint.API](&conf, lp)))
+
+	site := &Site{log: util.NewLogger("test")}
+	site.dropOldLmPriority()
+
+	stored, err := config.ConfigByID(conf.ID)
+	require.NoError(t, err)
+	assert.NotContains(t, stored.Data, "lmpriority")
+	assert.Equal(t, "Heizstab", stored.Data["title"])
+	assert.Equal(t, "charger", stored.Data["charger"])
+
+	// loads again without the key, a second run changes nothing
+	_, static, err = loadpoint.SplitConfig(stored.Named().Other)
+	require.NoError(t, err)
+	assert.NotContains(t, static, "lmpriority")
+	site.dropOldLmPriority()
 }

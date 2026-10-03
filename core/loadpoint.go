@@ -114,9 +114,10 @@ type Loadpoint struct {
 	MinCurrent_    float64       `mapstructure:"minCurrent"`    // ignored, present for compatibility
 	MaxCurrent_    float64       `mapstructure:"maxCurrent"`    // ignored, present for compatibility
 
-	// custom: load management priority of fork versions before 0.316.1-lm3. It may still
-	// sit in a stored loadpoint config (yaml moved to the ui), only taken over
-	// once into the priority, see core/site_lm_priority.go
+	// custom: load management priority of fork versions before 0.316.1-lm3. It may
+	// still sit in a stored loadpoint config (yaml moved to the ui): taken over
+	// once into the priority, then removed from the config, see
+	// core/site_lm_priority.go
 	LmPrio_ int `mapstructure:"lmpriority"`
 
 	title                    string   // UI title
