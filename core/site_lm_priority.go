@@ -38,6 +38,9 @@ func (site *Site) unifyLmPriorities() {
 
 		name := dev.Config().Name
 		prio, ok := prios[name]
+		if !ok && lp.LmPrio_ != 0 {
+			prio, ok = lp.LmPrio_, true // lmpriority from the stored loadpoint config
+		}
 		delete(prios, name)
 
 		if ok && prio != lp.GetPriority() {
