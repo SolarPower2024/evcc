@@ -771,6 +771,7 @@ func (lp *Loadpoint) Prepare(site site.API, uiChan chan<- util.Param, pushChan c
 	lp.publish(keys.MinCurrent, lp.GetMinCurrent())
 	lp.publish(keys.MaxCurrent, lp.GetMaxCurrent())
 	lp.publishPhaseSwitch() // custom: see core/loadpoint_phasecurrents.go
+	lp.publishStages()      // custom: see core/loadpoint_stages.go
 
 	lp.publish(keys.EnableThreshold, lp.Enable.Threshold)
 	lp.publish(keys.DisableThreshold, lp.Disable.Threshold)

@@ -81,6 +81,7 @@ export default defineComponent({
 		pvPossible: Boolean,
 		smartCostAvailable: Boolean,
 		switchDevice: Boolean,
+		chargerStages: Boolean, // custom: heater in stages, labelled as a switch device
 		continuous: Boolean,
 		heating: Boolean,
 		charging: Boolean,
@@ -116,7 +117,9 @@ export default defineComponent({
 	},
 	methods: {
 		label(mode: CHARGE_MODE) {
-			return this.$t(chargeModeLabelKey(mode, this.continuous, this.switchDevice));
+			return this.$t(
+				chargeModeLabelKey(mode, this.continuous, this.switchDevice || this.chargerStages)
+			);
 		},
 		isActive(mode: CHARGE_MODE) {
 			return this.mode === mode;

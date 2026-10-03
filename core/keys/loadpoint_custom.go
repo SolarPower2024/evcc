@@ -8,3 +8,6 @@ const (
 	PhaseScale3pDelay = "phaseScale3pDelay" // delay before scaling up to 3p (0 = enable delay)
 	PhaseScale1pDelay = "phaseScale1pDelay" // delay before scaling down to 1p (0 = disable delay)
 )
+
+// Custom extension: see core/loadpoint_stages.go
+const ChargerStages = "chargerStages" // charger switches a heater in stages

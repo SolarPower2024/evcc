@@ -802,6 +802,10 @@ export default {
 		chargerIsSwitchDevice() {
 			return this.chargerStatus?.switchDevice?.value || false;
 		},
+		// custom: heater in stages, see charger/switchstages.go
+		chargerIsStages() {
+			return this.charger?.config?.template === "homeassistant-stages";
+		},
 		chargerIsContinuous() {
 			return this.chargerStatus?.continuous?.value || false;
 		},
@@ -871,7 +875,11 @@ export default {
 			return [OFF, SMART, NOW].map((key) => ({
 				key,
 				name: this.$t(
-					chargeModeLabelKey(key, this.chargerIsContinuous, this.chargerIsSwitchDevice)
+					chargeModeLabelKey(
+						key,
+						this.chargerIsContinuous,
+						this.chargerIsSwitchDevice || this.chargerIsStages
+					)
 				),
 			}));
 		},

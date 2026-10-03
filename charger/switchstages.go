@@ -265,6 +265,11 @@ func (c *SwitchStages) apply(phases int) error {
 	return nil
 }
 
+// Stages returns the number of stages, core shows the heater as switched by it
+func (c *SwitchStages) Stages() int {
+	return len(c.stages)
+}
+
 // Status implements the api.Charger interface
 func (c *SwitchStages) Status() (api.ChargeStatus, error) {
 	if c.lp != nil && c.lp.GetMode() == api.ModeOff {

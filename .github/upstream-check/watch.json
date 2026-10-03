@@ -78,10 +78,11 @@
       "name": "Heizstab in Stufen",
       "files": [
         "charger/switchstages.go",
+        "core/loadpoint_stages.go",
         "templates/definition/charger/homeassistant-stages.yaml"
       ],
       "prs": [31722, 34056],
-      "keywords": ["stagepower", "stages:", "Heizstab in Stufen"]
+      "keywords": ["stagepower", "stages:", "Heizstab in Stufen", "chargerStages"]
     },
     {
       "name": "Abwurfschutz",

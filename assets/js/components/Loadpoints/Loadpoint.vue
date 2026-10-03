@@ -186,6 +186,7 @@ export default defineComponent({
 		chargerFeatureHeating: Boolean,
 		chargerFeatureContinuous: Boolean,
 		chargerFeatureSwitchDevice: Boolean,
+		chargerStages: Boolean, // custom: see core/loadpoint_stages.go
 		chargerIcon: String as PropType<string | null>,
 
 		// heating display range (ui-only)

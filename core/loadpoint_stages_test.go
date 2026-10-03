@@ -7,6 +7,7 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/charger"
 	"github.com/evcc-io/evcc/core/circuit"
+	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/util"
 	"github.com/stretchr/testify/assert"
@@ -175,4 +176,18 @@ func TestStagesGiveWayToHigherPriority(t *testing.T) {
 	assert.Equal(t, 3000.0, heaterPower())
 	run(wallbox)
 	assert.Equal(t, int64(10), wb.current)
+}
+
+// TestStagesPublished pins the flag the ui reads to label the modes Off/Smart/On
+func TestStagesPublished(t *testing.T) {
+	lp, _, _ := newStagesLoadpoint(t, "stagespublished")
+
+	ui := make(chan util.Param, 1)
+	lp.uiChan = ui
+	lp.publishStages()
+	assert.Equal(t, util.Param{Key: keys.ChargerStages, Val: true}, <-ui)
+
+	lp.charger = nil
+	lp.publishStages()
+	assert.Equal(t, util.Param{Key: keys.ChargerStages, Val: false}, <-ui)
 }
