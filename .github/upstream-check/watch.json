@@ -67,7 +67,7 @@
     {
       "name": "Batterie-Entladesperre / Batteriemodus",
       "files": ["core/site_peakshaving.go", "core/site_lm_profiles.go"],
-      "prs": [34027, 33920, 33861, 33813]
+      "prs": [34027, 33920, 33813]
     },
     {
       "name": "Schaltgeräte mit Nennleistung",
