@@ -469,16 +469,18 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 ## Taking in a new evcc version
 
-Every Friday the issue *evcc-Update-Check* reviews the new evcc commits (see
+The fork takes in evcc **releases** only, never the commits between them. Every
+Friday the issue *evcc-Update-Check* reviews evcc's newest release (see
 [Tests](#tests)): what changed, which fork features evcc may now have itself,
 which evcc commit causes which conflict, and whether the merge passes the
 tests. With the secret `UPDATE_TOKEN` the PR *evcc-Update* (branch
-`evcc-update` = evcc's master) is kept open as well; conflicts can then be
-resolved on it and it is merged with a merge commit.
+`evcc-update` = evcc's newest release) is kept open as well; conflicts can
+then be resolved on it and it is merged with a merge commit.
 
-1. `git fetch upstream --tags` and merge evcc's **master** into
-   `load-peak-features` (release branches only hold backports already in
-   master). If the newest master does not build, merge the last commit that does.
+1. `git fetch upstream --tags` and merge evcc's newest release tag (x.y.z) into
+   `load-peak-features`, never `upstream/master`. A patch release lives on a
+   release branch: where it only repeats master commits the fork already has,
+   there is nothing to do; on conflicts with them keep the release version.
 2. Resolve conflicts with the touch point table above. Also check whether evcc
    changed the logic the fork builds on (circuits, battery mode, tariffs,
    optimizer, phase switching) where nothing conflicts.
@@ -528,17 +530,17 @@ repository):
   the ui checks (format, lint, types, i18n, vitest, build) and a shuffled run
   that reports but does not block.
 - `custom-image.yml` builds an add-on image from a tag only after these passed.
-- `upstream-check.yml` Fridays at noon (10:00 UTC): fetches evcc's master read
-  only and runs the review `.github/upstream-check/review.mjs` into the issue
-  *evcc-Update-Check*: a) the commits by area and the evcc files with fork
-  hooks that changed, b) fork features evcc may now have itself (evcc PRs the
-  fork waits for, names of the feature in evcc's added code, listed in
-  `watch.json`; hints that need a review), c) each conflicting file with the
-  evcc commit causing it (found with `git merge-tree`, commit by commit), d)
-  the PRs to open. Without conflicts the merge is built and tested. With the
-  secret `UPDATE_TOKEN` it also keeps the PR *evcc-Update* open. Never writes
-  to evcc's repository; issue numbers in evcc's subjects become plain text
-  ("evcc PR" and the number).
+- `upstream-check.yml` Fridays at noon (10:00 UTC): fetches evcc's release tags
+  read only and runs the review `.github/upstream-check/review.mjs` into the
+  issue *evcc-Update-Check* for the newest release: a) the commits by area and
+  the evcc files with fork hooks that changed, b) fork features evcc may now
+  have itself (evcc PRs the fork waits for, names of the feature in evcc's
+  added code, listed in `watch.json`; hints that need a review), c) each
+  conflicting file with the evcc commit causing it (found with
+  `git merge-tree`, commit by commit), d) the PRs to open. Without conflicts
+  the merge is built and tested. With the secret `UPDATE_TOKEN` it also keeps
+  the PR *evcc-Update* open. Never writes to evcc's repository; issue numbers
+  in evcc's subjects become plain text ("evcc PR" and the number).
 
 **Locally** the Go tests run in WSL (no Windows firewall prompts), the ui checks
 in a checkout with `node_modules`. Live checks of a build with a simulated Home
