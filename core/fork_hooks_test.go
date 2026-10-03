@@ -36,7 +36,7 @@ var forkHooks = []struct {
 	{"core/loadpoint.go", "Loadpoint.fastChargingPhases", []string{"effectiveMinCurrentFor", "phaseScaleDelay"}},
 	{"core/loadpoint.go", "Loadpoint.pvScalePhases", []string{"lmm", "PeekCurrent", "effectiveMinCurrentFor", "phaseScaleDelay"}},
 	{"core/loadpoint.go", "Loadpoint.boostPower", []string{"effectiveMinCurrentFor"}},
-	{"core/loadpoint.go", "Loadpoint.pvMaxCurrent", []string{"effectiveMinCurrentFor", "effectiveMaxCurrentFor"}},
+	{"core/loadpoint.go", "Loadpoint.pvMaxCurrent", []string{"effectiveMinCurrentFor", "effectiveMaxCurrentFor", "projectPhaseSwitch1p"}},
 	{"core/loadpoint_effective.go", "Loadpoint.effectiveMinCurrent", []string{"effectiveMinCurrentFor", "currents1pPhases"}},
 	{"core/loadpoint_effective.go", "Loadpoint.effectiveMaxCurrent", []string{"effectiveMaxCurrentFor", "currents1pPhases"}},
 	{"core/loadpoint/config.go", "DynamicConfig.Apply", []string{"applyPhaseSwitch"}},

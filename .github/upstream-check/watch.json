@@ -1,0 +1,131 @@
+{
+  "_comment": "Fork features and how to recognise evcc taking them over: evcc PRs the fork waits for, and names or words that would appear in evcc's added code. A hit is a hint for a review, not proof. Keep in step with core/lm/README.md.",
+  "features": [
+    {
+      "name": "1p-/3p-Ströme beim Phasenumschalten",
+      "files": [
+        "core/loadpoint_phasecurrents.go",
+        "core/loadpoint/config_custom.go",
+        "assets/js/components/Config/PhaseSwitchFields.vue"
+      ],
+      "prs": [32505, 28399],
+      "keywords": ["minCurrent1p", "maxCurrent1p", "MinCurrent1p", "MaxCurrent1p"]
+    },
+    {
+      "name": "Verzögerung beim Phasenumschalten",
+      "files": ["core/loadpoint_phasecurrents.go"],
+      "keywords": ["phaseScale3pDelay", "phaseScale1pDelay", "PhaseSwitchDelay", "phaseSwitchDelay"]
+    },
+    {
+      "name": "Lastmanagement-Prioritäten (Abwurf nach Priorität)",
+      "files": ["core/lm/lm.go", "core/loadpoint_lm.go", "core/site_lm.go"],
+      "keywords": ["shed", "Shed"],
+      "paths": ["core/circuit/", "core/loadpoint.go", "core/site_circuits.go"]
+    },
+    {
+      "name": "Batterie im Lastmanagement",
+      "files": ["core/site_lm.go"],
+      "keywords": ["battery"],
+      "paths": ["core/circuit/", "core/site_circuits.go"]
+    },
+    {
+      "name": "Batterie-Ladeleistung über Home Assistant setzen",
+      "files": ["core/site_lm.go", "core/site_peakshaving.go"],
+      "prs": [33541, 33764, 33868],
+      "keywords": ["SetMaxChargePower", "MaxChargePower(", "BatteryChargePower"]
+    },
+    {
+      "name": "Peak Shaving / Leistungstarif",
+      "files": [
+        "core/peak/",
+        "core/site_peakshaving.go",
+        "core/site_peak_follow.go",
+        "core/site_peak_stats.go",
+        "core/site_peak_tariff.go"
+      ],
+      "keywords": [
+        "peakShaving",
+        "PeakShaving",
+        "peak shaving",
+        "demand charge",
+        "Leistungspreis",
+        "capacity tariff",
+        "Leistungstarif"
+      ]
+    },
+    {
+      "name": "Netzladen nach Ladestand / einmalig",
+      "files": ["core/site_lm.go", "core/site_lm_once.go"],
+      "keywords": [
+        "SocGridCharge",
+        "socGridCharge",
+        "gridChargeSoc",
+        "GridChargeOnce",
+        "chargeOnce"
+      ]
+    },
+    {
+      "name": "Batterie-Entladesperre / Batteriemodus",
+      "files": ["core/site_peakshaving.go", "core/site_lm_profiles.go"],
+      "prs": [34027, 33920, 33813]
+    },
+    {
+      "name": "Schaltgeräte mit Nennleistung",
+      "files": ["charger/switchsocket_lm.go"],
+      "keywords": ["ratedpower", "RatedPower"]
+    },
+    {
+      "name": "Heizstab in Stufen",
+      "files": [
+        "charger/switchstages.go",
+        "templates/definition/charger/homeassistant-stages.yaml"
+      ],
+      "prs": [31722, 34056],
+      "keywords": ["stagepower", "stages:", "Heizstab in Stufen"]
+    },
+    {
+      "name": "Abwurfschutz",
+      "files": ["core/lm/guard.go", "core/site_lm_guard.go"],
+      "keywords": ["ShedGuard", "shedGuard"]
+    },
+    {
+      "name": "Verbrauchsprognose nach Wochentag / Lastprofil",
+      "files": ["core/site_load_weekday.go", "core/site_load_manual.go"],
+      "keywords": ["weekday", "Weekday", "loadProfile", "LoadProfile"],
+      "paths": ["core/site_load_predictor.go", "core/metrics/"]
+    },
+    {
+      "name": "Batterie-Vermessung (Kapazität, Wirkungsgrad)",
+      "files": ["core/site_battery_ident.go"],
+      "keywords": ["roundtrip", "round trip", "RoundTrip", "usable capacity"]
+    },
+    {
+      "name": "Zweiter Einspeisetarif (EEG) / Energieseite",
+      "files": ["core/site_feedin_eeg.go", "core/metrics/feedin_eeg_custom.go"],
+      "prs": [33989, 33635, 33735],
+      "keywords": ["feedInEeg", "energy community", "Energiegemeinschaft"]
+    },
+    {
+      "name": "Optimizer: Automatikmodus und Planer",
+      "files": [
+        "core/site_optimizer_lm.go",
+        "core/site_optimizer_reserve_pass.go",
+        "core/site_optimizer_soc_pass.go"
+      ],
+      "prs": [32881, 34044],
+      "keywords": ["automatic", "ledger"],
+      "paths": ["core/site_optimizer.go", "core/planner/"]
+    },
+    {
+      "name": "Stromkreis-Grenzen zur Laufzeit (Lastmanagement-Schalter)",
+      "files": ["core/site_lm_switch.go"],
+      "keywords": ["SetMaxPower"],
+      "paths": ["core/circuit/", "core/site.go", "server/"]
+    },
+    {
+      "name": "Grundlagen, auf denen der Fork aufbaut",
+      "files": ["core/loadpoint_lm.go"],
+      "prs": [30367, 33463]
+    }
+  ]
+}

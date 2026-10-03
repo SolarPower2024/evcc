@@ -128,6 +128,19 @@ func (lp *Loadpoint) SetCurrents1p(minCurrent, maxCurrent float64) error {
 	return nil
 }
 
+// projectPhaseSwitch1p extends evcc's projectPhaseSwitch by the 1p minimum: after a
+// pending scale down to 1p the loadpoint runs at the 1p minimum, which is returned too
+func (lp *Loadpoint) projectPhaseSwitch1p(sitePower, minCurrent float64) (float64, int, float64) {
+	sitePower, phases := lp.projectPhaseSwitch(sitePower, minCurrent)
+	if lp.hasPhaseSwitching() && !lp.phaseTimer.IsZero() {
+		if min1p := lp.effectiveMinCurrentFor(1); min1p != minCurrent {
+			sitePower -= Voltage * (minCurrent - min1p)
+			minCurrent = min1p
+		}
+	}
+	return sitePower, phases, minCurrent
+}
+
 // phaseScaleDelay returns the delay before switching to the given phases: the
 // phase delay if set, else the enable delay for 3p and the disable delay for 1p
 func (lp *Loadpoint) phaseScaleDelay(phases int) time.Duration {

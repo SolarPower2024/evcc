@@ -276,3 +276,29 @@ func TestPhaseDelaysSettings(t *testing.T) {
 	assert.Zero(t, up)
 	assert.Zero(t, down)
 }
+
+func TestProjectPhaseSwitch1p(t *testing.T) {
+	// 3p at 8A with a pending scale down: evcc's projection drops two phases at 8A,
+	// the 1p minimum of 6A takes another 2A off
+	lp := phaseCurrentsLoadpoint(t, 3, 6, 20)
+	lp.phaseTimer = lp.clock.Now()
+
+	power, phases := lp.projectPhaseSwitch(1000, 8)
+	assert.Equal(t, 1000-230*8*2.0, power, "evcc projection")
+	assert.Equal(t, 1, phases)
+
+	power, phases, minCurrent := lp.projectPhaseSwitch1p(1000, 8)
+	assert.Equal(t, 1000-230*8*2.0-230*2.0, power)
+	assert.Equal(t, 1, phases)
+	assert.Equal(t, 6.0, minCurrent)
+
+	// no pending switch or no 1p values: evcc's result unchanged
+	lp.phaseTimer = time.Time{}
+	power, phases, minCurrent = lp.projectPhaseSwitch1p(1000, 8)
+	assert.Equal(t, []any{1000.0, 3, 8.0}, []any{power, phases, minCurrent})
+
+	lp.phaseTimer = lp.clock.Now()
+	lp.minCurrent1p = 0
+	power, phases, minCurrent = lp.projectPhaseSwitch1p(1000, 8)
+	assert.Equal(t, []any{1000 - 230*8*2.0, 1, 8.0}, []any{power, phases, minCurrent})
+}
