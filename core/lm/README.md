@@ -52,9 +52,7 @@ Prioritäten* by drag, top = highest; a drag renumbers the loads from the bottom
 loadpoint's value is its regular priority, also editable in the loadpoint
 settings; the battery's is stored in `lmPriorities`. Older versions had a
 separate load management priority per loadpoint; those values were taken over
-into the regular priority once (`core/site_lm_priority.go`). An old `lmpriority`
-key still in a stored loadpoint config is accepted (field `LmPrio_`), taken over
-and then removed from the config at start (`dropOldLmPriority`).
+into the regular priority once (`core/site_lm_priority.go`).
 
 How it works (`core/lm/lm.go`): a load whose request the circuit denies records
 the denied amount as unserved demand. Loads with a lower priority get that
@@ -432,7 +430,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
 | `core/site/api.go` | embeds `CustomAPI` |
-| `core/loadpoint.go` | `loadpointCustom` field; `LmPrio_` field (old `lmpriority` key); `setLimit` checks against `lp.lmCircuit()` and calls `done`; two `lp.lmm().Peek*` probes; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor`, `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), the phase timers take `phaseScaleDelay` |
+| `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`; two `lp.lmm().Peek*` probes; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor`, `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), the phase timers take `phaseScaleDelay` |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split per phase count (as in evcc PR 32505), min/max power use it |
 | `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
