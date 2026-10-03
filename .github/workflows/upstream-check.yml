@@ -1,5 +1,7 @@
-# Fridays at noon: what evcc changed since the fork's last merge. Read only
-# towards evcc: it fetches evcc's master and never writes to evcc's repository.
+# Fridays at noon: what evcc's newest release changed since the fork's last
+# merge. The fork takes in releases only, never the commits between them. Read
+# only towards evcc: it fetches evcc's release tags and never writes to evcc's
+# repository.
 #
 # The review (.github/upstream-check/review.mjs) goes into the issue
 # "evcc-Update-Check": a) what changed, b) fork features evcc may now have
@@ -8,10 +10,10 @@
 #
 # With the secret UPDATE_TOKEN (a token of this repository with contents, pull
 # requests and workflows write) it also keeps the PR "evcc-Update" open: the
-# branch evcc-update holds evcc's master, the PR shows the conflicts and is
-# merged into load-peak-features once they are resolved. GITHUB_TOKEN cannot
-# do that, as evcc's commits touch workflow files. No issue numbers, mentions
-# or links of evcc's repository go into any text.
+# branch evcc-update holds evcc's newest release, the PR shows the conflicts
+# and is merged into load-peak-features once they are resolved. GITHUB_TOKEN
+# cannot do that, as evcc's commits touch workflow files. No issue numbers,
+# mentions or links of evcc's repository go into any text.
 name: evcc update check
 
 on:
@@ -43,19 +45,22 @@ jobs:
         run: |
           git remote add upstream https://github.com/evcc-io/evcc.git
           git remote set-url --push upstream DISABLED-never-push-to-evcc
-          git fetch --no-tags upstream master
+          git fetch --no-tags upstream "refs/tags/0.*:refs/tags/0.*"
 
       - name: Review
         id: review
         run: |
-          node .github/upstream-check/review.mjs upstream/master /tmp/summary.json >/tmp/report.md
+          node .github/upstream-check/review.mjs release /tmp/summary.json >/tmp/report.md
+          echo "ref=$(jq -r .ref /tmp/summary.json)" >>"$GITHUB_OUTPUT"
           echo "count=$(jq .count /tmp/summary.json)" >>"$GITHUB_OUTPUT"
           echo "conflicts=$(jq '.conflicts | length' /tmp/summary.json)" >>"$GITHUB_OUTPUT"
 
       - name: Test the merge
         if: steps.review.outputs.count != '0' && steps.review.outputs.conflicts == '0'
+        env:
+          REF: ${{ steps.review.outputs.ref }}
         run: |
-          git -c user.name="update check" -c user.email="update-check@localhost" merge --no-edit --no-ff upstream/master
+          git -c user.name="update check" -c user.email="update-check@localhost" merge --no-edit --no-ff "$REF"
           mkdir -p dist && touch dist/empty
           {
             echo
@@ -77,6 +82,7 @@ jobs:
         env:
           UPDATE_TOKEN: ${{ secrets.UPDATE_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          REF: ${{ steps.review.outputs.ref }}
         run: |
           if [ -z "$UPDATE_TOKEN" ]; then
             printf '\n## Update-PR\n\nNicht angelegt: das Secret UPDATE_TOKEN fehlt.\n' >>/tmp/report.md
@@ -86,8 +92,8 @@ jobs:
             echo "report refers to evcc's repository, no PR"; exit 1
           fi
           export GH_TOKEN="$UPDATE_TOKEN"
-          git push --force "https://x-access-token:${UPDATE_TOKEN}@github.com/${GH_REPO}.git" upstream/master:refs/heads/evcc-update
-          title="evcc-Update: $(jq .count /tmp/summary.json) Commits"
+          git push --force "https://x-access-token:${UPDATE_TOKEN}@github.com/${GH_REPO}.git" "$(git rev-parse "$REF^{commit}")":refs/heads/evcc-update
+          title="evcc-Update: Release $REF ($(jq .count /tmp/summary.json) Commits)"
           number=$(gh pr list --head evcc-update --base load-peak-features --state open --json number --jq '.[0].number')
           if [ -n "$number" ]; then
             gh pr edit "$number" --title "$title" --body-file /tmp/report.md

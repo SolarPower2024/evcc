@@ -1,8 +1,13 @@
-// Review of what evcc changed since the fork's last merge, read only: nothing
-// is merged or written here. Prints a markdown report (German, for the
-// issue and the update PR) and writes a json summary for the workflow.
+// Review of what evcc's newest release changed since the fork's last merge,
+// read only: nothing is merged or written here. Prints a markdown report
+// (German, for the issue and the update PR) and writes a json summary for the
+// workflow.
 //
-// usage: node review.mjs <upstream ref> <summary.json>
+// usage: node review.mjs [release|<upstream ref>] <summary.json>
+//
+// The fork takes in evcc releases only, never the commits between them:
+// "release" (the default) is evcc's newest release tag, x.y.z without beta
+// or rc suffix. Nothing to do while all its commits are already in the fork.
 //
 // a) what changed, grouped by component
 // b) fork features evcc may now have itself (watched evcc PRs merged, names
@@ -17,7 +22,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const [upstream = "upstream/master", summaryFile = "/tmp/summary.json"] = process.argv.slice(2);
+const [arg = "release", summaryFile = "/tmp/summary.json"] = process.argv.slice(2);
 const watch = JSON.parse(readFileSync(new URL("./watch.json", import.meta.url), "utf8"));
 
 const git = (...args) =>
@@ -38,8 +43,31 @@ const clean = (s) =>
 		.replace(/https?:\/\/\S+/g, "")
 		.replace(/evcc-io\//g, "");
 
+const newestRelease = () => {
+	const tags = git("tag", "-l")
+		.split("\n")
+		.filter((t) => /^\d+\.\d+\.\d+$/.test(t));
+	if (!tags.length) throw new Error("no evcc release tag, fetch upstream's tags first");
+	const num = (t) => t.split(".").map(Number);
+	return tags
+		.sort((a, b) => {
+			const [x, y] = [num(a), num(b)];
+			return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+		})
+		.at(-1);
+};
+const upstream = arg === "release" ? newestRelease() : arg;
+
 const base = git("merge-base", "HEAD", upstream);
-const commits = git("log", "--reverse", "--format=%H%x09%s", `HEAD..${upstream}`)
+// a patch release lives on a release branch: its cherry-picks of master commits the fork has are not new
+const commits = git(
+	"log",
+	"--reverse",
+	"--cherry-pick",
+	"--right-only",
+	"--format=%H%x09%s",
+	`HEAD...${upstream}`
+)
 	.split("\n")
 	.filter(Boolean)
 	.map((l) => {
@@ -50,15 +78,17 @@ const commits = git("log", "--reverse", "--format=%H%x09%s", `HEAD..${upstream}`
 
 const out = [];
 const line = (s = "") => out.push(s);
-const summary = { count: commits.length, conflicts: [], features: [] };
+const summary = { ref: upstream, count: commits.length, conflicts: [], features: [] };
 
 line(`Stand ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC, automatisch erstellt.`);
 line();
-line(`**Neue evcc-Commits seit dem letzten Merge:** ${commits.length}`);
+line(`**evcc-Release:** ${upstream}`);
+line();
+line(`**Neue evcc-Commits des Releases seit dem letzten Merge:** ${commits.length}`);
 
 if (!commits.length) {
 	line();
-	line("Nichts zu tun.");
+	line(`Nichts zu tun: alle Änderungen von ${upstream} sind schon im Fork.`);
 	writeFileSync(summaryFile, JSON.stringify(summary));
 	console.log(out.join("\n"));
 	process.exit(0);
@@ -204,7 +234,7 @@ line();
 line("## d) Vorgeschlagene PRs");
 line();
 line(
-	`- **Merge der ${commits.length} evcc-Commits**${conflicts.length ? `, Konflikte lösen in ${conflicts.map((p) => `\`${p}\``).join(", ")}` : ""}; danach Regel 2 (evcc-Code übernehmen, wo er dasselbe leistet) und alle Tests.`
+	`- **Merge von evcc ${upstream} (${commits.length} Commits)**${conflicts.length ? `, Konflikte lösen in ${conflicts.map((p) => `\`${p}\``).join(", ")}` : ""}; danach Regel 2 (evcc-Code übernehmen, wo er dasselbe leistet) und alle Tests.`
 );
 for (const f of summary.features) {
 	line(
