@@ -12,7 +12,8 @@
 // bottom rather than with whichever load evcc happens to update first.
 //
 // Nothing happens while all loads on a circuit share the same priority, so the
-// behaviour is identical to upstream until priorities are actually configured.
+// behaviour is identical to upstream until priorities are actually configured,
+// except that the home battery always stands below every loadpoint.
 package lm
 
 import (
@@ -29,14 +30,19 @@ type Load interface {
 	GetTitle() string
 
 	// LmPriority is the shed priority, lower is shed first. For a loadpoint it
-	// is its regular priority, which also ranks pv surplus; the battery has a
-	// value of its own on the same scale.
+	// is its regular priority (0 or more), which also ranks pv surplus; the
+	// battery is always BatteryPriority.
 	LmPriority() int
 
 	// what the load draws right now, i.e. what shedding it would free
 	GetChargePower() float64
 	GetMaxPhaseCurrent() float64
 }
+
+// BatteryPriority is the home battery's priority: below every loadpoint, whose
+// priorities start at 0. Loadpoints get the power first, the battery grid
+// charges with what they leave.
+const BatteryPriority = -1
 
 const (
 	// DefaultTimeout is how long an unserved demand keeps reserving headroom.
@@ -72,7 +78,6 @@ type Manager struct {
 	mu      sync.Mutex
 	reg     map[Load]*record
 	timeout time.Duration
-	lookup  func(Load) (int, bool)
 
 	guard
 	status
@@ -90,27 +95,8 @@ func New() *Manager {
 	}
 }
 
-// SetPriorityLookup installs a lookup whose answer takes precedence over a
-// load's own LmPriority. The site uses it for the priorities set in the ui.
-func (m *Manager) SetPriorityLookup(f func(Load) (int, bool)) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.lookup = f
-}
-
-// Priority returns the effective shed priority of a load
+// Priority returns the shed priority of a load
 func (m *Manager) Priority(l Load) int {
-	m.mu.Lock()
-	f := m.lookup
-	m.mu.Unlock()
-
-	// called without holding mu, the lookup may take locks of its own
-	if f != nil {
-		if prio, ok := f(l); ok {
-			return prio
-		}
-	}
-
 	return l.LmPriority()
 }
 

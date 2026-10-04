@@ -15,8 +15,8 @@ package core
 // core/loadpoint.go (the circuit checks in setLimit and the two probes).
 
 import (
+	"errors"
 	"fmt"
-	"maps"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -48,7 +48,7 @@ type lmState struct {
 	socChargeStop    float64 // stop grid charging at or above this soc
 	socChargeRunning bool    // hysteresis state between start and stop
 
-	prios map[string]int // shed priorities set in the ui, by load name
+	prios map[string]int // stored priorities of older versions by load name, see site_lm_priority.go
 
 	// load management switched off, see site_lm_switch.go
 	off          bool
@@ -158,9 +158,9 @@ func (site *Site) restoreLmSettings() {
 		s.mu.Unlock()
 	}
 
-	site.lmm().SetPriorityLookup(site.lmPriorityLookup)
 	site.restoreGridChargeOnce()
 	site.unifyLmPriorities()
+	site.dropBatteryLmPriority()
 
 	site.restoreLmGuard()
 	site.restoreLmAdvanced()
@@ -207,10 +207,9 @@ func (b *batteryLoad) GetTitle() string {
 	return "battery"
 }
 
-// LmPriority is the battery's priority without one set in the ui: shed first,
-// the value set in the ui comes through lmPriorityLookup
+// LmPriority is the battery's priority: below every loadpoint
 func (b *batteryLoad) LmPriority() int {
-	return 0
+	return lm.BatteryPriority
 }
 
 func (b *batteryLoad) GetCircuit() api.Circuit {
@@ -624,7 +623,7 @@ func (site *Site) SetBatterySocGridChargeStop(soc float64) error {
 //
 
 const (
-	lmBatteryName = "battery" // name the battery's priority is stored under
+	lmBatteryName = "battery" // name of the battery as a load
 	lmMaxPriority = 10
 )
 
@@ -633,11 +632,10 @@ type lmPriority struct {
 	Name     string `json:"name"`
 	Title    string `json:"title"`
 	Priority int    `json:"priority"`
-	Battery  bool   `json:"battery,omitempty"`
 }
 
-// lmLoadName returns the name a load's priority is stored under: the loadpoint's
-// config name, e.g. db:3, or lmBatteryName. Empty for an unknown load.
+// lmLoadName returns the name a load is stored under: the loadpoint's config
+// name, e.g. db:3, or lmBatteryName. Empty for an unknown load.
 func (site *Site) lmLoadName(l lm.Load) string {
 	switch l := l.(type) {
 	case *batteryLoad:
@@ -654,36 +652,11 @@ func (site *Site) lmLoadName(l lm.Load) string {
 	return ""
 }
 
-// lmPriorityLookup returns the battery's priority set in the ui. Loadpoints use
-// their upstream priority, see site_lm_priority.go; a battery without a ui value
-// has the lowest, 0.
-func (site *Site) lmPriorityLookup(l lm.Load) (int, bool) {
-	name := site.lmLoadName(l)
-	if name != lmBatteryName {
-		return 0, false
-	}
-
-	s := site.lms()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	prio, ok := s.prios[name]
-	return prio, ok
-}
-
-// lmPriorities returns the loads that take part in load management, i.e. that
-// are on a circuit, with their effective priority
+// lmPriorities returns the loadpoints that take part in load management, i.e.
+// that are on a circuit, with their effective priority. The battery is not
+// among them, it always stands below.
 func (site *Site) lmPriorities() []lmPriority {
 	res := make([]lmPriority, 0)
-
-	if site.lmBatteryCircuit() != nil {
-		res = append(res, lmPriority{
-			Name:     lmBatteryName,
-			Priority: site.lmm().Priority(site.lmBattery()),
-			Battery:  true,
-		})
-	}
 
 	for _, dev := range config.Loadpoints().Devices() {
 		lp, ok := dev.Instance().(*Loadpoint)
@@ -705,45 +678,27 @@ func (site *Site) publishLmPriorities() {
 	site.publish(keys.LmPriorities, site.lmPriorities())
 }
 
-// SetLmPriority sets a load's priority, lower is shed first. For a loadpoint
-// that is its upstream priority, which also ranks pv surplus and plans.
+// SetLmPriority sets a loadpoint's priority, lower is shed first. That is its
+// upstream priority, which also ranks pv surplus and plans.
 func (site *Site) SetLmPriority(name string, prio int) error {
 	if prio < 0 || prio > lmMaxPriority {
 		return fmt.Errorf("priority must be between 0 and %d", lmMaxPriority)
 	}
 
-	if name != lmBatteryName {
-		dev, err := config.Loadpoints().ByName(name)
-		if err != nil {
-			return fmt.Errorf("unknown loadpoint: %s", name)
-		}
-		lp, ok := dev.Instance().(*Loadpoint)
-		if !ok {
-			return fmt.Errorf("unknown loadpoint: %s", name)
-		}
-
-		lp.SetPriority(prio)
-		site.publishLmPriorities()
-
-		return nil
+	if name == lmBatteryName {
+		return errors.New("the battery always stands below the loadpoints")
 	}
 
-	s := site.lms()
-
-	s.mu.Lock()
-	if s.prios == nil {
-		s.prios = make(map[string]int)
+	dev, err := config.Loadpoints().ByName(name)
+	if err != nil {
+		return fmt.Errorf("unknown loadpoint: %s", name)
 	}
-	s.prios[name] = prio
-	prios := maps.Clone(s.prios)
-	s.mu.Unlock()
-
-	site.log.DEBUG.Printf("set load management priority: %s = %d", name, prio)
-
-	if err := settings.SetJson(keys.LmPriorities, prios); err != nil {
-		return err
+	lp, ok := dev.Instance().(*Loadpoint)
+	if !ok {
+		return fmt.Errorf("unknown loadpoint: %s", name)
 	}
 
+	lp.SetPriority(prio)
 	site.publishLmPriorities()
 
 	return nil

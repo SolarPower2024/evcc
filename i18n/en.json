@@ -592,11 +592,11 @@
       "percentileValue": "{percentile} %"
     },
     "lmpriorities": {
-      "battery": "Home battery (grid charging)",
-      "description": "The most important load on top. If the power is not enough, loads are throttled or switched off from the bottom up; with equal priority, the first to arrive wins. For loadpoints it is their regular priority, which also applies to solar surplus and the planner. The battery has its own value.",
+      "batteryNote": "The battery grid-charges only with what the loadpoints leave.",
+      "description": "The most important load on top. If the power is not enough, loads are throttled or switched off from the bottom up; with equal priority, the first to arrive wins. It is the loadpoint's regular priority, which also applies to solar surplus and the planner.",
       "entryLabel": "Priorities",
       "invalid": "Could not save the priority.",
-      "noLoads": "No loads in load management. Loadpoints appear once assigned to a circuit, the battery via Battery circuit.",
+      "noLoads": "No loads in load management. Loadpoints appear once assigned to a circuit.",
       "title": "Load management priorities",
       "value": "Prio {priority}"
     },

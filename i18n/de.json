@@ -592,11 +592,11 @@
       "percentileValue": "{percentile} %"
     },
     "lmpriorities": {
-      "battery": "Hausbatterie (Netzladen)",
-      "description": "Oben der wichtigste Verbraucher. Reicht die Leistung nicht, wird von unten her gedrosselt oder abgeschaltet, bei gleicher Priorität zählt, wer zuerst da ist. Bei Ladepunkten ist es ihre normale Priorität, sie gilt auch für PV-Überschuss und Planer. Die Batterie hat einen eigenen Wert.",
+      "batteryNote": "Der Speicher lädt aus dem Netz nur mit dem, was die Ladepunkte übrig lassen.",
+      "description": "Oben der wichtigste Verbraucher. Reicht die Leistung nicht, wird von unten her gedrosselt oder abgeschaltet, bei gleicher Priorität zählt, wer zuerst da ist. Es ist die normale Priorität des Ladepunkts, sie gilt auch für PV-Überschuss und Planer.",
       "entryLabel": "Prioritäten",
       "invalid": "Priorität konnte nicht gespeichert werden.",
-      "noLoads": "Keine Verbraucher im Lastmanagement. Ladepunkte erscheinen mit zugewiesenem Stromkreis, die Batterie über Batterie-Stromkreis.",
+      "noLoads": "Keine Verbraucher im Lastmanagement. Ladepunkte erscheinen mit zugewiesenem Stromkreis.",
       "title": "Lastmanagement-Prioritäten",
       "value": "Prio {priority}"
     },

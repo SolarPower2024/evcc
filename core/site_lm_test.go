@@ -43,8 +43,8 @@ func TestBatteryNotFollowing(t *testing.T) {
 	sc.withDynamicCharge()
 
 	heater := &scenarioLoad{title: "heater", prio: 5, power: 3000}
-	sc.withCircuit(9000, heater, 1) // 3000W heater + 6250W battery on 9000W
-	sc.site.peak().limit = 7000     // leaves 3000W for charging at 4000W demand
+	sc.withCircuit(9000, heater) // 3000W heater + 6250W battery on 9000W
+	sc.site.peak().limit = 7000  // leaves 3000W for charging at 4000W demand
 
 	heaterAllowed := func() float64 { return sc.site.lmm().ValidatePower(heater, sc.circuit, 3000, 3000) }
 

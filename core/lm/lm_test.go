@@ -181,32 +181,28 @@ func TestCurrentReserveIsSeparate(t *testing.T) {
 	assert.Equal(t, 11000.0, m.ValidatePower(wallbox, c, 11000, 11000))
 }
 
-// TestPriorityLookupOverrides verifies that a priority set via the lookup wins
-// over the load's own, and that loads the lookup does not know keep theirs
-func TestPriorityLookupOverrides(t *testing.T) {
+// TestBatteryBelowLoadpoints verifies that the battery's priority stands below
+// every loadpoint, including one on the lowest priority 0: a loadpoint that
+// the circuit denies makes the battery give way, never the other way round
+func TestBatteryBelowLoadpoints(t *testing.T) {
 	m := lm.New()
 
-	wallbox := &testLoad{title: "wallbox", prio: 5}
-	heater := &testLoad{title: "heater", prio: 3}
+	wallbox := &testLoad{title: "wallbox", prio: 0, power: 5000}
+	battery := &testLoad{title: "battery", prio: lm.BatteryPriority, power: 4000}
+	c := newCircuit(t, 10000, wallbox, battery)
 
-	m.SetPriorityLookup(func(l lm.Load) (int, bool) {
-		if l == lm.Load(wallbox) {
-			return 1, true
-		}
-		return 0, false
-	})
+	assert.Equal(t, lm.BatteryPriority, m.Priority(battery))
+	assert.Less(t, m.Priority(battery), m.Priority(wallbox))
 
-	assert.Equal(t, 1, m.Priority(wallbox))
-	assert.Equal(t, 3, m.Priority(heater))
+	// the wallbox wants 8000 and is capped at 6000, the battery has to leave
+	// the denied 3000 W free and keeps 2000 W of its 4000 W
+	assert.Equal(t, 6000.0, m.ValidatePower(wallbox, c, 5000, 8000))
+	assert.Equal(t, 2000.0, m.ValidatePower(battery, c, 4000, 6000), "reserved for the wallbox")
 
-	// the overridden priority is what shedding acts on: the heater now outranks
-	// the wallbox, although by their own priorities it would be the other way round
-	wallbox.power = 11000
-	c := newCircuit(t, 11000, wallbox)
-	heater.circuit = c
-
-	assert.Equal(t, 0.0, m.ValidatePower(heater, c, 0, 2000))
-	assert.Equal(t, 9000.0, m.ValidatePower(wallbox, c, 11000, 11000))
+	// the battery's own unserved demand never holds a loadpoint back
+	m = lm.New()
+	assert.Equal(t, 5000.0, m.ValidatePower(battery, c, 4000, 6000))
+	assert.Equal(t, 6000.0, m.ValidatePower(wallbox, c, 5000, 6000))
 }
 
 // TestForgetReleasesReservation verifies that a load which stopped asking for

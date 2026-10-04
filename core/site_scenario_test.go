@@ -80,14 +80,13 @@ func newScenario(t *testing.T) *scenario {
 	s.chargePower = 6250
 	s.set = func(v float64) error { sc.peak = &v; return nil }
 
-	site.lmm().SetPriorityLookup(site.lmPriorityLookup)
 	site.lmm().SetFollowCycles(site.lmFollowCycles)
 
 	return sc
 }
 
 // withCircuit puts the battery and a wallbox on a meterless circuit
-func (sc *scenario) withCircuit(maxPower float64, wallbox *scenarioLoad, batteryPrio int) {
+func (sc *scenario) withCircuit(maxPower float64, wallbox *scenarioLoad) {
 	c, err := circuit.New(util.NewLogger("test"), "test", 0, maxPower, nil, 0)
 	require.NoError(sc.t, err)
 
@@ -96,7 +95,6 @@ func (sc *scenario) withCircuit(maxPower float64, wallbox *scenarioLoad, battery
 	wallbox.circuit = c
 	sc.loads = []api.CircuitLoad{wallbox}
 
-	sc.site.lms().prios = map[string]int{lmBatteryName: batteryPrio}
 }
 
 // withDynamicCharge sets a charge power entity
@@ -281,7 +279,7 @@ func TestScenarioPriceGridCharge(t *testing.T) {
 func TestScenarioCircuitOnOff(t *testing.T) {
 	t.Run("fits", func(t *testing.T) {
 		sc := newScenario(t)
-		sc.withCircuit(22000, &scenarioLoad{title: "wallbox", power: 7000}, 0)
+		sc.withCircuit(22000, &scenarioLoad{title: "wallbox", power: 7000})
 		assert.True(t, sc.cycle(20, 3000, 0))
 		assert.Equal(t, api.BatteryCharge, sc.mode())
 	})
@@ -289,7 +287,7 @@ func TestScenarioCircuitOnOff(t *testing.T) {
 	t.Run("does not fit: evcc holds, starts once there is room", func(t *testing.T) {
 		sc := newScenario(t)
 		wallbox := &scenarioLoad{title: "wallbox", power: 7000}
-		sc.withCircuit(12000, wallbox, 0)
+		sc.withCircuit(12000, wallbox)
 
 		// 7000 + 6250 > 12000: requested, but held by evcc's check
 		assert.True(t, sc.cycle(20, 3000, 0))
@@ -317,7 +315,7 @@ func TestScenarioCircuitOnOff(t *testing.T) {
 
 	t.Run("charging within the limit is not stopped", func(t *testing.T) {
 		sc := newScenario(t)
-		sc.withCircuit(13250, &scenarioLoad{title: "wallbox", power: 7000}, 0)
+		sc.withCircuit(13250, &scenarioLoad{title: "wallbox", power: 7000})
 
 		// exactly full with the battery drawing 6250
 		assert.True(t, sc.cycle(20, 3000, 0))
@@ -330,7 +328,7 @@ func TestScenarioCircuitOnOff(t *testing.T) {
 		sc := newScenario(t)
 		sc.site.peak().chargePower = 0 // nothing entered, meter reports no limits
 		wallbox := &scenarioLoad{title: "wallbox", power: 7000}
-		sc.withCircuit(10000, wallbox, 0)
+		sc.withCircuit(10000, wallbox)
 
 		// unknown power: starting is allowed
 		assert.True(t, sc.cycle(20, 3000, 0))
@@ -409,7 +407,7 @@ func TestScenarioDynamicCharge(t *testing.T) {
 	t.Run("circuit is tighter than the peak limit", func(t *testing.T) {
 		sc := newScenario(t)
 		sc.withDynamicCharge()
-		sc.withCircuit(9000, &scenarioLoad{title: "wallbox", power: 7000}, 0)
+		sc.withCircuit(9000, &scenarioLoad{title: "wallbox", power: 7000})
 
 		// peak room 4000, circuit room 2000: the setpoint is what evcc checks, so it fits
 		assert.True(t, sc.cycle(20, 1000, 0))
@@ -474,10 +472,9 @@ func TestScenarioSettingsValidation(t *testing.T) {
 	assert.Error(t, site.SetPeakShavingEntity("sensor.battery"), "wrong domain")
 	assert.Error(t, site.SetPeakShavingChargeEntity("switch.battery"), "wrong domain")
 
-	assert.NoError(t, site.SetLmPriority(lmBatteryName, 0))
-	assert.NoError(t, site.SetLmPriority(lmBatteryName, 10))
-	assert.Error(t, site.SetLmPriority(lmBatteryName, 11))
-	assert.Error(t, site.SetLmPriority(lmBatteryName, -1))
+	assert.Error(t, site.SetLmPriority(lmBatteryName, 5), "the battery has no priority to set")
+	assert.Error(t, site.SetLmPriority("db:1", 11))
+	assert.Error(t, site.SetLmPriority("db:1", -1))
 	assert.Error(t, site.SetLmPriority("no-such-loadpoint", 1))
 
 	// switching on without a target entity is refused
