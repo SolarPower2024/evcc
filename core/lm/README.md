@@ -95,6 +95,11 @@ trimmed to what fits below the peak limit and into the circuit, at least 500 W.
 After a shed, grid charging waits for the hold-off, as stopping it frees exactly
 the power that would let it start again. See `core/site_lm.go`.
 
+evcc PR 34401 (open) adds a grid charge gate of its own on the root circuit
+(`batteryChargeExceedsCircuit`, wallboxes first). Once it is in a release, the
+fork drops what that gate covers and keeps only its inputs and extras (charge
+power entity, peak shaving, overview).
+
 ## 3. Switch devices
 
 A switch device (smart plug, heater switch) draws its full power or nothing.

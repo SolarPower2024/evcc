@@ -25,7 +25,8 @@
     {
       "name": "Batterie im Lastmanagement",
       "files": ["core/site_lm.go"],
-      "keywords": ["battery"],
+      "prs": [34401],
+      "keywords": ["battery", "batteryChargeExceedsCircuit", "batteryChargeStopPower"],
       "paths": ["core/circuit/", "core/site_circuits.go"]
     },
     {
