@@ -17,7 +17,7 @@ import (
 const (
 	lmStateRunning   = "running"   // drawing what it asks for
 	lmStateThrottled = "throttled" // drawing less than it asks for
-	lmStateShed      = "shed"      // switched off by load management, held off until
+	lmStateShed      = "shed"      // switched off by load management, held off until (battery: until there is room)
 	lmStateWaiting   = "waiting"   // wants to start, not enough room
 	lmStatePaused    = "paused"    // battery grid charging paused for a peak
 	lmStateOff       = "off"       // not asking for anything
@@ -125,20 +125,41 @@ func (site *Site) lmBatteryStatus(now time.Time, gridCharge bool) lmLoadStatus {
 	pause, setpoint := p.chargePause, p.chargeSetpoint
 	p.mu.Unlock()
 
-	s := site.lms()
-	s.mu.Lock()
-	shedUntil := s.batteryShedUntil
-	s.mu.Unlock()
+	denied := site.lmGridChargeDenied(gridCharge)
+	site.lmNoteGridDenied(denied, now)
 
 	switch {
+	case denied:
+		// evcc's circuit check holds it until there is room, no fixed time
+		st.State = lmStateShed
 	case gridCharge:
 		// the setpoint of dynamic charging, 0 when switched on or off
 		st.State, st.Power, st.Allowed = lmStateRunning, bat.GetChargePower(), setpoint
 	case now.Before(pause):
 		st.State, st.Until = lmStatePaused, &pause
-	case now.Before(shedUntil):
-		st.State, st.Until = lmStateShed, &shedUntil
 	}
 
 	return st
+}
+
+// lmNoteGridDenied logs the change into the held state in the event log: nothing
+// allowed, the power it wanted to draw as the second value
+func (site *Site) lmNoteGridDenied(denied bool, now time.Time) {
+	s := site.lms()
+
+	s.mu.Lock()
+	changed := s.gridDenied != denied
+	s.gridDenied = denied
+	s.mu.Unlock()
+
+	if !changed || !denied {
+		return
+	}
+
+	want, _ := site.lmBatteryChargePower()
+	if want <= 0 {
+		want = site.batteryChargeStopPower
+	}
+
+	site.lmm().AddEvent(lm.Event{At: now, Type: lm.EventGridChargeDenied, A: 0, B: want})
 }

@@ -47,9 +47,9 @@ const (
 	// nothing; only a load that stops updating entirely would keep reserving.
 	DefaultTimeout = 10 * time.Minute
 
-	// DefaultHoldOff is how long battery grid charging stays off after load
-	// management denied it. Without it the battery would flap: stopping frees
-	// the power that made it start again.
+	// DefaultHoldOff is how long battery grid charging stays off after a
+	// demand peak paused it. Without it the battery would flap between
+	// charging and shaving.
 	DefaultHoldOff = 5 * time.Minute
 
 	// DefaultPhases is the assumed phase count for battery current accounting

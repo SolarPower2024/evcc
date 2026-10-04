@@ -49,7 +49,7 @@
 			</FormRow>
 
 			<!-- the values the grid charge logic actually works with -->
-			<p class="mb-1" :class="chargeUnknown ? 'text-danger' : 'text-muted'">
+			<p class="mb-1" :class="chargeUnknown && dynamic ? 'text-danger' : 'text-muted'">
 				<strong>{{ $t("config.gridcharge.chargePowerEffective") }}</strong>
 				{{ effectiveText }}
 			</p>
@@ -128,7 +128,11 @@ export default {
 		},
 		effectiveText() {
 			if (this.chargeUnknown) {
-				return this.$t("config.gridcharge.chargePowerUnknown");
+				return this.$t(
+					this.dynamic
+						? "config.gridcharge.chargePowerUnknown"
+						: "config.gridcharge.chargePowerMeasured"
+				);
 			}
 			const watt = this.fmtW(
 				store.state?.peakShavingChargePowerEffective ?? 0,

@@ -254,7 +254,7 @@ export default {
 				case "shed":
 					return {
 						value: this.$t("lmoverview.state.blocked"),
-						sub: this.$t("lmoverview.blockedCircuit", { time: this.until(b) }),
+						sub: this.$t("lmoverview.blockedCircuit"),
 					};
 			}
 			return { value: this.$t("lmoverview.state.off"), sub: "" };
@@ -315,9 +315,7 @@ export default {
 						requested: this.fmtW(l.requested),
 					});
 				case "shed":
-					return l.battery
-						? t("blocked", { time: this.until(l) })
-						: t("shed", { time: this.until(l) });
+					return l.battery ? t("blocked") : t("shed", { time: this.until(l) });
 				case "waiting":
 					return t("waiting", {
 						requested: this.fmtW(l.requested),
@@ -351,10 +349,7 @@ export default {
 						limit: kw(e.b),
 					});
 				case "gridChargeDenied":
-					return this.$t("lmoverview.event.gridChargeDenied", {
-						allowed: kw(e.a),
-						wanted: kw(e.b),
-					});
+					return this.$t("lmoverview.event.gridChargeDenied", { wanted: kw(e.b) });
 				case "peak":
 					return this.$t("lmoverview.event.peak", { demand: kw(e.a), limit: kw(e.b) });
 				case "notFollowing":
