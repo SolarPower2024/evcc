@@ -31,14 +31,6 @@
 				</DragDropItem>
 			</DragDropList>
 
-			<p
-				v-if="loads.length"
-				class="mt-3 mb-0 text-muted"
-				data-testid="lmpriorities-battery-note"
-			>
-				{{ $t("config.lmpriorities.batteryNote") }}
-			</p>
-
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
 				<button
 					type="button"
@@ -74,9 +66,9 @@ import store from "@/store";
 import api from "@/api";
 import { orderPriorities } from "@/utils/lmPriorityOrder";
 
-// Shed priorities of the loadpoints on a circuit. Sorted by drag, the lowest is
+// Shed priorities of all loads in load management: the loadpoints on a circuit
+// and the home battery once it is assigned to one. Sorted by drag, the lowest is
 // shed first. Unlike the loadpoints' own settings, these take effect immediately.
-// The home battery is not in the list, it always stands below.
 export default {
 	name: "LmPrioritiesModal",
 	components: { DragDropList, DragDropItem, GenericModal },
@@ -96,7 +88,7 @@ export default {
 			return (store.state?.lmPriorities || []).map((l) => ({
 				name: l.name,
 				priority: l.priority,
-				label: l.title || l.name,
+				label: l.battery ? this.$t("config.lmpriorities.battery") : l.title || l.name,
 			}));
 		},
 		changed() {

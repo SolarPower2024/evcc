@@ -2,14 +2,15 @@
 // of evcc.ts so upstream changes there merge without conflicts. evcc.ts extends
 // State and ConfigLoadpoint with them and re-exports everything.
 
-// a loadpoint taking part in load management, see core/site_lm.go
+// a load taking part in load management, see core/site_lm.go
 export interface LmPriority {
-  /** Config name, e.g. db:3. */
+  /** Config name, e.g. db:3, or "battery". */
   name: string;
-  /** Loadpoint title. */
+  /** Loadpoint title, empty for the battery. */
   title: string;
   /** Shed priority 0-10, lower is shed first. */
   priority: number;
+  battery?: boolean;
 }
 
 // advanced load management settings, see core/site_lm_advanced.go
@@ -221,7 +222,7 @@ export interface LmState {
   peakShavingChargeEntity?: string;
   /** Grid charge power in W currently written to that entity, 0 = not charging. */
   peakShavingChargeSetpoint?: number;
-  /** Loadpoints taking part in load management with their shed priority, lower is shed first. The battery always stands below. */
+  /** Loads taking part in load management with their shed priority, lower is shed first. */
   lmPriorities?: LmPriority[];
   /** Minutes a protected loadpoint stays off after load management shed it, 0 = off. */
   lmShedGuard?: number;

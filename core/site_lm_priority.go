@@ -4,9 +4,9 @@ package core
 //
 // Loadpoints are ranked by their upstream priority everywhere: pv surplus and
 // shedding (and the planner, once it shares circuit capacity, see PR 2), so a
-// loadpoint that gets surplus first is not the first to be shed. The battery
-// has no upstream priority and no value of its own: it always stands below the
-// loadpoints, see lm.BatteryPriority.
+// loadpoint that gets surplus first is not the first to be shed. The battery has
+// no upstream priority; it keeps a value of its own on the same 0-10 scale, set
+// in the load management priorities.
 
 import (
 	"maps"
@@ -17,7 +17,8 @@ import (
 )
 
 // unifyLmPriorities takes the load management priorities of the loadpoints over
-// into their upstream priority, once.
+// into their upstream priority, once. Afterwards only the battery's own value
+// is kept in the load management priorities.
 func (site *Site) unifyLmPriorities() {
 	if done, _ := settings.Bool(keys.LmPrioritiesUnified); done {
 		return
@@ -57,23 +58,10 @@ func (site *Site) unifyLmPriorities() {
 	settings.SetBool(keys.LmPrioritiesUnified, true)
 }
 
-// dropBatteryLmPriority removes the battery's entry from the stored load
-// management priorities: older versions let the battery have a value of its own
-func (site *Site) dropBatteryLmPriority() {
-	s := site.lms()
-
-	s.mu.Lock()
-	_, ok := s.prios[lmBatteryName]
-	prios := maps.Clone(s.prios)
-	delete(prios, lmBatteryName)
-	s.prios = prios
-	s.mu.Unlock()
-
-	if !ok {
-		return
+// lmBatteryPriority is the battery's priority: the value set in the ui, else 0
+func (site *Site) lmBatteryPriority() int {
+	if prio, ok := site.lmPriorityLookup(site.lmBattery()); ok {
+		return prio
 	}
-
-	if err := settings.SetJson(keys.LmPriorities, prios); err != nil {
-		site.log.ERROR.Printf("load management: priorities: %v", err)
-	}
+	return 0
 }

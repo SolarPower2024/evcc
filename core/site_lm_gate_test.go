@@ -90,7 +90,7 @@ func TestScenarioGateByPower(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sc := newScenario(t)
 			sc.site.peak().chargePower = 5000
-			sc.withCircuit(10000, &scenarioLoad{title: "wallbox", power: 10000 - tc.room})
+			sc.withCircuit(10000, &scenarioLoad{title: "wallbox", power: 10000 - tc.room}, 0)
 
 			sc.cycle(20, 3000, 0)
 			assert.Equal(t, tc.want, sc.mode())
@@ -106,7 +106,7 @@ func TestScenarioControlledPassesGate(t *testing.T) {
 	sc := newScenario(t)
 	sc.withDynamicCharge()
 	wallbox := &scenarioLoad{title: "wallbox", power: 7000}
-	sc.withCircuit(10000, wallbox)
+	sc.withCircuit(10000, wallbox, 0)
 	sc.site.peak().enabled = false
 
 	assert.True(t, sc.cycle(20, 3000, 0))
@@ -130,7 +130,7 @@ func TestScenarioControlledPassesGate(t *testing.T) {
 func TestScenarioMeterlessCircuitCountsBattery(t *testing.T) {
 	sc := newScenario(t)
 	wallbox := &scenarioLoad{title: "wallbox", power: 3000}
-	sc.withCircuit(10000, wallbox)
+	sc.withCircuit(10000, wallbox, 0)
 
 	assert.True(t, sc.cycle(20, 3000, 0))
 	assert.Equal(t, api.BatteryCharge, sc.mode())
@@ -224,37 +224,12 @@ func TestBatteryOnRootCircuit(t *testing.T) {
 	}
 }
 
-// TestScenarioLoadpointDemandShrinksSetpoint: the battery stands below the
-// loadpoints, so what a loadpoint asks for beyond the circuit is taken from the
-// battery's setpoint, even though the loadpoint is on the lowest priority 0
-func TestScenarioLoadpointDemandShrinksSetpoint(t *testing.T) {
-	sc := newScenario(t)
-	sc.withDynamicCharge()
-	sc.site.peak().enabled = false
-	wallbox := &scenarioLoad{title: "wallbox", power: 5000}
-	sc.withCircuit(10000, wallbox)
-
-	assert.Equal(t, lm.BatteryPriority, sc.site.lmm().Priority(sc.site.lmBattery()))
-	assert.Less(t, sc.site.lmm().Priority(sc.site.lmBattery()), sc.site.lmm().Priority(wallbox))
-
-	// the battery charges at 3000 W, the circuit holds 8000 of 10000 W
-	assert.True(t, sc.cycle(20, 8000, -3000))
-	assert.Equal(t, 5000.0, val(sc.charge), "room for 2000 W more")
-
-	// the wallbox asks for 4000 W more than fits: the circuit denies it, the
-	// battery gives way
-	assert.Equal(t, 7000.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 5000, 9000))
-	assert.True(t, sc.cycle(20, 8000, -3000))
-	assert.Equal(t, 1000.0, val(sc.charge), "what the wallbox is denied stays free")
-	assert.Equal(t, api.BatteryCharge, sc.mode())
-}
-
 // TestScenarioDrawBelowSetting: a running battery that draws less than the power
 // entered is not taken off for asking for the rest
 func TestScenarioDrawBelowSetting(t *testing.T) {
 	sc := newScenario(t)
 	sc.site.peak().enabled = false
-	sc.withCircuit(10000, &scenarioLoad{title: "wallbox", power: 3000})
+	sc.withCircuit(10000, &scenarioLoad{title: "wallbox", power: 3000}, 0)
 
 	assert.True(t, sc.cycle(20, 3000, 0))
 	assert.Equal(t, api.BatteryCharge, sc.mode())
@@ -265,17 +240,17 @@ func TestScenarioDrawBelowSetting(t *testing.T) {
 	assert.False(t, sc.site.lmGridChargeDenied(true))
 }
 
-// TestScenarioSwitchedBatteryGivesWay: a battery switched on or off stands
-// below the loadpoints too. A wallbox capped at the limit does not overload the
-// circuit, so evcc's check alone would let the battery charge on; load
-// management holds it so the wallbox gets the power, and it stays held while
-// the wallbox uses it.
+// TestScenarioSwitchedBatteryGivesWay: a battery switched on or off below a
+// wallbox in priority gives way to it. A wallbox capped at the limit does not
+// overload the circuit, so evcc's check alone would let the battery charge on;
+// load management holds it so the wallbox gets the power, and it stays held
+// while the wallbox uses it.
 func TestScenarioSwitchedBatteryGivesWay(t *testing.T) {
 	sc := newScenario(t)
 	sc.site.peak().enabled = false
 	sc.site.peak().chargePower = 3000
-	wallbox := &scenarioLoad{title: "wallbox", power: 5000}
-	sc.withCircuit(10000, wallbox)
+	wallbox := &scenarioLoad{title: "wallbox", prio: 1, power: 5000}
+	sc.withCircuit(10000, wallbox, 0)
 
 	assert.True(t, sc.cycle(20, 5000, 0))
 	assert.Equal(t, api.BatteryCharge, sc.mode())

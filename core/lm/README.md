@@ -42,18 +42,17 @@ Part 1 describes the features, part 2 how the fork is kept maintainable.
 
 evcc's circuits serve requests first come, first served. A priority puts an
 order on that: **lower is shed first**. With all loads on the same priority
-(the default) nothing changes compared to evcc, the battery aside.
+(the default) nothing changes compared to evcc.
 
 One priority ranks everything: a loadpoint's regular priority decides pv
-surplus and shedding alike. It is set under *Lastmanagement-Details →
-Prioritäten* by drag, top = highest; a drag renumbers the loadpoints from the
-bottom 0, 1, 2 and so on, at most 10 (`assets/js/utils/lmPriorityOrder.ts`),
-and it is also editable in the loadpoint settings. The home battery is not in
-the list: it always stands below every loadpoint (`lm.BatteryPriority`, -1) and
-grid charges with what they leave ([2](#2-battery-in-load-management)). Older
-versions had a separate load management priority per loadpoint, taken over into
-the regular priority once (`core/site_lm_priority.go`), and one for the
-battery, dropped at start.
+surplus and shedding alike. The battery has no evcc priority and keeps a value
+of its own on the same 0-10 scale. All are set under *Lastmanagement-Details →
+Prioritäten* by drag, top = highest; a drag renumbers the loads from the bottom
+0, 1, 2 and so on, at most 10 (`assets/js/utils/lmPriorityOrder.ts`). A
+loadpoint's value is its regular priority, also editable in the loadpoint
+settings; the battery's is stored in `lmPriorities`. Older versions had a
+separate load management priority per loadpoint; those values were taken over
+into the regular priority once (`core/site_lm_priority.go`).
 
 How it works (`core/lm/lm.go`): a load whose request the circuit denies records
 the denied amount as unserved demand. Loads with a lower priority get that
@@ -83,12 +82,11 @@ That check is evcc's (`batteryChargeExceedsCircuit`, evcc PR 34401): starting
 needs room for the expected charge power, charging is held (battery mode hold)
 while the circuit is over power, and it starts again only once there is room
 for the power measured when it was held. Wallboxes, switches and heaters come
-first: the battery's priority is fixed below every loadpoint, so loadpoints
-claim power the battery then leaves free. The fork adds inputs and what evcc
-does not have:
+first. The fork adds inputs and what evcc does not have:
 
 | Setting | Where | Default |
 | --- | --- | --- |
+| priority | Lastmanagement-Details → Prioritäten | 0 |
 | expected grid charge power | Lastmanagement-Details → Batterie-Netzladen | the meters' `maxchargepower`, else the power measured at the last hold |
 | entity for the charge power | Lastmanagement-Details → Batterie-Netzladen | none = on/off charging |
 | phases, wait after a peak pause, reservation expiry | Lastmanagement-Details → Erweitert | 3, 5 min, 10 min |
@@ -444,8 +442,7 @@ Every fork feature follows these, so taking in a new evcc version stays cheap:
    that every hook is still in place, see [Tests](#tests).
 5. **Dropped settings.** A stored key that falls away is still accepted and
    removed from the database at start, so an update does not fail on it
-   (`peakShavingCircuit`, the battery's circuit, `dropPeakShavingCircuit`; the
-   battery's entry in `lmPriorities`, `dropBatteryLmPriority`).
+   (`peakShavingCircuit`, the battery's circuit, `dropPeakShavingCircuit`).
 
 ## Upstream touch points
 
