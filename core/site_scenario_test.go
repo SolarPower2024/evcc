@@ -96,11 +96,7 @@ func (sc *scenario) withCircuit(maxPower float64, wallbox *scenarioLoad, battery
 	wallbox.circuit = c
 	sc.loads = []api.CircuitLoad{wallbox}
 
-	sc.site.peak().circuit = "test"
-	lms := sc.site.lms()
-	lms.batteryCircuitRef = "test"
-	lms.batteryCircuit = c
-	lms.prios = map[string]int{lmBatteryName: batteryPrio}
+	sc.site.lms().prios = map[string]int{lmBatteryName: batteryPrio}
 }
 
 // withDynamicCharge sets a charge power entity
@@ -483,8 +479,6 @@ func TestScenarioSettingsValidation(t *testing.T) {
 	assert.Error(t, site.SetLmPriority(lmBatteryName, 11))
 	assert.Error(t, site.SetLmPriority(lmBatteryName, -1))
 	assert.Error(t, site.SetLmPriority("no-such-loadpoint", 1))
-
-	assert.Error(t, site.SetPeakShavingCircuit("no-such-circuit"))
 
 	// switching on without a target entity is refused
 	site.peak().set = nil

@@ -1049,14 +1049,6 @@
       }
     },
     "peakshaving": {
-      "circuitDescription": "Erst mit Stromkreis nimmt die Hausbatterie am Lastmanagement teil.",
-      "circuitEntryLabel": "Batterie-Stromkreis",
-      "circuitHelp": "Netzladen und Abwurf der Batterie richten sich nach seiner Leistungsgrenze.",
-      "circuitInvalid": "Stromkreis konnte nicht gesetzt werden.",
-      "circuitLabel": "Stromkreis der Batterie",
-      "circuitNone": "Keiner — Batterie nicht im Lastmanagement",
-      "circuitNoneConfigured": "Es sind keine Stromkreise konfiguriert.",
-      "circuitTitle": "Batterie-Stromkreis",
       "description": "evcc schreibt die zum Kappen nötige Entladeleistung laufend in eine Home-Assistant-Entität, deine Automation steuert damit die Batterie.",
       "energyEntityHelp": "Zählerstand Netzbezug in kWh oder Wh. Nur nötig, wenn der Netzzähler in evcc keinen Energiezähler liefert.",
       "energyEntityLabel": "Energiezähler Netzbezug",

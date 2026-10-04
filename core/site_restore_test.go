@@ -46,7 +46,6 @@ func TestRestoreCustomAfterRestart(t *testing.T) {
 	require.NoError(t, a.SetPeakShavingLimit(7000))
 	require.NoError(t, a.SetPeakShavingReserve(40))
 	require.NoError(t, a.SetPeakShavingChargePower(4000))
-	require.NoError(t, a.SetPeakShavingCircuit("main"))
 	require.NoError(t, a.SetPeakFollowBuffer(1000))
 	require.NoError(t, a.SetPeakFollow(true))
 	require.NoError(t, a.SetPeakTariff("price", 40))
@@ -72,7 +71,6 @@ func TestRestoreCustomAfterRestart(t *testing.T) {
 	assert.Equal(t, 7000.0, b.GetPeakShavingLimit(), "the base, not a followed limit")
 	assert.Equal(t, 40.0, b.GetPeakShavingReserve())
 	assert.Equal(t, 4000.0, b.GetPeakShavingChargePower())
-	assert.Equal(t, "main", b.GetPeakShavingCircuit())
 	assert.True(t, b.GetPeakFollow())
 	assert.Equal(t, 1000.0, b.GetPeakFollowBuffer())
 	assert.Equal(t, 40.0, b.peak().tariff.Price)
@@ -81,4 +79,22 @@ func TestRestoreCustomAfterRestart(t *testing.T) {
 	assert.Equal(t, "input_number.charge", b.GetPeakShavingChargeEntity())
 	assert.Equal(t, "sensor.grid_import", b.GetPeakShavingEnergyEntity())
 	assert.Equal(t, "sensor.eeg_export", b.GetFeedInEegEntity())
+}
+
+// TestDropStoredPeakShavingCircuit: the battery's circuit assignment of older
+// versions is accepted at start and removed from the database
+func TestDropStoredPeakShavingCircuit(t *testing.T) {
+	noSettingsDB(t)
+	keepSettings(t)
+
+	settings.SetString(keys.PeakShavingCircuit, "main")
+
+	site := &Site{log: util.NewLogger("test")}
+	require.NotPanics(t, site.restorePeakSettings)
+
+	_, err := settings.String(keys.PeakShavingCircuit)
+	assert.ErrorIs(t, err, settings.ErrNotFound)
+
+	// nothing stored: nothing to do
+	require.NotPanics(t, site.restorePeakSettings)
 }

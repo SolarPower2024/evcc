@@ -76,7 +76,8 @@ the priorities, switch devices and the shed guard.
 
 ## 2. Battery in load management
 
-The home battery's grid charging respects the power limit of the root circuit.
+The home battery's grid charging respects the power limit of the root circuit,
+the site's top circuit (nothing to choose; without circuits nothing changes).
 That check is evcc's (`batteryChargeExceedsCircuit`, evcc PR 34401): starting
 needs room for the expected charge power, charging is held (battery mode hold)
 while the circuit is over power, and it starts again only once there is room
@@ -85,7 +86,6 @@ first. The fork adds inputs and what evcc does not have:
 
 | Setting | Where | Default |
 | --- | --- | --- |
-| circuit the battery draws from | Lastmanagement-Details → Batterie-Stromkreis | none = not managed |
 | priority | Lastmanagement-Details → Prioritäten | 0 |
 | expected grid charge power | Lastmanagement-Details → Batterie-Netzladen | the meters' `maxchargepower`, else the power measured at the last hold |
 | entity for the charge power | Lastmanagement-Details → Batterie-Netzladen | none = on/off charging |
@@ -105,8 +105,9 @@ first. The fork adds inputs and what evcc does not have:
   (`lmGridChargeBlocked`), unless the hems dimmed or the api set the mode.
   There is no fixed wait: the battery starts when there is room.
 - A circuit without meter counts the battery's charging (`circuitLoads`), so
-  evcc's check stops it there too. Load management off lifts the limit and
-  with it the check ([7](#7-load-management-circuit-and-switch)).
+  evcc's check stops it there too (evcc itself counts only loadpoints there).
+  Load management off lifts the limit and with it the check
+  ([7](#7-load-management-circuit-and-switch)).
 - A peak pausing grid charging ([11](#11-peak-shaving)) waits for the hold-off.
 
 See `core/site_lm.go`.
@@ -434,6 +435,9 @@ Every fork feature follows these, so taking in a new evcc version stays cheap:
 4. **Contract tests.** Each hook has a test pinning the evcc behaviour it relies
    on, and that the fork is inert while unused; `TestForkHooksInPlace` checks
    that every hook is still in place, see [Tests](#tests).
+5. **Dropped settings.** A stored key that falls away is still accepted and
+   removed from the database at start, so an update does not fail on it
+   (`peakShavingCircuit`, the battery's circuit, `dropPeakShavingCircuit`).
 
 ## Upstream touch points
 

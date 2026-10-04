@@ -1,15 +1,6 @@
 <template>
 	<div class="p-0 config-list">
 		<DeviceCard
-			:title="$t('config.peakshaving.circuitEntryLabel')"
-			editable
-			data-testid="peakshaving-circuit-entry"
-			@edit="openModal('peakshavingcircuit')"
-		>
-			<template #icon><CircuitsIcon /></template>
-		</DeviceCard>
-
-		<DeviceCard
 			:title="$t('config.lmpriorities.entryLabel')"
 			editable
 			data-testid="lmpriorities-entry"
@@ -101,23 +92,22 @@ import { defineComponent } from "vue";
 import store from "@/store";
 import { openModal } from "@/configModal";
 import DeviceCard from "./DeviceCard.vue";
-import CircuitsIcon from "../MaterialIcon/Circuits.vue";
 
 // Tiles of the load management details, laid out like the services. The settings
-// themselves are in PeakShavingCircuitModal, LmPrioritiesModal, LmShedGuardModal,
-// GridChargeModal, PeakShavingModal, PeakTariffModal, BatteryIdentModal, LmProfilesModal and
-// LmAdvancedModal. The
-// switches, the peak limit and the soc values live on the battery page.
+// themselves are in LmPrioritiesModal, LmShedGuardModal, GridChargeModal,
+// PeakShavingModal, PeakTariffModal, BatteryIdentModal, LmProfilesModal and
+// LmAdvancedModal. The switches, the peak limit and the soc values live on the
+// battery page.
 export default defineComponent({
 	name: "PeakShavingConfig",
-	components: { DeviceCard, CircuitsIcon },
+	components: { DeviceCard },
 	computed: {
-		// the charge power only matters once something checks against it: the
-		// circuit, or the dynamic setpoint it caps. Grid charging stays off without it.
+		// a charge power entity needs a power to cap: without one its setpoint stays 0
 		chargePowerMissing(): boolean {
-			const needed =
-				!!store.state.peakShavingCircuit || !!store.state.peakShavingChargeEntity;
-			return needed && (store.state.peakShavingChargePowerEffective ?? 0) <= 0;
+			return (
+				!!store.state.peakShavingChargeEntity &&
+				(store.state.peakShavingChargePowerEffective ?? 0) <= 0
+			);
 		},
 	},
 	methods: { openModal },

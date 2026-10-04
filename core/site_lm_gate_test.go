@@ -202,3 +202,22 @@ func TestLmGridChargeDeniedState(t *testing.T) {
 	assert.False(t, site.lmGridChargeBlocked())
 	assert.NotEqual(t, lmStateShed, site.lmBatteryStatus(now, true).State)
 }
+
+// TestBatteryOnRootCircuit: with circuits the battery always counts on the
+// site's root circuit, without nothing is managed
+func TestBatteryOnRootCircuit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	site := &Site{log: util.NewLogger("test")}
+
+	assert.Nil(t, site.lmBatteryCircuit())
+	assert.Empty(t, site.circuitLoads(), "no circuit, no battery load")
+
+	site.circuit = api.NewMockCircuit(ctrl)
+	assert.Equal(t, site.circuit, site.lmBatteryCircuit())
+	assert.Equal(t, site.circuit, site.lmBattery().GetCircuit())
+
+	loads := site.circuitLoads()
+	if assert.Len(t, loads, 1) {
+		assert.Equal(t, site.lmBattery(), loads[0])
+	}
+}

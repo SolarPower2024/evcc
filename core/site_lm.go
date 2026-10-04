@@ -65,13 +65,11 @@ type lmState struct {
 	advMu sync.Mutex
 	adv   lmAdvanced
 
-	gridCharge        bool           // battery grid charging requested in the last cycle
-	gridDenied        bool           // ... and held by evcc's circuit check, for the event log
-	gridOnce          gridChargeOnce // one-time grid charging, see site_lm_once.go
-	eeg               feedInEegState // second feed-in tariff, see site_feedin_eeg.go
-	batteryCircuit    api.Circuit    // resolved from the assignment
-	batteryCircuitRef string         // what batteryCircuit was resolved from
-	batteryLoad       *batteryLoad
+	gridCharge  bool           // battery grid charging requested in the last cycle
+	gridDenied  bool           // ... and held by evcc's circuit check, for the event log
+	gridOnce    gridChargeOnce // one-time grid charging, see site_lm_once.go
+	eeg         feedInEegState // second feed-in tariff, see site_feedin_eeg.go
+	batteryLoad *batteryLoad
 
 	// the optimizer's soc floor was raised above the battery's own minimum,
 	// see site_optimizer_lm.go
@@ -244,33 +242,10 @@ func (site *Site) lmBattery() *batteryLoad {
 	return s.batteryLoad
 }
 
-// lmBatteryCircuit returns the circuit the home battery draws from, nil when the
-// battery is not part of load management
+// lmBatteryCircuit returns the circuit the home battery draws from: the site's
+// root circuit, as in evcc, nil without circuits
 func (site *Site) lmBatteryCircuit() api.Circuit {
-	ref := site.GetPeakShavingCircuit()
-	if ref == "" {
-		return nil
-	}
-
-	s := site.lms()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// circuits are configured before the site, so resolve on first use - and
-	// again whenever the assignment changes
-	if s.batteryCircuitRef != ref {
-		s.batteryCircuitRef = ref
-		s.batteryCircuit = nil
-
-		if dev, err := config.Circuits().ByName(ref); err == nil {
-			s.batteryCircuit = dev.Instance()
-		} else {
-			site.log.ERROR.Printf("load management: battery circuit %s: %v", ref, err)
-		}
-	}
-
-	return s.batteryCircuit
+	return site.circuit
 }
 
 // lmHoldOff is how long battery grid charging stays off after a demand peak

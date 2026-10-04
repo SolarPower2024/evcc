@@ -1049,14 +1049,6 @@
       }
     },
     "peakshaving": {
-      "circuitDescription": "Only with a circuit does the home battery take part in load management.",
-      "circuitEntryLabel": "Battery circuit",
-      "circuitHelp": "Grid charging and shedding of the battery follow its power limit.",
-      "circuitInvalid": "Could not set the circuit.",
-      "circuitLabel": "Battery circuit",
-      "circuitNone": "None — battery outside load management",
-      "circuitNoneConfigured": "No circuits are configured.",
-      "circuitTitle": "Battery circuit",
       "description": "evcc keeps writing the discharge power needed for peak shaving to a Home Assistant entity, your automation drives the battery with it.",
       "energyEntityHelp": "Grid import counter in kWh or Wh. Only needed when the grid meter in evcc has no energy counter.",
       "energyEntityLabel": "Grid import energy counter",
