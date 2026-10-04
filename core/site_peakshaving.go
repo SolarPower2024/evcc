@@ -70,6 +70,9 @@ type peakState struct {
 	demand      float64   // grid demand without the battery in W, from the last cycle
 	chargePause time.Time // grid charging gives way to peak shaving until then
 
+	updated    time.Time // last cycle with meter values, see peakCheckMeters
+	metersLost bool      // the meters failed for longer than peak.MaxGap
+
 	set func(float64) error // resolved from config
 
 	// follow the peak, see site_peak_follow.go
@@ -155,6 +158,12 @@ func (site *Site) restorePeakSettings() {
 		s.energyEntity = v
 		s.mu.Unlock()
 	}
+
+	// a start during a meter outage counts as without meter values from now on,
+	// see peakCheckMeters, rather than keeping the setpoint written before it
+	s.mu.Lock()
+	s.updated = s.clock.Now()
+	s.mu.Unlock()
 
 	if err := site.rebuildPeakSetter(); err != nil {
 		site.log.ERROR.Printf("peak shaving: %v", err)
@@ -415,6 +424,16 @@ func (site *Site) updatePeakShaving(state siteState) {
 	s := site.peak()
 	defer site.savePeakMonths()
 
+	s.mu.Lock()
+	s.updated = s.clock.Now()
+	recovered := s.metersLost
+	s.metersLost = false
+	s.mu.Unlock()
+
+	if recovered {
+		site.log.INFO.Println("peak shaving: meters back")
+	}
+
 	site.updatePeakWindow(state.gridPower, state.battery.Power)
 	site.updatePeakFollow()
 	site.applyCircuitLimits() // load management switch and follow circuit, see site_lm_switch.go
@@ -639,6 +658,11 @@ func (site *Site) peakPausesGridCharge() bool {
 
 	now := s.clock.Now()
 
+	// without meter values the demand is unknown, so charging could create a peak
+	if s.metersStale(now) {
+		return true
+	}
+
 	if s.demand > s.limit {
 		if !now.Before(s.chargePause) {
 			site.log.DEBUG.Printf("battery grid charge: paused, demand %.0fW exceeds the %.0fW peak limit", s.demand, s.limit)
@@ -649,6 +673,45 @@ func (site *Site) peakPausesGridCharge() bool {
 	}
 
 	return now.Before(s.chargePause)
+}
+
+// metersStale reports whether peak shaving ran without meter values for longer
+// than peak.MaxGap, counted from the last good cycle or the start. updatePeakShaving
+// only runs once the meters were read, so the setpoint of the last good cycle
+// would otherwise stay in the entity for as long as the meters fail. Called with
+// mu held.
+func (s *peakState) metersStale(now time.Time) bool {
+	return !s.updated.IsZero() && now.Sub(s.updated) > peak.MaxGap
+}
+
+// peakCheckMeters hands control back to the battery once the meters failed for
+// longer than peak.MaxGap: the free value lets it cover any demand by ordinary
+// self-consumption, peaks included, where a stale setpoint of 0 would keep it
+// blocked. Grid charging pauses meanwhile, see peakPausesGridCharge. Runs every
+// cycle, also when the meters failed.
+func (site *Site) peakCheckMeters() {
+	s := site.peak()
+
+	s.mu.Lock()
+	lost := s.enabled && s.set != nil && s.metersStale(s.clock.Now())
+	started := lost && !s.metersLost
+	if lost {
+		s.metersLost = true
+		s.shaving = false
+		s.covering = false
+	}
+	s.mu.Unlock()
+
+	if !lost {
+		return
+	}
+
+	if started {
+		site.log.WARN.Printf("peak shaving: no meter values for over %s, battery runs freely and grid charging pauses until they are back", peak.MaxGap)
+		site.publish(keys.PeakShavingActive, false)
+	}
+
+	site.handBackPeak()
 }
 
 // peakChargeHeadroom returns how much grid charge power fits below the peak
@@ -678,6 +741,8 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 	defer site.publishLmStatus(gridCharge)
 	defer site.publishLmWallboxes()
 	defer site.checkLmFollowing()
+
+	site.peakCheckMeters()
 
 	if gridCharge || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)

@@ -258,6 +258,11 @@ discharge controller; a battery mode set from outside through the api stays.
 While the demand without the battery exceeds the limit, grid charging pauses
 and stays off for the hold-off, so it cannot add to the peak.
 
+Without meter values for over 2 minutes the free value is written and grid
+charging pauses until they are back: the battery covers any demand by ordinary
+self-consumption, where a stale setpoint of 0 would keep it blocked
+(`TestPeakMetersLost`).
+
 The window, the allowed power, the setpoint and the hysteresis are in
 `core/peak`, which knows nothing about the site and has its own tests;
 `core/site_peakshaving.go` feeds it and handles settings, Home Assistant and the
