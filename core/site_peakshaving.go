@@ -25,6 +25,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -273,7 +274,10 @@ func (site *Site) haConnection() (*homeassistant.Connection, error) {
 // numberSetter returns a setter writing to a Home Assistant number entity. Each
 // value is fitted to the entity's min, max and step first, see peak.Range.Fit;
 // up rounds to the next step above. These are read on every write, as an
-// integration may only learn them from the device after it started.
+// integration may only learn them from the device after it started. A value the
+// entity already holds, within the write tolerance, is not written again, see
+// peak.Range.Unchanged: a device may store every write. As the comparison is
+// against the entity, a value changed by hand is still corrected.
 func (site *Site) numberSetter(entity string, up bool) (func(float64) error, error) {
 	conn, err := site.haConnection()
 	if err != nil {
@@ -281,16 +285,44 @@ func (site *Site) numberSetter(entity string, up bool) (func(float64) error, err
 	}
 
 	return func(val float64) error {
-		if r, err := numberRange(conn, entity); err == nil {
-			val = r.Fit(val, up)
+		r, current, err := numberState(conn, entity)
+		if err != nil {
+			return conn.CallNumberService(entity, val)
 		}
+
+		val, write := numberWrite(r, current, val, up, site.peakWriteTolerance())
+		if !write {
+			return nil
+		}
+
 		return conn.CallNumberService(entity, val)
 	}, nil
 }
 
-// numberRange reads the min, max and step attributes of a number entity
-func numberRange(conn *homeassistant.Connection, entity string) (peak.Range, error) {
+// numberWrite returns the value fitted to the entity and whether it needs writing
+// given the entity's current state
+func numberWrite(r peak.Range, current string, val float64, up bool, tolerance float64) (float64, bool) {
+	val = r.Fit(val, up)
+
+	// an unavailable entity has no current value and gets the write
+	v, err := strconv.ParseFloat(current, 64)
+
+	return val, err != nil || !r.Unchanged(v, val, tolerance)
+}
+
+// peakWriteTolerance is the smallest change written to a peak shaving entity
+func (site *Site) peakWriteTolerance() float64 {
+	if v := site.advanced().WriteTolerance; v != nil {
+		return *v
+	}
+	return 0
+}
+
+// numberState reads the min, max and step attributes and the state of a number
+// entity
+func numberState(conn *homeassistant.Connection, entity string) (peak.Range, string, error) {
 	var res struct {
+		State      string `json:"state"`
 		Attributes struct {
 			Min  float64 `json:"min"`
 			Max  float64 `json:"max"`
@@ -301,7 +333,7 @@ func numberRange(conn *homeassistant.Connection, entity string) (peak.Range, err
 	uri := fmt.Sprintf("%s/api/states/%s", conn.URI(), url.PathEscape(entity))
 	err := conn.GetJSON(uri, &res)
 
-	return peak.Range(res.Attributes), err
+	return peak.Range(res.Attributes), res.State, err
 }
 
 func (site *Site) publishPeakSettings() {
@@ -503,9 +535,9 @@ func (site *Site) writeChargeValue(value float64) {
 }
 
 // writeOutput writes a value through set and reports whether it landed. It is
-// called every cycle and writes even an unchanged value, so an entity changed by
-// hand, by an automation or by a Home Assistant restart is corrected in the next
-// cycle.
+// called every cycle; the setter compares with the entity and skips an unchanged
+// value, so an entity changed by hand, by an automation or by a Home Assistant
+// restart is still corrected in the next cycle.
 func (site *Site) writeOutput(name string, set func(float64) error, value float64) bool {
 	if set == nil {
 		return false

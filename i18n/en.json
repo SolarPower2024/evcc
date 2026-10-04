@@ -481,7 +481,7 @@
       "chargePowerLabel": "Expected grid charge power",
       "chargePowerUnknown": "unknown, grid charging stays blocked",
       "description": "With a charge power entity, evcc keeps adjusting it below peak limit and circuit, without one charging is only switched on and off.",
-      "entityHelp": "Receives the allowed charge power in W, 0 = don't charge. Needs min 0, max ≥ grid charge power, step 1. Empty = on/off.",
+      "entityHelp": "Receives the allowed charge power in W, 0 = don't charge, fitted to the entity's min, max and step. Empty = on/off.",
       "entityInvalid": "Could not set the entity.",
       "entityLabel": "Charge power entity",
       "entryLabel": "Battery grid charging",
@@ -1056,10 +1056,10 @@
       "circuitNone": "None — battery outside load management",
       "circuitNoneConfigured": "No circuits are configured.",
       "circuitTitle": "Battery circuit",
-      "description": "evcc keeps writing the discharge power needed for peak shaving to a Home Assistant entity, your automation drives the battery with it.",
+      "description": "evcc writes the discharge power needed for peak shaving to a Home Assistant entity: the battery's discharge limit or a helper for your automation.",
       "energyEntityHelp": "Grid import counter in kWh or Wh. Only needed when the grid meter in evcc has no energy counter.",
       "energyEntityLabel": "Grid import energy counter",
-      "entityHelp": "Receives the setpoint in W. Needs min 0, max ≥ 10000, step 1.",
+      "entityHelp": "Receives the setpoint in W, fitted to the entity's min, max and step.",
       "entityInvalid": "Could not set the entity.",
       "entityLabel": "Discharge setpoint entity",
       "entryLabel": "Peak shaving",
@@ -1074,7 +1074,10 @@
         "power": "grid power"
       },
       "sourceLabel": "15 minute average metered with",
-      "title": "Peak shaving"
+      "title": "Peak shaving",
+      "writeToleranceHelp": "Smaller changes are not written to the entity, which spares the device. Also applies to the grid charge power. 0 = every change, stop and maximum always.",
+      "writeToleranceInvalid": "The tolerance must be between 0 and 1000 W, in whole watts.",
+      "writeToleranceLabel": "Write tolerance"
     },
     "peaktariff": {
       "agreedHelp": "As in the grid contract, 0 = none.",

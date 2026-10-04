@@ -22,6 +22,8 @@ type lmAdvanced struct {
 	Phases     *float64 `json:"phases,omitempty"`     // battery phases for current accounting
 	PeakFreeze *float64 `json:"peakFreeze,omitempty"` // minute of the window from which the peak budget no longer grows
 	PeakCap    *float64 `json:"peakCap,omitempty"`    // allowed grid power at most this multiple of the peak limit
+	// smallest change in W that is written to a peak shaving entity, see numberSetter
+	WriteTolerance *float64 `json:"writeTolerance,omitempty"`
 	// cycles after which a load not following its limit is no longer counted on, 0 = never
 	FollowCycles *float64 `json:"followCycles,omitempty"`
 	// hours the optimizer may take to reach the stop soc of soc-based grid charging
@@ -50,6 +52,7 @@ type lmAdvancedState struct {
 	Phases           int     `json:"phases"`
 	PeakFreeze       float64 `json:"peakFreeze"`
 	PeakCap          float64 `json:"peakCap"`
+	WriteTolerance   float64 `json:"writeTolerance"`
 	FollowCycles     int     `json:"followCycles"`
 	GridChargeWindow float64 `json:"gridChargeWindow"`
 	HomeWeekday      bool    `json:"homeWeekday"`
@@ -70,6 +73,7 @@ var lmAdvancedLimits = map[string]lmAdvancedLimit{
 	"phases":           {1, 3, true},
 	"peakFreeze":       {1, 14, true},
 	"peakCap":          {1, 10, false},
+	"writeTolerance":   {0, 1000, true},
 	"followCycles":     {0, 20, true},
 	"gridChargeWindow": {1, 24, true},
 	"homeWeekday":      {0, 1, true},
@@ -113,6 +117,7 @@ func (site *Site) publishLmAdvanced() {
 		Phases:           site.lmBatteryPhases(),
 		PeakFreeze:       site.peakFreeze().Minutes(),
 		PeakCap:          site.peakCap(),
+		WriteTolerance:   site.peakWriteTolerance(),
 		FollowCycles:     site.lmFollowCycles(),
 		GridChargeWindow: site.gridChargeWindow().Hours(),
 		HomeWeekday:      site.homeWeekday(),
@@ -172,6 +177,8 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 		s.adv.PeakFreeze = &v
 	case "peakCap":
 		s.adv.PeakCap = &v
+	case "writeTolerance":
+		s.adv.WriteTolerance = &v
 	case "followCycles":
 		s.adv.FollowCycles = &v
 	case "gridChargeWindow":

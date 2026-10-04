@@ -40,6 +40,8 @@ export interface LmAdvanced {
   peakFreeze: number;
   /** Allowed grid draw at most this multiple of the peak limit. */
   peakCap: number;
+  /** Smallest change in W written to a peak shaving entity. */
+  writeTolerance: number;
   /** Home consumption forecast per weekday. */
   homeWeekday?: boolean;
   /** Home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load profile. */
