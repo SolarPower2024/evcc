@@ -337,6 +337,16 @@ func (site *Site) lmGridChargePower() (float64, bool) {
 	return 0, false
 }
 
+// lmBatteryOutranks reports whether loads with a lower priority than the battery
+// draw on its circuit. Load management then sheds them for the battery, while
+// evcc's circuit check would hold the battery first, so that check is skipped,
+// see batteryChargeExceedsCircuit. Starting and holding the battery is then
+// load management's call alone, see lmGridChargeDecision.
+func (site *Site) lmBatteryOutranks() bool {
+	c := site.lmBatteryCircuit()
+	return c != nil && site.lmm().SheddableBelow(site.lmBattery(), c) > 0
+}
+
 // lmGridHeld reports whether load management held back a switched battery's
 // grid charging in the last cycle, for loadpoints short of power
 func (site *Site) lmGridHeld() bool {

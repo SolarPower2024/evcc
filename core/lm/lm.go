@@ -234,6 +234,13 @@ func (m *Manager) below(entries []entry, c api.Circuit, prio int, self Load, sel
 	return power, current
 }
 
+// SheddableBelow returns what the loads with a lower priority than l draw on
+// circuits competing with c, i.e. what shedding them could free for l
+func (m *Manager) SheddableBelow(l Load, c api.Circuit) float64 {
+	lower, _ := m.below(m.snapshot(), c, m.Priority(l), l, 0, 0)
+	return lower
+}
+
 // headroom returns the power and current still free on the circuit, the
 // tightest level of its parent chain. Unlimited levels do not count.
 func headroom(c api.Circuit) (float64, float64) {

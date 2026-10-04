@@ -279,3 +279,73 @@ func TestScenarioSwitchedBatteryGivesWay(t *testing.T) {
 	assert.Equal(t, api.BatteryCharge, sc.mode())
 	assert.False(t, sc.site.lmGridChargeDenied(true))
 }
+
+// newRankedScenario: on/off battery with 4000 W on a 10 kW circuit with a
+// wallbox, the battery's priority as set in the ui
+func newRankedScenario(t *testing.T, batteryPrio int, wallbox *scenarioLoad) *scenario {
+	sc := newScenario(t)
+	sc.site.peak().enabled = false
+	sc.site.peak().chargePower = 4000
+	sc.withCircuit(10000, wallbox, batteryPrio)
+	return sc
+}
+
+// TestLmBatteryOutranksSkipsEvccCheck is the contract of the hook in
+// batteryChargeExceedsCircuit: on overload evcc's check holds the battery, unless
+// it ranks above a load drawing on the circuit; then load management sheds that
+// load and the battery keeps charging.
+func TestLmBatteryOutranksSkipsEvccCheck(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		prio int
+		mode api.BatteryMode
+	}{
+		{"battery above the wallbox keeps charging", 5, api.BatteryCharge},
+		{"battery on the same priority is held by evcc", 0, api.BatteryHold},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wallbox := &scenarioLoad{title: "wallbox", power: 5000}
+			sc := newRankedScenario(t, tc.prio, wallbox)
+			sc.site.lmm().ValidatePower(wallbox, sc.circuit, 5000, 5000)
+
+			assert.True(t, sc.cycle(20, 5000, 0))
+			assert.Equal(t, api.BatteryCharge, sc.mode())
+
+			// the wallbox draws 7000 W beside the battery's 4000 W: over the limit
+			wallbox.power = 7000
+			sc.site.lmm().ValidatePower(wallbox, sc.circuit, 7000, 7000)
+			sc.cycle(21, 11000, -4000)
+			assert.Equal(t, tc.mode, sc.mode())
+			assert.Equal(t, tc.prio > 0, sc.site.lmBatteryOutranks())
+
+			if tc.prio > 0 {
+				// the wallbox below covers the excess
+				assert.LessOrEqual(t, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 7000, 7000), 6000.0)
+			}
+		})
+	}
+}
+
+// TestScenarioBatteryAboveWallboxStarts: a battery above a charging wallbox is
+// not kept from starting by it: it waits while the wallbox gives way, then charges
+func TestScenarioBatteryAboveWallboxStarts(t *testing.T) {
+	wallbox := &scenarioLoad{title: "wallbox", power: 8000}
+	sc := newRankedScenario(t, 5, wallbox)
+	sc.site.lmm().ValidatePower(wallbox, sc.circuit, 8000, 8000)
+
+	// 2000 W free for 4000 W: held while the wallbox gives way
+	assert.False(t, sc.cycle(20, 8000, 0))
+	assert.Equal(t, api.BatteryHold, sc.mode())
+
+	// the wallbox is allowed only what is left beside the battery
+	wallbox.power = sc.site.lmm().ValidatePower(wallbox, sc.circuit, 8000, 8000)
+	assert.LessOrEqual(t, wallbox.power, 6000.0)
+
+	assert.True(t, sc.cycle(20, wallbox.power, 0))
+	assert.Equal(t, api.BatteryCharge, sc.mode())
+
+	// charging, the wallbox below cannot push it out
+	sc.site.lmm().ValidatePower(wallbox, sc.circuit, wallbox.power, 9000)
+	assert.True(t, sc.cycle(21, wallbox.power+4000, -4000))
+	assert.Equal(t, api.BatteryCharge, sc.mode())
+}

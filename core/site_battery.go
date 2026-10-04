@@ -144,6 +144,10 @@ func (site *Site) requiredBatteryMode(batteryGridChargeActive, batteryGridDischa
 // batteryChargeExceedsCircuit reports whether grid charging exceeds the root circuit's power limit: starting needs
 // headroom for the batteries' charge limits (or the charge power at the last stop), charging stops when over power
 func (site *Site) batteryChargeExceedsCircuit() bool {
+	if site.lmBatteryOutranks() { // custom: load management sheds the loads below the battery, see core/site_lm.go
+		return false
+	}
+
 	if site.circuit == nil {
 		return false
 	}

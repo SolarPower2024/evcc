@@ -81,8 +81,12 @@ the site's top circuit (nothing to choose; without circuits nothing changes).
 That check is evcc's (`batteryChargeExceedsCircuit`, evcc PR 34401): starting
 needs room for the expected charge power, charging is held (battery mode hold)
 while the circuit is over power, and it starts again only once there is room
-for the power measured when it was held. Wallboxes, switches and heaters come
-first. The fork adds inputs and what evcc does not have:
+for the power measured when it was held. The battery keeps its place in the
+priorities ([1](#1-load-management-priorities)): while loads with a lower
+priority draw on the circuit, load management sheds those for it and evcc's
+check is skipped (`lmBatteryOutranks`), so a charging wallbox below it cannot
+push it out; peak shaving needs it charged. The fork adds inputs and what evcc
+does not have:
 
 | Setting | Where | Default |
 | --- | --- | --- |
@@ -97,7 +101,7 @@ first. The fork adds inputs and what evcc does not have:
   starts (`lmGridChargePower` is the fork's input into `batteryMaxChargePower`).
   A wallbox capped at the limit does not overload the circuit, so evcc's check
   alone would keep the battery charging. Load management holds the battery
-  when loadpoints are short of power and while they use it, in hold mode like
+  when loadpoints above it are short of power and while they use it, in hold mode like
   evcc's check (`updateBatteryModePeakAware`). Running, it asks only for what
   it draws (`TestScenarioSwitchedBatteryGivesWay`, `TestScenarioDrawBelowSetting`).
 - With a charge power entity, evcc writes the grid charge power instead: the
@@ -453,6 +457,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site.go` | `custom` field; `restoreCustom` in `restoreSettings`; `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter`; `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_battery.go` | `lmGridChargePower` first in `batteryMaxChargePower` (the power evcc's circuit check of battery grid charging goes by) |
+| `core/site_battery.go` | `lmBatteryOutranks` first in `batteryChargeExceedsCircuit`: skips evcc's check while loads below the battery's priority draw on its circuit, load management sheds those instead |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
 | `core/site/api.go` | embeds `CustomAPI` |
