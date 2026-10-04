@@ -26,6 +26,25 @@
 				/>
 			</FormRow>
 
+			<!-- custom: skip writes below this change, see numberSetter in core/site_peakshaving.go -->
+			<FormRow
+				id="peakShavingWriteTolerance"
+				:label="$t('config.peakshaving.writeToleranceLabel')"
+				:help="$t('config.peakshaving.writeToleranceHelp')"
+			>
+				<div class="input-group">
+					<input
+						id="peakShavingWriteTolerance"
+						v-model.number="tolerance"
+						type="number"
+						step="any"
+						class="form-control"
+						data-testid="peakshaving-write-tolerance"
+					/>
+					<span class="input-group-text">W</span>
+				</div>
+			</FormRow>
+
 			<FormRow
 				id="peakShavingEnergyEntity"
 				:label="$t('config.peakshaving.energyEntityLabel')"
@@ -134,6 +153,8 @@ export default {
 			initialFollow: false,
 			buffer: 0.5,
 			initialBuffer: 0.5,
+			tolerance: 0,
+			initialTolerance: 0,
 		};
 	},
 	computed: {
@@ -149,12 +170,16 @@ export default {
 		bufferChanged() {
 			return this.buffer !== this.initialBuffer;
 		},
+		toleranceChanged() {
+			return this.tolerance !== this.initialTolerance;
+		},
 		changed() {
 			return (
 				this.entityChanged ||
 				this.energyEntityChanged ||
 				this.followChanged ||
-				this.bufferChanged
+				this.bufferChanged ||
+				this.toleranceChanged
 			);
 		},
 		sourceText() {
@@ -177,6 +202,9 @@ export default {
 			this.initialFollow = this.follow;
 			this.buffer = (follow?.buffer ?? 500) / 1000;
 			this.initialBuffer = this.buffer;
+			// stored with the advanced settings, see core/site_lm_advanced.go
+			this.tolerance = store?.state?.lmAdvanced?.writeTolerance ?? 0;
+			this.initialTolerance = this.tolerance;
 		},
 		open() {
 			this.reset();
@@ -193,6 +221,13 @@ export default {
 					bufferW % 100 !== 0)
 			) {
 				this.error = this.$t("config.peakshaving.followBufferInvalid");
+				return;
+			}
+			if (
+				this.toleranceChanged &&
+				(!Number.isInteger(this.tolerance) || this.tolerance < 0 || this.tolerance > 1000)
+			) {
+				this.error = this.$t("config.peakshaving.writeToleranceInvalid");
 				return;
 			}
 
@@ -223,6 +258,9 @@ export default {
 
 				if (this.bufferChanged) {
 					await api.post(`peakfollowbuffer/${bufferW}`);
+				}
+				if (this.toleranceChanged) {
+					await api.post(`lmadvanced/writeTolerance/${this.tolerance}`);
 				}
 				if (this.followChanged) {
 					await api.post(`peakfollow/${this.follow}`);

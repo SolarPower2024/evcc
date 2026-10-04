@@ -22,6 +22,7 @@ func TestLmAdvancedSettings(t *testing.T) {
 	assert.Equal(t, lm.DefaultPhases, site.lmBatteryPhases())
 	assert.Equal(t, 12*time.Minute, site.peakFreeze())
 	assert.Equal(t, 2.0, site.peakCap())
+	assert.Equal(t, 0.0, site.peakWriteTolerance())
 
 	// set in the ui
 	require.NoError(t, site.SetLmAdvanced("hysteresis", 0))
@@ -31,6 +32,7 @@ func TestLmAdvancedSettings(t *testing.T) {
 	require.NoError(t, site.SetLmAdvanced("phases", 1))
 	require.NoError(t, site.SetLmAdvanced("peakFreeze", 10))
 	require.NoError(t, site.SetLmAdvanced("peakCap", 1.5))
+	require.NoError(t, site.SetLmAdvanced("writeTolerance", 50))
 
 	assert.Equal(t, 0.0, site.peakHysteresis(), "0 is a valid value, not unset")
 	assert.Equal(t, 12000.0, site.peakFreeValue())
@@ -39,6 +41,7 @@ func TestLmAdvancedSettings(t *testing.T) {
 	assert.Equal(t, 1, site.lmBatteryPhases())
 	assert.Equal(t, 10*time.Minute, site.peakFreeze())
 	assert.Equal(t, 1.5, site.peakCap())
+	assert.Equal(t, 50.0, site.peakWriteTolerance())
 
 	// the free value is what peak shaving writes while off
 	var written []float64
@@ -64,6 +67,8 @@ func TestLmAdvancedSettings(t *testing.T) {
 		{"peakFreeze", 12.5},
 		{"peakCap", 0.9},
 		{"peakCap", 11},
+		{"writeTolerance", 1001},
+		{"writeTolerance", 2.5},
 		{"unknown", 1},
 	} {
 		assert.Error(t, site.SetLmAdvanced(tc.name, tc.value), "%s = %g", tc.name, tc.value)

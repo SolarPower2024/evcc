@@ -128,3 +128,17 @@ func (r Range) Fit(value float64, up bool) float64 {
 
 	return value
 }
+
+// Unchanged reports whether writing target can be skipped because the entity
+// already holds current. A difference below the tolerance is not worth a write,
+// a device may store each one. Half a step always counts as unchanged, as a
+// device converting to its own unit may report a written value a little off.
+// Min and max are written exactly, so stopping and handing back always land.
+func (r Range) Unchanged(current, target, tolerance float64) bool {
+	threshold := r.Step / 2
+	if target != r.Min && (r.Max <= r.Min || target != r.Max) {
+		threshold = max(threshold, tolerance)
+	}
+
+	return current == target || math.Abs(target-current) < threshold
+}

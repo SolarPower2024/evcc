@@ -1074,7 +1074,10 @@
         "power": "grid power"
       },
       "sourceLabel": "15 minute average metered with",
-      "title": "Peak shaving"
+      "title": "Peak shaving",
+      "writeToleranceHelp": "Smaller changes are not written to the entity, which spares the device. Also applies to the grid charge power. 0 = every change, stop and maximum always.",
+      "writeToleranceInvalid": "The tolerance must be between 0 and 1000 W, in whole watts.",
+      "writeToleranceLabel": "Write tolerance"
     },
     "peaktariff": {
       "agreedHelp": "As in the grid contract, 0 = none.",

@@ -231,7 +231,9 @@ helper read by an automation. Both outputs, this one and the grid charge power,
 are fitted to the entity's `min`, `max` and `step` on every write: the
 setpoint rounds up so the peak stays covered, the charge power rounds down so it
 stays within the limits, and a free value above `max` becomes `max`
-(`TestRangeFit`). A 2 % hysteresis keeps the soc
+(`TestRangeFit`). A value the entity already holds, within the write tolerance
+(0 W = every change; min and max always land), is not written again, as a
+device may store each write (`TestNumberWrite`). A 2 % hysteresis keeps the soc
 from flapping across the reserve.
 
 The limit applies to the clock-aligned 15 minute window: `allowed` =
@@ -397,6 +399,7 @@ values are not stored, so a changed default applies.
 | --- | --- | --- | --- |
 | `hysteresis` | soc band of the peak reserve | 2 % | 0-20 |
 | `freeValue` | setpoint for "discharge freely" | 10000 W | 1-100000 |
+| `writeTolerance` | smallest change written to the peak shaving and grid charge power entities, set in the *Peak Shaving* dialog | 0 W | 0-1000 |
 | `holdOff` | wait after battery grid charging was stopped | 5 min | 1-60 |
 | `timeout` | expiry of unserved demand | 10 min | 1-60 |
 | `phases` | battery phases for current accounting | 3 | 1-3 |

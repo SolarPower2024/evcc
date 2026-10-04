@@ -1074,7 +1074,10 @@
         "power": "Netzleistung"
       },
       "sourceLabel": "15-Minuten-Mittel gemessen mit",
-      "title": "Peak Shaving"
+      "title": "Peak Shaving",
+      "writeToleranceHelp": "Kleinere Änderungen schreibt evcc nicht in die Entität, das schont das Gerät. Gilt auch für die Netzladeleistung. 0 = jede Änderung, Stopp und Maximum immer.",
+      "writeToleranceInvalid": "Die Toleranz muss zwischen 0 und 1000 W liegen, in ganzen Watt.",
+      "writeToleranceLabel": "Schreib-Toleranz"
     },
     "peaktariff": {
       "agreedHelp": "Laut Netzvertrag, 0 = ohne.",

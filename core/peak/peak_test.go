@@ -149,3 +149,34 @@ func TestRangeFit(t *testing.T) {
 		})
 	}
 }
+
+// TestRangeUnchanged covers the tolerance, the half step and the exact min and max
+func TestRangeUnchanged(t *testing.T) {
+	fronius := peak.Range{Min: 0, Max: 15360, Step: 10}
+
+	tc := []struct {
+		name                       string
+		r                          peak.Range
+		current, target, tolerance float64
+		want                       bool
+	}{
+		{"equal", fronius, 4540, 4540, 0, true},
+		{"one step without tolerance", fronius, 4540, 4550, 0, false},
+		{"reported a little off", fronius, 4541, 4540, 0, true},
+		{"below tolerance", fronius, 4540, 4580, 50, true},
+		{"at tolerance", fronius, 4540, 4590, 50, false},
+		{"free value below tolerance", fronius, 9980, 10000, 50, true},
+		{"stop is exact", fronius, 30, 0, 50, false},
+		{"stop reported a little off", fronius, 1, 0, 50, true},
+		{"max is exact", fronius, 15330, 15360, 50, false},
+		{"no attributes", peak.Range{}, 4540, 4541, 0, false},
+		{"no attributes, tolerance", peak.Range{}, 4540, 4541, 10, true},
+		{"no attributes, stop is exact", peak.Range{}, 5, 0, 10, false},
+	}
+
+	for _, tc := range tc {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.r.Unchanged(tc.current, tc.target, tc.tolerance))
+		})
+	}
+}
