@@ -116,3 +116,36 @@ func TestReserved(t *testing.T) {
 	assert.False(t, peak.Reserved(false, 31, 30, 2), "in the band: stays free")
 	assert.False(t, peak.Reserved(true, 32, 30, 2), "released")
 }
+
+// TestRangeFit covers the step rounding in both directions and the clamp to min
+// and max
+func TestRangeFit(t *testing.T) {
+	fronius := peak.Range{Min: 0, Max: 10100, Step: 10}
+
+	tc := []struct {
+		name  string
+		r     peak.Range
+		value float64
+		up    bool
+		want  float64
+	}{
+		{"on a step", fronius, 4530, false, 4530},
+		{"charge rounds down", fronius, 4537, false, 4530},
+		{"discharge rounds up", fronius, 4531, true, 4540},
+		{"on a step stays when rounding up", fronius, 4540, true, 4540},
+		{"free value above max", fronius, 10000, true, 10000},
+		{"above max", peak.Range{Min: 0, Max: 5120, Step: 10}, 10000, true, 5120},
+		{"zero stays zero", fronius, 0, false, 0},
+		{"below min", peak.Range{Min: 100, Max: 5000, Step: 50}, 0, false, 100},
+		{"steps counted from min", peak.Range{Min: 5, Max: 1000, Step: 10}, 22, false, 15},
+		{"fractional step", peak.Range{Min: 0, Max: 100, Step: 0.1}, 12.34, false, 12.3},
+		{"no attributes", peak.Range{}, 4537.4, false, 4537.4},
+		{"step only", peak.Range{Step: 100}, 4537, false, 4500},
+	}
+
+	for _, tc := range tc {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.InDelta(t, tc.want, tc.r.Fit(tc.value, tc.up), 1e-9)
+		})
+	}
+}
