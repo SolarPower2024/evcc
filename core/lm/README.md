@@ -225,8 +225,13 @@ Above the reserve the discharge controller gets the free value (default
 exceeds the allowed grid power: setpoint = `max(0, grid + battery − allowed)`.
 The battery power is added back because the grid meter already reflects the
 controller's own output; using the grid alone oscillates
-(`TestPeakSetpointIsStable`). evcc only writes the setpoint to a number entity;
-a Home Assistant automation does the discharge. A 2 % hysteresis keeps the soc
+(`TestPeakSetpointIsStable`). evcc only writes the setpoint to a number entity
+(`number` or `input_number`), either the battery's own discharge limit or a
+helper read by an automation. Both outputs, this one and the grid charge power,
+are fitted to the entity's `min`, `max` and `step` on every write: the
+setpoint rounds up so the peak stays covered, the charge power rounds down so it
+stays within the limits, and a free value above `max` becomes `max`
+(`TestRangeFit`). A 2 % hysteresis keeps the soc
 from flapping across the reserve.
 
 The limit applies to the clock-aligned 15 minute window: `allowed` =

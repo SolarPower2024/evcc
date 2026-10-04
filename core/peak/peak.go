@@ -97,3 +97,34 @@ func Reserved(prev bool, soc, reserve, hysteresis float64) bool {
 	}
 	return prev
 }
+
+// Range is what a number entity accepts: values from Min to Max in steps of Step
+// counted from Min. A zero Step or a Max not above Min leaves that part out.
+type Range struct {
+	Min, Max, Step float64
+}
+
+// Fit moves a value onto the entity's range. Home Assistant rejects values
+// outside min and max, and some devices misbehave on values off the step (a
+// Fronius battery charges from the grid with 500W unless the power is a multiple
+// of 10W). Up rounds to the next step above, for a discharge setpoint that has
+// to cover a peak; otherwise to the step below, for a charge power that has to
+// stay within the limit.
+func (r Range) Fit(value float64, up bool) float64 {
+	if r.Step > 0 {
+		// the tolerance keeps float noise from moving a value already on a step
+		steps := (value - r.Min) / r.Step
+		if up {
+			steps = math.Ceil(steps - 1e-9)
+		} else {
+			steps = math.Floor(steps + 1e-9)
+		}
+		value = r.Min + steps*r.Step
+	}
+
+	if r.Max > r.Min {
+		value = min(max(value, r.Min), r.Max)
+	}
+
+	return value
+}

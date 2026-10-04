@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -198,7 +199,7 @@ func (site *Site) rebuildPeakSetter() error {
 		return nil
 	}
 
-	set, err := site.numberSetter(entity)
+	set, err := site.numberSetter(entity, true) // a discharge setpoint has to cover the peak
 	if err != nil {
 		return err
 	}
@@ -223,7 +224,7 @@ func (site *Site) rebuildChargeSetter() error {
 
 	if entity != "" {
 		var err error
-		if set, err = site.numberSetter(entity); err != nil {
+		if set, err = site.numberSetter(entity, false); err != nil { // a charge power has to stay within the limits
 			return err
 		}
 	}
@@ -269,14 +270,38 @@ func (site *Site) haConnection() (*homeassistant.Connection, error) {
 	return homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", false)
 }
 
-// numberSetter returns a setter writing to a Home Assistant number entity
-func (site *Site) numberSetter(entity string) (func(float64) error, error) {
+// numberSetter returns a setter writing to a Home Assistant number entity. Each
+// value is fitted to the entity's min, max and step first, see peak.Range.Fit;
+// up rounds to the next step above. These are read on every write, as an
+// integration may only learn them from the device after it started.
+func (site *Site) numberSetter(entity string, up bool) (func(float64) error, error) {
 	conn, err := site.haConnection()
 	if err != nil {
 		return nil, err
 	}
 
-	return func(val float64) error { return conn.CallNumberService(entity, val) }, nil
+	return func(val float64) error {
+		if r, err := numberRange(conn, entity); err == nil {
+			val = r.Fit(val, up)
+		}
+		return conn.CallNumberService(entity, val)
+	}, nil
+}
+
+// numberRange reads the min, max and step attributes of a number entity
+func numberRange(conn *homeassistant.Connection, entity string) (peak.Range, error) {
+	var res struct {
+		Attributes struct {
+			Min  float64 `json:"min"`
+			Max  float64 `json:"max"`
+			Step float64 `json:"step"`
+		} `json:"attributes"`
+	}
+
+	uri := fmt.Sprintf("%s/api/states/%s", conn.URI(), url.PathEscape(entity))
+	err := conn.GetJSON(uri, &res)
+
+	return peak.Range(res.Attributes), err
 }
 
 func (site *Site) publishPeakSettings() {
