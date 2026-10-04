@@ -20,14 +20,14 @@ func TestNamePatternMatchesUiDevices(t *testing.T) {
 	var got string
 
 	r := mux.NewRouter()
-	r.Methods(http.MethodPost).Path("/peakshavingcircuit/{value:" + namePattern + "}").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	r.Methods(http.MethodPost).Path("/lmcircuit/{value:" + namePattern + "}").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = mux.Vars(r)["value"]
 	})
 
 	for path, want := range map[string]string{
-		"/peakshavingcircuit/hausanschluss": "hausanschluss",
-		"/peakshavingcircuit/db:1":          "db:1",
-		"/peakshavingcircuit/db%3A12":       "db:12", // as sent by encodeURIComponent
+		"/lmcircuit/hausanschluss": "hausanschluss",
+		"/lmcircuit/db:1":          "db:1",
+		"/lmcircuit/db%3A12":       "db:12", // as sent by encodeURIComponent
 	} {
 		got = ""
 		w := httptest.NewRecorder()
@@ -129,8 +129,6 @@ var customRouteSamples = map[string]string{
 	"peakshavingenergyentity":       "/peakshavingenergyentity/sensor.grid_import",
 	"peakshavingenergyentitydelete": "/peakshavingenergyentity",
 	"peakshavingchargepower":        "/peakshavingchargepower/4000",
-	"peakshavingcircuit":            "/peakshavingcircuit/db:1",
-	"peakshavingcircuitdelete":      "/peakshavingcircuit",
 }
 
 // TestCustomRoutesMatch sends a request to every custom route through a real

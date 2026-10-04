@@ -47,9 +47,9 @@ const (
 	// nothing; only a load that stops updating entirely would keep reserving.
 	DefaultTimeout = 10 * time.Minute
 
-	// DefaultHoldOff is how long battery grid charging stays off after load
-	// management denied it. Without it the battery would flap: stopping frees
-	// the power that made it start again.
+	// DefaultHoldOff is how long battery grid charging stays off after a
+	// demand peak paused it. Without it the battery would flap between
+	// charging and shaving.
 	DefaultHoldOff = 5 * time.Minute
 
 	// DefaultPhases is the assumed phase count for battery current accounting
@@ -232,6 +232,13 @@ func (m *Manager) below(entries []entry, c api.Circuit, prio int, self Load, sel
 	}
 
 	return power, current
+}
+
+// SheddableBelow returns what the loads with a lower priority than l draw on
+// circuits competing with c, i.e. what shedding them could free for l
+func (m *Manager) SheddableBelow(l Load, c api.Circuit) float64 {
+	lower, _ := m.below(m.snapshot(), c, m.Priority(l), l, 0, 0)
+	return lower
 }
 
 // headroom returns the power and current still free on the circuit, the

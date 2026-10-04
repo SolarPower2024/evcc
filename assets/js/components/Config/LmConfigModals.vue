@@ -1,6 +1,5 @@
 <template>
 	<PeakShavingModal />
-	<PeakShavingCircuitModal />
 	<LmPrioritiesModal />
 	<LmShedGuardModal />
 	<LmAdvancedModal />
@@ -14,7 +13,6 @@
 <script lang="ts">
 import { defineComponent } from "vue";
 import PeakShavingModal from "./PeakShavingModal.vue";
-import PeakShavingCircuitModal from "./PeakShavingCircuitModal.vue";
 import LmPrioritiesModal from "./LmPrioritiesModal.vue";
 import LmShedGuardModal from "./LmShedGuardModal.vue";
 import LmAdvancedModal from "./LmAdvancedModal.vue";
@@ -30,7 +28,6 @@ export default defineComponent({
 	name: "LmConfigModals",
 	components: {
 		PeakShavingModal,
-		PeakShavingCircuitModal,
 		LmPrioritiesModal,
 		LmShedGuardModal,
 		LmAdvancedModal,

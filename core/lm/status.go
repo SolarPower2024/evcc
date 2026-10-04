@@ -23,7 +23,7 @@ const (
 	EventShed             = "shed"             // a running load was switched off, A = guard minutes, B = circuit power
 	EventThrottled        = "throttled"        // a load was limited, A = requested, B = allowed
 	EventGridChargePaused = "gridChargePaused" // a peak paused battery grid charging, A = demand, B = peak limit
-	EventGridChargeDenied = "gridChargeDenied" // the circuit denied battery grid charging, A = allowed, B = wanted
+	EventGridChargeDenied = "gridChargeDenied" // evcc's circuit check holds battery grid charging, A = 0, B = wanted
 	EventPeak             = "peak"             // the battery started to cover a peak, A = demand, B = peak limit
 	EventNotFollowing     = "notFollowing"     // a load keeps drawing more than allowed, A = power, B = allowed
 )

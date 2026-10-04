@@ -76,24 +76,50 @@ the priorities, switch devices and the shed guard.
 
 ## 2. Battery in load management
 
-The home battery's grid charging takes part in load management once it is on a
-circuit:
+The home battery's grid charging respects the power limit of the root circuit,
+the site's top circuit (nothing to choose; without circuits nothing changes).
+That check is evcc's (`batteryChargeExceedsCircuit`, evcc PR 34401): starting
+needs room for the expected charge power, charging is held (battery mode hold)
+while the circuit is over power, and it starts again only once there is room
+for the power measured when it was held. The battery keeps its place in the
+priorities ([1](#1-load-management-priorities)): while loads with a lower
+priority draw on the circuit, load management sheds those for it and evcc's
+check is skipped (`lmBatteryOutranks`), so a charging wallbox below it cannot
+push it out; peak shaving needs it charged. The fork adds inputs and what evcc
+does not have:
 
 | Setting | Where | Default |
 | --- | --- | --- |
-| circuit the battery draws from | Lastmanagement-Details → Batterie-Stromkreis | none = not managed |
 | priority | Lastmanagement-Details → Prioritäten | 0 |
-| expected grid charge power | Lastmanagement-Details → Batterie-Netzladen | sum of the battery meters' max charge power |
+| expected grid charge power | Lastmanagement-Details → Batterie-Netzladen | the meters' `maxchargepower`, else the power measured at the last hold |
 | entity for the charge power | Lastmanagement-Details → Batterie-Netzladen | none = on/off charging |
-| phases, wait after a shed, reservation expiry | Lastmanagement-Details → Erweitert | 3, 5 min, 10 min |
+| phases, wait after a peak pause, reservation expiry | Lastmanagement-Details → Erweitert | 3, 5 min, 10 min |
 
-A battery switched through mode scripts is on or off, so the whole expected
-charge power has to fit into the circuit. Without a known charge power, grid
-charging on a circuit stays off and a warning is logged once. With a charge
-power entity, evcc writes the grid charge power instead: the expected power,
-trimmed to what fits below the peak limit and into the circuit, at least 500 W.
-After a shed, grid charging waits for the hold-off, as stopping it frees exactly
-the power that would let it start again. See `core/site_lm.go`.
+- A battery switched through mode scripts is on or off. evcc checks the
+  expected power in this order: the power entered in the ui, the battery
+  meters' `maxchargepower`, the power measured at the last hold, else it
+  starts (`lmGridChargePower` is the fork's input into `batteryMaxChargePower`).
+  A wallbox capped at the limit does not overload the circuit, so evcc's check
+  alone would keep the battery charging. Load management holds the battery
+  when loadpoints above it are short of power and while they use it, in hold mode like
+  evcc's check (`updateBatteryModePeakAware`). Running, it asks only for what
+  it draws (`TestScenarioSwitchedBatteryGivesWay`, `TestScenarioDrawBelowSetting`).
+- With a charge power entity, evcc writes the grid charge power instead: the
+  expected power, trimmed to what fits below the peak limit and into the
+  circuit, at least 500 W. This setpoint is the power evcc checks, so the
+  check passes; when loadpoints ask for more, the setpoint shrinks. Without a
+  known power the setpoint stays 0 and a warning is logged once.
+- Held by the circuit shows as *shed* without a time in the overview (event
+  *Netzladen gesperrt*) and as blocked for the optimizer
+  (`lmGridChargeBlocked`), unless the hems dimmed or the api set the mode.
+  There is no fixed wait: the battery starts when there is room.
+- A circuit without meter counts the battery's charging (`circuitLoads`), so
+  evcc's check stops it there too (evcc itself counts only loadpoints there).
+  Load management off lifts the limit and with it the check
+  ([7](#7-load-management-circuit-and-switch)).
+- A peak pausing grid charging ([11](#11-peak-shaving)) waits for the hold-off.
+
+See `core/site_lm.go`.
 
 ## 3. Switch devices
 
@@ -358,8 +384,8 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   grid charge power with the charging efficiency; with peak shaving only with
   the room below the limit, paused while a peak runs.
 - one-time grid charging: the target as goal at the chosen time, or right away.
-- grid charging refused right now (shed hold-off, unknown charge power on a
-  circuit) is not offered (`charge_from_grid`).
+- grid charging held right now by the circuit check ([2](#2-battery-in-load-management))
+  is not offered (`charge_from_grid`).
 - load management: a loadpoint plans with at most its circuits' power,
   priorities 0-3/4-6/7-10 become `c_priority` 0/1/2.
 - a price tariff set as planner tariff is the grid price the optimizer plans
@@ -387,7 +413,7 @@ values are not stored, so a changed default applies.
 | --- | --- | --- | --- |
 | `hysteresis` | soc band of the peak reserve | 2 % | 0-20 |
 | `freeValue` | setpoint for "discharge freely" | 10000 W | 1-100000 |
-| `holdOff` | wait after battery grid charging was stopped | 5 min | 1-60 |
+| `holdOff` | wait after a peak paused battery grid charging | 5 min | 1-60 |
 | `timeout` | expiry of unserved demand | 10 min | 1-60 |
 | `phases` | battery phases for current accounting | 3 | 1-3 |
 | `peakFreeze` | minute from which the peak budget no longer grows | 12 | 1-14 |
@@ -418,6 +444,9 @@ Every fork feature follows these, so taking in a new evcc version stays cheap:
 4. **Contract tests.** Each hook has a test pinning the evcc behaviour it relies
    on, and that the fork is inert while unused; `TestForkHooksInPlace` checks
    that every hook is still in place, see [Tests](#tests).
+5. **Dropped settings.** A stored key that falls away is still accepted and
+   removed from the database at start, so an update does not fail on it
+   (`peakShavingCircuit`, the battery's circuit, `dropPeakShavingCircuit`).
 
 ## Upstream touch points
 
@@ -427,6 +456,8 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | --- | --- |
 | `core/site.go` | `custom` field; `restoreCustom` in `restoreSettings`; `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter`; `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
+| `core/site_battery.go` | `lmGridChargePower` first in `batteryMaxChargePower` (the power evcc's circuit check of battery grid charging goes by) |
+| `core/site_battery.go` | `lmBatteryOutranks` first in `batteryChargeExceedsCircuit`: skips evcc's check while loads below the battery's priority draw on its circuit, load management sheds those instead |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
 | `core/site/api.go` | embeds `CustomAPI` |
@@ -502,7 +533,7 @@ unused:
 - `TestForkInertWhenUnused`, `TestEqualPrioritiesAreUpstream`,
   `TestCurrents1pInertWhenUnused`, `TestLmSMaxFromUpstream`: without
   configuration the fork changes nothing.
-- `TestSetLimitUsesLmCircuit`, `TestPeakReserveKeepsExternalMode`,
+- `TestSetLimitUsesLmCircuit`, `TestPeakReserveKeepsExternalMode`, `TestLmGridChargePowerInput`,
   `TestLoadpointUsesSiteLoadManagement`, `TestMergeRoutesKeepsUpstream`: the
   hooks act on evcc's real control path.
 - `TestRestoreCustomAfterRestart`: every fork setting survives a restart.

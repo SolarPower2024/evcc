@@ -174,8 +174,6 @@ export interface LmState {
   peakShavingActive?: boolean;
   /** Battery power in W currently requested by peak shaving, or the free-discharge signal. */
   peakShavingPower?: number;
-  /** Circuit the battery draws from, links it into load management. */
-  peakShavingCircuit?: string;
   /** Home Assistant number entity receiving the peak shaving setpoint. */
   peakShavingEntity?: string;
   /** Average grid power in W of the running 15 minute metering window. */

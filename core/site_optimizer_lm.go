@@ -295,22 +295,15 @@ func (site *Site) peakShavingConfigured() (bool, float64, float64) {
 }
 
 // lmGridChargeBlocked reports without side effects whether grid charging is
-// currently refused: held off after load management shed it, or without a
-// known charge power on a circuit. A peak pausing it is not: that holds only
-// while the demand exceeds the limit, which the import limit already plans.
+// currently refused: requested, but held by evcc's circuit check. A peak
+// pausing it is not: that holds only while the demand exceeds the limit, which
+// the import limit already plans.
 func (site *Site) lmGridChargeBlocked() bool {
-	if site.lmBatteryCircuit() == nil {
-		return false
-	}
-
-	if power, _ := site.lmBatteryChargePower(); power <= 0 {
-		return true
-	}
-
 	s := site.lms()
+
 	s.mu.Lock()
-	shedUntil := s.batteryShedUntil
+	requested := s.gridCharge
 	s.mu.Unlock()
 
-	return time.Now().Before(shedUntil)
+	return site.lmGridChargeDenied(requested)
 }

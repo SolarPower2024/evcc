@@ -477,9 +477,10 @@
     },
     "gridcharge": {
       "chargePowerEffective": "In use:",
-      "chargePowerHelp": "With an entity the cap of the setpoint, without one it must fit the circuit completely when switched on. 0 = from the battery config.",
+      "chargePowerHelp": "With an entity the cap of the setpoint, else it has to fit the circuit when switched on. Empty: maxchargepower of the battery, else last measured.",
       "chargePowerLabel": "Expected grid charge power",
-      "chargePowerUnknown": "unknown, grid charging stays blocked",
+      "chargePowerMeasured": "unknown, last measured power",
+      "chargePowerUnknown": "unknown, setpoint 0",
       "description": "With a charge power entity, evcc keeps adjusting it below peak limit and circuit, without one charging is only switched on and off.",
       "entityHelp": "Receives the allowed charge power in W, 0 = don't charge. Needs min 0, max ≥ grid charge power, step 1. Empty = on/off.",
       "entityInvalid": "Could not set the entity.",
@@ -551,7 +552,7 @@
       "followCyclesLabel": "Limit ignored after",
       "freeValueHelp": "Written to the peak shaving entity while the battery may discharge freely.",
       "freeValueLabel": "Free discharge value",
-      "holdOffHelp": "Battery grid charging stays off this long after a peak or the circuit stopped it.",
+      "holdOffHelp": "Battery grid charging stays off this long after a peak stopped it.",
       "holdOffLabel": "Hold-off after battery grid charging stopped",
       "hysteresisHelp": "Below the reserve the battery discharges for peaks only. It is free for the house again once the soc is this far above the reserve. Prevents constant switching.",
       "hysteresisLabel": "Peak shaving reserve hysteresis",
@@ -1048,14 +1049,6 @@
       }
     },
     "peakshaving": {
-      "circuitDescription": "Only with a circuit does the home battery take part in load management.",
-      "circuitEntryLabel": "Battery circuit",
-      "circuitHelp": "Grid charging and shedding of the battery follow its power limit.",
-      "circuitInvalid": "Could not set the circuit.",
-      "circuitLabel": "Battery circuit",
-      "circuitNone": "None — battery outside load management",
-      "circuitNoneConfigured": "No circuits are configured.",
-      "circuitTitle": "Battery circuit",
       "description": "evcc keeps writing the discharge power needed for peak shaving to a Home Assistant entity, your automation drives the battery with it.",
       "energyEntityHelp": "Grid import counter in kWh or Wh. Only needed when the grid meter in evcc has no energy counter.",
       "energyEntityLabel": "Grid import energy counter",
@@ -1607,14 +1600,14 @@
   },
   "lmoverview": {
     "battery": "Home battery (grid charging)",
-    "blockedCircuit": "Circuit · until {time}",
+    "blockedCircuit": "Circuit · waits for room",
     "circuitFollows": "follows the month's peak, set {limit}",
     "circuitLifted": "limit {limit} lifted",
     "disabledHelp": "Off: the circuits' power limits do not apply, nothing is throttled for them. Fuses (current limits), §14a and battery peak shaving stay active.",
     "enabled": "Load management",
     "enabledHelp": "The circuits' power limits (peak) throttle wallboxes, heaters and battery grid charging.",
     "event": {
-      "gridChargeDenied": "Grid charging blocked · circuit allows {allowed} of {wanted}",
+      "gridChargeDenied": "Grid charging blocked · no room on the circuit for {wanted}",
       "gridChargePaused": "Grid charging paused · demand {demand} above peak limit {limit}",
       "notFollowing": "{load} ignores its limit · {power} instead of {allowed}",
       "peak": "Peak covered · demand {demand}, limit {limit}",
@@ -1649,7 +1642,7 @@
       "running": "Running"
     },
     "stateDetail": {
-      "blocked": "Blocked · until {time}",
+      "blocked": "Blocked · waits for room",
       "charging": "Charging · setpoint {power}",
       "paused": "Paused · peak until {time}",
       "shed": "Shed · held off until {time}",

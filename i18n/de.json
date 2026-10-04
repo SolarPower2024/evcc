@@ -477,9 +477,10 @@
     },
     "gridcharge": {
       "chargePowerEffective": "Verwendet wird:",
-      "chargePowerHelp": "Mit Entität die Obergrenze der Vorgabe, ohne muss sie beim Einschalten ganz in den Stromkreis passen. 0 = aus der Batteriekonfiguration.",
+      "chargePowerHelp": "Mit Entität die Obergrenze der Vorgabe, sonst muss sie beim Einschalten in den Stromkreis passen. Leer: maxchargepower der Batterie, sonst zuletzt gemessen.",
       "chargePowerLabel": "Erwartete Netzladeleistung",
-      "chargePowerUnknown": "nicht ermittelbar, Netzladen bleibt gesperrt",
+      "chargePowerMeasured": "unbekannt, zuletzt gemessene Leistung",
+      "chargePowerUnknown": "nicht ermittelbar, Vorgabe 0",
       "description": "Mit Entität für die Ladeleistung regelt evcc sie laufend unter Peak-Grenze und Stromkreis, ohne wird nur ein- und ausgeschaltet.",
       "entityHelp": "Erhält die erlaubte Ladeleistung in W, 0 = nicht laden. Braucht Min 0, Max ≥ Netzladeleistung, Schritt 1. Leer = Ein/Aus.",
       "entityInvalid": "Entität konnte nicht gesetzt werden.",
@@ -551,7 +552,7 @@
       "followCyclesLabel": "Vorgabe ignoriert nach",
       "freeValueHelp": "Wird in die Peak-Shaving-Entität geschrieben, solange die Batterie frei entladen darf.",
       "freeValueLabel": "Freigabewert",
-      "holdOffHelp": "So lange bleibt das Batterie-Netzladen aus, nachdem eine Spitze oder der Stromkreis es gestoppt hat.",
+      "holdOffHelp": "So lange bleibt das Batterie-Netzladen aus, nachdem eine Spitze es gestoppt hat.",
       "holdOffLabel": "Wartezeit nach Abbruch Batterie-Netzladen",
       "hysteresisHelp": "Unter der Reserve entlädt die Batterie nur noch für Spitzen. Für den Hausverbrauch ist sie erst wieder frei, wenn der Ladestand so weit über der Reserve liegt. Verhindert ständiges Umschalten.",
       "hysteresisLabel": "Hysterese der Peak-Shaving-Reserve",
@@ -1048,14 +1049,6 @@
       }
     },
     "peakshaving": {
-      "circuitDescription": "Erst mit Stromkreis nimmt die Hausbatterie am Lastmanagement teil.",
-      "circuitEntryLabel": "Batterie-Stromkreis",
-      "circuitHelp": "Netzladen und Abwurf der Batterie richten sich nach seiner Leistungsgrenze.",
-      "circuitInvalid": "Stromkreis konnte nicht gesetzt werden.",
-      "circuitLabel": "Stromkreis der Batterie",
-      "circuitNone": "Keiner — Batterie nicht im Lastmanagement",
-      "circuitNoneConfigured": "Es sind keine Stromkreise konfiguriert.",
-      "circuitTitle": "Batterie-Stromkreis",
       "description": "evcc schreibt die zum Kappen nötige Entladeleistung laufend in eine Home-Assistant-Entität, deine Automation steuert damit die Batterie.",
       "energyEntityHelp": "Zählerstand Netzbezug in kWh oder Wh. Nur nötig, wenn der Netzzähler in evcc keinen Energiezähler liefert.",
       "energyEntityLabel": "Energiezähler Netzbezug",
@@ -1607,14 +1600,14 @@
   },
   "lmoverview": {
     "battery": "Hausbatterie (Netzladen)",
-    "blockedCircuit": "Stromkreis · bis {time}",
+    "blockedCircuit": "Stromkreis · wartet auf Platz",
     "circuitFollows": "folgt der Monatsspitze, eingestellt {limit}",
     "circuitLifted": "Grenze {limit} aufgehoben",
     "disabledHelp": "Aus: Die Leistungsgrenzen der Stromkreise gelten nicht, nichts wird dafür gedrosselt. Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv.",
     "enabled": "Lastmanagement",
     "enabledHelp": "Die Leistungsgrenzen der Stromkreise (Peak) drosseln Wallbox, Heizstäbe und Batterie-Netzladen.",
     "event": {
-      "gridChargeDenied": "Netzladen gesperrt · Stromkreis erlaubt {allowed} von {wanted}",
+      "gridChargeDenied": "Netzladen gesperrt · Stromkreis ohne Platz für {wanted}",
       "gridChargePaused": "Netzladen pausiert · Bedarf {demand} über Peak-Grenze {limit}",
       "notFollowing": "{load} folgt der Vorgabe nicht · {power} statt {allowed}",
       "peak": "Peak abgefangen · Bedarf {demand}, Grenze {limit}",
@@ -1649,7 +1642,7 @@
       "running": "Läuft"
     },
     "stateDetail": {
-      "blocked": "Gesperrt · bis {time}",
+      "blocked": "Gesperrt · wartet auf Platz",
       "charging": "Lädt · Soll {power}",
       "paused": "Pausiert · Peak bis {time}",
       "shed": "Abgeworfen · gesperrt bis {time}",

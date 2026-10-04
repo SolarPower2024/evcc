@@ -27,6 +27,7 @@ import (
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/db/settings"
+	"github.com/evcc-io/evcc/hems/hems"
 	"github.com/evcc-io/evcc/util/config"
 )
 
@@ -39,7 +40,7 @@ const (
 type lmState struct {
 	once     sync.Once   // defaults
 	m        *lm.Manager // the load management of this site
-	warnOnce sync.Once   // incomplete battery config warning
+	warnOnce sync.Once   // unknown battery charge power warning
 	mu       sync.Mutex
 
 	socChargeEnabled bool    // soc-based grid charging switch
@@ -64,12 +65,12 @@ type lmState struct {
 	advMu sync.Mutex
 	adv   lmAdvanced
 
-	batteryShedUntil  time.Time      // battery grid charge hold-off after a shed
-	gridOnce          gridChargeOnce // one-time grid charging, see site_lm_once.go
-	eeg               feedInEegState // second feed-in tariff, see site_feedin_eeg.go
-	batteryCircuit    api.Circuit    // resolved from the assignment
-	batteryCircuitRef string         // what batteryCircuit was resolved from
-	batteryLoad       *batteryLoad
+	gridCharge  bool           // battery grid charging requested in the last cycle
+	gridHeld    bool           // ... asked for, but held back for loadpoints short of power
+	gridDenied  bool           // held by load management or evcc's circuit check, for the event log
+	gridOnce    gridChargeOnce // one-time grid charging, see site_lm_once.go
+	eeg         feedInEegState // second feed-in tariff, see site_feedin_eeg.go
+	batteryLoad *batteryLoad
 
 	// the optimizer's soc floor was raised above the battery's own minimum,
 	// see site_optimizer_lm.go
@@ -242,36 +243,13 @@ func (site *Site) lmBattery() *batteryLoad {
 	return s.batteryLoad
 }
 
-// lmBatteryCircuit returns the circuit the home battery draws from, nil when the
-// battery is not part of load management
+// lmBatteryCircuit returns the circuit the home battery draws from: the site's
+// root circuit, as in evcc, nil without circuits
 func (site *Site) lmBatteryCircuit() api.Circuit {
-	ref := site.GetPeakShavingCircuit()
-	if ref == "" {
-		return nil
-	}
-
-	s := site.lms()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// circuits are configured before the site, so resolve on first use - and
-	// again whenever the assignment changes
-	if s.batteryCircuitRef != ref {
-		s.batteryCircuitRef = ref
-		s.batteryCircuit = nil
-
-		if dev, err := config.Circuits().ByName(ref); err == nil {
-			s.batteryCircuit = dev.Instance()
-		} else {
-			site.log.ERROR.Printf("load management: battery circuit %s: %v", ref, err)
-		}
-	}
-
-	return s.batteryCircuit
+	return site.circuit
 }
 
-// lmHoldOff is how long battery grid charging stays off after it had to give way
+// lmHoldOff is how long battery grid charging stays off after a demand peak
 func (site *Site) lmHoldOff() time.Duration {
 	if v := site.advanced().HoldOff; v != nil {
 		return time.Duration(*v) * time.Minute
@@ -336,57 +314,65 @@ func (site *Site) circuitLoads() []api.CircuitLoad {
 	return res
 }
 
-// batteryCircuitAllows reports whether load management leaves enough headroom to
-// grid-charge the battery. A battery driven via mode scripts can only be switched
-// on or off, so the full expected charge power has to fit.
-func (site *Site) batteryCircuitAllows() bool {
-	c := site.lmBatteryCircuit()
-	if c == nil {
-		return true
+// lmGridChargePower is the fork's input into evcc's grid charge check on the
+// circuit, see batteryMaxChargePower: the power the battery is going to draw.
+// A battery with a charge power entity gets this cycle's setpoint, which already
+// fits below the peak limit and the circuit; otherwise it is the power entered in
+// the ui. Without either evcc goes by the battery meters' limits.
+func (site *Site) lmGridChargePower() (float64, bool) {
+	if site.chargePowerControlled() {
+		p := site.peak()
+
+		p.mu.Lock()
+		power := p.chargeSetpoint
+		p.mu.Unlock()
+
+		return power, power > 0
 	}
 
+	if power := site.GetPeakShavingChargePower(); power > 0 {
+		return power, true
+	}
+
+	return 0, false
+}
+
+// lmBatteryOutranks reports whether loads with a lower priority than the battery
+// draw on its circuit. Load management then sheds them for the battery, while
+// evcc's circuit check would hold the battery first, so that check is skipped,
+// see batteryChargeExceedsCircuit. Starting and holding the battery is then
+// load management's call alone, see lmGridChargeDecision.
+func (site *Site) lmBatteryOutranks() bool {
+	c := site.lmBatteryCircuit()
+	return c != nil && site.lmm().SheddableBelow(site.lmBattery(), c) > 0
+}
+
+// lmGridHeld reports whether load management held back a switched battery's
+// grid charging in the last cycle, for loadpoints short of power
+func (site *Site) lmGridHeld() bool {
 	s := site.lms()
 
-	want, _ := site.lmBatteryChargePower()
-	if want <= 0 {
-		// Without an expected charge power there is nothing to check against.
-		// Refusing rather than waving it through: the battery was explicitly put
-		// on a circuit, so letting it draw an unknown amount is exactly what the
-		// circuit limit exists to prevent. Peak shaving refuses for the same
-		// reason, so both gates behave alike.
-		s.warnOnce.Do(func() {
-			site.log.WARN.Println("load management: battery grid charge power unknown, set it under peak load management or configure the battery's maxchargepower - grid charging stays off until then")
-		})
-		return false
-	}
-
 	s.mu.Lock()
-	shedUntil := s.batteryShedUntil
-	s.mu.Unlock()
+	defer s.mu.Unlock()
 
-	if now := time.Now(); now.Before(shedUntil) {
-		site.log.DEBUG.Printf("battery grid charge: shed by load management, retrying in %s", shedUntil.Sub(now).Round(time.Second))
-		return false
-	}
+	return s.gridHeld
+}
 
-	bat := site.lmBattery()
-
-	// records the battery's unserved demand, so loads below its priority give way
-	allowed := site.lmm().ValidatePower(bat, c, bat.GetChargePower(), want)
-	if allowed >= want {
+// lmGridChargeDenied reports whether a grid charge is held: by load management
+// for loadpoints short of power, or by evcc's circuit check, i.e. the battery is
+// in hold mode with a circuit in place, and neither the hems nor the api asked
+// for it
+func (site *Site) lmGridChargeDenied(requested bool) bool {
+	if site.lmGridHeld() {
 		return true
 	}
 
-	holdOff := site.lmHoldOff()
+	if !requested || site.circuit == nil || site.GetBatteryMode() != api.BatteryHold || site.GetBatteryModeExternal() != api.BatteryUnknown {
+		return false
+	}
 
-	s.mu.Lock()
-	s.batteryShedUntil = time.Now().Add(holdOff)
-	s.mu.Unlock()
-
-	site.log.DEBUG.Printf("battery grid charge: load management allows %.0fW of %.0fW, holding off for %s", allowed, want, holdOff)
-	site.lmm().AddEvent(lm.Event{At: time.Now(), Type: lm.EventGridChargeDenied, A: allowed, B: want})
-
-	return false
+	dimmed := hems.Dimmed(site.hems)
+	return dimmed == nil || !*dimmed
 }
 
 //
@@ -395,8 +381,23 @@ func (site *Site) batteryCircuitAllows() bool {
 
 // batteryGridChargeRequested reports whether the battery should be grid-charged.
 // It combines the upstream price-based limit with the soc-based switch. Both give
-// way to a running demand peak and are gated on the circuit headroom.
+// way to a running demand peak. Whether the power fits the circuit is evcc's
+// check, fed with lmGridChargePower.
 func (site *Site) batteryGridChargeRequested(rate api.Rate) bool {
+	res, held := site.lmGridChargeDecision(rate)
+
+	s := site.lms()
+	s.mu.Lock()
+	s.gridCharge = res
+	s.gridHeld = held
+	s.mu.Unlock()
+
+	return res
+}
+
+// lmGridChargeDecision is the decision behind batteryGridChargeRequested, and
+// whether load management held back a switched battery
+func (site *Site) lmGridChargeDecision(rate api.Rate) (bool, bool) {
 	// evaluated unconditionally so the hysteresis keeps tracking the soc
 	socActive := site.batterySocChargeActive()
 	onceActive := site.batteryGridChargeOnceActive()
@@ -408,28 +409,52 @@ func (site *Site) batteryGridChargeRequested(rate api.Rate) bool {
 		site.lmm().Forget(site.lmBattery())
 		site.writeChargeValue(0)
 		site.recordBatteryLimit(0, 0)
-		return false
+		return false, false
 	}
 
 	want, _ := site.lmBatteryChargePower()
 
 	if !site.chargePowerControlled() {
-		ok := site.batteryCircuitAllows()
+		// switched on or off: evcc checks that the power fits the circuit. Load
+		// management keeps it below the loadpoints: it does not start into power
+		// they are short of, and a running one gives way to them, which evcc's
+		// check does not see as long as they are capped at the limit. Running, it
+		// asks for what it draws, not for more.
+		allowed, held := want, false
+		if c := site.lmBatteryCircuit(); c != nil {
+			bat := site.lmBattery()
+			draw := bat.GetChargePower()
 
-		var allowed float64
-		if ok {
-			allowed = want
+			running := site.GetBatteryMode() == api.BatteryCharge
+
+			req := want
+			if running {
+				req = draw
+			}
+
+			if req > 0 {
+				if got := site.lmm().ValidatePower(bat, c, draw, req); got < req {
+					site.log.DEBUG.Printf("battery grid charge: load management allows %.0fW of %.0fW, loadpoints first", got, req)
+					allowed, held = got, true
+
+					// as evcc's check does when it stops charging: restarting needs
+					// room for what the battery drew
+					if running {
+						site.batteryChargeStopPower = draw
+					}
+				}
+			}
 		}
 		site.recordBatteryLimit(want, allowed)
 
-		return ok
+		return !held, held
 	}
 
 	power := site.batteryChargeSetpoint()
 	site.writeChargeValue(power)
 	site.recordBatteryLimit(want, power)
 
-	return power > 0
+	return power > 0, false
 }
 
 // recordBatteryLimit keeps what the battery may grid-charge with, which load
@@ -450,7 +475,7 @@ func (site *Site) batteryChargeSetpoint() float64 {
 	power, _ := site.lmBatteryChargePower()
 	if power <= 0 {
 		site.lms().warnOnce.Do(func() {
-			site.log.WARN.Println("load management: battery grid charge power unknown, set it under peak load management or configure the battery's maxchargepower - grid charging stays off until then")
+			site.log.WARN.Println("load management: battery grid charge power unknown, setpoint 0 - set it under peak load management or configure the battery's maxchargepower")
 		})
 		return 0
 	}

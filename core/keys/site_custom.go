@@ -19,7 +19,7 @@ const (
 	PeakShavingChargePower          = "peakShavingChargePower"
 	PeakShavingChargePowerEffective = "peakShavingChargePowerEffective"
 	PeakShavingChargePowerSource    = "peakShavingChargePowerSource"
-	PeakShavingCircuit              = "peakShavingCircuit"
+	PeakShavingCircuit              = "peakShavingCircuit" // dropped, removed from the database at start
 	PeakShavingPower                = "peakShavingPower"
 	PeakShavingWindowAvg            = "peakShavingWindowAvg"
 	PeakShavingAllowed              = "peakShavingAllowed"        // grid power allowed for the rest of the window

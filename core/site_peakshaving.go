@@ -35,7 +35,6 @@ import (
 	"github.com/evcc-io/evcc/core/peak"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util"
-	"github.com/evcc-io/evcc/util/config"
 	"github.com/evcc-io/evcc/util/homeassistant"
 )
 
@@ -59,7 +58,6 @@ type peakState struct {
 	reserve     float64 // soc below which the battery is reserved for peaks
 	entity      string  // Home Assistant number entity receiving the setpoint
 	chargePower float64 // assumed grid charge power in W, 0 = derive it
-	circuit     string  // circuit the battery draws from, empty = not managed
 
 	shaving    bool // hysteresis state: below the reserve
 	covering   bool // covering a peak right now, for the event log
@@ -138,11 +136,7 @@ func (site *Site) restorePeakSettings() {
 		s.chargePower = v
 		s.mu.Unlock()
 	}
-	if v, err := settings.String(keys.PeakShavingCircuit); err == nil {
-		s.mu.Lock()
-		s.circuit = v
-		s.mu.Unlock()
-	}
+	site.dropPeakShavingCircuit()
 	if v, err := settings.String(keys.PeakShavingChargeEntity); err == nil {
 		s.mu.Lock()
 		s.chargeEntity = v
@@ -283,7 +277,7 @@ func (site *Site) publishPeakSettings() {
 	s := site.peak()
 
 	s.mu.Lock()
-	enabled, limit, reserve, entity, charge, circuit := s.enabled, s.limit, s.reserve, s.entity, s.chargePower, s.circuit
+	enabled, limit, reserve, entity, charge := s.enabled, s.limit, s.reserve, s.entity, s.chargePower
 	chargeEntity, energyEntity := s.chargeEntity, s.energyEntity
 	s.mu.Unlock()
 
@@ -292,7 +286,6 @@ func (site *Site) publishPeakSettings() {
 	site.publish(keys.PeakShavingReserve, reserve)
 	site.publish(keys.PeakShavingEntity, entity)
 	site.publish(keys.PeakShavingChargePower, charge)
-	site.publish(keys.PeakShavingCircuit, circuit)
 	site.publish(keys.PeakShavingChargeEntity, chargeEntity)
 	site.publish(keys.PeakShavingEnergyEntity, energyEntity)
 
@@ -306,6 +299,14 @@ func (site *Site) publishChargePower() {
 
 	site.publish(keys.PeakShavingChargePowerEffective, effective)
 	site.publish(keys.PeakShavingChargePowerSource, source)
+}
+
+// dropPeakShavingCircuit removes the circuit assignment of the battery that
+// older versions stored: the battery now always counts on the site's root circuit
+func (site *Site) dropPeakShavingCircuit() {
+	if err := settings.Delete(keys.PeakShavingCircuit); err != nil {
+		site.log.ERROR.Printf("peak shaving: %v", err)
+	}
 }
 
 // peakFreeValue returns the value signalling unrestricted discharge
@@ -567,7 +568,7 @@ func (site *Site) updatePeakWindow(gridPower, batteryPower float64) {
 //
 // The charge power itself is deliberately not counted against the peak limit:
 // the charger alone may well draw more than the limit, and whether it fits is
-// the circuit's call, see batteryCircuitAllows. After a peak, charging stays
+// the circuit's call, which evcc checks. After a peak, charging stays
 // off for the hold-off, so a demand hovering around the limit does not flip
 // the battery between charging and discharging every cycle.
 func (site *Site) peakPausesGridCharge() bool {
@@ -612,15 +613,33 @@ func (site *Site) peakChargeHeadroom() (headroom float64, ok bool) {
 
 // updateBatteryModePeakAware keeps the battery in normal mode while the reserve
 // is being held for peaks, as hold would block the discharge controller. This is
-// the one place the fork overrides upstream's battery mode, and only below the
-// reserve: grid charging has already been cleared against both the circuit and a
-// running peak (see batteryGridChargeRequested), and a mode set from outside
-// through the api stays the caller's decision.
+// the one place the fork overrides upstream's battery mode: below the reserve,
+// and to hold a battery that load management keeps below the loadpoints: grid charging has already been cleared against a running peak (see
+// batteryGridChargeRequested) and is checked against the circuit by evcc, and a
+// mode set from outside through the api stays the caller's decision.
 func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rate api.Rate) {
 	// the last hook of the cycle: everything the overview shows is decided now
 	defer site.publishLmStatus(gridCharge)
 	defer site.publishLmWallboxes()
 	defer site.checkLmFollowing()
+
+	// load management holds grid charging back for loadpoints: hold, as evcc's
+	// own circuit check does, see core/site_lm.go
+	if site.lmGridHeld() && site.GetBatteryModeExternal() == api.BatteryUnknown {
+		if site.GetBatteryMode() == api.BatteryHold {
+			return
+		}
+
+		site.log.DEBUG.Println("battery mode: held for loadpoints")
+
+		if err := site.applyBatteryMode(api.BatteryHold); err != nil {
+			site.log.ERROR.Println("battery mode:", err)
+			return
+		}
+
+		site.SetBatteryMode(api.BatteryHold)
+		return
+	}
 
 	if gridCharge || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)
@@ -887,45 +906,6 @@ func (site *Site) SetPeakShavingChargePower(power float64) error {
 		settings.SetFloat(keys.PeakShavingChargePower, power)
 		site.publish(keys.PeakShavingChargePower, power)
 		site.publishChargePower()
-	}
-
-	return nil
-}
-
-// GetPeakShavingCircuit returns the circuit the battery draws from
-func (site *Site) GetPeakShavingCircuit() string {
-	s := site.peak()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.circuit
-}
-
-// SetPeakShavingCircuit assigns the battery to a circuit. That link is what
-// makes the battery take part in load management and what the grid charge gate
-// checks against; empty takes it out of load management.
-func (site *Site) SetPeakShavingCircuit(name string) error {
-	if name != "" {
-		if _, err := config.Circuits().ByName(name); err != nil {
-			return fmt.Errorf("unknown circuit: %s", name)
-		}
-	}
-
-	s := site.peak()
-
-	s.mu.Lock()
-	changed := s.circuit != name
-	s.circuit = name
-	s.mu.Unlock()
-
-	if changed {
-		site.log.DEBUG.Println("set peak shaving circuit:", name)
-		settings.SetString(keys.PeakShavingCircuit, name)
-		site.publish(keys.PeakShavingCircuit, name)
-
-		// the battery only appears among the priorities once it is on a circuit
-		site.publishLmPriorities()
 	}
 
 	return nil
