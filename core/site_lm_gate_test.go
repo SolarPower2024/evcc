@@ -77,7 +77,7 @@ func TestLmGridChargePowerInput(t *testing.T) {
 }
 
 // TestScenarioGateByPower: on/off charging with the power from the ui against
-// the room on the circuit, as evcc checks it
+// the room on the circuit, held in hold mode without room
 func TestScenarioGateByPower(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -92,8 +92,9 @@ func TestScenarioGateByPower(t *testing.T) {
 			sc.site.peak().chargePower = 5000
 			sc.withCircuit(10000, &scenarioLoad{title: "wallbox", power: 10000 - tc.room})
 
-			assert.True(t, sc.cycle(20, 3000, 0), "requested")
+			sc.cycle(20, 3000, 0)
 			assert.Equal(t, tc.want, sc.mode())
+			assert.Equal(t, tc.want == api.BatteryHold, sc.site.lmGridChargeDenied(true))
 		})
 	}
 }
@@ -134,10 +135,11 @@ func TestScenarioMeterlessCircuitCountsBattery(t *testing.T) {
 	assert.True(t, sc.cycle(20, 3000, 0))
 	assert.Equal(t, api.BatteryCharge, sc.mode())
 
-	// the wallbox starts: 7000 + 4000 > 10000
+	// the wallbox starts: 7000 + 4000 > 10000, held with the power it drew
 	wallbox.power = 7000
-	assert.True(t, sc.cycle(21, 3000, -4000))
+	sc.cycle(21, 3000, -4000)
 	assert.Equal(t, api.BatteryHold, sc.mode())
+	assert.Equal(t, 4000.0, sc.site.batteryChargeStopPower)
 }
 
 // TestLmGridChargeDeniedState: held by the circuit check shows as shed without a
@@ -245,4 +247,60 @@ func TestScenarioLoadpointDemandShrinksSetpoint(t *testing.T) {
 	assert.True(t, sc.cycle(20, 8000, -3000))
 	assert.Equal(t, 1000.0, val(sc.charge), "what the wallbox is denied stays free")
 	assert.Equal(t, api.BatteryCharge, sc.mode())
+}
+
+// TestScenarioDrawBelowSetting: a running battery that draws less than the power
+// entered is not taken off for asking for the rest
+func TestScenarioDrawBelowSetting(t *testing.T) {
+	sc := newScenario(t)
+	sc.site.peak().enabled = false
+	sc.withCircuit(10000, &scenarioLoad{title: "wallbox", power: 3000})
+
+	assert.True(t, sc.cycle(20, 3000, 0))
+	assert.Equal(t, api.BatteryCharge, sc.mode())
+
+	// 6250 W entered, 4000 W drawn, 7000 W on the circuit: keeps charging
+	assert.True(t, sc.cycle(21, 7000, -4000))
+	assert.Equal(t, api.BatteryCharge, sc.mode())
+	assert.False(t, sc.site.lmGridChargeDenied(true))
+}
+
+// TestScenarioSwitchedBatteryGivesWay: a battery switched on or off stands
+// below the loadpoints too. A wallbox capped at the limit does not overload the
+// circuit, so evcc's check alone would let the battery charge on; load
+// management holds it so the wallbox gets the power, and it stays held while
+// the wallbox uses it.
+func TestScenarioSwitchedBatteryGivesWay(t *testing.T) {
+	sc := newScenario(t)
+	sc.site.peak().enabled = false
+	sc.site.peak().chargePower = 3000
+	wallbox := &scenarioLoad{title: "wallbox", power: 5000}
+	sc.withCircuit(10000, wallbox)
+
+	assert.True(t, sc.cycle(20, 5000, 0))
+	assert.Equal(t, api.BatteryCharge, sc.mode())
+
+	// battery draws 3000 W, the wallbox asks for 9000 W and is capped at 7000 W
+	assert.True(t, sc.cycle(20, 8000, -3000))
+	assert.Equal(t, 7000.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 5000, 9000))
+
+	// the battery gives way, in hold mode
+	assert.False(t, sc.cycle(20, 8000, -3000))
+	assert.Equal(t, api.BatteryHold, sc.mode())
+	assert.True(t, sc.site.lmGridChargeDenied(false))
+	assert.True(t, sc.site.lmGridChargeBlocked(), "the optimizer sees it held")
+	assert.Equal(t, lmStateShed, sc.site.lmBatteryStatus(time.Now(), false).State)
+
+	// the wallbox takes the power, the battery does not come back
+	wallbox.power = 9000
+	assert.Equal(t, 9000.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 9000, 9000))
+	assert.False(t, sc.cycle(20, 9000, 0))
+	assert.Equal(t, api.BatteryHold, sc.mode())
+
+	// the wallbox is done: the battery charges again
+	wallbox.power = 0
+	assert.Equal(t, 0.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 0, 0))
+	assert.True(t, sc.cycle(20, 0, 0))
+	assert.Equal(t, api.BatteryCharge, sc.mode())
+	assert.False(t, sc.site.lmGridChargeDenied(true))
 }

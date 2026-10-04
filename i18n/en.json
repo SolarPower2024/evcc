@@ -477,7 +477,7 @@
     },
     "gridcharge": {
       "chargePowerEffective": "In use:",
-      "chargePowerHelp": "With an entity the cap of the setpoint, without one evcc checks that it fits the circuit when switched on. No value: maxchargepower of the battery, else the last measured power.",
+      "chargePowerHelp": "With an entity the cap of the setpoint, else it has to fit the circuit when switched on. Empty: maxchargepower of the battery, else last measured.",
       "chargePowerLabel": "Expected grid charge power",
       "chargePowerMeasured": "unknown, last measured power",
       "chargePowerUnknown": "unknown, setpoint 0",

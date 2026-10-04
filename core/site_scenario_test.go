@@ -284,19 +284,21 @@ func TestScenarioCircuitOnOff(t *testing.T) {
 		assert.Equal(t, api.BatteryCharge, sc.mode())
 	})
 
-	t.Run("does not fit: evcc holds, starts once there is room", func(t *testing.T) {
+	t.Run("does not fit: held back, starts once there is room", func(t *testing.T) {
 		sc := newScenario(t)
 		wallbox := &scenarioLoad{title: "wallbox", power: 7000}
 		sc.withCircuit(12000, wallbox)
 
-		// 7000 + 6250 > 12000: requested, but held by evcc's check
-		assert.True(t, sc.cycle(20, 3000, 0))
+		// 7000 + 6250 > 12000: load management holds it back, in hold mode as
+		// evcc's own check would
+		assert.False(t, sc.cycle(20, 3000, 0))
 		assert.Equal(t, api.BatteryHold, sc.mode())
-		assert.True(t, sc.site.lmGridChargeDenied(true))
+		assert.True(t, sc.site.lmGridChargeDenied(false))
 
 		// no fixed wait: the same cycle again is held, as long as there is no room
-		assert.True(t, sc.cycle(20, 3000, 0))
+		assert.False(t, sc.cycle(20, 3000, 0))
 		assert.Equal(t, api.BatteryHold, sc.mode())
+		assert.True(t, sc.site.lmGridChargeDenied(false))
 
 		// the wallbox keeps its power, the battery stands below it
 		assert.Equal(t, 7000.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 7000, 7000))
@@ -334,8 +336,9 @@ func TestScenarioCircuitOnOff(t *testing.T) {
 		assert.True(t, sc.cycle(20, 3000, 0))
 		assert.Equal(t, api.BatteryCharge, sc.mode())
 
-		// the battery draws 4000 W, the circuit is over its limit: held
-		assert.True(t, sc.cycle(21, 3000, -4000))
+		// the battery draws 4000 W, the circuit is over its limit: held, by load
+		// management as the lowest load or by evcc's check, both remember the power
+		sc.cycle(21, 3000, -4000)
 		assert.Equal(t, api.BatteryHold, sc.mode())
 		assert.Equal(t, 4000.0, sc.site.batteryChargeStopPower)
 

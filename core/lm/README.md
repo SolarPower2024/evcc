@@ -97,6 +97,11 @@ does not have:
   expected power in this order: the power entered in the ui, the battery
   meters' `maxchargepower`, the power measured at the last hold, else it
   starts (`lmGridChargePower` is the fork's input into `batteryMaxChargePower`).
+  A wallbox capped at the limit does not overload the circuit, so evcc's check
+  alone would keep the battery charging. Load management holds the battery
+  when loadpoints are short of power and while they use it, in hold mode like
+  evcc's check (`updateBatteryModePeakAware`). Running, it asks only for what
+  it draws (`TestScenarioSwitchedBatteryGivesWay`, `TestScenarioDrawBelowSetting`).
 - With a charge power entity, evcc writes the grid charge power instead: the
   expected power, trimmed to what fits below the peak limit and into the
   circuit, at least 500 W. This setpoint is the power evcc checks, so the

@@ -477,7 +477,7 @@
     },
     "gridcharge": {
       "chargePowerEffective": "Verwendet wird:",
-      "chargePowerHelp": "Mit Entität die Obergrenze der Vorgabe, ohne prüft evcc, ob sie beim Einschalten in den Stromkreis passt. Ohne Wert: maxchargepower der Batterie, sonst die zuletzt gemessene Leistung.",
+      "chargePowerHelp": "Mit Entität die Obergrenze der Vorgabe, sonst muss sie beim Einschalten in den Stromkreis passen. Leer: maxchargepower der Batterie, sonst zuletzt gemessen.",
       "chargePowerLabel": "Erwartete Netzladeleistung",
       "chargePowerMeasured": "unbekannt, zuletzt gemessene Leistung",
       "chargePowerUnknown": "nicht ermittelbar, Vorgabe 0",

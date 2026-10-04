@@ -613,8 +613,8 @@ func (site *Site) peakChargeHeadroom() (headroom float64, ok bool) {
 
 // updateBatteryModePeakAware keeps the battery in normal mode while the reserve
 // is being held for peaks, as hold would block the discharge controller. This is
-// the one place the fork overrides upstream's battery mode, and only below the
-// reserve: grid charging has already been cleared against a running peak (see
+// the one place the fork overrides upstream's battery mode: below the reserve,
+// and to hold a battery that load management keeps below the loadpoints: grid charging has already been cleared against a running peak (see
 // batteryGridChargeRequested) and is checked against the circuit by evcc, and a
 // mode set from outside through the api stays the caller's decision.
 func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rate api.Rate) {
@@ -622,6 +622,24 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 	defer site.publishLmStatus(gridCharge)
 	defer site.publishLmWallboxes()
 	defer site.checkLmFollowing()
+
+	// load management holds grid charging back for loadpoints: hold, as evcc's
+	// own circuit check does, see core/site_lm.go
+	if site.lmGridHeld() && site.GetBatteryModeExternal() == api.BatteryUnknown {
+		if site.GetBatteryMode() == api.BatteryHold {
+			return
+		}
+
+		site.log.DEBUG.Println("battery mode: held for loadpoints")
+
+		if err := site.applyBatteryMode(api.BatteryHold); err != nil {
+			site.log.ERROR.Println("battery mode:", err)
+			return
+		}
+
+		site.SetBatteryMode(api.BatteryHold)
+		return
+	}
 
 	if gridCharge || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)
