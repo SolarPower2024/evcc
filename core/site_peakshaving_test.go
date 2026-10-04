@@ -172,6 +172,54 @@ func TestPeakValueWrittenEveryCycle(t *testing.T) {
 	assert.Equal(t, []float64{0, 0, 0}, charges, "the peak pauses grid charging")
 }
 
+// TestPeakMetersLost verifies that a setpoint does not stay in the entity while
+// the meters fail: after peak.MaxGap the free value is written once and grid
+// charging pauses, until the meters are back
+func TestPeakMetersLost(t *testing.T) {
+	sc := newScenario(t)
+	clk := clock.NewMock()
+
+	var writes []float64
+
+	s := sc.site.peak()
+	s.clock = clk
+	s.set = func(v float64) error { writes = append(writes, v); return nil }
+
+	// below the reserve, no peak: no discharge, soc-based grid charging runs
+	assert.True(t, sc.cycle(20, 3000, 0))
+	assert.Equal(t, []float64{0}, writes)
+
+	// the meters fail: updatePeakShaving no longer runs, the rest of the cycle does
+	failed := func() bool {
+		clk.Add(30 * time.Second)
+		charge := sc.site.batteryGridChargeRequested(sc.rate)
+		sc.site.updateBatteryModePeakAware(charge, false, sc.rate)
+		return charge
+	}
+
+	// up to peak.MaxGap nothing changes
+	writes = nil
+	for range 4 {
+		assert.True(t, failed())
+	}
+	assert.Empty(t, writes)
+	assert.True(t, sc.site.peakShavingActive())
+
+	// beyond it: free value once, no grid charging
+	assert.False(t, failed())
+	assert.False(t, failed())
+	assert.Equal(t, []float64{peak.DefaultFreeValue}, writes)
+	assert.False(t, sc.site.peakShavingActive())
+
+	// meters back: the setpoint again
+	writes = nil
+	clk.Add(30 * time.Second)
+	sc.cycle(20, 3000, 0)
+	assert.Equal(t, []float64{0}, writes)
+	assert.False(t, s.metersLost)
+	assert.True(t, sc.site.peakShavingActive())
+}
+
 // peakWindowSite returns a site with a mock clock at the given minute of a window
 func peakWindowSite(t *testing.T, minute int) (*Site, *clock.Mock) {
 	t.Helper()

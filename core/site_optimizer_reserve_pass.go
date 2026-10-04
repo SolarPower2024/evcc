@@ -421,8 +421,17 @@ func passErr(err error, res *optimizer.OptimizationResult) any {
 // changed setting or grid charging starting then waits for the next slot
 // otherwise, which with several passes per run happens often
 func (site *Site) lmOptimizeLater(minAge time.Duration) {
-	if minAge == 0 {
-		site.lms().optimizeAgain.Store(true)
+	if minAge != 0 {
+		return
+	}
+
+	site.lms().optimizeAgain.Store(true)
+
+	// the running one may have finished and checked the flag before it was set:
+	// then nobody else picks it up
+	if site.optimizerMu.TryLock() {
+		site.optimizerMu.Unlock()
+		site.lmOptimizeAgain()
 	}
 }
 

@@ -61,6 +61,9 @@ func TestRestoreCustomAfterRestart(t *testing.T) {
 	b := newSite()
 	b.restoreCustom()
 
+	// a meter outage is counted from the start, see peakCheckMeters
+	assert.False(t, b.peak().updated.IsZero())
+
 	assert.True(t, b.GetBatterySocGridCharge())
 	assert.Equal(t, 25.0, b.GetBatterySocGridChargeStart())
 	assert.Equal(t, 85.0, b.GetBatterySocGridChargeStop())

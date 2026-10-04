@@ -7,6 +7,7 @@ package core
 // the regular value. Phase scaling uses both: scaling up to 3p needs the 1p
 // maximum exhausted and the 3p minimum reached, scaling down happens below the
 // 3p minimum. After a switch the limits of the new phase count apply right away.
+// On 1p the min never exceeds the 1p max, see getMinCurrentFor.
 // Built after evcc PR 32505, with the same names, settings keys and config
 // fields, so an upstream version can take over the values. Without phase
 // switching the regular limits already are the 1p limits and the 1p values are
@@ -20,6 +21,7 @@ package core
 import (
 	"cmp"
 	"errors"
+	"sync/atomic"
 	"time"
 
 	"github.com/evcc-io/evcc/core/keys"
@@ -31,6 +33,8 @@ type phaseSwitchSettings struct {
 	maxCurrent1p      float64       // 1p override for maxCurrent, 0 = use maxCurrent
 	phaseScale3pDelay time.Duration // delay before scaling up, 0 = enable delay
 	phaseScale1pDelay time.Duration // delay before scaling down, 0 = disable delay
+
+	currents1pConflict atomic.Bool // the 1p min exceeds the 1p max, warned once
 }
 
 // restorePhaseSwitch restores the phase switching settings
@@ -74,12 +78,29 @@ func (lp *Loadpoint) uses1pCurrent(phases int) bool {
 	return phases == 1 && lp.hasPhaseSwitching()
 }
 
-// getMinCurrentFor returns the configured min current for the given phases
+// getMinCurrentFor returns the configured min current for the given phases.
+// On 1p it never exceeds the 1p max: a min or max current changed after the 1p
+// values were set is not checked against them, and the 1p max usually is a
+// wiring or unbalanced load limit, so it wins over the min.
 func (lp *Loadpoint) getMinCurrentFor(phases int) float64 {
-	if lp.uses1pCurrent(phases) && lp.minCurrent1p > 0 {
-		return lp.minCurrent1p
+	// without 1p values the regular limits apply unchanged, as upstream
+	if !lp.uses1pCurrent(phases) || lp.minCurrent1p == 0 && lp.maxCurrent1p == 0 {
+		return lp.getMinCurrent()
 	}
-	return lp.getMinCurrent()
+
+	minCurrent := cmp.Or(lp.minCurrent1p, lp.getMinCurrent())
+	maxCurrent := lp.getMaxCurrentFor(phases)
+
+	if minCurrent <= maxCurrent || maxCurrent <= 0 {
+		lp.currents1pConflict.Store(false)
+		return minCurrent
+	}
+
+	if !lp.currents1pConflict.Swap(true) {
+		lp.log.WARN.Printf("1p min current %.3gA exceeds 1p max current %.3gA, charging at %.3gA on 1p", minCurrent, maxCurrent, maxCurrent)
+	}
+
+	return maxCurrent
 }
 
 // getMaxCurrentFor returns the configured max current for the given phases

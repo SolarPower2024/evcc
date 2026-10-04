@@ -80,6 +80,32 @@ func TestEffectiveCurrent1p(t *testing.T) {
 	assert.Equal(t, 16.0, lp.effectiveMaxCurrentFor(1))
 }
 
+// A min or max current changed after the 1p values is not checked against them:
+// on 1p the 1p max wins rather than min exceeding max, which setLimit rejects.
+func TestCurrents1pMinAboveMax(t *testing.T) {
+	// 1p max 10A, 1p min unset: the regular min of 12A would exceed it
+	lp := phaseCurrentsLoadpoint(t, 1, 0, 10)
+	lp.minCurrent = 12
+
+	assert.Equal(t, 10.0, lp.effectiveMinCurrentFor(1))
+	assert.Equal(t, 10.0, lp.effectiveMaxCurrentFor(1))
+	assert.True(t, lp.currents1pConflict.Load())
+	assert.NoError(t, lp.setLimit(10), "no invalid config")
+
+	// 1p min 12A, 1p max unset: the regular max lowered to 10A
+	lp = phaseCurrentsLoadpoint(t, 1, 12, 0)
+	lp.maxCurrent = 10
+	assert.Equal(t, 10.0, lp.effectiveMinCurrentFor(1))
+
+	// 3p is not affected
+	assert.Equal(t, 8.0, lp.effectiveMinCurrentFor(3))
+
+	// resolved again
+	lp.maxCurrent = 16
+	assert.Equal(t, 12.0, lp.effectiveMinCurrentFor(1))
+	assert.False(t, lp.currents1pConflict.Load())
+}
+
 func TestCurrents1pIgnoredWithoutPhaseSwitching(t *testing.T) {
 	// a fixed phase charger: the regular limits already are its 1p limits
 	lp := phaseCurrentsLoadpoint(t, 1, 6, 20)

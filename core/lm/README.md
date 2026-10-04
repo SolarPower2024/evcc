@@ -181,6 +181,9 @@ evcc PR 32505, so an evcc version can take the values over.
 - after a switch the limits of the new phase count apply right away
 - fast charging and battery boost check the circuit with the 3p minimum
 - without 1p values nothing changes (`TestCurrents1pInertWhenUnused`)
+- a min or max current changed later (api, Home Assistant) is not checked
+  against the 1p values; should the 1p min then exceed the 1p max, it charges
+  at the 1p max on 1p and logs a warning once (`TestCurrents1pMinAboveMax`)
 
 Two optional delays: how long the surplus has to allow 3p before scaling up and
 be short of it before scaling down; empty = enable and disable delay as in
@@ -254,6 +257,11 @@ Below the reserve the battery is kept in normal mode, as hold would block the
 discharge controller; a battery mode set from outside through the api stays.
 While the demand without the battery exceeds the limit, grid charging pauses
 and stays off for the hold-off, so it cannot add to the peak.
+
+Without meter values for over 2 minutes the free value is written and grid
+charging pauses until they are back: the battery covers any demand by ordinary
+self-consumption, where a stale setpoint of 0 would keep it blocked
+(`TestPeakMetersLost`).
 
 The window, the allowed power, the setpoint and the hysteresis are in
 `core/peak`, which knows nothing about the site and has its own tests;
