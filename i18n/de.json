@@ -1583,6 +1583,10 @@
       "meter": {
         "energy": "Energie",
         "returnEnergy": "Energie (rückwärts)"
+      },
+      "eeg": {
+        "energy": "",
+        "returnEnergy": "eingespeist"
       }
     },
     "empty": "Keine Energiedaten für diesen Zeitraum verfügbar.",
@@ -1663,7 +1667,11 @@
       "savingsTooltip": "Im Vergleich zum Bezug der verbrauchten {energy} aus dem Netz.",
       "versus": "{value} statt {reference}"
     },
-    "title": "Energie"
+    "title": "Energie",
+    "feedInEeg": {
+      "eeg": "EEG",
+      "revenue": "EEG-Vergütung"
+    }
   },
   "issue": {
     "additional": {

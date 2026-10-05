@@ -64,6 +64,9 @@ var forkUiHooks = []struct {
 	{"assets/js/components/Loadpoints/Mode.vue", []string{"chargerStages: Boolean", "this.switchDevice || this.chargerStages"}},
 	{"assets/js/components/Config/TariffCard.vue", []string{"<FeedInEegSummary"}},
 	{"assets/js/components/Config/TariffModal.vue", []string{"feedInEeg", "tariff-planner-optimizer"}},
+	{"assets/js/views/Energy.vue", []string{"gridChartSeries", ":feed-in-eeg=\"feedInEeg\"", "loadFeedInSplit(requestKey)", "withoutFeedInEeg("}},
+	{"assets/js/components/Energy/GroupChart.vue", []string{"s.returnColor ||"}},
+	{"assets/js/components/Energy/GridStats.vue", []string{"feedInEegStats(this.feedInEeg)"}},
 	{"assets/js/types/evcc.ts", []string{"extends LmState", "extends LmConfigLoadpoint", `export type * from "./evcc-lm"`}},
 }
 

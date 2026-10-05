@@ -86,7 +86,7 @@ func TestQueryFeedInSplit(t *testing.T) {
 	res, err = QueryFeedInSplit(slot(9, 0), slot(9, 4), "15m")
 	require.NoError(t, err)
 	require.Len(t, res, 4)
-	require.Equal(t, slot(9, 3), res[3].Start)
+	require.True(t, slot(9, 3).Equal(res[3].Start), "start %v", res[3].Start)
 	require.InDelta(t, 0.2, res[3].Eeg, 1e-9)
 
 	_, err = QueryFeedInSplit(slot(9, 0), slot(9, 4), "week")
