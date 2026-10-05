@@ -1378,6 +1378,8 @@ export default defineComponent({
 				if (requestKey === this.fetchKey) this.feedInSplit = split;
 			} catch (e) {
 				console.error("Failed to load feed-in split", e);
+				// no split of another period on this one
+				if (requestKey === this.fetchKey) this.feedInSplit = [];
 			}
 		},
 		fetchFlow(from: Date, to: Date) {

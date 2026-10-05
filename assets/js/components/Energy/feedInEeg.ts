@@ -83,17 +83,21 @@ export function splitGridSeries(
   aggregate: string,
   gridTitle: string
 ): HistorySeries[] {
+  // EEG left to take out per bucket: after a grid meter swap a bucket has
+  // export on several grid series, the EEG part comes off only once
   const eeg = new Map(split.map((b) => [bucketKey(b.start, aggregate), b.eeg]));
+  const takeOut = (key: string, export_: number) => {
+    const part = Math.min(export_, eeg.get(key) || 0);
+    eeg.set(key, (eeg.get(key) || 0) - part);
+    return export_ - part;
+  };
 
   const standard = grid.map((s) => ({
     ...s,
     title: gridTitle,
     data: s.data.map((slot): HistorySlot => ({
       ...slot,
-      returnEnergy: Math.max(
-        0,
-        slot.returnEnergy - (eeg.get(bucketKey(slot.start, aggregate)) || 0)
-      ),
+      returnEnergy: takeOut(bucketKey(slot.start, aggregate), Math.max(0, slot.returnEnergy)),
     })),
   }));
 
