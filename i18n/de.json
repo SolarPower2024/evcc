@@ -2353,6 +2353,10 @@
     "resetWarning": "Es ist kein dynamischer Einspeisetarif konfiguriert. Dennoch ist ein Grenze von {limit} eingerichtet. Konfiguration aufräumen?",
     "title": "Einspeisung priorisieren"
   },
+  "snowCover": {
+    "label": "Schnee auf PV",
+    "note": "Schnee auf PV: Der Optimizer rechnet ohne PV-Ertrag. Geht aus, wenn die Anlage 1 h lang 70 % liefert."
+  },
   "startupError": {
     "configFile": "Verwendete Konfigurationsdatei:",
     "configuration": "Konfiguration",

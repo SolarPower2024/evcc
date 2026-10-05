@@ -2353,6 +2353,10 @@
     "resetWarning": "There is no dynamic feed-in tariff configured. However, there is still a limit of {limit}. Clean up your configuration?",
     "title": "Feed-in Priority"
   },
+  "snowCover": {
+    "label": "Snow on PV",
+    "note": "Snow on PV: the optimizer plans without solar yield. Turns off once the system delivers 70 % for 1 h."
+  },
   "startupError": {
     "configFile": "Configuration file used:",
     "configuration": "Config",
