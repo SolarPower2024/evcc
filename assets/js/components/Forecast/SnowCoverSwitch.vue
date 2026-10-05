@@ -54,11 +54,12 @@ export default defineComponent({
 	},
 	methods: {
 		async change(e: Event) {
+			const input = e.target as HTMLInputElement;
 			try {
-				await api.post(
-					`snowcover/${(e.target as HTMLInputElement).checked ? "true" : "false"}`
-				);
+				await api.post(`snowcover/${input.checked ? "true" : "false"}`);
 			} catch (err) {
+				// back to the state evcc has, the store did not change
+				input.checked = this.snowCover;
 				console.error(err);
 			}
 		},
