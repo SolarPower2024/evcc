@@ -132,6 +132,12 @@
       "paths": ["util/log.go", "util/logstash/"]
     },
     {
+      "name": "Schnee auf PV (Schalter, Optimizer ohne PV-Ertrag)",
+      "files": ["core/site_snow.go", "assets/js/components/Forecast/SnowCoverSwitch.vue"],
+      "keywords": ["snow", "Snow", "Schnee", "snowCover"],
+      "paths": ["core/site_tariffs.go", "core/site_optimizer.go", "assets/js/views/Forecast.vue"]
+    },
+    {
       "name": "Grundlagen, auf denen der Fork aufbaut",
       "files": ["core/loadpoint_lm.go"],
       "prs": [30367, 33463]

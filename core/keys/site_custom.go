@@ -72,4 +72,7 @@ const (
 
 	// log in daily files, see core/site_logfile.go
 	LogFile = "logFile"
+
+	// snow on pv, the optimizer plans without solar yield, see core/site_snow.go
+	SnowCover = "snowCover"
 )

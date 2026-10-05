@@ -106,6 +106,9 @@ func customSiteRoutes(site site.API) map[string]route {
 		"logfile":    {"GET", "/logfile", logFileHandler(site)},
 		"logfileset": {"POST", "/logfile", logFileSetHandler(site)},
 
+		// snow on pv, see core/site_snow.go
+		"snowcover": {"POST", "/snowcover/{value:[01truefalse]+}", boolHandler(site.SetSnowCover, site.GetSnowCover)},
+
 		// peak shaving, see core/site_peakshaving.go
 		"peakshaving":                   {"POST", "/peakshaving/{value:[01truefalse]+}", boolHandler(site.SetPeakShaving, site.GetPeakShaving)},
 		"peakshavinglimit":              {"POST", "/peakshavinglimit/{value:[0-9.]+}", floatHandler(site.SetPeakShavingLimit, site.GetPeakShavingLimit)},

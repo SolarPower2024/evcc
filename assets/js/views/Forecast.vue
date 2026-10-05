@@ -32,8 +32,8 @@
 					edge-to-edge
 					class="box-pull-out mb-4"
 				>
-					<template v-if="showSolarAdjust" #actions>
-						<div class="form-check form-switch mb-0 text-nowrap">
+					<template #actions>
+						<div v-if="showSolarAdjust" class="form-check form-switch mb-0 text-nowrap">
 							<input
 								id="solarForecastAdjust"
 								:checked="solarAdjusted"
@@ -47,6 +47,8 @@
 								<span class="d-none d-md-inline">{{ solarAdjustTextMedium }}</span>
 							</label>
 						</div>
+						<SnowCoverSwitch />
+						<!-- custom -->
 					</template>
 					<div class="chart-edge">
 						<SolarChart
@@ -58,6 +60,8 @@
 							@scroll="onChartScroll"
 						/>
 					</div>
+					<SnowCoverSwitch note />
+					<!-- custom -->
 					<SolarDetails :solar="solar" />
 				</Card>
 
@@ -138,6 +142,7 @@ import Card from "../components/Helper/Card.vue";
 import DynamicPriceIcon from "../components/MaterialIcon/DynamicPrice.vue";
 import SolarChart from "../components/Forecast/SolarChart.vue";
 import SolarDetails from "../components/Forecast/SolarDetails.vue";
+import SnowCoverSwitch from "../components/Forecast/SnowCoverSwitch.vue"; // custom
 import PriceChart from "../components/Forecast/PriceChart.vue";
 import GridDetails from "../components/Forecast/GridDetails.vue";
 import ValueChart, { type ValueChartType } from "../components/Forecast/ValueChart.vue";
@@ -159,6 +164,7 @@ export default defineComponent({
 		DynamicPriceIcon,
 		SolarChart,
 		SolarDetails,
+		SnowCoverSwitch, // custom
 		PriceChart,
 		GridDetails,
 		ValueChart,

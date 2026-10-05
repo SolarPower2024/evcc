@@ -119,6 +119,7 @@ var customRouteSamples = map[string]string{
 	"feedinsplit":                   "/feedinsplit?from=2026-09-01&to=2026-10-01&aggregate=day",
 	"logfile":                       "/logfile",
 	"logfileset":                    "/logfile",
+	"snowcover":                     "/snowcover/true",
 	"peakshaving":                   "/peakshaving/false",
 	"peakshavinglimit":              "/peakshavinglimit/7000",
 	"peakfollow":                    "/peakfollow/true",
@@ -181,6 +182,7 @@ func TestCustomRoutesMatch(t *testing.T) {
 	assert.Equal(t, 1000.0, site.GetPeakFollowBuffer())
 	assert.Equal(t, 4000.0, site.GetPeakShavingChargePower())
 	assert.False(t, site.GetLmEnabled())
+	assert.True(t, site.GetSnowCover())
 }
 
 func must[T any](v T, err error) T {

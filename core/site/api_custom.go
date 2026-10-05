@@ -61,6 +61,10 @@ type CustomAPI interface {
 	LogFile() logstash.FileState
 	SetLogFile(logstash.FileConfig) error
 
+	// snow on pv, see core/site_snow.go
+	GetSnowCover() bool
+	SetSnowCover(bool) error
+
 	// peak shaving, see core/site_peakshaving.go
 	GetPeakShaving() bool
 	SetPeakShaving(bool) error

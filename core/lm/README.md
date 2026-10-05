@@ -28,6 +28,7 @@ Part 1 describes the features, part 2 how the fork is kept maintainable.
 16. [Optimizer inputs](#16-optimizer-inputs)
 17. [Advanced settings](#17-advanced-settings)
 18. [Log file](#18-log-file)
+19. [Snow on PV](#19-snow-on-pv)
 
 **Part 2: maintenance**
 
@@ -386,6 +387,7 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   circuit) is not offered (`charge_from_grid`).
 - load management: a loadpoint plans with at most its circuits' power,
   priorities 0-3/4-6/7-10 become `c_priority` 0/1/2.
+- snow on pv: the solar series is 0 while the switch is on, see [19](#19-snow-on-pv).
 - a price tariff set as planner tariff is the grid price the optimizer plans
   with (`p_N`); statistics and costs keep the grid tariff. With real prices
   close to the feed-in price the optimizer never discharges (stored energy is
@@ -397,8 +399,8 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
 - the plan is solved again when soc-based grid charging starts or stops, and a
   forced run arriving during a run follows right after it.
 
-Without circuits, peak shaving and soc or one-time grid charging the request is
-unchanged. The optimizer's automatic mode (evcc PR 32881) needs a gate at
+Without circuits, peak shaving, soc or one-time grid charging and snow on pv the
+request is unchanged. The optimizer's automatic mode (evcc PR 32881) needs a gate at
 execution, prepared separately on top of these inputs.
 
 ## 17. Advanced settings
@@ -468,6 +470,40 @@ changes the logger underneath `util/log.go`; then the hook has to be set again a
 checked whether evcc brings a file output itself. See `util/logstash/file_custom.go`,
 `core/site_logfile.go`.
 
+## 19. Snow on PV
+
+Snow on the modules cuts the yield to almost nothing while the solar forecast
+still shows the full yield, so the optimizer plans grid charging, reserve and
+peaks around pv that does not come. *Forecast page → Solar card → Snow on PV*
+(off by default) tells it: while it is on, the solar series of every optimizer
+request is 0 (`core/site_snow.go`, `applySnowCover` from
+`applyLmOptimizerInputs`, after evcc has built the series, so it also overrides
+the adjusted forecast and the blend of the first slots). Switching runs the
+optimizer again at once, as evcc's *adjust forecast* switch does. The forecast
+display, the regulation and evcc's planner stay as they are. Below 768 px the
+switch sits with the hint under the chart instead of the card header, which has
+no room for it next to evcc's switch. It is not shown without a solar forecast.
+
+It turns itself off: after each completed quarter hour the measured pv energy
+is compared with the forecast energy of that quarter hour (the collector values
+evcc's blend of the first slots uses, the forecast unscaled). A quarter hour
+with a forecast under 100 Wh says nothing (night, dawn, overcast) and neither
+counts nor resets. From 70 % of the forecast it counts as free, otherwise the
+count is reset. After 4 free quarter hours in a row the switch goes off, is
+saved and the optimizer runs again; INFO log `pv snow cover off: production back
+to 70 % of the forecast for 1 h`. The count is in memory only, after a restart it
+begins at 0 (turning off is delayed by one hour at most). The thresholds are
+fixed. Fog, bad weather, an inverter outage and curtailment are not handled: if
+the system is curtailed under snow with a full battery, the switch stays on
+longer, it can be switched off by hand any time.
+
+```
+POST /api/snowcover/{true|false}
+```
+
+State `snowCover`. See `core/site_snow.go`,
+`assets/js/components/Forecast/SnowCoverSwitch.vue`.
+
 ---
 
 ## Rules
@@ -512,6 +548,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the download button |
+| `assets/js/views/Forecast.vue` | mounts `Forecast/SnowCoverSwitch.vue` twice: the switch in the solar card's `#actions` (which is now always rendered, evcc's own switch keeps its `v-if="showSolarAdjust"` on its inner `div`) and the hint under the chart |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown; default mode labels Aus/Smart/Ein for a heater in stages (`chargerIsStages`) |
@@ -536,6 +573,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
 | EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
 | log file | `util/logstash/file_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
+| snow on pv | `core/site_snow.go`, `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
 | ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `FeedInEegSummary`, `PhaseSwitchFields`) |
@@ -580,6 +618,9 @@ unused:
   `TestLoadpointUsesSiteLoadManagement`, `TestMergeRoutesKeepsUpstream`: the
   hooks act on evcc's real control path.
 - `TestRestoreCustomAfterRestart`: every fork setting survives a restart.
+- `TestSnowCoverOptimizerInput`: the solar series is 0 with the switch on and
+  the request unchanged with it off; it relies on evcc building `Ft` as one
+  value per slot before `applyLmOptimizerInputs`.
 - `TestCustomRoutesMatch`: every api route reaches its handler; a new route
   needs a sample request there.
 

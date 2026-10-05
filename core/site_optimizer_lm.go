@@ -17,10 +17,11 @@ package core
 //     (charge_from_grid off)
 //   - load management: a loadpoint plans with at most its circuits' power, and
 //     the priorities rank the batteries (c_priority)
+//   - snow on pv: no solar yield, see site_snow.go
 //   - a price tariff set as planner tariff is the grid price the optimizer
 //     plans with, statistics keep the grid tariff
 //
-// Without circuits, peak shaving and soc-based grid charging the request is
+// Without circuits, peak shaving, soc-based grid charging and snow on pv the request is
 // unchanged.
 
 import (
@@ -79,6 +80,8 @@ func (site *Site) optimizerGridTariff() api.Tariff {
 
 // applyLmOptimizerInputs adds the fork's settings to the optimizer request
 func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batteries []optimizerBattery) {
+	site.applySnowCover(req)
+
 	lmActive := len(config.Circuits().Devices()) > 0
 	peakOn, limit, reserve := site.peakShavingConfigured()
 

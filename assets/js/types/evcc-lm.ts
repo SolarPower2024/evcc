@@ -152,6 +152,8 @@ export interface LmStatus {
 
 /** State fields added by this fork. */
 export interface LmState {
+  /** Snow on pv: the optimizer plans without solar yield, see core/site_snow.go. */
+  snowCover?: boolean;
   /** Soc-based grid charging of the home battery is enabled. */
   batterySocGridCharge?: boolean;
   /** Soc in % at or below which soc-based grid charging starts. */
