@@ -64,6 +64,8 @@ type CustomAPI interface {
 	// snow on pv, see core/site_snow.go
 	GetSnowCover() bool
 	SetSnowCover(bool) error
+	GetSnowAuto() bool
+	SetSnowAuto(bool) error
 
 	// peak shaving, see core/site_peakshaving.go
 	GetPeakShaving() bool

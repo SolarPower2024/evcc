@@ -75,4 +75,10 @@ const (
 
 	// snow on pv, the optimizer plans without solar yield, see core/site_snow.go
 	SnowCover = "snowCover"
+
+	// snow on pv, detected from the weather, see core/site_snow_auto.go
+	SnowAuto          = "snowAuto"          // setting: detect snow automatically
+	SnowCoverAuto     = "snowCoverAuto"     // the switch was turned on automatically
+	SnowAutoAvailable = "snowAutoAvailable" // published: an Open-Meteo solar forecast gives the location
+	SnowSeen          = "snowSeen"          // end of the last snow already counted
 )

@@ -134,6 +134,7 @@ func TestSnowCoverAutoOff(t *testing.T) {
 
 	require.NoError(t, site.SetSnowCover(true))
 	assert.Equal(t, util.Param{Key: keys.SnowCover, Val: true}, <-pub)
+	assert.Equal(t, util.Param{Key: keys.SnowCoverAuto, Val: false}, <-pub)
 
 	// the first slot is not complete yet: tried again, nothing is marked
 	site.updateSnowCover(clk.Now())
@@ -167,6 +168,7 @@ func TestSnowCoverAutoOff(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, v)
 	assert.Equal(t, util.Param{Key: keys.SnowCover, Val: false}, <-pub)
+	assert.Equal(t, util.Param{Key: keys.SnowCoverAuto, Val: false}, <-pub)
 
 	// off: further slots change nothing
 	slot(0, 400)
