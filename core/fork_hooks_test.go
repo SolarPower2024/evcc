@@ -64,6 +64,7 @@ var forkUiHooks = []struct {
 	{"assets/js/components/Config/LoadpointModal.vue", []string{"<PhaseSwitchFields", "emptyUnsetPhaseSwitch", "chargerIsStages"}},
 	{"assets/js/components/Loadpoints/Loadpoint.vue", []string{"chargerStages: Boolean"}},
 	{"assets/js/components/Loadpoints/Mode.vue", []string{"chargerStages: Boolean", "this.switchDevice || this.chargerStages"}},
+	{"assets/js/views/Log.vue", []string{"<LogFileButton", "LogFileButton,"}},
 	{"assets/js/components/Config/TariffCard.vue", []string{"<FeedInEegSummary"}},
 	{"assets/js/components/Config/TariffModal.vue", []string{"feedInEeg", "tariff-planner-optimizer"}},
 	{"assets/js/views/Energy.vue", []string{"gridChartSeries", ":feed-in-eeg=\"feedInEeg\"", "loadFeedInSplit(requestKey)", "withoutFeedInEeg("}},

@@ -466,6 +466,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
+| `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the download button |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown; default mode labels Aus/Smart/Ein for a heater in stages (`chargerIsStages`) |

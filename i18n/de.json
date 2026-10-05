@@ -1802,6 +1802,21 @@
     "title": "Logs",
     "update": "Aktualisieren"
   },
+  "logFile": {
+    "daysLabel": "Aufbewahrung",
+    "daysUnit": "Tage",
+    "description": "Schreibt das Log in Tagesdateien, ältere werden gepackt. Im Add-on über die Samba-Freigabe unter addon_configs lesbar. Höchstens 1 GB.",
+    "enabledLabel": "Log-Datei schreiben",
+    "failed": "Fehler",
+    "files": "Dateien",
+    "folder": "Ordner",
+    "invalid": "Ungültige Einstellung.",
+    "invalidDays": "Aufbewahrung: ganze Tage von {min} bis {max}.",
+    "levelLabel": "Level",
+    "off": "aus",
+    "size": "Größe",
+    "title": "Log-Datei"
+  },
   "loginModal": {
     "cancel": "Abbrechen",
     "demoMode": "Login ist im Demo-Modus nicht verfügbar.",

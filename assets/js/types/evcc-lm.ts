@@ -257,3 +257,19 @@ export interface LmConfigLoadpoint {
   phaseScale3pDelay?: number; // ns before scaling up, 0/empty = enable delay
   phaseScale1pDelay?: number; // ns before scaling down, 0/empty = disable delay
 }
+
+/** Log file setting and state, see core/site_logfile.go. */
+export interface LogFileState {
+  enabled: boolean;
+  /** Level of the file: error, warn, info, debug or trace. */
+  level: string;
+  /** Days the files are kept. */
+  days: number;
+  /** Folder of the files, set by evcc. */
+  dir: string;
+  files: number;
+  /** Bytes of all files. */
+  size: number;
+  /** Why the file is off, empty = none. */
+  error?: string;
+}
