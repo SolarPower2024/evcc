@@ -1802,6 +1802,21 @@
     "title": "Logs",
     "update": "Auto update"
   },
+  "logFile": {
+    "daysLabel": "Retention",
+    "daysUnit": "days",
+    "description": "Writes the log to daily files, older ones are compressed. In the add-on readable via the Samba share under addon_configs. At most 1 GB.",
+    "enabledLabel": "Write log file",
+    "failed": "Error",
+    "files": "Files",
+    "folder": "Folder",
+    "invalid": "Invalid setting.",
+    "invalidDays": "Retention: whole days from {min} to {max}.",
+    "levelLabel": "Level",
+    "off": "off",
+    "size": "Size",
+    "title": "Log file"
+  },
   "loginModal": {
     "cancel": "Cancel",
     "demoMode": "Login is not supported in demo mode.",

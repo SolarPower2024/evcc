@@ -69,4 +69,7 @@ const (
 	// export under a second feed-in tariff, see core/site_feedin_eeg.go
 	FeedInEegEntity = "feedInEegEntity" // Home Assistant energy counter of the EEG export
 	TariffFeedInEeg = "tariffFeedInEeg" // published: current EEG price
+
+	// log in daily files, see core/site_logfile.go
+	LogFile = "logFile"
 )

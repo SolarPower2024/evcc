@@ -10,6 +10,7 @@ import (
 	"github.com/evcc-io/evcc/core"
 	"github.com/evcc-io/evcc/core/lm/profile"
 	"github.com/evcc-io/evcc/core/site"
+	"github.com/evcc-io/evcc/util/logstash"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 )
@@ -116,6 +117,8 @@ var customRouteSamples = map[string]string{
 	"feedineegentity":               "/feedineegentity/sensor.eeg_export",
 	"feedineegentitydelete":         "/feedineegentity",
 	"feedinsplit":                   "/feedinsplit?from=2026-09-01&to=2026-10-01&aggregate=day",
+	"logfile":                       "/logfile",
+	"logfileset":                    "/logfile",
 	"peakshaving":                   "/peakshaving/false",
 	"peakshavinglimit":              "/peakshavinglimit/7000",
 	"peakfollow":                    "/peakfollow/true",
@@ -185,4 +188,41 @@ func must[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
+}
+
+// TestLogFileRoutes: GET and POST answer the state, an invalid level or retention is a 400
+func TestLogFileRoutes(t *testing.T) {
+	r := mux.NewRouter()
+	for _, rt := range customSiteRoutes(core.NewSite()) {
+		r.Methods(rt.Methods()...).Path(rt.Pattern).Handler(rt.HandlerFunc)
+	}
+
+	do := func(method, body string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(method, "/logfile", strings.NewReader(body)))
+		return w
+	}
+
+	t.Cleanup(func() { _, _ = logstash.SetFile(logstash.DefaultFileConfig) })
+
+	w := do(http.MethodGet, "")
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"enabled":false`)
+
+	// disabled: stored, nothing written
+	w = do(http.MethodPost, `{"enabled":false,"level":"WARN","days":7,"dir":"/ignored"}`)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"level":"warn"`)
+	assert.Contains(t, w.Body.String(), `"days":7`)
+	assert.NotContains(t, w.Body.String(), "ignored")
+
+	for _, body := range []string{
+		`{"enabled":true,"level":"loud","days":7}`,
+		`{"enabled":true,"level":"info","days":0}`,
+		`{"enabled":true,"level":"info","days":91}`,
+		`{"enabled":true,"level":"info"}`,
+		`not json`,
+	} {
+		assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, body).Code, body)
+	}
 }

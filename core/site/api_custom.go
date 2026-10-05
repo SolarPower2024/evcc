@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/core/lm/profile"
+	"github.com/evcc-io/evcc/util/logstash"
 )
 
 // CustomAPI is the part of the site api added by this fork. It lives in its own
@@ -55,6 +56,10 @@ type CustomAPI interface {
 	// export under a second feed-in tariff, see core/site_feedin_eeg.go
 	GetFeedInEegEntity() string
 	SetFeedInEegEntity(string) error
+
+	// log in daily files, see core/site_logfile.go
+	LogFile() logstash.FileState
+	SetLogFile(logstash.FileConfig) error
 
 	// peak shaving, see core/site_peakshaving.go
 	GetPeakShaving() bool

@@ -125,6 +125,13 @@
       "paths": ["core/circuit/", "core/site.go", "server/"]
     },
     {
+      "name": "Log-Datei (Tagesdateien)",
+      "files": ["util/logstash/file_custom.go", "core/site_logfile.go"],
+      "prs": [32018],
+      "keywords": ["log file", "logfile", "LogFile", "logrotate", "lumberjack", "rotat"],
+      "paths": ["util/log.go", "util/logstash/"]
+    },
+    {
       "name": "Grundlagen, auf denen der Fork aufbaut",
       "files": ["core/loadpoint_lm.go"],
       "prs": [30367, 33463]

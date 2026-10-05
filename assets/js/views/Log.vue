@@ -36,6 +36,8 @@
 								></shopicon-regular-download>
 							</a>
 						</div>
+						<LogFileButton />
+						<!-- custom: log file, see util/logstash/file_custom.go -->
 					</div>
 					<div class="col-6 offset-lg-1 col-lg-4 mb-4 mb-lg-0">
 						<input
@@ -115,6 +117,7 @@ import Header from "../components/Top/Header.vue";
 import Play from "../components/MaterialIcon/Play.vue";
 import ProgressRing from "../components/MaterialIcon/ProgressRing.vue";
 import MultiSelect from "../components/Helper/MultiSelect.vue";
+import LogFileButton from "../components/LogFile/LogFileButton.vue";
 import api from "../api";
 import store from "../store";
 import { defineComponent, type PropType } from "vue";
@@ -132,6 +135,7 @@ export default defineComponent({
 		Play,
 		ProgressRing,
 		MultiSelect,
+		LogFileButton,
 	},
 	props: {
 		areas: { type: Array as PropType<string[]>, default: () => [] },

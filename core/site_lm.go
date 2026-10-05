@@ -100,6 +100,7 @@ func (site *Site) restoreCustom() {
 	site.restoreLmSettings()
 	site.restorePeakSettings()
 	site.restoreFeedInEeg()
+	site.restoreLogFile()
 }
 
 // updateCustom runs the fork's per cycle work once the meters are read, before

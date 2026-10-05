@@ -48,6 +48,8 @@ var forkHooks = []struct {
 	{"api/globalconfig/types.go", "TariffRefs.IsConfigured", []string{"FeedInEeg"}},
 	{"api/globalconfig/types.go", "TariffRefs.Used", []string{"FeedInEeg"}},
 	{"charger/switchsocket.go", "NewSwitchSocketFromConfig", []string{"RatedPower"}},
+	{"util/log.go", "newLogger", []string{"Output"}},
+	{"cmd/root.go", "runRoot", []string{"CloseFile"}},
 }
 
 // forkUiHooks lists the fork's mounts in evcc's ui files
@@ -62,6 +64,7 @@ var forkUiHooks = []struct {
 	{"assets/js/components/Config/LoadpointModal.vue", []string{"<PhaseSwitchFields", "emptyUnsetPhaseSwitch", "chargerIsStages"}},
 	{"assets/js/components/Loadpoints/Loadpoint.vue", []string{"chargerStages: Boolean"}},
 	{"assets/js/components/Loadpoints/Mode.vue", []string{"chargerStages: Boolean", "this.switchDevice || this.chargerStages"}},
+	{"assets/js/views/Log.vue", []string{"<LogFileButton", "LogFileButton,"}},
 	{"assets/js/components/Config/TariffCard.vue", []string{"<FeedInEegSummary"}},
 	{"assets/js/components/Config/TariffModal.vue", []string{"feedInEeg", "tariff-planner-optimizer"}},
 	{"assets/js/views/Energy.vue", []string{"gridChartSeries", ":feed-in-eeg=\"feedInEeg\"", "loadFeedInSplit(requestKey)", "withoutFeedInEeg("}},

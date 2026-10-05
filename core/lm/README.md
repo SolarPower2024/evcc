@@ -27,6 +27,7 @@ Part 1 describes the features, part 2 how the fork is kept maintainable.
 15. [Second feed-in tariff (EEG)](#15-second-feed-in-tariff-eeg)
 16. [Optimizer inputs](#16-optimizer-inputs)
 17. [Advanced settings](#17-advanced-settings)
+18. [Log file](#18-log-file)
 
 **Part 2: maintenance**
 
@@ -423,6 +424,50 @@ values are not stored, so a changed default applies.
 Also there: the load management circuit ([7](#7-load-management-circuit-and-switch))
 and evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
 
+## 18. Log file
+
+evcc keeps its log in a ring buffer of 10,000 lines for the log page, which at
+debug is an hour or two. *Log page → Log-Datei* (off by default, nothing is
+written and no folder created until it is switched on) writes the same stream
+(all areas and levels, already redacted) to `evcc-YYYY-MM-DD.log` in the local
+date. The level (error to trace, default debug) is the file's own and
+independent of the console level, so the console or the add-on log can stay on
+info while the file gets debug.
+
+- the folder is fixed, shown in the dialog only: `/config/logs` where `/config`
+  is a folder (the add-on, readable through its Samba share under
+  `addon_configs`), else `logs` next to the database file
+- switching on writes the log buffer into the file first (so the lines from
+  before the settings were loaded are in), then the new lines follow, both under
+  the buffer's lock: no gap, no line twice. Switching on again or changing a
+  setting writes only the lines the file does not have yet. Each file and each
+  switching on starts with `[logfil] INFO <time> evcc <version>, level <level>`
+- the first line of a new day switches the file, the day before is compressed in
+  the background (`.log.gz`, streaming) and the original deleted; files left
+  unpacked by a stop are packed the same way
+- the retention (1-90 days, default 14) counts today: older files are deleted
+  when switching on and at each new day. Over 1 GB for all files together the
+  oldest are deleted with a warning, also while today's file grows; today's file
+  is never deleted, if it alone reaches 1 GB it pauses with a note until the next day
+- written buffered (64 KB) and flushed every 2 s, at once for warnings and errors,
+  when switching off and at the end of `runRoot`: a power cut or a kill loses at
+  most 2 s of info and debug lines
+- a folder that cannot be created or a full disk switches the file off for this
+  run: logged once as an error (console and log page) and shown in the dialog. The
+  setting stays on, the next start tries again. A failing file never stops
+  the control loop
+
+```
+GET  /api/logfile   {enabled, level, days, dir, files, size, error}
+POST /api/logfile   json body {enabled, level, days}, answers like GET
+```
+
+The output sits between the loggers and the buffer (`logstash.Output`, hook in
+`util/log.go`), the buffer and the log page stay as they are. evcc PR 32018 (open)
+changes the logger underneath `util/log.go`; then the hook has to be set again and
+checked whether evcc brings a file output itself. See `util/logstash/file_custom.go`,
+`core/site_logfile.go`.
+
 ---
 
 ## Rules
@@ -459,11 +504,14 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
 | `charger/switchsocket.go` | `RatedPower` config field |
+| `util/log.go` | `newLogger` writes to `logstash.Output` instead of `logstash.DefaultHandler`, which passes every line on to it and to the log file |
+| `cmd/root.go` | `logstash.CloseFile()` at the end of `runRoot`, after the shutdown functions |
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
+| `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the download button |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown; default mode labels Aus/Smart/Ein for a heater in stages (`chargerIsStages`) |
@@ -487,6 +535,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
 | EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
+| log file | `util/logstash/file_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
 | ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `FeedInEegSummary`, `PhaseSwitchFields`) |
