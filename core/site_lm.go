@@ -92,6 +92,7 @@ type lmState struct {
 type siteCustom struct {
 	lm   lmState
 	peak peakState
+	snow snowState // snow on pv, see site_snow.go
 }
 
 // restoreCustom restores the fork's settings, called at the end of upstream's
@@ -101,15 +102,17 @@ func (site *Site) restoreCustom() {
 	site.restorePeakSettings()
 	site.restoreFeedInEeg()
 	site.restoreLogFile()
+	site.restoreSnowCover()
 }
 
 // updateCustom runs the fork's per cycle work once the meters are read, before
 // upstream decides on battery grid charging and the battery mode: peak shaving,
-// the export under the second feed-in tariff and the battery identification
+// the export under the second feed-in tariff, the battery identification and snow on pv
 func (site *Site) updateCustom(state siteState) {
 	site.updatePeakShaving(state)
 	site.updateFeedInEeg()
 	site.updateBatteryIdent()
+	site.updateSnowCover(time.Now())
 }
 
 // lms returns the load management state, applying defaults on first use

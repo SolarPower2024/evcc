@@ -54,6 +54,7 @@ func TestRestoreCustomAfterRestart(t *testing.T) {
 	require.NoError(t, a.SetPeakFollow(true))
 	require.NoError(t, a.SetPeakTariff("price", 40))
 	require.NoError(t, a.SetLogFile(logstash.FileConfig{Enabled: true, Level: "info", Days: 30}))
+	require.NoError(t, a.SetSnowCover(true))
 
 	// set through Home Assistant in the ui, stored as names
 	settings.SetString(keys.PeakShavingEntity, "input_number.peak")
@@ -91,4 +92,5 @@ func TestRestoreCustomAfterRestart(t *testing.T) {
 	assert.True(t, b.LogFile().Enabled)
 	assert.Equal(t, "info", b.LogFile().Level)
 	assert.Equal(t, 30, b.LogFile().Days)
+	assert.True(t, b.GetSnowCover())
 }
