@@ -18,6 +18,7 @@ import (
 	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/site"
 	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/logstash"
 	"github.com/gorilla/mux"
 )
 
@@ -101,6 +102,10 @@ func customSiteRoutes(site site.API) map[string]route {
 		"feedineegentitydelete": {"DELETE", "/feedineegentity", stringHandler(site.SetFeedInEegEntity, site.GetFeedInEegEntity)},
 		"feedinsplit":           {"GET", "/feedinsplit", feedInSplitHandler},
 
+		// log in daily files, see core/site_logfile.go
+		"logfile":    {"GET", "/logfile", logFileHandler(site)},
+		"logfileset": {"POST", "/logfile", logFileSetHandler(site)},
+
 		// peak shaving, see core/site_peakshaving.go
 		"peakshaving":                   {"POST", "/peakshaving/{value:[01truefalse]+}", boolHandler(site.SetPeakShaving, site.GetPeakShaving)},
 		"peakshavinglimit":              {"POST", "/peakshavinglimit/{value:[0-9.]+}", floatHandler(site.SetPeakShavingLimit, site.GetPeakShavingLimit)},
@@ -117,6 +122,31 @@ func customSiteRoutes(site site.API) map[string]route {
 		"peakshavingchargepower":        {"POST", "/peakshavingchargepower/{value:[0-9.]+}", floatHandler(site.SetPeakShavingChargePower, site.GetPeakShavingChargePower)},
 		"peakshavingcircuit":            {"POST", "/peakshavingcircuit/{value:" + namePattern + "}", stringHandler(site.SetPeakShavingCircuit, site.GetPeakShavingCircuit)},
 		"peakshavingcircuitdelete":      {"DELETE", "/peakshavingcircuit", stringHandler(site.SetPeakShavingCircuit, site.GetPeakShavingCircuit)},
+	}
+}
+
+// logFileHandler returns the log file setting and the state of the files
+func logFileHandler(site site.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		jsonWrite(w, site.LogFile())
+	}
+}
+
+// logFileSetHandler saves the log file setting sent as json and answers like logFileHandler
+func logFileSetHandler(site site.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var cfg logstash.FileConfig
+		err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&cfg)
+		if err == nil {
+			err = site.SetLogFile(cfg)
+		}
+
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		jsonWrite(w, site.LogFile())
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
+	"github.com/evcc-io/evcc/util/logstash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,6 +23,8 @@ func TestRestoreCustomAfterRestart(t *testing.T) {
 	keepSettings(t)
 	config.Reset()
 	t.Cleanup(config.Reset)
+
+	useLogFileDir(t)
 
 	main, err := circuit.New(util.NewLogger("test"), "main", 0, 10000, nil, 0)
 	require.NoError(t, err)
@@ -50,6 +53,7 @@ func TestRestoreCustomAfterRestart(t *testing.T) {
 	require.NoError(t, a.SetPeakFollowBuffer(1000))
 	require.NoError(t, a.SetPeakFollow(true))
 	require.NoError(t, a.SetPeakTariff("price", 40))
+	require.NoError(t, a.SetLogFile(logstash.FileConfig{Enabled: true, Level: "info", Days: 30}))
 
 	// set through Home Assistant in the ui, stored as names
 	settings.SetString(keys.PeakShavingEntity, "input_number.peak")
@@ -84,4 +88,7 @@ func TestRestoreCustomAfterRestart(t *testing.T) {
 	assert.Equal(t, "input_number.charge", b.GetPeakShavingChargeEntity())
 	assert.Equal(t, "sensor.grid_import", b.GetPeakShavingEnergyEntity())
 	assert.Equal(t, "sensor.eeg_export", b.GetFeedInEegEntity())
+	assert.True(t, b.LogFile().Enabled)
+	assert.Equal(t, "info", b.LogFile().Level)
+	assert.Equal(t, 30, b.LogFile().Days)
 }
