@@ -132,9 +132,9 @@
       "paths": ["util/log.go", "util/logstash/"]
     },
     {
-      "name": "Schnee auf PV (Schalter, Optimizer ohne PV-Ertrag)",
-      "files": ["core/site_snow.go", "assets/js/components/Forecast/SnowCoverSwitch.vue"],
-      "keywords": ["snow", "Snow", "Schnee", "snowCover"],
+      "name": "Schnee auf PV (Schalter, Optimizer ohne PV-Ertrag, Erkennung aus dem Wetter)",
+      "files": ["core/site_snow.go", "core/site_snow_auto.go", "assets/js/components/Forecast/SnowCoverSwitch.vue"],
+      "keywords": ["snow", "Snow", "Schnee", "snowCover", "snowfall"],
       "paths": ["core/site_tariffs.go", "core/site_optimizer.go", "assets/js/views/Forecast.vue"]
     },
     {

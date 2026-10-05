@@ -504,6 +504,48 @@ POST /api/snowcover/{true|false}
 State `snowCover`. See `core/site_snow.go`,
 `assets/js/components/Forecast/SnowCoverSwitch.vue`.
 
+**Detect snow automatically** (*Detect snow automatically* under the chart, off by
+default, `core/site_snow_auto.go`): the first snow day is not caught by the
+measurement, the plan for it still runs with the full forecast. With the setting
+on, the weather is fetched from Open-Meteo every 30 minutes (own request,
+`minutely_15=snowfall,temperature_2m` and the sunrises, past day plus two forecast
+days) for the location of the first Open-Meteo solar forecast set up in the ui
+(template `open-meteo`, `lat`/`lon` read from the stored tariff configuration;
+the template stays as it is, solar forecasts from a yaml file are not looked at).
+Without such a forecast the switch is not shown (`snowAutoAvailable`) and nothing
+is fetched.
+
+- Snow counts when the quarter-hour values at an air temperature of +1 °C or
+  below add up to 1 cm or more within 24 hours (the most snowy 24 hours of the
+  window). The window is the last 24 hours up to the next sunrise: snow falling
+  tonight turns the switch on right away (the plan for tomorrow runs without
+  solar yield; at night there is none anyway), snow of tomorrow afternoon is
+  looked at again after the sunrise. Without a sunrise in the data it is the next
+  24 hours. The ground snow depth is not looked at, it says little about the roof.
+- The switch goes on at once, from now on, shown as *automatic* (`snowCoverAuto`)
+  and logged at INFO (`pv snow cover on: ...`). Turning off stays with the
+  measurement above or by hand; thawing is not predicted, in Tirol one warm day or
+  several are needed depending on the amount. The first free day is therefore
+  planned pessimistically until 1 h at 70 % is measured.
+- Snow that was counted (`snowSeen`, the end of the last snowy quarter hour,
+  saved) does not count again: not after the measurement turned the switch off,
+  not after the user did by hand. Only snow after it can turn the switch on
+  again. It is also remembered while the switch is already on (by hand or
+  automatic). When the setting is turned on while snow lies, that snow turns the
+  switch on once.
+- A failed request leaves the switch as it is: WARN once per series of failures
+  (`snow detection: weather data not available`), the next attempts after 30
+  minutes are logged at DEBUG, INFO when the data is back. The fetch runs in the
+  background, the control cycle does not wait for it.
+- Turning the setting on or off fetches at the next cycle at once.
+
+```
+POST /api/snowauto/{true|false}
+```
+
+State `snowAuto` (setting), `snowCoverAuto`, `snowAutoAvailable`. Saved:
+`snowAuto`, `snowCoverAuto`, `snowSeen`. See `core/site_snow_auto.go`.
+
 ---
 
 ## Rules
@@ -573,7 +615,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
 | EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
 | log file | `util/logstash/file_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
-| snow on pv | `core/site_snow.go`, `assets/js/components/Forecast/SnowCoverSwitch.vue` |
+| snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
 | ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `FeedInEegSummary`, `PhaseSwitchFields`) |
@@ -621,6 +663,13 @@ unused:
 - `TestSnowCoverOptimizerInput`: the solar series is 0 with the switch on and
   the request unchanged with it off; it relies on evcc building `Ft` as one
   value per slot before `applyLmOptimizerInputs`.
+- `TestSnowFall`, `TestSnowAutoRecordedForecast`, `TestSnowAutoTurnsOn`,
+  `TestSnowAutoWhileOn`, `TestSnowAutoWithoutLocation`, `TestSnowAutoFailure`,
+  `TestSnowAutoInterval`, `TestSnowAutoRestore`, `TestSnowCoordinates`: the rule
+  on made-up and recorded weather (`core/testdata`, Innsbruck, 24 to 26 January
+  2026), the location from the stored tariffs, no request without the setting or
+  location, a failed request, the 30 minute interval. No network in the tests, a
+  local server answers.
 - `TestCustomRoutesMatch`: every api route reaches its handler; a new route
   needs a sample request there.
 
