@@ -7,7 +7,6 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"slices"
@@ -18,7 +17,6 @@ import (
 	"github.com/evcc-io/evcc/core/lm/profile"
 	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/site"
-	"github.com/evcc-io/evcc/db"
 	"github.com/evcc-io/evcc/util"
 	"github.com/gorilla/mux"
 )
@@ -332,21 +330,9 @@ func gridChargeOnceCancelHandler(site site.API) http.HandlerFunc {
 // feedInSplitHandler returns the export split by feed-in tariff in the
 // buckets of the energy history
 func feedInSplitHandler(w http.ResponseWriter, r *http.Request) {
-	if db.Instance == nil {
-		jsonError(w, http.StatusBadRequest, errors.New("database offline"))
+	from, to, ok := historyRange(w, r)
+	if !ok {
 		return
-	}
-
-	var from, to time.Time
-	for name, dst := range map[string]*time.Time{"from": &from, "to": &to} {
-		if v := r.URL.Query().Get(name); v != "" {
-			t, err := time.Parse(time.RFC3339, v)
-			if err != nil {
-				jsonError(w, http.StatusBadRequest, fmt.Errorf("invalid '%s' parameter", name))
-				return
-			}
-			*dst = t
-		}
 	}
 
 	if to.IsZero() {
