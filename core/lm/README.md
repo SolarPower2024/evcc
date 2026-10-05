@@ -27,6 +27,7 @@ Part 1 describes the features, part 2 how the fork is kept maintainable.
 15. [Second feed-in tariff (EEG)](#15-second-feed-in-tariff-eeg)
 16. [Optimizer inputs](#16-optimizer-inputs)
 17. [Advanced settings](#17-advanced-settings)
+18. [Log file](#18-log-file)
 
 **Part 2: maintenance**
 
@@ -423,6 +424,47 @@ values are not stored, so a changed default applies.
 Also there: the load management circuit ([7](#7-load-management-circuit-and-switch))
 and evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
 
+## 18. Log file
+
+evcc keeps its log in a ring buffer of 10,000 lines for the log page, which at
+debug is an hour or two. *Log page → Log-Datei* (off by default, nothing is
+written and no folder created until it is switched on) writes the same stream
+(all areas and levels, already redacted) to `evcc-YYYY-MM-DD.log` in the local
+date. The level (error to trace, default debug) is the file's own and
+independent of the console level, so the console or the add-on log can stay on
+info while the file gets debug.
+
+- the folder is fixed, shown in the dialog only: `/config/logs` where `/config`
+  is a folder (the add-on, readable through its Samba share under
+  `addon_configs`), else `logs` next to the database file
+- switching on writes the log buffer into the file first (so the lines from
+  before the settings were loaded are in), then the new lines follow, both under
+  the buffer's lock: no gap, no line twice. Each file and each switching on starts
+  with `[logfil] INFO <time> evcc <version>, level <level>`
+- the first line of a new day switches the file, the day before is compressed in
+  the background (`.log.gz`, streaming) and the original deleted; files left
+  unpacked by a stop are packed the same way
+- files older than the retention (1-90 days, default 14) are deleted when switching
+  on and at each new day. Over 1 GB for all files together the oldest are deleted
+  with a warning, today's never
+- written buffered (64 KB) and flushed every 2 s, when switching off and at the
+  end of `runRoot`: a power cut loses at most 2 s
+- a folder that cannot be created or a full disk switches the file off for this
+  run: logged once as an error (console and log page) and shown in the dialog. The
+  setting stays on, the next start tries again. The control loop never waits for
+  the file
+
+```
+GET  /api/logfile   {enabled, level, days, dir, files, size, error}
+POST /api/logfile   json body {enabled, level, days}, answers like GET
+```
+
+The output sits between the loggers and the buffer (`logstash.Output`, hook in
+`util/log.go`), the buffer and the log page stay as they are. evcc PR 32018 (open)
+changes the logger underneath `util/log.go`; then the hook has to be set again and
+checked whether evcc brings a file output itself. See `util/logstash/file_custom.go`,
+`core/site_logfile.go`.
+
 ---
 
 ## Rules
@@ -490,6 +532,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
 | EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
+| log file | `util/logstash/file_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
 | ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `FeedInEegSummary`, `PhaseSwitchFields`) |
