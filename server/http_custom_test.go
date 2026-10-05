@@ -120,6 +120,7 @@ var customRouteSamples = map[string]string{
 	"logfile":                       "/logfile",
 	"logfileset":                    "/logfile",
 	"snowcover":                     "/snowcover/true",
+	"snowauto":                      "/snowauto/true",
 	"peakshaving":                   "/peakshaving/false",
 	"peakshavinglimit":              "/peakshavinglimit/7000",
 	"peakfollow":                    "/peakfollow/true",
@@ -183,6 +184,7 @@ func TestCustomRoutesMatch(t *testing.T) {
 	assert.Equal(t, 4000.0, site.GetPeakShavingChargePower())
 	assert.False(t, site.GetLmEnabled())
 	assert.True(t, site.GetSnowCover())
+	assert.True(t, site.GetSnowAuto())
 }
 
 func must[T any](v T, err error) T {
