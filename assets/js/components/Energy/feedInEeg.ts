@@ -88,15 +88,13 @@ export function splitGridSeries(
   const standard = grid.map((s) => ({
     ...s,
     title: gridTitle,
-    data: s.data.map(
-      (slot): HistorySlot => ({
-        ...slot,
-        returnEnergy: Math.max(
-          0,
-          slot.returnEnergy - (eeg.get(bucketKey(slot.start, aggregate)) || 0)
-        ),
-      })
-    ),
+    data: s.data.map((slot): HistorySlot => ({
+      ...slot,
+      returnEnergy: Math.max(
+        0,
+        slot.returnEnergy - (eeg.get(bucketKey(slot.start, aggregate)) || 0)
+      ),
+    })),
   }));
 
   const color = eegColor();
