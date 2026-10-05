@@ -219,14 +219,94 @@ func TestFileDumpsBuffer(t *testing.T) {
 
 	assert.Equal(t, header+"debug\n"+lDebug+"\n"+lInfo+"\n"+lError+"\n"+lWarn+"\n", f.read(t, "evcc-2026-10-05.log"))
 
-	// switched on again: appended, with a header of its own
+	// switched on again: appended, with a header of its own, the lines already in the file not again
 	_, err = f.setFile(f.config("error", 14))
 	require.NoError(t, err)
 	f.close()
 
 	got := f.read(t, "evcc-2026-10-05.log")
 	assert.Equal(t, 2, strings.Count(got, "[logfil] INFO"))
-	assert.True(t, strings.HasSuffix(got, header+"error\n"+lError+"\n"))
+	assert.Equal(t, 1, strings.Count(got, lError))
+	assert.True(t, strings.HasSuffix(got, lWarn+"\n"+header+"error\n"))
+}
+
+// TestFileSettingChangeNoDuplicate: changing a setting while the file is on
+// reopens it without writing the buffer a second time
+func TestFileSettingChangeNoDuplicate(t *testing.T) {
+	f := newFileTest(t)
+
+	_, err := f.setFile(f.config("debug", 14))
+	require.NoError(t, err)
+	f.write(lDebug, lInfo)
+
+	_, err = f.setFile(f.config("info", 30))
+	require.NoError(t, err)
+	f.write(lWarn)
+	f.close()
+
+	assert.Equal(t, header+"debug\n"+lDebug+"\n"+lInfo+"\n"+header+"info\n"+lWarn+"\n", f.read(t, "evcc-2026-10-05.log"))
+}
+
+// TestFileReenableWritesMissed: lines that came while the file was off are
+// written on switching on again, those already in the file are not
+func TestFileReenableWritesMissed(t *testing.T) {
+	f := newFileTest(t)
+
+	_, err := f.setFile(f.config("debug", 14))
+	require.NoError(t, err)
+	f.write(lDebug)
+
+	off := f.config("debug", 14)
+	off.Enabled = false
+	_, err = f.setFile(off)
+	require.NoError(t, err)
+	f.write(lInfo)
+
+	_, err = f.setFile(f.config("debug", 14))
+	require.NoError(t, err)
+	f.close()
+
+	assert.Equal(t, header+"debug\n"+lDebug+"\n"+header+"debug\n"+lInfo+"\n", f.read(t, "evcc-2026-10-05.log"))
+}
+
+// TestFileFlushesWarnAtOnce: warnings and errors are on disk right away, the
+// lines before a crash are not lost in the buffer
+func TestFileFlushesWarnAtOnce(t *testing.T) {
+	f := newFileTest(t)
+
+	_, err := f.setFile(f.config("debug", 14))
+	require.NoError(t, err)
+
+	f.write(lInfo)
+	assert.NotContains(t, f.read(t, "evcc-2026-10-05.log"), lInfo, "info waits for the flush interval")
+
+	f.write(lWarn)
+	got := f.read(t, "evcc-2026-10-05.log")
+	assert.Contains(t, got, lInfo+"\n"+lWarn+"\n")
+
+	f.write(lError)
+	assert.Contains(t, f.read(t, "evcc-2026-10-05.log"), lError)
+}
+
+// TestWriteWithIsWrite: writeWith stores exactly what evcc's Write stores, so
+// a change of Write in an evcc update shows up here
+func TestWriteWithIsWrite(t *testing.T) {
+	lines := []string{lTrace, lDebug, "[cache ] DEBUG dropped", lInfo, "no area at all", lWarn, lError}
+
+	a, b := New(5), New(5)
+	for _, s := range lines {
+		na, ea := a.Write([]byte(s))
+		nb, eb := b.writeWith([]byte(s), func(entry) {})
+		assert.Equal(t, na, nb, s)
+		assert.Equal(t, ea, eb, s)
+	}
+
+	for _, level := range []jww.Threshold{jww.LevelTrace, jww.LevelDebug, jww.LevelError} {
+		assert.Equal(t, a.All(nil, level, 0), b.All(nil, level, 0))
+	}
+	assert.Equal(t, a.Areas(), b.Areas())
+	assert.Equal(t, a.Size(), b.Size())
+	assert.Equal(t, a.seq, b.seq)
 }
 
 // TestFileDumpNoGapNoDuplicate: lines written by other goroutines while the
@@ -308,8 +388,8 @@ func TestFileRetention(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(f.dir, name), []byte(content), 0o644))
 	}
 	touch("evcc-2026-09-20.log.gz", "old")  // 15 days: deleted
-	touch("evcc-2026-09-29.log.gz", "old")  // 6 days: kept
-	touch("evcc-2026-09-28.log", "old")     // 7 days: kept
+	touch("evcc-2026-09-29.log.gz", "old")  // 7th day counting today: kept
+	touch("evcc-2026-09-28.log", "old")     // 8th day: deleted
 	touch("evcc-2026-10-03.log", "left\n")  // not packed yet
 	touch("evcc-2026-10-01.log.gz.tmp", "") // stopped while packing
 	touch("notes.txt", "not ours")
@@ -320,7 +400,7 @@ func TestFileRetention(t *testing.T) {
 	f.waitMaintain()
 
 	assert.ElementsMatch(t, []string{
-		"evcc-2026-09-29.log.gz", "evcc-2026-09-28.log.gz", "evcc-2026-10-03.log.gz", "evcc-2026-10-05.log", "notes.txt", "evcc-x.log",
+		"evcc-2026-09-29.log.gz", "evcc-2026-10-03.log.gz", "evcc-2026-10-05.log", "notes.txt", "evcc-x.log",
 	}, f.names(t))
 	assert.Equal(t, "left\n", readGz(t, filepath.Join(f.dir, "evcc-2026-10-03.log.gz")))
 
@@ -329,8 +409,8 @@ func TestFileRetention(t *testing.T) {
 	f.write(lInfo)
 	f.waitMaintain()
 
-	assert.NotContains(t, f.names(t), "evcc-2026-09-28.log.gz")
-	assert.Contains(t, f.names(t), "evcc-2026-09-29.log.gz")
+	assert.NotContains(t, f.names(t), "evcc-2026-09-29.log.gz")
+	assert.Contains(t, f.names(t), "evcc-2026-10-03.log.gz")
 	assert.Contains(t, f.names(t), "evcc-2026-10-05.log.gz")
 }
 
@@ -359,7 +439,8 @@ func TestFileSizeLimit(t *testing.T) {
 	}
 }
 
-// TestFileSizeLimitKeepsToday: today's file is never deleted, however large
+// TestFileSizeLimitKeepsToday: today's file is never deleted; once it alone
+// reaches the limit, writing pauses with a note until the next day
 func TestFileSizeLimitKeepsToday(t *testing.T) {
 	f := newFileTest(t)
 	f.sizeLimit = 100
@@ -368,14 +449,48 @@ func TestFileSizeLimitKeepsToday(t *testing.T) {
 	require.NoError(t, err)
 	f.waitMaintain()
 
-	f.write("[site  ] INFO " + strings.Repeat("x", 300))
+	big := "[site  ] INFO " + strings.Repeat("x", 300)
+	f.write(big, lError)
 	f.l.mu.RLock()
 	f.sink.flush()
 	f.l.mu.RUnlock()
 	f.sink.maintain()
 
 	assert.Equal(t, []string{"evcc-2026-10-05.log"}, f.names(t))
-	assert.Empty(t, f.logged())
+	got := f.read(t, "evcc-2026-10-05.log")
+	assert.Contains(t, got, big+"\n[logfil] WARN 2026/10/05 12:00:00 log file reached 0 MB, paused until the next day\n")
+	assert.NotContains(t, got, lError, "paused")
+	assert.Eventually(t, func() bool { return len(f.logged()) == 1 }, time.Second, time.Millisecond)
+
+	// the next day writes again
+	f.setTime(time.Date(2026, 10, 6, 0, 0, 1, 0, time.Local))
+	f.write(lInfo)
+	f.waitMaintain()
+	f.close()
+	assert.Contains(t, f.read(t, "evcc-2026-10-06.log"), lInfo)
+}
+
+// TestFileSizeLimitDuringDay: today's file growing over the limit removes the
+// oldest files right away, not only at the next day
+func TestFileSizeLimitDuringDay(t *testing.T) {
+	f := newFileTest(t)
+	f.sizeLimit = 300
+	require.NoError(t, os.MkdirAll(f.dir, 0o755))
+
+	for _, d := range []string{"01", "02", "03"} {
+		require.NoError(t, os.WriteFile(filepath.Join(f.dir, "evcc-2026-10-"+d+".log.gz"), make([]byte, 60), 0o644))
+	}
+
+	_, err := f.setFile(f.config("debug", 14))
+	require.NoError(t, err)
+	f.waitMaintain()
+	assert.Len(t, f.names(t), 4, "180 and the header within 300")
+
+	// header 58 + 100 + 180 over 300: the oldest goes
+	f.write("[site  ] INFO " + strings.Repeat("x", 85))
+	f.waitMaintain()
+
+	assert.ElementsMatch(t, []string{"evcc-2026-10-02.log.gz", "evcc-2026-10-03.log.gz", "evcc-2026-10-05.log"}, f.names(t))
 }
 
 // TestFileSizeLimitKeepsNewer: only as many of the oldest go as needed

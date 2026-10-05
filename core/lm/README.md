@@ -439,20 +439,23 @@ info while the file gets debug.
   `addon_configs`), else `logs` next to the database file
 - switching on writes the log buffer into the file first (so the lines from
   before the settings were loaded are in), then the new lines follow, both under
-  the buffer's lock: no gap, no line twice. Each file and each switching on starts
-  with `[logfil] INFO <time> evcc <version>, level <level>`
+  the buffer's lock: no gap, no line twice. Switching on again or changing a
+  setting writes only the lines the file does not have yet. Each file and each
+  switching on starts with `[logfil] INFO <time> evcc <version>, level <level>`
 - the first line of a new day switches the file, the day before is compressed in
   the background (`.log.gz`, streaming) and the original deleted; files left
   unpacked by a stop are packed the same way
-- files older than the retention (1-90 days, default 14) are deleted when switching
-  on and at each new day. Over 1 GB for all files together the oldest are deleted
-  with a warning, today's never
-- written buffered (64 KB) and flushed every 2 s, when switching off and at the
-  end of `runRoot`: a power cut loses at most 2 s
+- the retention (1-90 days, default 14) counts today: older files are deleted
+  when switching on and at each new day. Over 1 GB for all files together the
+  oldest are deleted with a warning, also while today's file grows; today's file
+  is never deleted, if it alone reaches 1 GB it pauses with a note until the next day
+- written buffered (64 KB) and flushed every 2 s, at once for warnings and errors,
+  when switching off and at the end of `runRoot`: a power cut or a kill loses at
+  most 2 s of info and debug lines
 - a folder that cannot be created or a full disk switches the file off for this
   run: logged once as an error (console and log page) and shown in the dialog. The
-  setting stays on, the next start tries again. The control loop never waits for
-  the file
+  setting stays on, the next start tries again. A failing file never stops
+  the control loop
 
 ```
 GET  /api/logfile   {enabled, level, days, dir, files, size, error}

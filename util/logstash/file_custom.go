@@ -7,7 +7,8 @@ package logstash
 // <dir>/evcc-YYYY-MM-DD.log from a level of its own, independent of the console
 // level. The first line of a new day switches the file, the day before is
 // compressed in the background, older files are deleted by age and by a fixed
-// size limit for the whole folder.
+// size limit for the whole folder, also while today's file grows. Warnings and
+// errors are written out at once, the rest every 2 s.
 //
 // Output sits between the loggers and the ring buffer. It hands every line
 // to the buffer unchanged and, under the buffer's lock, to the file. Switching
@@ -28,6 +29,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	jww "github.com/spf13/jwalterweatherman"
@@ -125,6 +127,9 @@ type tee struct {
 	cfg  FileConfig
 	sink *fileSink
 	err  error // why the file is off, kept until the next setting
+	// seq of the last line handed to a file: switching on again or changing a
+	// setting dumps only the buffered lines after it, none twice
+	written uint64
 }
 
 var _ io.Writer = (*tee)(nil)
@@ -138,12 +143,13 @@ func (t *tee) Write(p []byte) (int, error) {
 }
 
 // toFile runs under the lock of the log buffer
-func (t *tee) toFile(e element) {
+func (t *tee) toFile(e entry) {
 	if t.sink == nil {
 		return
 	}
 
-	t.sink.write(e)
+	t.sink.write(e.text)
+	t.written = e.seq
 
 	if err := t.sink.failure(); err != nil {
 		t.fail(err)
@@ -184,7 +190,12 @@ func (t *tee) setFile(cfg FileConfig) (FileState, error) {
 		s, err := newFileSink(cfg, t.now, t.sizeLimit, t.flushEvery)
 		if err == nil {
 			// the buffer first, then the lines that follow, nothing in between
-			t.l.merged(func(e entry) { s.write(e.text) })
+			t.l.merged(func(e entry) {
+				if e.seq > t.written {
+					s.write(e.text)
+					t.written = e.seq
+				}
+			})
 			s.flush() // the folder shows the file as it is switched on
 			err = s.failure()
 		}
@@ -248,8 +259,9 @@ func (t *tee) close() {
 	}
 }
 
-// writeWith is Write, additionally handing the stored line to fn while the lock is held
-func (l *logger) writeWith(p []byte, fn func(element)) (int, error) {
+// writeWith is Write, additionally handing the stored entry to fn while the lock
+// is held. It repeats Write's body, TestWriteWithIsWrite pins that both store the same.
+func (l *logger) writeWith(p []byte, fn func(entry)) (int, error) {
 	if bytes.HasPrefix(p, []byte("[cache ]")) {
 		return len(p), nil
 	}
@@ -261,13 +273,14 @@ func (l *logger) writeWith(p []byte, fn func(element)) (int, error) {
 	defer l.mu.Unlock()
 
 	l.seq++
+	en := entry{l.seq, e}
 	if level == jww.LevelTrace {
-		l.trace.add(entry{l.seq, e})
+		l.trace.add(en)
 	} else {
-		l.other.add(entry{l.seq, e})
+		l.other.add(en)
 	}
 
-	fn(e)
+	fn(en)
 
 	return len(p), nil
 }
@@ -299,11 +312,16 @@ type fileSink struct {
 	now          func() time.Time
 	log          func(jww.Threshold, string)
 
-	mu  sync.Mutex
-	f   *os.File
-	w   *bufio.Writer
-	day string
-	err error
+	mu   sync.Mutex
+	f    *os.File
+	w    *bufio.Writer
+	next time.Time // start of the next day, the first line from then switches the file
+	full bool      // today's file alone reached the size limit, paused until the next day
+	err  error
+
+	bytes   atomic.Int64 // size of today's file including the buffer
+	others  atomic.Int64 // size of the other files, as the last clean-up left them
+	pruning atomic.Bool  // a clean-up for the size limit is running
 
 	flushEvery time.Duration
 	stopC      chan struct{}
@@ -359,7 +377,14 @@ func (s *fileSink) open() error {
 		return err
 	}
 
-	s.f, s.w, s.day = f, bufio.NewWriterSize(f, fileBufferSize), day
+	var size int64
+	if fi, err := f.Stat(); err == nil {
+		size = fi.Size()
+	}
+
+	s.f, s.w, s.full = f, bufio.NewWriterSize(f, fileBufferSize), false
+	s.next = time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+	s.bytes.Store(size)
 	s.line(fmt.Sprintf("[logfil] INFO %s evcc %s, level %s", now.Format(timeLayout), s.version, s.levelName))
 
 	return s.err
@@ -371,7 +396,9 @@ func (s *fileSink) line(text string) {
 		text += "\n"
 	}
 
-	if _, err := s.w.WriteString(text); err != nil {
+	n, err := s.w.WriteString(text)
+	s.bytes.Add(int64(n))
+	if err != nil {
 		s.fail(err)
 	}
 }
@@ -389,7 +416,8 @@ func (s *fileSink) fail(err error) {
 
 // write adds a line from the level on, the first line of a new day switches the file
 func (s *fileSink) write(e element) {
-	if _, level := e.areaLevel(); level < s.level {
+	_, level := e.areaLevel()
+	if level < s.level {
 		return
 	}
 
@@ -400,14 +428,48 @@ func (s *fileSink) write(e element) {
 		return
 	}
 
-	if s.now().Format(dayLayout) != s.day {
+	if !s.now().Before(s.next) {
 		s.rotate()
 		if s.w == nil {
 			return
 		}
 	}
 
+	if s.full {
+		return
+	}
+
 	s.line(string(e))
+	s.limit()
+
+	// warnings and errors at once: the lines before a crash are the ones that count
+	if level >= jww.LevelWarn && s.w != nil {
+		if err := s.w.Flush(); err != nil {
+			s.fail(err)
+		}
+	}
+}
+
+// limit keeps the folder within the size limit while today's file grows, the caller holds s.mu
+func (s *fileSink) limit() {
+	if s.w == nil || s.bytes.Load()+s.others.Load() <= s.sizeLimit {
+		return
+	}
+
+	if s.bytes.Load() < s.sizeLimit {
+		// the older files make room, one clean-up at a time
+		if s.pruning.CompareAndSwap(false, true) {
+			s.maintainAsync()
+		}
+		return
+	}
+
+	s.full = true
+	msg := fmt.Sprintf("log file reached %d MB, paused until the next day", s.sizeLimit>>20)
+	s.line(fmt.Sprintf("[logfil] WARN %s %s", s.now().Format(timeLayout), msg))
+	if log := s.log; log != nil {
+		go log(jww.LevelWarn, msg) // the caller holds the lock of the log buffer
+	}
 }
 
 // rotate closes the file of the day before and opens the next, the caller holds s.mu
@@ -568,19 +630,31 @@ func (s *fileSink) maintain() {
 		}
 	}
 
-	var total int64
-	files := listFiles(s.dir)
-	for _, f := range files {
-		if f.day.Before(today.AddDate(0, 0, -s.days)) {
+	// the retention counts today: 14 days are today and the 13 before
+	first := today.AddDate(0, 0, 1-s.days)
+
+	var kept []logFile
+	for _, f := range listFiles(s.dir) {
+		if f.day.Before(first) {
 			if err := os.Remove(filepath.Join(s.dir, f.name)); err != nil {
 				s.report(jww.LevelWarn, fmt.Sprintf("log file %s not deleted: %v", f.name, err))
+				kept = append(kept, f)
 			}
 			continue
 		}
-		total += f.size
+		kept = append(kept, f)
 	}
 
-	for _, f := range listFiles(s.dir) {
+	// today's file as written, the disk lags by the buffer
+	var total, others int64
+	for _, f := range kept {
+		if f.day.Before(today) {
+			others += f.size
+		}
+	}
+	total = others + s.bytes.Load()
+
+	for _, f := range kept {
 		if total <= s.sizeLimit || !f.day.Before(today) {
 			break
 		}
@@ -591,8 +665,12 @@ func (s *fileSink) maintain() {
 		}
 
 		total -= f.size
+		others -= f.size
 		s.report(jww.LevelWarn, fmt.Sprintf("log files over %d MB, deleted %s", s.sizeLimit>>20, f.name))
 	}
+
+	s.others.Store(others)
+	s.pruning.Store(false)
 }
 
 func (s *fileSink) report(level jww.Threshold, msg string) {
