@@ -526,7 +526,9 @@ is fetched.
   and logged at INFO (`pv snow cover on: ...`). Turning off stays with the
   measurement above or by hand; thawing is not predicted, in Tirol one warm day or
   several are needed depending on the amount. The first free day is therefore
-  planned pessimistically until 1 h at 70 % is measured.
+  planned pessimistically until 1 h at 70 % is measured. While counted snow is
+  still to come (e.g. tonight's snow found on a sunny afternoon), the measurement
+  does not turn the switch off: free modules now say nothing about tomorrow.
 - Snow that was counted (`snowSeen`, the end of the last snowy quarter hour,
   saved) does not count again: not after the measurement turned the switch off,
   not after the user did by hand. Only snow after it can turn the switch on

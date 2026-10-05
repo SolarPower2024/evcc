@@ -197,6 +197,11 @@ func (site *Site) updateSnowCover(now time.Time) {
 		s.mu.Unlock()
 		return
 	}
+	// snow the detection counted is still to come, e.g. tonight's snow found on a
+	// sunny afternoon: the free modules of now say nothing about tomorrow
+	if off && s.seen.After(now) {
+		off, count = false, 0
+	}
 	s.clear, s.slot = count, slot
 	s.mu.Unlock()
 

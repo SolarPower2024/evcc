@@ -176,6 +176,55 @@ func TestSnowCoverAutoOff(t *testing.T) {
 	assert.Zero(t, count())
 }
 
+// TestSnowCoverStaysForComingSnow: snow the detection counted that is still to
+// come keeps the switch on, however free the modules are now
+func TestSnowCoverStaysForComingSnow(t *testing.T) {
+	keepSettings(t)
+
+	clk := clock.NewMock()
+	clk.Set(time.Date(2026, 1, 10, 13, 0, 0, 0, time.UTC))
+
+	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	t.Cleanup(func() { db.Instance = nil })
+	require.NoError(t, metrics.SetupSchema())
+
+	pv, err := metrics.NewCollector(metrics.PV, "pv", "", metrics.WithClock(clk))
+	require.NoError(t, err)
+	fc, err := metrics.NewCollector(metrics.Forecast, metrics.Forecast, "", metrics.WithClock(clk))
+	require.NoError(t, err)
+
+	site := &Site{
+		log:        util.NewLogger("test"),
+		valueChan:  make(chan util.Param, 64),
+		collectors: map[string]*metrics.Collector{"pv": pv, metrics.Forecast: fc},
+	}
+	site.Meters.PVMetersRef = []string{"pv"}
+
+	// sunny afternoon, snow forecast until 14:30
+	site.setSnowCover(true, true)
+	site.snow().seen = time.Date(2026, 1, 10, 14, 30, 0, 0, time.UTC)
+
+	free := func() {
+		require.NoError(t, pv.SetEnergy(0.3))
+		require.NoError(t, fc.SetEnergy(0.3))
+		clk.Add(15 * time.Minute)
+		require.NoError(t, pv.SetEnergy(0))
+		require.NoError(t, fc.SetEnergy(0))
+		site.updateSnowCover(clk.Now())
+	}
+
+	for range 4 {
+		free() // 13:00 ... 13:45
+	}
+	assert.True(t, site.GetSnowCover(), "snow still to come")
+	assert.Zero(t, site.snow().clear)
+
+	for range 4 {
+		free() // 14:00 ... 14:45, the snow ends at 14:30
+	}
+	assert.False(t, site.GetSnowCover(), "off after four free slots once the snow is past")
+}
+
 // TestSnowCoverNeedsMeterAndForecast: without a pv meter or forecast collector nothing is rated
 func TestSnowCoverNeedsMeterAndForecast(t *testing.T) {
 	keepSettings(t)
