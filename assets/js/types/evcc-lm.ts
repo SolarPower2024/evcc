@@ -154,6 +154,12 @@ export interface LmStatus {
 export interface LmState {
   /** Snow on pv: the optimizer plans without solar yield, see core/site_snow.go. */
   snowCover?: boolean;
+  /** Snow on pv was turned on by the detection from the weather, see core/site_snow_auto.go. */
+  snowCoverAuto?: boolean;
+  /** Snow on pv is detected from the weather. */
+  snowAuto?: boolean;
+  /** An Open-Meteo solar forecast gives the location for the detection. */
+  snowAutoAvailable?: boolean;
   /** Soc-based grid charging of the home battery is enabled. */
   batterySocGridCharge?: boolean;
   /** Soc in % at or below which soc-based grid charging starts. */
