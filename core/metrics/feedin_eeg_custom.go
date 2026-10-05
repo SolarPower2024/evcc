@@ -75,22 +75,6 @@ func splitSlot(export float64, eeg *float64) (float64, float64) {
 	return e, max(0, export-e)
 }
 
-// bucketStart is the start of the bucket holding ts in local time, like the
-// energy history's buckets
-func bucketStart(ts time.Time, aggregate string) time.Time {
-	ts = ts.Local()
-	switch aggregate {
-	case "hour":
-		return time.Date(ts.Year(), ts.Month(), ts.Day(), ts.Hour(), 0, 0, 0, time.Local)
-	case "day":
-		return time.Date(ts.Year(), ts.Month(), ts.Day(), 0, 0, 0, 0, time.Local)
-	case "month":
-		return time.Date(ts.Year(), ts.Month(), 1, 0, 0, 0, 0, time.Local)
-	default:
-		return ts
-	}
-}
-
 // QueryFeedInSplit returns the export in [from,to) per bucket of the energy
 // history (15m, hour, day, month), oldest first. Buckets without export and
 // without EEG energy are left out.
@@ -120,7 +104,7 @@ func QueryFeedInSplit(from, to time.Time, aggregate string) ([]FeedInSplit, erro
 
 	var res []FeedInSplit
 	for _, s := range slots {
-		start := bucketStart(time.Unix(s.Ts, 0), aggregate)
+		start := aggregateStarts[aggregate](time.Unix(s.Ts, 0))
 		if len(res) == 0 || !res[len(res)-1].Start.Equal(start) {
 			res = append(res, FeedInSplit{Start: start, End: addDuration(start)})
 		}
