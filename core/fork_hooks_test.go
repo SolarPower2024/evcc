@@ -48,6 +48,8 @@ var forkHooks = []struct {
 	{"api/globalconfig/types.go", "TariffRefs.IsConfigured", []string{"FeedInEeg"}},
 	{"api/globalconfig/types.go", "TariffRefs.Used", []string{"FeedInEeg"}},
 	{"charger/switchsocket.go", "NewSwitchSocketFromConfig", []string{"RatedPower"}},
+	{"util/log.go", "newLogger", []string{"Output"}},
+	{"cmd/root.go", "runRoot", []string{"CloseFile"}},
 }
 
 // forkUiHooks lists the fork's mounts in evcc's ui files

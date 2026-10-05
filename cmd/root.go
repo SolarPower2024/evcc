@@ -28,6 +28,7 @@ import (
 	"github.com/evcc-io/evcc/ui"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/auth"
+	"github.com/evcc-io/evcc/util/logstash"
 	"github.com/evcc-io/evcc/util/pipe"
 	"github.com/evcc-io/evcc/util/sponsor"
 	"github.com/evcc-io/evcc/util/telemetry"
@@ -555,6 +556,8 @@ func runRoot(cmd *cobra.Command, args []string) {
 	case <-shutdownDoneC(): // wait for shutdown
 	case <-time.After(max(conf.Interval, 5*time.Second)):
 	}
+
+	logstash.CloseFile() // custom: write out the log file, see util/logstash/file_custom.go
 
 	// exit code 1 on error
 	os.Exit(cast.ToInt(err != nil))
