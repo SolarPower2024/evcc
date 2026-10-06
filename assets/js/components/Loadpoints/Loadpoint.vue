@@ -412,8 +412,9 @@ export default defineComponent({
 			api.post(this.apiPath("batteryboost") + `/${batteryBoost ? "1" : "0"}`);
 		},
 		fmtPower(value: number) {
+			// custom: assumed power in whole kW with a narrow space, so it fits a phone
 			if (!this.chargePower && this.chargePowerEstimate) {
-				return `≈ ${this.fmtW(value, POWER_UNIT.AUTO)}`; // custom: assumed power
+				return `≈ ${this.fmtW(value, POWER_UNIT.KW, true, 0)}`;
 			}
 			return this.fmtW(value, POWER_UNIT.AUTO);
 		},
