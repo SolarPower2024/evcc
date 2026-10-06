@@ -106,3 +106,106 @@ func TestPeakMonthsKept(t *testing.T) {
 	assert.Equal(t, "2026-06", s.months[0].Month)
 	assert.Equal(t, "2024-07", s.months[peakMonthsKept-1].Month)
 }
+
+// TestPeakBaseline verifies that a new month takes the limit set by hand and that
+// setting the limit raises the month's baseline, lowering it does not
+func TestPeakBaseline(t *testing.T) {
+	site, clk := peakWindowSite(t, 0)
+	s := site.peak()
+	s.limit = 7500
+
+	// a new month starts with the limit set by hand
+	site.updatePeakWindow(4000, 0)
+	for range 31 {
+		clk.Add(30 * time.Second)
+		site.updatePeakWindow(4000, 0)
+	}
+	require.Len(t, s.months, 1)
+	assert.Equal(t, 7500.0, s.months[0].Baseline)
+
+	require.NoError(t, site.SetPeakShavingLimit(9000))
+	assert.Equal(t, 9000.0, s.months[0].Baseline)
+	assert.False(t, s.monthsDirty, "saved")
+
+	require.NoError(t, site.SetPeakShavingLimit(6000))
+	assert.Equal(t, 6000.0, s.limit)
+	assert.Equal(t, 9000.0, s.months[0].Baseline, "lowering the limit keeps the baseline")
+
+	// the next month starts with the current limit, the old one stays
+	clk.Set(time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC))
+	require.NoError(t, site.SetPeakShavingLimit(6500))
+	require.Len(t, s.months, 2)
+	assert.Equal(t, "2026-10", s.months[0].Month)
+	assert.Equal(t, 6500.0, s.months[0].Baseline)
+	assert.Equal(t, 9000.0, s.months[1].Baseline)
+
+	// lowered on the first of a month: the new month starts with the new limit
+	clk.Set(time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC))
+	require.NoError(t, site.SetPeakShavingLimit(5000))
+	require.Len(t, s.months, 3)
+	assert.Equal(t, 5000.0, s.months[0].Baseline)
+
+	var saved []peakMonth
+	require.NoError(t, settings.Json(keys.PeakMonths, &saved))
+	assert.Equal(t, s.months, saved)
+}
+
+// TestPeakBaselineFollow verifies that following the peak counts the base, not
+// the raised limit
+func TestPeakBaselineFollow(t *testing.T) {
+	site, clk := peakWindowSite(t, 0)
+	s := site.peak()
+	s.limit = 5000
+	s.followBuffer = defaultPeakFollowBuffer
+	s.months = []peakMonth{{Month: "2026-09", Peak: 12000, Baseline: 5000}}
+
+	require.NoError(t, site.SetPeakFollow(true))
+	assert.Equal(t, 11500.0, s.limit, "raised to the month's peak")
+	assert.Equal(t, 5000.0, s.manualPeakLimit())
+
+	// a new month while the limit is raised
+	clk.Set(time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC))
+	assert.Equal(t, 5000.0, s.peakMonthOf(clk.Now()).Baseline)
+
+	// set by hand: the base
+	require.NoError(t, site.SetPeakShavingLimit(6000))
+	assert.Equal(t, 6000.0, s.months[0].Baseline)
+	assert.Equal(t, "2026-10", s.months[0].Month)
+}
+
+// TestPeakFillBaselines verifies that only months without a baseline are filled
+// and that an entry from before the baseline existed is still read
+func TestPeakFillBaselines(t *testing.T) {
+	site, _ := peakWindowSite(t, 0)
+	s := site.peak()
+	s.limit = 7000
+
+	old := `[{"month":"2026-09","peak":5000,"peakAt":"2026-09-25T10:00:00Z","demand":6000,"demandAt":"2026-09-25T10:00:00Z","interventions":2},` +
+		`{"month":"2026-08","peak":4000,"peakAt":"2026-08-05T10:00:00Z","demand":4000,"demandAt":"2026-08-05T10:00:00Z","interventions":0,"baseline":4500}]`
+	settings.SetString(keys.PeakMonths, old)
+
+	site.restorePeakMonths()
+	require.Len(t, s.months, 2)
+	assert.Zero(t, s.months[0].Baseline)
+	assert.Equal(t, 2, s.months[0].Interventions)
+
+	site.fillPeakBaselines()
+	assert.Equal(t, 7000.0, s.months[0].Baseline)
+	assert.Equal(t, 4500.0, s.months[1].Baseline, "a stored baseline stays")
+	assert.False(t, s.monthsDirty)
+
+	var saved []peakMonth
+	require.NoError(t, settings.Json(keys.PeakMonths, &saved))
+	assert.Equal(t, s.months, saved)
+
+	// fixed from now on
+	s.limit = 8000
+	site.fillPeakBaselines()
+	assert.Equal(t, 7000.0, s.months[0].Baseline)
+
+	// without a limit nothing is filled
+	s.months = []peakMonth{{Month: "2026-09"}}
+	s.limit = 0
+	site.fillPeakBaselines()
+	assert.Zero(t, s.months[0].Baseline)
+}

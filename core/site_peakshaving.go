@@ -177,6 +177,7 @@ func (site *Site) restorePeakSettings() {
 
 	site.restorePeakMonths()
 	site.restorePeakFollow()
+	site.fillPeakBaselines()
 	site.restorePeakTariff()
 	site.publishPeakSettings()
 	site.publishLmPriorities()
@@ -1069,6 +1070,8 @@ func (site *Site) SetPeakShavingLimit(limit float64) error {
 	if math.Mod(limit, peakLimitStep) != 0 {
 		return fmt.Errorf("peak limit must be a multiple of %.0fW", peakLimitStep)
 	}
+
+	site.raisePeakBaseline(limit) // the month's savings are counted above it, see site_peak_stats.go
 
 	// following the peak: the limit set by hand is the base
 	if site.peakFollowSetBase(limit) {

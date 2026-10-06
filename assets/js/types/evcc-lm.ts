@@ -83,6 +83,8 @@ export interface PeakMonth {
   demandAt: string;
   /** Peaks the battery covered. */
   interventions: number;
+  /** W, the highest limit set by hand in the month, absent = none. */
+  baseline?: number;
 }
 
 export interface PeakFollow {
@@ -102,7 +104,9 @@ export interface PeakTariffMonth {
   cost: number;
   /** The same without the battery. */
   costWithout: number;
-  /** costWithout - cost, negative when grid charging raised the peak. */
+  /** W, the month's highest limit set by hand, 0 = none. */
+  baseline: number;
+  /** What the battery saved above the baseline, negative when grid charging raised the peak above it. */
   saving: number;
 }
 

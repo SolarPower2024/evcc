@@ -33,7 +33,8 @@ type peakTariffMonth struct {
 	Billed      float64 `json:"billed"`      // kW billed
 	Cost        float64 `json:"cost"`        // capacity cost of the month
 	CostWithout float64 `json:"costWithout"` // the same without the battery
-	Saving      float64 `json:"saving"`      // CostWithout - Cost, negative when grid charging raised the peak
+	Baseline    float64 `json:"baseline"`    // W, the month's highest limit set by hand, 0 = none
+	Saving      float64 `json:"saving"`      // what the battery saved above the baseline, negative when grid charging raised the peak above it
 }
 
 // peakTariffState is what the ui gets
@@ -80,12 +81,20 @@ func (t peakTariff) months(months []peakMonth) []peakTariffMonth {
 			without = cost
 		}
 
+		// up to the limit set by hand the grid draw is allowed anyway, so only what
+		// lies above it counts
+		saving := t.monthlyCost(max(m.Demand, m.Baseline)) - t.monthlyCost(max(m.Peak, m.Baseline))
+		if m.DemandAt.IsZero() {
+			saving = 0
+		}
+
 		res = append(res, peakTariffMonth{
 			Month:       m.Month,
 			Billed:      t.billed(m.Peak),
 			Cost:        cost,
 			CostWithout: without,
-			Saving:      without - cost,
+			Baseline:    m.Baseline,
+			Saving:      saving,
 		})
 	}
 

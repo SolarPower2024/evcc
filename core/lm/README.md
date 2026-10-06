@@ -279,12 +279,15 @@ starts there again. The load management circuit rises along. See
 **Statistics** (*Mehr → Peak Shaving*): per month the highest quarter hour with
 and without the battery and how often it covered a peak; only quarter hours
 metered from their start count, kept for 24 months (`peakMonths`,
-`core/site_peak_stats.go`).
+`core/site_peak_stats.go`). Each month also keeps its baseline, the highest
+limit set by hand in it (the base while following the peak); months from before
+get the current one at the start.
 
 **Capacity tariff** (*Lastmanagement-Details → Leistungstarif*): price per kW
 and year up to a threshold, a higher one above, at least a minimum and a share
 of the agreed power; zero price = off. Each month's cost with and without the
-battery and the saving are shown with the statistics. Prefilled with the
+battery and the saving are shown with the statistics; the saving only counts
+above the month's baseline, as the grid draw up to it is allowed anyway. Prefilled with the
 Austrian draft for 2027 (33.82 EUR/kW/year up to 10 kW, double above, at least
 20 % of the agreed power and 2 kW). See `core/site_peak_tariff.go`.
 
