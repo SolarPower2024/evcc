@@ -35,31 +35,42 @@
 						@change="target = parseInt(($event.target as HTMLInputElement).value, 10)"
 					/>
 				</template>
+				<template #when>
+					<CustomSelect
+						id="batteryGridChargeOnceWhen"
+						:options="whenOptions"
+						:selected="when"
+						:aria-label="$t('battery.gridChargeOnce.whenLabel')"
+						data-testid="battery-grid-charge-once-when"
+						inline
+						@change="when = ($event.target as HTMLSelectElement).value"
+					>
+						<span
+							v-if="when === 'now'"
+							class="text-decoration-underline fw-bold text-nowrap"
+						>
+							{{ $t("battery.gridChargeOnce.now") }}
+						</span>
+						<!-- "bis" stays with the time when the sentence wraps -->
+						<i18n-t
+							v-else
+							keypath="battery.gridChargeOnce.until"
+							tag="span"
+							class="text-nowrap"
+							scope="global"
+						>
+							<template #time>
+								<span class="text-decoration-underline fw-bold">{{ when }}</span>
+							</template>
+						</i18n-t>
+					</CustomSelect>
+				</template>
 			</i18n-t>
-			<select
-				id="batteryGridChargeOnceMode"
-				v-model="mode"
-				class="form-select form-select-sm w-auto"
-				data-testid="battery-grid-charge-once-mode"
-				:aria-label="$t('battery.gridChargeOnce.title')"
-			>
-				<option value="now">{{ $t("battery.gridChargeOnce.now") }}</option>
-				<option value="until">{{ $t("battery.gridChargeOnce.until") }}</option>
-			</select>
-			<input
-				v-if="mode === 'until'"
-				id="batteryGridChargeOnceTime"
-				v-model="time"
-				type="time"
-				class="form-control form-control-sm w-auto"
-				data-testid="battery-grid-charge-once-time"
-				:aria-label="$t('battery.gridChargeOnce.timeLabel')"
-			/>
 			<button
 				type="submit"
 				class="btn btn-sm btn-primary ms-auto"
 				data-testid="battery-grid-charge-once-start"
-				:disabled="busy || (mode === 'until' && !time)"
+				:disabled="busy"
 			>
 				{{ $t("battery.gridChargeOnce.start") }}
 			</button>
@@ -74,6 +85,7 @@ import { defineComponent } from "vue";
 import formatter from "@/mixins/formatter";
 import api from "@/api";
 import store from "@/store";
+import CustomSelect from "../Helper/CustomSelect.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
 
 interface GridChargeOnce {
@@ -86,10 +98,11 @@ interface GridChargeOnce {
 // of day at the cheapest slots, see core/site_lm_once.go
 export default defineComponent({
 	name: "BatteryGridChargeOnce",
-	components: { InlineSocSelect },
+	components: { CustomSelect, InlineSocSelect },
 	mixins: [formatter],
 	data() {
-		return { target: 80, mode: "now", time: "06:00", busy: false, error: "" };
+		// when: "now" or a time of day HH:MM
+		return { target: 80, when: "now", busy: false, error: "" };
 	},
 	computed: {
 		once(): GridChargeOnce {
@@ -109,6 +122,19 @@ export default defineComponent({
 			}
 			return options;
 		},
+		// right away or by a time of day, every half hour
+		whenOptions() {
+			const options = [{ value: "now", name: this.$t("battery.gridChargeOnce.now") }];
+			for (let m = 0; m < 24 * 60; m += 30) {
+				const hh = String(Math.floor(m / 60)).padStart(2, "0");
+				const time = `${hh}:${m % 60 ? "30" : "00"}`;
+				options.push({
+					value: time,
+					name: this.$t("battery.gridChargeOnce.until", { time }),
+				});
+			}
+			return options;
+		},
 		whenText(): string {
 			if (!this.once.until) return this.$t("battery.gridChargeOnce.now");
 			return this.$t("battery.gridChargeOnce.byTime", {
@@ -125,8 +151,8 @@ export default defineComponent({
 			this.error = "";
 			try {
 				const path =
-					this.mode === "until"
-						? `batterygridchargeonce/${this.target}/${encodeURIComponent(this.time)}`
+					this.when !== "now"
+						? `batterygridchargeonce/${this.target}/${encodeURIComponent(this.when)}`
 						: `batterygridchargeonce/${this.target}`;
 				await api.post(path);
 			} catch (e: any) {
