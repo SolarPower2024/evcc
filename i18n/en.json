@@ -2360,10 +2360,10 @@
     "title": "Feed-in Priority"
   },
   "snowCover": {
-    "autoHelp": "Turns on at ≥ 1 cm of new snow (≤ 1 °C) in 24 h per forecast, up to sunrise included.",
+    "autoHelp": "Turns on at ≥ 1 cm of new snow (≤ 1 °C) in 24 h per forecast.",
     "autoLabel": "Detect snow automatically",
     "autoOn": "Detected automatically.",
-    "help": "The optimizer plans without solar yield. Turns off once the system delivers 70 % for 1 h.",
+    "help": "The optimizer plans without solar yield. Turns off once the system delivers at least 70 % of the forecast for 1 h.",
     "label": "Snow on PV"
   },
   "startupError": {
