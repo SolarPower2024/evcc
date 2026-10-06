@@ -96,14 +96,14 @@
     },
     "gridChargeOnce": {
       "title": "Charge once",
-      "sentence": "Charge once from the grid up to {soc}, {when}",
+      "sentence": "Charge from the grid up to {soc}, {when}",
       "now": "right away",
       "until": "by {time}",
       "byTime": "by {time}, at the cheapest time",
       "whenLabel": "When",
       "start": "Start",
       "cancel": "Cancel",
-      "running": "Charging once up to {soc}",
+      "running": "Charging up to {soc}",
       "active": "charging",
       "waiting": "waiting for the cheapest time"
     }
