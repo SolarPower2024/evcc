@@ -36,10 +36,8 @@
 								></shopicon-regular-download>
 							</a>
 						</div>
-						<LogFileButton />
-						<!-- custom: log file, see util/logstash/file_custom.go -->
 					</div>
-					<div class="col-6 offset-lg-1 col-lg-4 mb-4 mb-lg-0">
+					<div class="col-6 offset-lg-1 col-lg-4 mb-4 mb-lg-0 d-flex gap-2">
 						<input
 							:value="q"
 							@input="changeSearch"
@@ -48,6 +46,8 @@
 							:placeholder="$t('log.search')"
 							data-testid="log-search"
 						/>
+						<LogFileButton />
+						<!-- custom: log file next to the search (d-flex gap-2), see util/logstash/file_custom.go -->
 					</div>
 					<div class="filterLevel col-6 col-lg-2">
 						<select
