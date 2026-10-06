@@ -2360,11 +2360,11 @@
     "title": "Einspeisung priorisieren"
   },
   "snowCover": {
-    "autoHelp": "Schaltet ein bei ≥ 1 cm Neuschnee (≤ 1 °C) in 24 h laut Open-Meteo, Prognose bis Sonnenaufgang eingerechnet. Aus nur über die Messung oder von Hand.",
+    "autoHelp": "Schaltet ein bei ≥ 1 cm Neuschnee (≤ 1 °C) in 24 h laut Forecast, bis Sonnenaufgang eingerechnet.",
     "autoLabel": "Schnee automatisch erkennen",
-    "label": "Schnee auf PV",
-    "note": "Schnee auf PV: Der Optimizer rechnet ohne PV-Ertrag. Geht aus, wenn die Anlage 1 h lang 70 % liefert.",
-    "noteAuto": "Schnee auf PV (automatisch erkannt): Der Optimizer rechnet ohne PV-Ertrag. Geht aus, wenn die Anlage 1 h lang 70 % liefert."
+    "autoOn": "Automatisch erkannt.",
+    "help": "Der Optimizer rechnet ohne PV-Ertrag. Geht aus, wenn die Anlage 1 h lang 70 % liefert.",
+    "label": "Schnee auf PV"
   },
   "startupError": {
     "configFile": "Verwendete Konfigurationsdatei:",
