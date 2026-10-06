@@ -10,4 +10,7 @@ const (
 )
 
 // Custom extension: see core/loadpoint_stages.go
-const ChargerStages = "chargerStages" // charger switches a heater in stages
+const (
+	ChargerStages       = "chargerStages"       // charger switches a heater in stages
+	ChargePowerEstimate = "chargePowerEstimate" // assumed charge power kept out of chargePower, 0 = measured
+)

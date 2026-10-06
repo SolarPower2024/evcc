@@ -270,6 +270,13 @@ func (c *SwitchStages) StageStates() ([]bool, error) {
 	return c.states()
 }
 
+// PowerEstimated reports that without a power sensor the power is the stages
+// switched on times the stage power, an assumption: the heater's own thermostat
+// may have cut out. Core then keeps it out of the home consumption.
+func (c *SwitchStages) PowerEstimated() bool {
+	return c.power == nil
+}
+
 // Stages returns the number of stages, core shows the heater as switched by it
 func (c *SwitchStages) Stages() int {
 	return len(c.stages)

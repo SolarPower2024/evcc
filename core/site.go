@@ -1211,7 +1211,7 @@ func (site *Site) updateLoadpoints(rates api.Rates) float64 {
 			site.prioritizer.UpdateChargePowerFlexibility(lp, rates)
 
 			mu.Lock()
-			sum += power
+			sum += lp.meteredPower(power) // custom: an assumed power stays in the home consumption, see loadpoint_stages.go
 			mu.Unlock()
 		})
 	}

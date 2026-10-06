@@ -1969,7 +1969,7 @@ func (lp *Loadpoint) UpdateChargePowerAndCurrents() float64 {
 		lp.Unlock()
 
 		lp.log.DEBUG.Printf("charge power: %.0fW", power)
-		lp.publish(keys.ChargePower, power)
+		lp.publishChargePower(power) // custom: an assumed power is published apart, see loadpoint_stages.go
 
 		// https://github.com/evcc-io/evcc/issues/2153
 		// https://github.com/evcc-io/evcc/issues/6986
@@ -2129,7 +2129,7 @@ func (lp *Loadpoint) publishChargeProgress() {
 	}
 
 	if lp.chargeEnergy != nil {
-		lp.chargeEnergy.AddEnergy(importTotal, nil, lp.chargePower)
+		lp.chargeEnergy.AddEnergy(importTotal, nil, lp.meteredPower(lp.chargePower)) // custom: see loadpoint_stages.go
 		if v := lp.GetSoc(); v > 0 {
 			lp.chargeEnergy.SetSocTemp(v, lp.chargerHasFeature(api.Heating))
 		}
@@ -2372,7 +2372,7 @@ func (lp *Loadpoint) Update(sitePower, batteryPower float64, consumption, feedin
 
 	// update ChargeRater here to make sure initial meter update is caught
 	lp.bus.Publish(evChargeCurrent, lp.offeredCurrent)
-	lp.bus.Publish(evChargePower, lp.chargePower)
+	lp.bus.Publish(evChargePower, lp.meteredPower(lp.chargePower)) // custom: see loadpoint_stages.go
 
 	// update progress and soc before status is updated
 	lp.publishChargeProgress()

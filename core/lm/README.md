@@ -126,8 +126,14 @@ shedding it whole. Down is immediate, a higher stage waits until the last
 change is the delay old (default 1 min), switching on from off follows the
 loadpoint's enable delay. The loadpoint's phases must match the wiring. A
 thermostat that cut out (draw up to the standby power, default 15 W) reports
-ready and counts as 0 W. `TestStagesCircuitStepsDown`,
-`TestStagesGiveWayToHigherPriority`.
+ready and counts as 0 W. Without a power sensor the power is assumed (stages
+on × stage power): control, circuits and load management use it, but the home
+consumption, energy flow, energy history and sessions count only measured
+power, so the heater's real draw is part of the home consumption; the
+loadpoint card shows the assumption as "≈ 6,0 kW" (`chargePowerEstimate`,
+`core/loadpoint_stages.go`). Its session energy stays 0, so a kWh charge limit does
+not apply there. `TestStagesCircuitStepsDown`,
+`TestStagesGiveWayToHigherPriority`, `TestStagesEstimatedPower`.
 
 ## 5. Shed guard
 
@@ -577,12 +583,12 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `custom` field; `restoreCustom` in `restoreSettings`; `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter`; `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
+| `core/site.go` | `custom` field; `meteredPower` in `updateLoadpoints` (an assumed heater power stays in the home consumption); `restoreCustom` in `restoreSettings`; `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter`; `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
 | `core/site/api.go` | embeds `CustomAPI` |
-| `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`; two `lp.lmm().Peek*` probes; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor`, `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), the phase timers take `phaseScaleDelay`; `publishStages` after `publishPhaseSwitch` |
+| `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`; two `lp.lmm().Peek*` probes; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor`, `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), the phase timers take `phaseScaleDelay`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split per phase count (as in evcc PR 32505), min/max power use it |
 | `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
@@ -600,7 +606,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown; default mode labels Aus/Smart/Ein for a heater in stages (`chargerIsStages`) |
-| `assets/js/components/Loadpoints/Loadpoint.vue`, `Mode.vue` | `chargerStages` prop, mode labels Aus/Smart/Ein for a heater in stages |
+| `assets/js/components/Loadpoints/Loadpoint.vue`, `Mode.vue` | `chargerStages` prop, mode labels Aus/Smart/Ein for a heater in stages; `chargePowerEstimate` shown as "≈ 6,0 kW" |
 | `assets/js/components/Config/DeviceTags.vue` | value `stages` shown as "an · an · aus" |
 | `assets/js/components/Config/TariffCard.vue`, `TariffModal.vue` | EEG counter in the EEG card, price templates for `feedInEeg`, planner price hint |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
