@@ -84,22 +84,19 @@ export default defineComponent({
 		},
 	},
 	methods: {
-		async change(e: Event) {
-			const input = e.target as HTMLInputElement;
-			try {
-				await api.post(`snowcover/${input.checked ? "true" : "false"}`);
-			} catch (err) {
-				// back to the state evcc has, the store did not change
-				input.checked = this.snowCover;
-				console.error(err);
-			}
+		change(e: Event) {
+			this.post(e, "snowcover", this.snowCover);
 		},
-		async changeAuto(e: Event) {
+		changeAuto(e: Event) {
+			this.post(e, "snowauto", this.snowAuto);
+		},
+		// on failure the switch goes back to the state evcc has, the store did not change
+		async post(e: Event, path: string, current: boolean) {
 			const input = e.target as HTMLInputElement;
 			try {
-				await api.post(`snowauto/${input.checked ? "true" : "false"}`);
+				await api.post(`${path}/${input.checked}`);
 			} catch (err) {
-				input.checked = this.snowAuto;
+				input.checked = current;
 				console.error(err);
 			}
 		},
