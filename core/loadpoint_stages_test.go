@@ -191,3 +191,41 @@ func TestStagesPublished(t *testing.T) {
 	lp.publishStages()
 	assert.Equal(t, util.Param{Key: keys.ChargerStages, Val: false}, <-ui)
 }
+
+// TestStagesEstimatedPower verifies that without a power sensor the assumed power
+// drives control but stays out of the home consumption, energy and sessions
+func TestStagesEstimatedPower(t *testing.T) {
+	lp, c, _ := newStagesLoadpoint(t, "stagesestimated")
+	lp.chargeMeter = newChargeMeter(c)
+
+	require.True(t, lp.powerEstimated())
+	assert.Equal(t, 0.0, lp.meteredPower(6000))
+
+	ui := make(chan util.Param, 2)
+	lp.uiChan = ui
+	lp.publishChargePower(6000)
+	assert.Equal(t, util.Param{Key: keys.ChargePower, Val: 0.0}, <-ui)
+	assert.Equal(t, util.Param{Key: keys.ChargePowerEstimate, Val: 6000.0}, <-ui)
+
+	// a loadpoint meter measures
+	lp.chargeMeter = newChargeMeter(&lmMeter{power: 6000})
+	assert.False(t, lp.powerEstimated())
+	assert.Equal(t, 6000.0, lp.meteredPower(6000))
+
+	lp.publishChargePower(6000)
+	assert.Equal(t, util.Param{Key: keys.ChargePower, Val: 6000.0}, <-ui)
+	assert.Equal(t, util.Param{Key: keys.ChargePowerEstimate, Val: 0.0}, <-ui)
+
+	// with a power sensor the heater measures itself
+	measured, err := charger.NewSwitchStagesFromConfig(t.Context(), map[string]any{
+		"stages": []any{map[string]any{
+			"enabled": map[string]any{"source": "const", "value": "true"},
+			"enable":  map[string]any{"source": "js", "vm": "stagesestimated2", "script": "x = enable"},
+		}},
+		"stagepower": 2000,
+		"power":      map[string]any{"source": "const", "value": "1500"},
+	})
+	require.NoError(t, err)
+	lp.chargeMeter = newChargeMeter(measured)
+	assert.False(t, lp.powerEstimated())
+}

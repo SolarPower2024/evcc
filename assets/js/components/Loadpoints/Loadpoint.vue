@@ -58,7 +58,7 @@
 				<div class="d-flex align-items-center">
 					<LabelAndValue
 						:label="$t('main.loadpoint.power')"
-						:value="chargePower"
+						:value="chargePower || chargePowerEstimate"
 						:valueFmt="fmtPower"
 						class="mb-2 text-nowrap text-truncate-xs-only"
 						align="start"
@@ -187,6 +187,7 @@ export default defineComponent({
 		chargerFeatureContinuous: Boolean,
 		chargerFeatureSwitchDevice: Boolean,
 		chargerStages: Boolean, // custom: see core/loadpoint_stages.go
+		chargePowerEstimate: { type: Number, default: 0 }, // custom: assumed power, see core/loadpoint_stages.go
 		chargerIcon: String as PropType<string | null>,
 
 		// heating display range (ui-only)
@@ -324,7 +325,7 @@ export default defineComponent({
 			return this.collectProps(VehicleComponent);
 		},
 		showChargingIndicator() {
-			return this.charging && this.chargePower > 0;
+			return this.charging && (this.chargePower > 0 || this.chargePowerEstimate > 0); // custom: chargePowerEstimate
 		},
 		planTimeUnreachable() {
 			// 1 minute tolerance
@@ -411,6 +412,9 @@ export default defineComponent({
 			api.post(this.apiPath("batteryboost") + `/${batteryBoost ? "1" : "0"}`);
 		},
 		fmtPower(value: number) {
+			if (!this.chargePower && this.chargePowerEstimate) {
+				return `≈ ${this.fmtW(value, POWER_UNIT.AUTO)}`; // custom: assumed power
+			}
 			return this.fmtW(value, POWER_UNIT.AUTO);
 		},
 		fmtEnergy(value: number) {
