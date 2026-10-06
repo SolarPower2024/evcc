@@ -370,13 +370,16 @@ func TestSnowAutoWithoutLocation(t *testing.T) {
 
 	assert.Zero(t, calls.Load())
 	assert.False(t, site.GetSnowCover())
-	assert.False(t, site.snow().available)
 	assert.Equal(t, util.Param{Key: keys.SnowAutoAvailable, Val: false}, <-pub)
 
 	// restored with the setting: offered as soon as the forecast is there
 	snowAutoDB(t, snowTariff("open-meteo"))
 	site.restoreSnowCover()
-	assert.True(t, site.snow().available)
+	var last util.Param
+	for range 4 { // switch, by detection, setting, available
+		last = <-pub
+	}
+	assert.Equal(t, util.Param{Key: keys.SnowAutoAvailable, Val: true}, last)
 }
 
 // TestSnowAutoFailure: an unavailable weather service leaves the switch as it
