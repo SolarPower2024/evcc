@@ -2152,11 +2152,12 @@
   "peakstats": {
     "cost": "Capacity cost",
     "costShort": "Cost",
-    "description": "Highest quarter hour per month, with and without the battery.",
+    "description": "Highest quarter hour per month, with and without the battery. Savings count only above the limit set.",
     "empty": "No complete quarter hour recorded yet.",
     "extraCost": "extra cost {cost}",
     "interventions": "Interventions",
     "interventionsCount": "{count} interventions",
+    "limitShort": "limit {limit}",
     "menu": "Peak Shaving",
     "month": "Month",
     "saving": "Capacity saving",
@@ -2164,7 +2165,9 @@
     "savingTotal": "total {total}",
     "title": "Peak Shaving",
     "withBattery": "With battery",
-    "withoutBattery": "Without battery"
+    "withShort": "with {power}",
+    "withoutBattery": "Without battery",
+    "withoutShort": "without {power}"
   },
   "session": {
     "addOdometer": "Add value",

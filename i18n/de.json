@@ -2152,11 +2152,12 @@
   "peakstats": {
     "cost": "Leistungspreis",
     "costShort": "Kosten",
-    "description": "Höchste Viertelstunde je Monat, mit und ohne Batterie.",
+    "description": "Höchste Viertelstunde je Monat, mit und ohne Batterie. Ersparnis zählt erst über der eingestellten Grenze.",
     "empty": "Noch keine vollständige Viertelstunde erfasst.",
     "extraCost": "Mehrkosten {cost}",
     "interventions": "Eingriffe",
     "interventionsCount": "{count} Eingriffe",
+    "limitShort": "Grenze {limit}",
     "menu": "Peak Shaving",
     "month": "Monat",
     "saving": "Ersparnis Leistungspreis",
@@ -2164,7 +2165,9 @@
     "savingTotal": "gesamt {total}",
     "title": "Peak Shaving",
     "withBattery": "Mit Batterie",
-    "withoutBattery": "Ohne Batterie"
+    "withShort": "mit {power}",
+    "withoutBattery": "Ohne Batterie",
+    "withoutShort": "ohne {power}"
   },
   "session": {
     "addOdometer": "Wert eintragen",

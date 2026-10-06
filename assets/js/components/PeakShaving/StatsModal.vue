@@ -46,7 +46,7 @@
 					</div>
 				</div>
 
-				<div class="table-responsive">
+				<div class="table-responsive d-none d-sm-block">
 					<table class="table table-sm align-middle mb-0">
 						<thead>
 							<tr class="evcc-gray small">
@@ -65,13 +65,7 @@
 							<tr v-for="m in months" :key="m.month" data-testid="peak-stats-month">
 								<td class="text-nowrap">
 									{{ monthName(m.month) }}
-									<div class="evcc-gray small">
-										{{
-											$t("peakstats.interventionsCount", {
-												count: m.interventions,
-											})
-										}}
-									</div>
+									<div class="evcc-gray small">{{ monthInfo(m) }}</div>
 								</td>
 								<td class="text-end text-nowrap">
 									{{ power(m.peak, m.peakAt) }}
@@ -104,6 +98,31 @@
 						</tbody>
 					</table>
 				</div>
+
+				<ul class="list-unstyled mb-0 d-sm-none" data-testid="peak-stats-list">
+					<li
+						v-for="m in months"
+						:key="m.month"
+						class="month-row py-2"
+						data-testid="peak-stats-month-mobile"
+					>
+						<div class="d-flex justify-content-between align-items-baseline gap-3">
+							<strong>{{ monthName(m.month) }}</strong>
+							<div v-if="hasTariff && costOf(m.month)" class="text-end">
+								{{ money(costOf(m.month).cost) }}
+								<div
+									class="small"
+									:class="
+										costOf(m.month).saving < 0 ? 'text-danger' : 'evcc-gray'
+									"
+								>
+									{{ savingText(costOf(m.month).saving) }}
+								</div>
+							</div>
+						</div>
+						<div class="evcc-gray small">{{ monthSummary(m) }}</div>
+					</li>
+				</ul>
 			</template>
 		</div>
 	</GenericModal>
@@ -134,8 +153,10 @@ export default {
 			const [y, m] = this.current.month.split("-").map(Number);
 			return this.fmtMonthYear(new Date(y, m - 1, 1));
 		},
-		// the limit set by hand, also while following the peak
+		// the month's baseline, the highest limit set by hand in it, see
+		// core/site_peak_stats.go; before the first one: the limit now
 		limit() {
+			if (this.current?.baseline) return this.current.baseline;
 			const follow = store.state?.peakFollow;
 			if (follow?.enabled && follow.base) return follow.base;
 			return store.state?.peakShavingLimit || 0;
@@ -158,6 +179,31 @@ export default {
 		},
 	},
 	methods: {
+		limitText(m) {
+			return m.baseline > 0
+				? this.$t("peakstats.limitShort", { limit: this.fmtW(m.baseline) })
+				: "";
+		},
+		// second line of the month in the table
+		monthInfo(m) {
+			return [
+				this.$t("peakstats.interventionsCount", { count: m.interventions }),
+				this.limitText(m),
+			]
+				.filter(Boolean)
+				.join(" · ");
+		},
+		// second line of the month on a phone, where the table does not fit
+		monthSummary(m) {
+			return [
+				this.$t("peakstats.withShort", { power: this.power(m.peak, m.peakAt) }),
+				this.$t("peakstats.withoutShort", { power: this.power(m.demand, m.demandAt) }),
+				this.$t("peakstats.interventionsCount", { count: m.interventions }),
+				this.limitText(m),
+			]
+				.filter(Boolean)
+				.join(" · ");
+		},
 		costOf(month) {
 			return this.costs.find((c) => c.month === month);
 		},
@@ -203,6 +249,9 @@ export default {
 	border: 1px solid var(--bs-border-color);
 	border-radius: 0.75rem;
 	padding: 0.75rem 1rem;
+}
+.month-row + .month-row {
+	border-top: 1px solid var(--bs-border-color);
 }
 .tile-label,
 .tile-sub {
