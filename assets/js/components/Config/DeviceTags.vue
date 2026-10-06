@@ -264,6 +264,10 @@ export default {
 					return `${this.fmtW(value[0])} / ${this.fmtW(value[1])}`;
 				case "currentRange":
 					return `${this.fmtNumber(value[0], 1)} A / ${this.fmtNumber(value[1], 1)} A`;
+				case "stages": // custom: heater in stages, see server/http_config_custom.go
+					return value
+						.map((on) => this.$t(`config.deviceValue.${on ? "stageOn" : "stageOff"}`))
+						.join(" · ");
 				case "current":
 				case "maxCurrent":
 					return `${this.fmtNumber(value, 1)} A`;

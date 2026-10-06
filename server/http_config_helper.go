@@ -443,6 +443,8 @@ func testInstance(ctx context.Context, instance any) map[string]testResult {
 		}
 	})
 
+	wg.Go(func() { customTestResults(instance, makeResult) }) // custom: fork values, see http_config_custom.go
+
 	wg.Go(func() {
 		if dev, ok := api.Cap[api.Dimmer](instance); ok {
 			val, err := dev.Dimmed()

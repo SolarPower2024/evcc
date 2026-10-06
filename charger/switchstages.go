@@ -265,6 +265,11 @@ func (c *SwitchStages) apply(phases int) error {
 	return nil
 }
 
+// StageStates returns each stage's switch, lowest first, for the config page
+func (c *SwitchStages) StageStates() ([]bool, error) {
+	return c.states()
+}
+
 // Stages returns the number of stages, core shows the heater as switched by it
 func (c *SwitchStages) Stages() int {
 	return len(c.stages)
