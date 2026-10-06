@@ -185,13 +185,6 @@ func (site *Site) snowFetch(lat, lon float64) (snowWeather, error) {
 // Open-Meteo solar forecast gives one
 func (site *Site) updateSnowAvailable() (lat, lon float64, ok bool) {
 	lat, lon, ok = snowCoordinates()
-
-	s := site.snow()
-
-	s.mu.Lock()
-	s.available = ok
-	s.mu.Unlock()
-
 	site.publish(keys.SnowAutoAvailable, ok)
 
 	return lat, lon, ok

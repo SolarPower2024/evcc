@@ -35,13 +35,12 @@ type snowState struct {
 	slot  time.Time // start of the last slot rated, memory only
 
 	// detection from the weather, see site_snow_auto.go
-	auto      bool      // the setting
-	byAuto    bool      // the switch was turned on by the detection
-	seen      time.Time // end of the last snow slot counted
-	available bool      // an Open-Meteo solar forecast gives the location
-	fetchAt   time.Time // last attempt, memory only
-	fetching  bool      // an attempt is running, memory only
-	failed    bool      // the last attempt failed, memory only
+	auto     bool      // the setting
+	byAuto   bool      // the switch was turned on by the detection
+	seen     time.Time // end of the last snow slot counted
+	fetchAt  time.Time // last attempt, memory only
+	fetching bool      // an attempt is running, memory only
+	failed   bool      // the last attempt failed, memory only
 }
 
 // snow returns the snow on pv state
