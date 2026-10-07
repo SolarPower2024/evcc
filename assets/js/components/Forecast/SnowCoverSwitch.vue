@@ -1,5 +1,19 @@
 <template>
 	<div v-if="note">
+		<div v-if="adjust" class="form-check form-switch mt-2 mb-0 d-md-none">
+			<input
+				id="solarForecastAdjustRow"
+				:checked="adjusted"
+				class="form-check-input"
+				type="checkbox"
+				role="switch"
+				data-testid="solar-adjust-row"
+				@change="$emit('adjust', $event)"
+			/>
+			<label class="form-check-label text-muted" for="solarForecastAdjustRow">
+				{{ adjust }}
+			</label>
+		</div>
 		<div class="form-check form-switch mt-2 mb-0 d-md-none">
 			<input
 				id="snowCoverRow"
@@ -69,13 +83,19 @@ import store from "@/store";
 // Custom extension: switch "snow on pv" on the forecast page, see core/site_snow.go,
 // and the switch to detect it automatically under the chart, see core/site_snow_auto.go.
 // In the card header from md up; below that it sits under the chart, as the header
-// has no room for it next to the title and evcc's switch. The help texts are
+// has no room for it next to the title and evcc's switch. Below md the row also
+// carries evcc's "adjust forecast" switch, so the title stands alone. The help texts are
 // tooltips on the info icons.
 export default defineComponent({
 	name: "SnowCoverSwitch",
 	props: {
 		note: Boolean,
+		// evcc's "adjust forecast" switch, shown in the row below md: its label
+		// (empty = not shown), its state and its change handler, all from Forecast.vue
+		adjust: { type: String, default: "" },
+		adjusted: Boolean,
 	},
+	emits: ["adjust"],
 	data() {
 		return { tooltips: {} as Record<string, Tooltip> };
 	},
