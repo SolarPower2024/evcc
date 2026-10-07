@@ -594,7 +594,7 @@
       "percentileValue": "{percentile} %"
     },
     "lmpriorities": {
-      "battery": "Home battery (grid charging)",
+      "battery": "Battery (grid charging)",
       "description": "The most important load on top. If the power is not enough, loads are throttled or switched off from the bottom up; with equal priority, the first to arrive wins. For loadpoints it is their regular priority, which also applies to solar surplus and the planner. The battery has its own value.",
       "entryLabel": "Priorities",
       "invalid": "Could not save the priority.",
@@ -1737,8 +1737,7 @@
     "version": "Version"
   },
   "lmoverview": {
-    "battery": "Home battery (grid charging)",
-    "blockedCircuit": "Circuit · until {time}",
+    "battery": "Battery (grid charging)",
     "circuitFollows": "follows the month's peak, set {limit}",
     "circuitLifted": "limit {limit} lifted",
     "disabledHelp": "Off: the circuits' power limits do not apply, nothing is throttled for them. Fuses (current limits), §14a and battery peak shaving stay active.",
@@ -1754,7 +1753,6 @@
       "throttled": "{load} throttled {requested} → {allowed}"
     },
     "events": "Recent events",
-    "gridCharge": "Battery grid charging",
     "loads": "Loads by priority · throttled/switched off from the bottom up",
     "menu": "Load management (peak)",
     "noEvents": "No events since the start.",
@@ -1765,14 +1763,12 @@
       "off": "Off",
       "overload": "Overload"
     },
-    "pausedPeak": "Peak · resumes at {time}",
     "peak": "Peak shaving · 15 min average",
     "peakAllowed": "Allowed {power} until {time}",
     "peakFree": "Above the reserve · free",
     "peakOff": "Off",
     "peakReserve": "Reserve active · setpoint {setpoint}",
     "protected": "Shed guard",
-    "setpoint": "Setpoint {power}",
     "state": {
       "blocked": "Blocked",
       "off": "Off",
@@ -1781,7 +1777,7 @@
     },
     "stateDetail": {
       "blocked": "Blocked · until {time}",
-      "charging": "Charging · setpoint {power}",
+      "charging": "Charging",
       "paused": "Paused · peak until {time}",
       "shed": "Shed · held off until {time}",
       "throttled": "Throttled · {allowed} of {requested}",
