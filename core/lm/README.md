@@ -459,8 +459,18 @@ A second evcc instance of the fork reads the entity as solar forecast: *Konfigur
 (`tariff/homeassistant_forecast.go`, template `homeassistant-forecast`, no yaml and
 no token; in the add-on the supervisor connection is used). Entity (required),
 attribute (default `forecast`) and interval (default 15 min) are set there; the data
-stays valid for twice the interval. A missing entity, `unavailable` or an attribute
-that is not a list is an error of the tariff, as for any forecast tariff.
+stays valid for twice the interval.
+
+The tariff never breaks the sum of the solar tariffs. A missing entity (404),
+`unavailable`, a missing or wrong attribute, a forecast whose `updated` attribute
+is older than an hour (without that attribute, e.g. from another source, the
+forecast counts as current) and data older than twice the interval give no rates
+and no error, so the instance's own forecast goes on alone. Each case is logged as a
+warning, at most every 15 minutes. The tariff is also created while the entity does
+not exist yet (the first read may stay empty); only a missing entity name or
+instance is a configuration error. If Home Assistant itself does not answer, the
+last data stays until it is outdated. Only entries from a day ago to a week ahead
+are taken, a longer entry only as far as that.
 
 - An entry longer than 15 minutes is divided into 15 minute slots of its value. evcc
   takes a solar value as the power at the start of its slot, and shapes a longer slot
@@ -749,8 +759,10 @@ unused:
   `TestExportForecast*` and `TestPublishExportForecast` cover the list, the
   write against a local server, no repeat of an unchanged list and no write
   without entity. `TestHAForecast*` read a local server: the list, an attribute of
-  its own, errors (attribute missing, `unavailable`, not a list, entity missing),
-  the template render.
+  its own, no rates and no error (attribute missing, `unavailable`, not a list,
+  entity missing or gone, stale, Home Assistant not answering), the sum with a
+  second solar tariff while the entity is missing, the time window, the template
+  render.
 - `TestSnowCoverOptimizerInput`: the solar series is 0 with the switch on and
   the request unchanged with it off; it relies on evcc building `Ft` as one
   value per slot before `applyLmOptimizerInputs`.

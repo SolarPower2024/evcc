@@ -75,8 +75,10 @@ func haConfig(extra map[string]any) map[string]any {
 	return res
 }
 
+// at is a time tomorrow, within the window the forecast takes entries from
 func at(h, m int) time.Time {
-	return time.Date(2026, 10, 8, h, m, 0, 0, time.Local)
+	n := time.Now()
+	return time.Date(n.Year(), n.Month(), n.Day()+1, h, m, 0, 0, time.Local)
 }
 
 func quarters(t *testing.T, rates api.Rates) []float64 {
@@ -121,7 +123,7 @@ func TestHAForecastSlots(t *testing.T) {
 		{Start: at(10, 15), End: at(10, 30), Value: 300},
 		{Start: at(10, 30), End: at(11, 30), Value: 0}, // an hour
 		{Start: at(11, 30), End: at(11, 45), Value: 50},
-	})
+	}, time.Now())
 	require.NoError(t, err)
 
 	assert.Equal(t, []float64{400, 300, 0, 0, 0, 0, 50}, quarters(t, rates))
@@ -133,7 +135,7 @@ func TestHAForecastSlots(t *testing.T) {
 		{{Start: at(10, 15), End: at(10, 0), Value: 1}},
 		{{End: at(10, 0), Value: 1}},
 	} {
-		_, err := haForecastSlots(bad)
+		_, err := haForecastSlots(bad, time.Now())
 		assert.Error(t, err)
 	}
 
@@ -141,12 +143,19 @@ func TestHAForecastSlots(t *testing.T) {
 	rates, err = haForecastSlots(api.Rates{
 		{Start: at(10, 0), End: at(10, 30), Value: 1},
 		{Start: at(10, 15), End: at(10, 45), Value: 2},
-	})
+	}, time.Now())
 	require.NoError(t, err)
 	assert.Len(t, rates, 3)
 }
 
-func TestHAForecastErrors(t *testing.T) {
+// Every state of the entity that gives no forecast: the tariff is created and gives
+// no rates and no error, so it does not break the sum of the solar tariffs.
+func TestHAForecastNoForecast(t *testing.T) {
+	list := func(updated string) string {
+		return fmt.Sprintf(`{"state":"1","attributes":{"updated":%q,"forecast":[{"start":%q,"end":%q,"value":5}]}}`,
+			updated, at(10, 0).Format(time.RFC3339), at(10, 15).Format(time.RFC3339))
+	}
+
 	for name, body := range map[string]string{
 		"attribute missing": `{"state":"1000","attributes":{}}`,
 		"unavailable":       `{"state":"unavailable","attributes":{"forecast":[]}}`,
@@ -154,12 +163,17 @@ func TestHAForecastErrors(t *testing.T) {
 		"not a list":        `{"state":"1","attributes":{"forecast":"abc"}}`,
 		"list of numbers":   `{"state":"1","attributes":{"forecast":[1,2]}}`,
 		"invalid entry":     `{"state":"1","attributes":{"forecast":[{"start":"2026-10-08T10:00:00Z","end":"2026-10-08T09:00:00Z","value":1}]}}`,
+		"stale":             list(time.Now().Add(-90 * time.Minute).Format(time.RFC3339)),
 	} {
 		t.Run(name, func(t *testing.T) {
 			haForecastServer(t, body)
 
-			_, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(nil))
-			assert.Error(t, err)
+			tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(nil))
+			require.NoError(t, err)
+
+			rates, err := tr.Rates()
+			assert.NoError(t, err)
+			assert.Empty(t, rates)
 		})
 	}
 
@@ -167,9 +181,30 @@ func TestHAForecastErrors(t *testing.T) {
 		h := haForecastServer(t, `{"message":"Entity not found."}`)
 		h.set(`{"message":"Entity not found."}`, http.StatusNotFound)
 
-		_, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(nil))
-		assert.Error(t, err)
+		tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(nil))
+		require.NoError(t, err)
+
+		rates, err := tr.Rates()
+		assert.NoError(t, err)
+		assert.Empty(t, rates)
 	})
+
+	// a forecast updated within the hour, or without that attribute, is taken
+	for name, body := range map[string]string{
+		"fresh":      list(time.Now().Add(-50 * time.Minute).Format(time.RFC3339)),
+		"no updated": fmt.Sprintf(`{"state":"1","attributes":{"forecast":[{"start":%q,"end":%q,"value":5}]}}`, at(10, 0).Format(time.RFC3339), at(10, 15).Format(time.RFC3339)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			haForecastServer(t, body)
+
+			tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(nil))
+			require.NoError(t, err)
+
+			rates, err := tr.Rates()
+			require.NoError(t, err)
+			assert.Equal(t, []float64{5}, quarters(t, rates))
+		})
+	}
 
 	t.Run("config", func(t *testing.T) {
 		haForecastServer(t, `{}`)
@@ -180,6 +215,105 @@ func TestHAForecastErrors(t *testing.T) {
 		_, err = NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"attribute": ""}))
 		assert.ErrorContains(t, err, "missing attribute")
 	})
+}
+
+// The entity is gone or the data outdated after it was read: no rates, no error.
+func TestHAForecastGoesAway(t *testing.T) {
+	body := fmt.Sprintf(`{"state":"1","attributes":{"forecast":[{"start":%q,"end":%q,"value":5}]}}`,
+		at(10, 0).Format(time.RFC3339), at(10, 15).Format(time.RFC3339))
+
+	t.Run("entity vanishes", func(t *testing.T) {
+		h := haForecastServer(t, body)
+
+		tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"interval": "100ms"}))
+		require.NoError(t, err)
+
+		rates, err := tr.Rates()
+		require.NoError(t, err)
+		assert.Len(t, rates, 1)
+
+		h.set(`{"message":"Entity not found."}`, http.StatusNotFound)
+
+		assert.Eventually(t, func() bool {
+			rates, err := tr.Rates()
+			return err == nil && len(rates) == 0
+		}, 5*time.Second, 20*time.Millisecond)
+	})
+
+	t.Run("home assistant not answering", func(t *testing.T) {
+		h := haForecastServer(t, body)
+
+		tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"interval": "100ms"}))
+		require.NoError(t, err)
+
+		h.set(``, http.StatusInternalServerError)
+
+		// the data is kept until it is outdated after twice the interval
+		assert.Eventually(t, func() bool {
+			rates, err := tr.Rates()
+			return err == nil && len(rates) == 0
+		}, 5*time.Second, 20*time.Millisecond)
+	})
+}
+
+// The forecast is one of several solar tariffs: while the entity is missing the
+// sum is the other tariff's forecast.
+func TestHAForecastCombined(t *testing.T) {
+	h := haForecastServer(t, `{"message":"Entity not found."}`)
+	h.set(`{"message":"Entity not found."}`, http.StatusNotFound)
+
+	ha, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(nil))
+	require.NoError(t, err)
+
+	own := &tariff{rates: api.Rates{
+		{Start: at(10, 0), End: at(10, 15), Value: 700},
+		{Start: at(10, 15), End: at(10, 30), Value: 900},
+	}}
+
+	got, err := NewCombined([]api.Tariff{ha, own}).Rates()
+	require.NoError(t, err)
+	assert.Equal(t, own.rates, got, "the own forecast goes on alone")
+
+	got, err = NewCombined([]api.Tariff{own, ha}).Rates()
+	require.NoError(t, err)
+	assert.Equal(t, own.rates, got)
+
+	// with the entity there it is added
+	h.set(fmt.Sprintf(`{"state":"1","attributes":{"forecast":[{"start":%q,"end":%q,"value":100}]}}`,
+		at(10, 0).Format(time.RFC3339), at(10, 30).Format(time.RFC3339)), http.StatusOK)
+
+	ha2, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(nil))
+	require.NoError(t, err)
+
+	got, err = NewCombined([]api.Tariff{ha2, own}).Rates()
+	require.NoError(t, err)
+	assert.Equal(t, []float64{800, 1000}, quarters(t, got))
+}
+
+// Entries are taken from a day ago to a week ahead, and an entry reaching out of
+// it only as far as that.
+func TestHAForecastWindow(t *testing.T) {
+	now := time.Now()
+	day := 24 * time.Hour
+
+	rates, err := haForecastSlots(api.Rates{
+		{Start: now.Add(-3 * day), End: now.Add(-2 * day), Value: 1},                 // before the window
+		{Start: now.Add(-day - time.Hour), End: now.Add(-day + time.Hour), Value: 2}, // reaches in
+		{Start: now.Add(time.Hour), End: now.Add(2 * time.Hour), Value: 3},
+		{Start: now.Add(7*day - time.Hour), End: now.Add(7*day + time.Hour), Value: 4}, // reaches out
+		{Start: now.Add(8 * day), End: now.Add(9 * day), Value: 5},                     // after the window
+		{Start: now.Add(-day), End: now.Add(400 * day), Value: 6},                      // a year: only the window
+	}, now)
+	require.NoError(t, err)
+
+	assert.Less(t, len(rates), 8*96+10, "no more slots than the window holds")
+	for _, r := range rates {
+		assert.False(t, r.Start.Before(now.Add(-day-SlotDuration)), "%v", r.Start)
+		assert.False(t, r.End.After(now.Add(7*day+SlotDuration)), "%v", r.End)
+		assert.NotEqual(t, 1.0, r.Value)
+		assert.NotEqual(t, 5.0, r.Value)
+	}
+	assert.Equal(t, 2.0, rates[0].Value)
 }
 
 func TestHAForecastAttribute(t *testing.T) {

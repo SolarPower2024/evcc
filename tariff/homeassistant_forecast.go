@@ -10,12 +10,19 @@ package tariff
 // the next one (see shapeSolar); a night written as one entry would rise from its
 // first slot on instead of staying at 0. Several solar tariffs are added per
 // slot by evcc (see combined), where one ends the others go on alone.
+//
+// This forecast never breaks the sum of the solar tariffs: a missing entity,
+// `unavailable`, a wrong attribute, a forecast not updated for an hour and data
+// older than twice the interval give no rates and no error, so the instance's own
+// forecast goes on alone. Each case is logged as a warning, at most every 15
+// minutes.
 
 import (
 	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"slices"
 	"sync"
@@ -25,7 +32,24 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/homeassistant"
+	"github.com/evcc-io/evcc/util/request"
 )
+
+const (
+	// the forecast counts as stale when its `updated` attribute is older, a
+	// forecast without that attribute (another source) is taken as current
+	haForecastStale = time.Hour
+
+	// entries are taken from this window around now
+	haForecastPast   = 24 * time.Hour
+	haForecastFuture = 7 * 24 * time.Hour
+
+	haForecastWarnEvery = 15 * time.Minute
+)
+
+// errNoForecast marks a state of the entity that gives no forecast, as opposed to
+// a failed request
+var errNoForecast = errors.New("no forecast")
 
 // HAForecast is a solar forecast from the attribute of a Home Assistant entity
 type HAForecast struct {
@@ -34,6 +58,9 @@ type HAForecast struct {
 	entity    string
 	attribute string
 	data      *util.Monitor[api.Rates]
+
+	mu       sync.Mutex
+	lastWarn time.Time
 }
 
 var _ api.Tariff = (*HAForecast)(nil)
@@ -84,41 +111,73 @@ func NewHAForecastFromConfig(other map[string]any) (api.Tariff, error) {
 		data:       util.NewMonitor[api.Rates](2 * cc.Interval),
 	}
 
-	done := make(chan error)
+	// the first read may stay empty: the entity may not exist yet, the instance
+	// that writes it may start later. Wait for it a short time only.
+	done := make(chan struct{})
 	go t.run(cc.Interval, done)
 
-	if err := <-done; err != nil {
-		return nil, err
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
 	}
 
 	return t, nil
 }
 
-func (t *HAForecast) run(interval time.Duration, done chan error) {
+func (t *HAForecast) run(interval time.Duration, done chan struct{}) {
 	var once sync.Once
 
 	for ; true; <-time.Tick(interval) {
 		var data api.Rates
 
-		if err := backoff.Retry(func() error {
+		err := backoff.Retry(func() error {
 			var err error
-			data, err = t.forecast()
-			return backoffPermanentError(err)
-		}, bo()); err != nil {
-			if reportError(&once, done, err) {
-				return
+			data, err = t.forecast(time.Now())
+
+			// a state of the entity does not change by asking again
+			if errors.Is(err, errNoForecast) {
+				return backoff.Permanent(err)
 			}
-			t.log.ERROR.Println(err)
-			continue
+			return backoffPermanentError(err)
+		}, bo())
+
+		switch {
+		case err == nil:
+			t.data.Set(data)
+		case errors.Is(err, errNoForecast):
+			t.warn(err)
+			t.data.Set(nil)
+		default:
+			// Home Assistant not reached: keep the data until it is outdated
+			t.warn(err)
+			select {
+			case <-t.data.Done():
+			default:
+				t.data.Set(nil)
+			}
 		}
 
-		t.data.Set(data)
 		once.Do(func() { close(done) })
 	}
 }
 
-// forecast reads the list from the entity and divides it into slots
-func (t *HAForecast) forecast() (api.Rates, error) {
+// warn logs at most once in haForecastWarnEvery
+func (t *HAForecast) warn(err error) {
+	t.mu.Lock()
+	warn := time.Since(t.lastWarn) >= haForecastWarnEvery
+	if warn {
+		t.lastWarn = time.Now()
+	}
+	t.mu.Unlock()
+
+	if warn {
+		t.log.WARN.Printf("%s: %v", t.entity, err)
+	}
+}
+
+// forecast reads the list from the entity and divides it into slots. A state of
+// the entity that gives no forecast is an errNoForecast.
+func (t *HAForecast) forecast(now time.Time) (api.Rates, error) {
 	var res struct {
 		State      string                     `json:"state"`
 		Attributes map[string]json.RawMessage `json:"attributes"`
@@ -126,34 +185,49 @@ func (t *HAForecast) forecast() (api.Rates, error) {
 
 	uri := fmt.Sprintf("%s/api/states/%s", t.URI(), url.PathEscape(t.entity))
 	if err := t.GetJSON(uri, &res); err != nil {
+		if se, ok := errors.AsType[*request.StatusError](err); ok && se.StatusCode() == http.StatusNotFound {
+			return nil, fmt.Errorf("entity not found: %w", errNoForecast)
+		}
 		return nil, err
 	}
 
 	if res.State == "unknown" || res.State == "unavailable" {
-		return nil, backoff.Permanent(fmt.Errorf("%s: %w", t.entity, api.ErrNotAvailable))
+		return nil, fmt.Errorf("entity %s: %w", res.State, errNoForecast)
 	}
 
 	raw, ok := res.Attributes[t.attribute]
 	if !ok {
-		return nil, backoff.Permanent(fmt.Errorf("%s: missing attribute %s", t.entity, t.attribute))
+		return nil, fmt.Errorf("missing attribute %s: %w", t.attribute, errNoForecast)
+	}
+
+	if raw, ok := res.Attributes["updated"]; ok {
+		var s string
+		if json.Unmarshal(raw, &s) == nil {
+			if updated, err := time.Parse(time.RFC3339, s); err == nil && now.Sub(updated) > haForecastStale {
+				return nil, fmt.Errorf("not updated since %s: %w", updated.Local().Format("02.01. 15:04"), errNoForecast)
+			}
+		}
 	}
 
 	var rates api.Rates
 	if err := json.Unmarshal(raw, &rates); err != nil {
-		return nil, backoff.Permanent(fmt.Errorf("%s: attribute %s is not a list of start, end and value: %w", t.entity, t.attribute, err))
+		return nil, fmt.Errorf("attribute %s is not a list of start, end and value: %w", t.attribute, errors.Join(err, errNoForecast))
 	}
 
-	slots, err := haForecastSlots(rates)
+	slots, err := haForecastSlots(rates, now)
 	if err != nil {
-		return nil, backoff.Permanent(fmt.Errorf("%s: %w", t.entity, err))
+		return nil, fmt.Errorf("attribute %s: %w", t.attribute, errors.Join(err, errNoForecast))
 	}
 
 	return slots, nil
 }
 
 // haForecastSlots divides each entry into slots of SlotDuration with the value of
-// the entry. An entry starts at the slot it begins in.
-func haForecastSlots(rates api.Rates) (api.Rates, error) {
+// the entry. An entry starts at the slot it begins in. Only the time from a day
+// ago to a week ahead is taken, before dividing.
+func haForecastSlots(rates api.Rates, now time.Time) (api.Rates, error) {
+	from, to := now.Add(-haForecastPast), now.Add(haForecastFuture)
+
 	res := make(api.Rates, 0, len(rates))
 
 	for _, r := range rates {
@@ -161,10 +235,21 @@ func haForecastSlots(rates api.Rates) (api.Rates, error) {
 			return nil, fmt.Errorf("invalid entry from %v to %v", r.Start, r.End)
 		}
 
-		for start := r.Start.Truncate(SlotDuration); start.Before(r.End); start = start.Add(SlotDuration) {
+		start, end := r.Start, r.End
+		if start.Before(from) {
+			start = from
+		}
+		if end.After(to) {
+			end = to
+		}
+		if !end.After(start) {
+			continue
+		}
+
+		for s := start.Truncate(SlotDuration); s.Before(end); s = s.Add(SlotDuration) {
 			res = append(res, api.Rate{
-				Start: start,
-				End:   start.Add(SlotDuration),
+				Start: s,
+				End:   s.Add(SlotDuration),
 				Value: r.Value,
 			})
 		}
@@ -177,13 +262,18 @@ func haForecastSlots(rates api.Rates) (api.Rates, error) {
 	return res, nil
 }
 
-// Rates implements the api.Tariff interface
+// Rates implements the api.Tariff interface. Without a current forecast there
+// are no rates and no error, see above.
 func (t *HAForecast) Rates() (api.Rates, error) {
 	var res api.Rates
-	err := t.data.GetFunc(func(val api.Rates) {
+	if err := t.data.GetFunc(func(val api.Rates) {
 		res = slices.Clone(val)
-	})
-	return res, err
+	}); err != nil {
+		t.warn(err)
+		return nil, nil
+	}
+
+	return res, nil
 }
 
 // Type implements the api.Tariff interface
