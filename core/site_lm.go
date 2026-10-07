@@ -373,10 +373,7 @@ func (site *Site) batteryCircuitAllows() bool {
 		return false
 	}
 
-	bat := site.lmBattery()
-
-	// records the battery's unserved demand, so loads below its priority give way
-	allowed := site.lmm().ValidatePower(bat, c, bat.GetChargePower(), want)
+	allowed := site.batteryCircuitBudget(c, want)
 	if allowed >= want {
 		return true
 	}
@@ -391,6 +388,26 @@ func (site *Site) batteryCircuitAllows() bool {
 	site.lmm().AddEvent(lm.Event{At: time.Now(), Type: lm.EventGridChargeDenied, A: allowed, B: want})
 
 	return false
+}
+
+// batteryCircuitBudget returns how much of the requested grid charge power the
+// circuit grants the battery, checked against its power and its current limits
+// alike. It records what the circuit denies, so loads below the battery's
+// priority give way.
+func (site *Site) batteryCircuitBudget(c api.Circuit, want float64) float64 {
+	bat := site.lmBattery()
+	phases := site.lmBatteryPhases()
+
+	allowed := site.lmm().ValidatePower(bat, c, bat.GetChargePower(), want)
+
+	// converted back only when capped, the round trip would otherwise shave off
+	// a fraction of a watt and fail the full power check of on/off charging
+	wantCurrent := powerToCurrent(want, phases)
+	if current := site.lmm().ValidateCurrent(bat, c, bat.GetMaxPhaseCurrent(), wantCurrent); current < wantCurrent {
+		allowed = min(allowed, currentToPower(current, phases))
+	}
+
+	return allowed
 }
 
 //
@@ -465,8 +482,7 @@ func (site *Site) batteryChargeSetpoint() float64 {
 
 	// records what the circuit denies, so loads below the battery give way
 	if c := site.lmBatteryCircuit(); c != nil {
-		bat := site.lmBattery()
-		power = min(power, site.lmm().ValidatePower(bat, c, bat.GetChargePower(), power))
+		power = min(power, site.batteryCircuitBudget(c, power))
 	}
 
 	power = math.Floor(power)

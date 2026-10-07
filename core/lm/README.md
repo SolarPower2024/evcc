@@ -90,10 +90,12 @@ circuit:
 | phases, wait after a shed, reservation expiry | Lastmanagement-Details → Erweitert | 3, 5 min, 10 min |
 
 A battery switched through mode scripts is on or off, so the whole expected
-charge power has to fit into the circuit. Without a known charge power, grid
-charging on a circuit stays off and a warning is logged once. With a charge
-power entity, evcc writes the grid charge power instead: the expected power,
-trimmed to what fits below the peak limit and into the circuit, at least 500 W.
+charge power has to fit into the circuit, against its power and its current
+limit (the current spread over the phases set under *Erweitert*). Without a
+known charge power, grid charging on a circuit stays off and a warning is
+logged once. With a charge power entity, evcc writes the grid charge power
+instead: the expected power, trimmed to what fits below the peak limit and into
+the circuit, at least 500 W.
 After a shed, grid charging waits for the hold-off, as stopping it frees exactly
 the power that would let it start again. See `core/site_lm.go`.
 
