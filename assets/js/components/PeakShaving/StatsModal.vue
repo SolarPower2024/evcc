@@ -14,35 +14,45 @@
 			<p v-if="!months.length" class="text-muted mb-0">{{ $t("peakstats.empty") }}</p>
 			<template v-else>
 				<div class="tiles mb-4" data-testid="peak-stats-current">
-					<div class="tile">
-						<div class="tile-label">{{ $t("peakstats.withBattery") }}</div>
-						<div class="tile-value" :class="{ 'text-danger': overLimit }">
-							{{ power(current.peak, current.peakAt, false) }}
-							<span class="tile-unit">/ {{ fmtW(limit) }}</span>
+					<div class="tile" data-testid="peak-stats-peak">
+						<div class="tile-title">
+							{{ $t("peakstats.peakIn", { month: currentMonthLong }) }}
 						</div>
-						<div class="tile-sub">{{ when(current.peakAt) }}</div>
-					</div>
-					<div class="tile">
-						<div class="tile-label">{{ $t("peakstats.withoutBattery") }}</div>
-						<div class="tile-value">
-							{{ power(current.demand, current.demandAt, false) }}
-							<span v-if="recorded(current.demandAt)" class="tile-unit">kW</span>
+						<div class="pair my-2">
+							<div>
+								<div class="tile-label">{{ $t("peakstats.withBattery") }}</div>
+								<div class="tile-value" :class="{ 'text-danger': overLimit }">
+									{{ power(current.peak, current.peakAt, false) }}
+									<span v-if="recorded(current.peakAt)" class="tile-unit"
+										>kW</span
+									>
+								</div>
+								<div class="tile-sub">{{ when(current.peakAt) }}</div>
+							</div>
+							<div>
+								<div class="tile-label">{{ $t("peakstats.withoutBattery") }}</div>
+								<div class="tile-value">
+									{{ power(current.demand, current.demandAt, false) }}
+									<span v-if="recorded(current.demandAt)" class="tile-unit"
+										>kW</span
+									>
+								</div>
+								<div class="tile-sub">{{ when(current.demandAt) }}</div>
+							</div>
 						</div>
-						<div class="tile-sub">{{ when(current.demandAt) }}</div>
+						<div class="tile-sub">{{ peakFooter }}</div>
 					</div>
 					<div v-if="currentCost" class="tile" data-testid="peak-stats-saving">
-						<div class="tile-label">{{ $t("peakstats.saving") }}</div>
-						<div class="tile-value" :class="{ 'text-danger': currentCost.saving < 0 }">
+						<div class="tile-title">
+							{{ $t("peakstats.savingIn", { month: currentMonthLong }) }}
+						</div>
+						<div
+							class="tile-value my-1"
+							:class="{ 'text-danger': currentCost.saving < 0 }"
+						>
 							{{ money(currentCost.saving) }}
 						</div>
-						<div class="tile-sub">
-							{{ $t("peakstats.savingTotal", { total: money(totalSaving) }) }}
-						</div>
-					</div>
-					<div class="tile">
-						<div class="tile-label">{{ $t("peakstats.interventions") }}</div>
-						<div class="tile-value">{{ current.interventions }}</div>
-						<div class="tile-sub">{{ currentMonthName }}</div>
+						<div class="tile-sub">{{ savingFooter }}</div>
 					</div>
 				</div>
 
@@ -99,30 +109,42 @@
 					</table>
 				</div>
 
-				<ul class="list-unstyled mb-0 d-sm-none" data-testid="peak-stats-list">
-					<li
-						v-for="m in months"
-						:key="m.month"
-						class="month-row py-2"
-						data-testid="peak-stats-month-mobile"
-					>
-						<div class="d-flex justify-content-between align-items-baseline gap-3">
-							<strong>{{ monthName(m.month) }}</strong>
-							<div v-if="hasTariff && costOf(m.month)" class="text-end">
-								{{ money(costOf(m.month).cost) }}
-								<div
-									class="small"
+				<div class="d-sm-none" data-testid="peak-stats-list">
+					<div class="list-head d-flex justify-content-between small evcc-gray pb-1">
+						<span>{{ $t("peakstats.monthly") }}</span>
+						<span v-if="hasTariff">{{ $t("peakstats.cost") }}</span>
+					</div>
+					<ul class="list-unstyled mb-0">
+						<li
+							v-for="m in months"
+							:key="m.month"
+							class="month-row"
+							data-testid="peak-stats-month-mobile"
+						>
+							<div class="d-flex justify-content-between align-items-baseline gap-3">
+								<strong>{{ monthName(m.month) }}</strong>
+								<span v-if="hasTariff && costOf(m.month)">
+									{{ money(costOf(m.month).cost) }}
+								</span>
+							</div>
+							<div
+								class="d-flex justify-content-between align-items-baseline gap-3 small mt-1"
+							>
+								<span class="evcc-gray">{{ monthPowers(m) }}</span>
+								<span
+									v-if="hasTariff && costOf(m.month)"
+									class="text-nowrap"
 									:class="
 										costOf(m.month).saving < 0 ? 'text-danger' : 'evcc-gray'
 									"
 								>
 									{{ savingText(costOf(m.month).saving) }}
-								</div>
+								</span>
 							</div>
-						</div>
-						<div class="evcc-gray small">{{ monthSummary(m) }}</div>
-					</li>
-				</ul>
+							<div class="evcc-gray small">{{ monthInfo(m) }}</div>
+						</li>
+					</ul>
+				</div>
 			</template>
 		</div>
 	</GenericModal>
@@ -149,9 +171,30 @@ export default {
 		current() {
 			return this.months[0];
 		},
-		currentMonthName() {
+		currentMonthLong() {
 			const [y, m] = this.current.month.split("-").map(Number);
-			return this.fmtMonthYear(new Date(y, m - 1, 1));
+			return new Intl.DateTimeFormat(this.$i18n?.locale, { month: "long" }).format(
+				new Date(y, m - 1, 1)
+			);
+		},
+		// below the pair: the limit, and the interventions when there is no saving tile
+		peakFooter() {
+			const parts = [];
+			if (this.limit > 0) {
+				parts.push(this.$t("peakstats.limitShort", { limit: this.fmtW(this.limit) }));
+			}
+			if (!this.currentCost) parts.push(this.interventionsText(this.current));
+			return parts.join(" · ");
+		},
+		savingFooter() {
+			const first = this.costs.map((c) => c.month).sort()[0];
+			return [
+				this.$t("peakstats.savingSince", {
+					month: this.monthName(first),
+					total: this.money(this.totalSaving),
+				}),
+				this.interventionsText(this.current),
+			].join(" · ");
 		},
 		// the month's baseline, the highest limit set by hand in it, see
 		// core/site_peak_stats.go; before the first one: the limit now
@@ -184,25 +227,19 @@ export default {
 				? this.$t("peakstats.limitShort", { limit: this.fmtW(m.baseline) })
 				: "";
 		},
-		// second line of the month in the table
+		interventionsText(m) {
+			return this.$t("peakstats.interventionsCount", { count: m.interventions });
+		},
+		// interventions and limit: under the month in the table, last line on a phone
 		monthInfo(m) {
-			return [
-				this.$t("peakstats.interventionsCount", { count: m.interventions }),
-				this.limitText(m),
-			]
-				.filter(Boolean)
-				.join(" · ");
+			return [this.interventionsText(m), this.limitText(m)].filter(Boolean).join(" · ");
 		},
 		// second line of the month on a phone, where the table does not fit
-		monthSummary(m) {
+		monthPowers(m) {
 			return [
 				this.$t("peakstats.withShort", { power: this.power(m.peak, m.peakAt) }),
 				this.$t("peakstats.withoutShort", { power: this.power(m.demand, m.demandAt) }),
-				this.$t("peakstats.interventionsCount", { count: m.interventions }),
-				this.limitText(m),
-			]
-				.filter(Boolean)
-				.join(" · ");
+			].join(" · ");
 		},
 		costOf(month) {
 			return this.costs.find((c) => c.month === month);
@@ -241,8 +278,23 @@ export default {
 <style scoped>
 .tiles {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
 	gap: 0.75rem;
+}
+.pair {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 1rem;
+}
+.tile-title {
+	font-size: 0.85rem;
+	font-weight: bold;
+}
+.list-head {
+	border-bottom: 1px solid var(--bs-border-color);
+}
+.month-row {
+	padding: 0.85rem 0;
 }
 .tile {
 	background: var(--evcc-box);
