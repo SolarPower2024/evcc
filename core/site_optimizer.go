@@ -657,8 +657,8 @@ func (site *Site) optimizerUpdate(battery []types.Measurement) error {
 		return apiError(resp)
 	}
 
-	// custom: reserve and soc-based grid charging as further passes, see core/site_optimizer_reserve_pass.go
-	site.lmOptimizerPasses(apiClient, &req, details, resp.JSON200)
+	// custom: reserve and soc-based grid charging as further passes and the export forecast, see core/site_optimizer_reserve_pass.go and core/site_lm_export_forecast.go
+	site.lmOptimizerResult(apiClient, &req, details, resp.JSON200)
 
 	// publish before the status check so the optimizer page stays available
 	// for diagnosing non-optimal results

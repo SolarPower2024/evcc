@@ -85,7 +85,9 @@ func customSiteRoutes(site site.API) map[string]route {
 		"batteryidentuse": {"POST", "/batteryidentuse/{value:[01truefalse]+}", boolHandler(site.SetBatteryIdentUse, site.GetBatteryIdentUse)},
 
 		// advanced load management settings, see core/site_lm_advanced.go
-		"lmadvanced": {"POST", "/lmadvanced/{name:[a-zA-Z]+}/{value:[0-9.]+}", lmAdvancedHandler(site)},
+		"lmadvanced":             {"POST", "/lmadvanced/{name:[a-zA-Z]+}/{value:[0-9.]+}", lmAdvancedHandler(site)},
+		"lmexportforecast":       {"POST", "/lmexportforecast/{value:[a-zA-Z0-9_.]+}", stringHandler(site.SetLmExportForecast, site.GetLmExportForecast)},
+		"lmexportforecastdelete": {"DELETE", "/lmexportforecast", stringHandler(site.SetLmExportForecast, site.GetLmExportForecast)},
 
 		// uploaded load profile for the home forecast, see core/site_load_manual.go
 		"lmhomeprofile":       {"POST", "/lmhomeprofile", lmHomeProfileUploadHandler(site)},

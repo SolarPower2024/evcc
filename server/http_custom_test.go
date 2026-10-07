@@ -108,6 +108,8 @@ var customRouteSamples = map[string]string{
 	"lmcircuitdelete":               "/lmcircuit",
 	"batteryidentuse":               "/batteryidentuse/true",
 	"lmadvanced":                    "/lmadvanced/hysteresis/3",
+	"lmexportforecast":              "/lmexportforecast/sensor.evcc_einspeiseprognose",
+	"lmexportforecastdelete":        "/lmexportforecast",
 	"lmhomeprofile":                 "/lmhomeprofile",
 	"lmhomeprofiledelete":           "/lmhomeprofile",
 	"lmhomeprofilecsv":              "/lmhomeprofile",

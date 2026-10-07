@@ -90,9 +90,10 @@ type lmState struct {
 
 // siteCustom is the state of this fork's features, one field in upstream's Site
 type siteCustom struct {
-	lm   lmState
-	peak peakState
-	snow snowState // snow on pv, see site_snow.go
+	lm     lmState
+	peak   peakState
+	snow   snowState           // snow on pv, see site_snow.go
+	export exportForecastState // planned grid export as forecast in Home Assistant, see site_lm_export_forecast.go
 }
 
 // restoreCustom restores the fork's settings, called at the end of upstream's

@@ -49,6 +49,8 @@ export interface LmAdvanced {
   /** Cycles after which a load ignoring its limit is no longer counted on, 0 = off. */
   followCycles: number;
   gridChargeWindow: number;
+  /** Home Assistant entity the optimizer's planned grid export is written to, empty = off. */
+  exportForecastEntity?: string;
 }
 
 // a battery profile, see core/lm/profile. Values left out are not changed.

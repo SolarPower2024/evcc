@@ -34,6 +34,9 @@ type lmAdvanced struct {
 	// home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load
 	// profile, see site_load_manual.go
 	HomeForecast *float64 `json:"homeForecast,omitempty"`
+	// Home Assistant entity the optimizer's planned grid export is written to, empty = off,
+	// see site_lm_export_forecast.go
+	ExportForecastEntity string `json:"exportForecastEntity,omitempty"`
 }
 
 // home consumption forecasts, see HomeForecast
@@ -45,18 +48,19 @@ const (
 
 // lmAdvancedState is what the ui shows: the values in effect
 type lmAdvancedState struct {
-	Hysteresis       float64 `json:"hysteresis"`
-	FreeValue        float64 `json:"freeValue"`
-	HoldOff          float64 `json:"holdOff"`
-	Timeout          float64 `json:"timeout"`
-	Phases           int     `json:"phases"`
-	PeakFreeze       float64 `json:"peakFreeze"`
-	PeakCap          float64 `json:"peakCap"`
-	WriteTolerance   float64 `json:"writeTolerance"`
-	FollowCycles     int     `json:"followCycles"`
-	GridChargeWindow float64 `json:"gridChargeWindow"`
-	HomeWeekday      bool    `json:"homeWeekday"`
-	HomeForecast     int     `json:"homeForecast"`
+	Hysteresis           float64 `json:"hysteresis"`
+	FreeValue            float64 `json:"freeValue"`
+	HoldOff              float64 `json:"holdOff"`
+	Timeout              float64 `json:"timeout"`
+	Phases               int     `json:"phases"`
+	PeakFreeze           float64 `json:"peakFreeze"`
+	PeakCap              float64 `json:"peakCap"`
+	WriteTolerance       float64 `json:"writeTolerance"`
+	FollowCycles         int     `json:"followCycles"`
+	GridChargeWindow     float64 `json:"gridChargeWindow"`
+	HomeWeekday          bool    `json:"homeWeekday"`
+	HomeForecast         int     `json:"homeForecast"`
+	ExportForecastEntity string  `json:"exportForecastEntity"`
 }
 
 // lmAdvancedLimit is a setting's valid range
@@ -110,18 +114,19 @@ func (site *Site) advanced() lmAdvanced {
 
 func (site *Site) publishLmAdvanced() {
 	site.publish(keys.LmAdvanced, lmAdvancedState{
-		Hysteresis:       site.peakHysteresis(),
-		FreeValue:        site.peakFreeValue(),
-		HoldOff:          site.lmHoldOff().Minutes(),
-		Timeout:          site.lmTimeout().Minutes(),
-		Phases:           site.lmBatteryPhases(),
-		PeakFreeze:       site.peakFreeze().Minutes(),
-		PeakCap:          site.peakCap(),
-		WriteTolerance:   site.peakWriteTolerance(),
-		FollowCycles:     site.lmFollowCycles(),
-		GridChargeWindow: site.gridChargeWindow().Hours(),
-		HomeWeekday:      site.homeWeekday(),
-		HomeForecast:     site.homeForecast(),
+		Hysteresis:           site.peakHysteresis(),
+		FreeValue:            site.peakFreeValue(),
+		HoldOff:              site.lmHoldOff().Minutes(),
+		Timeout:              site.lmTimeout().Minutes(),
+		Phases:               site.lmBatteryPhases(),
+		PeakFreeze:           site.peakFreeze().Minutes(),
+		PeakCap:              site.peakCap(),
+		WriteTolerance:       site.peakWriteTolerance(),
+		FollowCycles:         site.lmFollowCycles(),
+		GridChargeWindow:     site.gridChargeWindow().Hours(),
+		HomeWeekday:          site.homeWeekday(),
+		HomeForecast:         site.homeForecast(),
+		ExportForecastEntity: site.exportForecastEntity(),
 	})
 }
 
