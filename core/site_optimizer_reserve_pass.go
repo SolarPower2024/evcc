@@ -442,10 +442,15 @@ func (site *Site) lmOptimizeAgain() {
 	}
 }
 
+// usableResult reports whether a result is a plan: optimal or feasible
+func usableResult(res *optimizer.OptimizationResult) bool {
+	return res != nil && (res.Status == optimizer.Optimal || res.Status == optimizer.Feasible)
+}
+
 // lmOptimizerPasses runs the passes after the first solve: the reserve as
 // the fork holds it, then soc-based grid charging
 func (site *Site) lmOptimizerPasses(client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, details requestDetails, res *optimizer.OptimizationResult) {
-	if res == nil || (res.Status != optimizer.Optimal && res.Status != optimizer.Feasible) {
+	if !usableResult(res) {
 		return
 	}
 

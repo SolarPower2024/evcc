@@ -443,8 +443,11 @@ elsewhere saving the field fails.
   ends of the horizon stay as they are.
   The first step, which starts at the time of the run, is listed from the quarter
   hour it is in, with the power of its own length.
-- The write runs in the background (timeout 10 s), is skipped while the last one
-  is still running and when the list is unchanged. A failed write is logged as a
+- The write runs in the background (timeout 10 s) over one connection that is
+  kept until a write fails or the entity changes. An unchanged list for the same
+  entity is not written again, but at the latest after 10 minutes, so `updated`
+  stays current for the reader. While a write runs, the newest list waits and is
+  written when it ends (older ones are dropped). A failed write is logged as a
   warning (at most every 15 minutes) and tried again with the next run. The size
   of the attribute is logged at debug level; there is no limit.
 - The entity is gone after a restart of Home Assistant until the next optimizer

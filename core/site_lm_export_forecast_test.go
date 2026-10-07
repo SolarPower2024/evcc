@@ -161,7 +161,7 @@ func TestExportForecastEntityValidation(t *testing.T) {
 	t.Setenv(homeassistant.SupervisorToken, "token")
 
 	for _, entity := range []string{"number.x", "sensor.", "sensor.A", "sensor.a-b", "x", "sensor.a b"} {
-		assert.Error(t, site.SetLmExportForecast(entity), entity)
+		assert.ErrorContains(t, site.SetLmExportForecast(entity), "sensor. followed by", entity)
 	}
 	assert.Empty(t, site.GetLmExportForecast())
 
@@ -203,6 +203,7 @@ type haRecorder struct {
 	paths  []string
 	bodies []map[string]any
 	status int
+	gate   chan struct{} // a request waits for it to be closed or sent to
 }
 
 func (h *haRecorder) handler(w http.ResponseWriter, r *http.Request) {
@@ -216,6 +217,13 @@ func (h *haRecorder) handler(w http.ResponseWriter, r *http.Request) {
 	var body map[string]any
 	_ = json.Unmarshal(b, &body)
 	h.bodies = append(h.bodies, body)
+
+	if h.gate != nil {
+		gate := h.gate
+		h.mu.Unlock()
+		<-gate
+		h.mu.Lock()
+	}
 
 	if h.status != 0 {
 		w.WriteHeader(h.status)
@@ -332,6 +340,78 @@ func TestPublishExportForecast(t *testing.T) {
 		assert.Equal(t, "POST /api/states/sensor.other", path)
 	})
 
+	t.Run("unchanged list is refreshed after ten minutes", func(t *testing.T) {
+		ha := new(haRecorder)
+		site := exportSite(t, ha, "sensor.evcc_einspeiseprognose")
+
+		site.publishExportForecast(details, req, res)
+		site.exportFc().wg.Wait()
+		require.Equal(t, 1, ha.count())
+
+		f := site.exportFc()
+		f.mu.Lock()
+		f.lastWrite = time.Now().Add(-exportForecastRefresh + time.Minute)
+		f.mu.Unlock()
+		site.publishExportForecast(details, req, res)
+		site.exportFc().wg.Wait()
+		assert.Equal(t, 1, ha.count(), "nine minutes")
+
+		f.mu.Lock()
+		f.lastWrite = time.Now().Add(-exportForecastRefresh - time.Minute)
+		f.mu.Unlock()
+		site.publishExportForecast(details, req, res)
+		site.exportFc().wg.Wait()
+		assert.Equal(t, 2, ha.count(), "eleven minutes: written again, updated stays fresh")
+
+		_, body := ha.call(1)
+		_, err := time.Parse(time.RFC3339, body["attributes"].(map[string]any)["updated"].(string))
+		assert.NoError(t, err)
+	})
+
+	t.Run("the same list for another entity is written", func(t *testing.T) {
+		ha := new(haRecorder)
+		site := exportSite(t, ha, "sensor.a")
+
+		site.publishExportForecast(details, req, res)
+		site.exportFc().wg.Wait()
+		require.Equal(t, 1, ha.count())
+
+		// as SetLmExportForecast leaves it, but the old entity's write is the last one
+		site.lms().adv.ExportForecastEntity = "sensor.b"
+		site.publishExportForecast(details, req, res)
+		site.exportFc().wg.Wait()
+		assert.Equal(t, 2, ha.count())
+		path, _ := ha.call(1)
+		assert.Equal(t, "POST /api/states/sensor.b", path)
+	})
+
+	t.Run("the newest list waits for the running write", func(t *testing.T) {
+		ha := &haRecorder{gate: make(chan struct{})}
+		site := exportSite(t, ha, "sensor.evcc_einspeiseprognose")
+
+		list := func(v float32) {
+			d, r, rs := exportCase(start, 900, v, 125)
+			site.publishExportForecast(d, r, rs)
+		}
+
+		list(250)
+		require.Eventually(t, func() bool { return ha.count() == 1 }, 5*time.Second, 10*time.Millisecond)
+
+		// while the first write waits: two newer lists, only the newest is kept
+		list(300)
+		list(350)
+		list(350)
+		assert.Equal(t, 1, ha.count())
+
+		close(ha.gate)
+		site.exportFc().wg.Wait()
+
+		require.Equal(t, 2, ha.count(), "the first and the newest")
+		_, body := ha.call(1)
+		fc := body["attributes"].(map[string]any)["forecast"].([]any)
+		assert.Equal(t, 1400.0, fc[0].(map[string]any)["value"], "350 Wh in 15 min")
+	})
+
 	t.Run("no entity writes nothing", func(t *testing.T) {
 		ha := new(haRecorder)
 		site := exportSite(t, ha, "")
@@ -348,7 +428,8 @@ func TestPublishExportForecast(t *testing.T) {
 		site.publishExportForecast(details, req, res)
 		site.exportFc().wg.Wait()
 		assert.Equal(t, 1, ha.count())
-		assert.Empty(t, site.exportFc().last)
+		assert.Nil(t, site.exportFc().last)
+		assert.Nil(t, site.exportFc().conn, "a new connection after an error")
 
 		ha.mu.Lock()
 		ha.status = 0
@@ -357,7 +438,8 @@ func TestPublishExportForecast(t *testing.T) {
 		site.publishExportForecast(details, req, res)
 		site.exportFc().wg.Wait()
 		assert.Equal(t, 2, ha.count())
-		assert.NotEmpty(t, site.exportFc().last)
+		assert.NotNil(t, site.exportFc().last)
+		assert.NotNil(t, site.exportFc().conn, "the connection is kept")
 	})
 
 	t.Run("no connection is logged, not fatal", func(t *testing.T) {
@@ -367,7 +449,7 @@ func TestPublishExportForecast(t *testing.T) {
 
 		site.publishExportForecast(details, req, res)
 		site.exportFc().wg.Wait()
-		assert.Empty(t, site.exportFc().last)
+		assert.Nil(t, site.exportFc().last)
 		assert.False(t, site.exportFc().lastWarn.IsZero(), "warned")
 	})
 }

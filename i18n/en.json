@@ -551,7 +551,7 @@
       "description": "The defaults suit most installations.",
       "entryLabel": "Advanced",
       "exportForecastHelp": "Add-on only. Writes the optimizer’s planned grid export to this entity (created), e.g. as solar forecast of a second evcc instance. Empty = off.",
-      "exportForecastInvalid": "Entity must start with sensor.",
+      "exportForecastInvalid": "Entity: sensor. followed by a–z, 0–9 or _",
       "exportForecastLabel": "Export forecast to Home Assistant",
       "followCyclesHelp": "If a reduced load draws more than allowed for this many cycles during an overload, the next load up the priority order is cut instead. 0 = off.",
       "followCyclesLabel": "Limit ignored after",
