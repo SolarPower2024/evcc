@@ -246,8 +246,10 @@ setpoint rounds up so the peak stays covered, the charge power rounds down so it
 stays within the limits, and a free value above `max` becomes `max`
 (`TestRangeFit`). A value the entity already holds, within the write tolerance
 (0 W = every change; min and max always land), is not written again, as a
-device may store each write (`TestNumberWrite`). A 2 % hysteresis keeps the soc
-from flapping across the reserve.
+device may store each write (`TestNumberWrite`). An entity removed or replaced
+gets the free value, a charge power entity 0 W
+(`TestPeakEntityRemovedHandsBack`). A 2 % hysteresis keeps the soc from
+flapping across the reserve.
 
 The limit applies to the clock-aligned 15 minute window: `allowed` =
 `(limit × 15 min − energy drawn so far) / time left`, so energy left unused

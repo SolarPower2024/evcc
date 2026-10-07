@@ -837,7 +837,7 @@ func (site *Site) SetPeakShavingEntity(entity string) error {
 
 	s.mu.Lock()
 	changed := s.entity != entity
-	previous := s.entity
+	previous, previousSet := s.entity, s.set
 	s.entity = entity
 	s.mu.Unlock()
 
@@ -853,6 +853,9 @@ func (site *Site) SetPeakShavingEntity(entity string) error {
 
 		return err
 	}
+
+	// the previous target would otherwise keep the last setpoint
+	site.writeOutput("peak shaving", previousSet, site.peakFreeValue())
 
 	site.log.DEBUG.Println("set peak shaving entity:", entity)
 	settings.SetString(keys.PeakShavingEntity, entity)
@@ -888,7 +891,7 @@ func (site *Site) SetPeakShavingChargeEntity(entity string) error {
 
 	s.mu.Lock()
 	changed := s.chargeEntity != entity
-	previous := s.chargeEntity
+	previous, previousSet := s.chargeEntity, s.chargeSet
 	s.chargeEntity = entity
 	s.mu.Unlock()
 
@@ -903,6 +906,9 @@ func (site *Site) SetPeakShavingChargeEntity(entity string) error {
 
 		return err
 	}
+
+	// the previous target would otherwise keep charging at the last setpoint
+	site.writeOutput("grid charge power", previousSet, 0)
 
 	site.log.DEBUG.Println("set grid charge power entity:", entity)
 	settings.SetString(keys.PeakShavingChargeEntity, entity)
