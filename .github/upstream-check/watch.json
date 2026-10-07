@@ -80,6 +80,7 @@
       "files": [
         "charger/switchstages.go",
         "core/loadpoint_stages.go",
+        "assets/js/utils/lmEnergyflow.ts",
         "templates/definition/charger/homeassistant-stages.yaml"
       ],
       "prs": [31722, 34056],

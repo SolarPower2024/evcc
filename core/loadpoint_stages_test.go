@@ -178,18 +178,23 @@ func TestStagesGiveWayToHigherPriority(t *testing.T) {
 	assert.Equal(t, int64(10), wb.current)
 }
 
-// TestStagesPublished pins the flag the ui reads to label the modes Off/Smart/On
+// TestStagesPublished pins the flags the ui reads to label the modes Off/Smart/On
+// and to leave a loadpoint with assumed power out of the energy flow
 func TestStagesPublished(t *testing.T) {
-	lp, _, _ := newStagesLoadpoint(t, "stagespublished")
+	lp, c, _ := newStagesLoadpoint(t, "stagespublished")
+	lp.chargeMeter = newChargeMeter(c)
 
-	ui := make(chan util.Param, 1)
+	ui := make(chan util.Param, 2)
 	lp.uiChan = ui
 	lp.publishStages()
 	assert.Equal(t, util.Param{Key: keys.ChargerStages, Val: true}, <-ui)
+	assert.Equal(t, util.Param{Key: keys.ChargePowerEstimated, Val: true}, <-ui)
 
 	lp.charger = nil
+	lp.chargeMeter = newChargeMeter(&lmMeter{power: 6000})
 	lp.publishStages()
 	assert.Equal(t, util.Param{Key: keys.ChargerStages, Val: false}, <-ui)
+	assert.Equal(t, util.Param{Key: keys.ChargePowerEstimated, Val: false}, <-ui)
 }
 
 // TestStagesEstimatedPower verifies that without a power sensor the assumed power

@@ -11,7 +11,8 @@ import "github.com/evcc-io/evcc/core/keys"
 // on times the stage power), while its own thermostat may have cut out. Control,
 // circuits and load management keep using it. The home consumption, the energy
 // flow, the energy history and the sessions count only measured power, so the
-// heater's real draw shows up in the home consumption instead.
+// heater's real draw shows up in the home consumption instead. The energy flow
+// leaves such a loadpoint out.
 
 // stagedCharger is implemented by charger.SwitchStages
 type stagedCharger interface {
@@ -23,10 +24,11 @@ type powerEstimator interface {
 	PowerEstimated() bool
 }
 
-// publishStages publishes if the charger switches in stages
+// publishStages publishes if the charger switches in stages and if its power is assumed
 func (lp *Loadpoint) publishStages() {
 	_, ok := lp.charger.(stagedCharger)
 	lp.publish(keys.ChargerStages, ok)
+	lp.publish(keys.ChargePowerEstimated, lp.powerEstimated())
 }
 
 // powerEstimated reports if the charge power is assumed rather than measured:

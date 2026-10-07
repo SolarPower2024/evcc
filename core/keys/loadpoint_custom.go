@@ -12,5 +12,6 @@ const (
 // Custom extension: see core/loadpoint_stages.go
 const (
 	ChargerStages       = "chargerStages"       // charger switches a heater in stages
-	ChargePowerEstimate = "chargePowerEstimate" // assumed charge power kept out of chargePower, 0 = measured
+	ChargePowerEstimate  = "chargePowerEstimate"  // assumed charge power kept out of chargePower, 0 = measured
+	ChargePowerEstimated = "chargePowerEstimated" // charge power is always assumed, energy flow leaves the loadpoint out
 )
