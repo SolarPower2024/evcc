@@ -131,7 +131,8 @@ thermostat that cut out (draw up to the standby power, default 15 W) reports
 ready and counts as 0 W. Without a power sensor the power is assumed (stages
 on × stage power): control, circuits and load management use it, but the home
 consumption, energy flow, energy history and sessions count only measured
-power, so the heater's real draw is part of the home consumption; the
+power, so the heater's real draw is part of the home consumption and the
+energy flow leaves the loadpoint out (`chargePowerEstimated`); the
 loadpoint card shows the assumption as "≈ 6 kW" (whole kW, fits a phone) (`chargePowerEstimate`,
 `core/loadpoint_stages.go`). Its session energy stays 0, so a kWh charge limit does
 not apply there. `TestStagesCircuitStepsDown`,
@@ -612,6 +613,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown; default mode labels Aus/Smart/Ein for a heater in stages (`chargerIsStages`) |
 | `assets/js/components/Loadpoints/Loadpoint.vue`, `Mode.vue` | `chargerStages` prop, mode labels Aus/Smart/Ein for a heater in stages; `chargePowerEstimate` shown as "≈ 6 kW" (whole kW, fits a phone) |
+| `assets/js/components/Site/Site.vue` | energy flow gets `measuredLoadpoints(…)` (`utils/lmEnergyflow.ts`): a loadpoint with `chargePowerEstimated` is left out |
 | `assets/js/components/Config/DeviceTags.vue` | value `stages` shown as "ein · ein · aus" |
 | `assets/js/components/Config/TariffCard.vue`, `TariffModal.vue` | EEG counter in the EEG card, price templates for `feedInEeg`, planner price hint |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |

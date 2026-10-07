@@ -92,6 +92,7 @@ import type {
 	Vehicle,
 } from "@/types/evcc";
 import vehicleList from "@/utils/vehicleList";
+import { measuredLoadpoints } from "@/utils/lmEnergyflow"; // custom
 import store from "@/store";
 import type { Grid } from "./types";
 
@@ -180,7 +181,10 @@ export default defineComponent({
 			return store.state?.experimental;
 		},
 		energyflow() {
-			return { ...this.collectProps(Energyflow), loadpoints: this.enabledLoadpoints };
+			return {
+				...this.collectProps(Energyflow),
+				loadpoints: measuredLoadpoints(this.enabledLoadpoints), // custom: see utils/lmEnergyflow.ts
+			};
 		},
 		vehicleList() {
 			return vehicleList(this.vehicles);
