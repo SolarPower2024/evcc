@@ -112,6 +112,7 @@ func TestPeakEntityRemovedHandsBack(t *testing.T) {
 	require.NoError(t, sc.site.SetPeakShavingChargeEntity(""))
 	assert.Equal(t, 0.0, val(sc.charge))
 	assert.False(t, sc.site.chargePowerControlled())
+	assert.Equal(t, 0.0, s.chargeSetpoint, "overview setpoint")
 }
 
 // TestBatteryChargeSetpoint verifies the controlled grid charge power: trimmed
