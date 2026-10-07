@@ -451,6 +451,32 @@ elsewhere saving the field fails.
   run (about 15 minutes at most). Exclude it from the recorder, which keeps no
   attributes above 16 KB: `recorder: exclude: entities:` with the entity.
 
+A second evcc instance of the fork reads the entity as solar forecast: *Konfiguration
+→ Vorhersage hinzufügen → Solar-Vorhersage hinzufügen → Home Assistant (Prognose-Entität)*
+(`tariff/homeassistant_forecast.go`, template `homeassistant-forecast`, no yaml and
+no token; in the add-on the supervisor connection is used). Entity (required),
+attribute (default `forecast`) and interval (default 15 min) are set there; the data
+stays valid for twice the interval. A missing entity, `unavailable` or an attribute
+that is not a list is an error of the tariff, as for any forecast tariff.
+
+- An entry longer than 15 minutes is divided into 15 minute slots of its value. evcc
+  takes a solar value as the power at the start of its slot, and shapes a longer slot
+  as a ramp towards the next one (`shapeSolar`), where an entry over a night would
+  rise from its first slot on; an entry that stays one slot would also shift every
+  slot after it in the optimizer input. `TestExportForecastThroughSolarPath` sends
+  the written list (hours of zeros as one entry, a first step shorter than a quarter
+  hour) through the tariff, the sum with a second solar tariff, the energy per slot
+  of the optimizer request and the series of the forecast page and checks each slot:
+  the value of its step, 0 in the hours of zeros, equal to the same plan written as
+  single steps.
+- Several solar tariffs are added per slot by evcc (`combined`), so the second
+  instance can keep its own forecast and add the export of the first. The export is
+  only planned as far as the optimizer's horizon reaches (48 hours, to the end of
+  that day from 6:00): after it the sum is the other tariff alone, it does not end
+  with the shorter one.
+- Not in the instance that writes the entity: the optimizer would plan with double
+  the solar power. The template says so.
+
 ## 17. Advanced settings
 
 *Lastmanagement-Details → Erweitert* (`POST /api/lmadvanced/{name}/{value}`,
@@ -671,7 +697,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
 | log file | `util/logstash/file_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
-| optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go` |
+| optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
 | ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `PowerIcon`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `FeedInEegSummary`, `PhaseSwitchFields`) |
 | build | `.github/workflows/custom-image.yml` |
@@ -719,7 +745,9 @@ unused:
   result (optimal, feasible) to the export forecast and nothing else;
   `TestExportForecast*` and `TestPublishExportForecast` cover the list, the
   write against a local server, no repeat of an unchanged list and no write
-  without entity.
+  without entity. `TestHAForecast*` read a local server: the list, an attribute of
+  its own, errors (attribute missing, `unavailable`, not a list, entity missing),
+  the template render.
 - `TestSnowCoverOptimizerInput`: the solar series is 0 with the switch on and
   the request unchanged with it off; it relies on evcc building `Ft` as one
   value per slot before `applyLmOptimizerInputs`.

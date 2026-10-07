@@ -139,6 +139,15 @@
       "paths": ["core/site_tariffs.go", "core/site_optimizer.go", "assets/js/views/Forecast.vue"]
     },
     {
+      "name": "Einspeise-Prognose über Home Assistant (Optimizer schreibt, zweite Instanz liest)",
+      "files": [
+        "core/site_lm_export_forecast.go",
+        "tariff/homeassistant_forecast.go",
+        "templates/definition/tariff/homeassistant-forecast.yaml"
+      ],
+      "keywords": ["homeassistant-forecast", "exportForecast", "forecast_json"]
+    },
+    {
       "name": "Grundlagen, auf denen der Fork aufbaut",
       "files": ["core/loadpoint_lm.go"],
       "prs": [30367, 33463]
