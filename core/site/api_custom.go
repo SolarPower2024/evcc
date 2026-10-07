@@ -42,6 +42,8 @@ type CustomAPI interface {
 
 	// advanced load management settings, see core/site_lm_advanced.go
 	SetLmAdvanced(name string, value float64) error
+	GetLmExportForecast() string
+	SetLmExportForecast(string) error
 
 	// uploaded load profile for the home forecast, see core/site_load_manual.go
 	SetLmHomeProfile(name string, data []byte) error

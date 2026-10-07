@@ -421,6 +421,36 @@ Without circuits, peak shaving, soc or one-time grid charging and snow on pv the
 request is unchanged. The optimizer's automatic mode (evcc PR 32881) needs a gate at
 execution, prepared separately on top of these inputs.
 
+### Export forecast
+
+The optimizer's planned grid export can be written to a Home Assistant entity,
+for example as the solar forecast of a second evcc instance
+(`core/site_lm_export_forecast.go`). Set in *Lastmanagement-Details → Erweitert*
+as "Einspeise-Prognose an Home Assistant" (`POST /api/lmexportforecast/{entity}`,
+`DELETE` turns it off), `sensor.<name>` with lowercase letters, digits and
+`_`. Empty = off. Only in the Home Assistant add-on (supervisor, no token),
+elsewhere saving the field fails.
+
+- After each optimizer run with status optimal or feasible, once the fork's
+  passes ran (`lmOptimizerResult` in place of `lmOptimizerPasses`), the grid
+  export per step (`grid_export`, Wh) becomes the mean power in W (Wh × 3600 / step
+  length, whole W) and is written with `POST /api/states/<entity>`: `state` is
+  the power of the current step, `attributes` are `unit_of_measurement: W`,
+  `device_class: power`, `friendly_name`, `updated` and `forecast`, a list of
+  `{start, end, value}`. The entity is created by the write, no helper is needed.
+- Steps of a full hour at 0 W are one entry over that hour (the nights); an entry
+  never spans more than a full hour. Steps with export and partial hours at the
+  ends of the horizon stay as they are.
+  The first step, which starts at the time of the run, is listed from the quarter
+  hour it is in, with the power of its own length.
+- The write runs in the background (timeout 10 s), is skipped while the last one
+  is still running and when the list is unchanged. A failed write is logged as a
+  warning (at most every 15 minutes) and tried again with the next run. The size
+  of the attribute is logged at debug level; there is no limit.
+- The entity is gone after a restart of Home Assistant until the next optimizer
+  run (about 15 minutes at most). Exclude it from the recorder, which keeps no
+  attributes above 16 KB: `recorder: exclude: entities:` with the entity.
+
 ## 17. Advanced settings
 
 *Lastmanagement-Details → Erweitert* (`POST /api/lmadvanced/{name}/{value}`,
@@ -440,6 +470,7 @@ values are not stored, so a changed default applies.
 | `followCycles` | cycles until a load not following is ignored | 3 | 0-20, 0 = off |
 | `gridChargeWindow` | hours to reach the stop soc in the plan | 3 | 1-24 |
 | `homeForecast` | home forecast: evcc, per weekday, manual | 0 | 0-2 |
+| `exportForecastEntity` | text, not a number: entity for the export forecast, see [16](#export-forecast) | empty = off | `sensor.<name>` |
 
 Also there: the load management circuit ([7](#7-load-management-circuit-and-switch))
 and evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
@@ -596,7 +627,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site.go` | `custom` field; `meteredPower` in `updateLoadpoints` (an assumed heater power stays in the home consumption); `restoreCustom` in `restoreSettings`; `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter`; `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
-| `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerPasses` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
+| `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerResult` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
 | `core/site/api.go` | embeds `CustomAPI` |
 | `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`; two `lp.lmm().Peek*` probes; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor`, `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), the phase timers take `phaseScaleDelay`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split per phase count (as in evcc PR 32505), min/max power use it |
@@ -640,7 +671,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
 | log file | `util/logstash/file_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
-| optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go` |
+| optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
 | ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `PowerIcon`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `FeedInEegSummary`, `PhaseSwitchFields`) |
 | build | `.github/workflows/custom-image.yml` |
@@ -684,6 +715,11 @@ unused:
   `TestLoadpointUsesSiteLoadManagement`, `TestMergeRoutesKeepsUpstream`: the
   hooks act on evcc's real control path.
 - `TestRestoreCustomAfterRestart`: every fork setting survives a restart.
+- `TestLmOptimizerResultExport`: the hook in `optimizerUpdate` passes a usable
+  result (optimal, feasible) to the export forecast and nothing else;
+  `TestExportForecast*` and `TestPublishExportForecast` cover the list, the
+  write against a local server, no repeat of an unchanged list and no write
+  without entity.
 - `TestSnowCoverOptimizerInput`: the solar series is 0 with the switch on and
   the request unchanged with it off; it relies on evcc building `Ft` as one
   value per slot before `applyLmOptimizerInputs`.

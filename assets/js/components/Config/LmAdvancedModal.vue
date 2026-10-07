@@ -141,6 +141,23 @@
 				</select>
 			</FormRow>
 
+			<!-- custom: export forecast of the optimizer to Home Assistant, see core/site_lm_export_forecast.go -->
+			<FormRow
+				id="lmAdvanced-exportForecast"
+				:label="$t('config.lmadvanced.exportForecastLabel')"
+				:help="$t('config.lmadvanced.exportForecastHelp')"
+			>
+				<input
+					id="lmAdvanced-exportForecast"
+					v-model.trim="exportForecast"
+					type="text"
+					class="form-control"
+					placeholder="sensor.evcc_einspeiseprognose"
+					autocomplete="off"
+					data-testid="lmadvanced-exportForecast"
+				/>
+			</FormRow>
+
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
 				<button
 					type="button"
@@ -153,7 +170,13 @@
 				<button
 					type="submit"
 					class="btn btn-primary order-1 order-sm-2 flex-grow-1 flex-sm-grow-0 px-4"
-					:disabled="saving || (!changed.length && !circuitChanged && !percentileChanged)"
+					:disabled="
+						saving ||
+						(!changed.length &&
+							!circuitChanged &&
+							!percentileChanged &&
+							!exportForecastChanged)
+					"
 				>
 					<span
 						v-if="saving"
@@ -212,6 +235,8 @@ export default {
 			initialCircuit: "",
 			percentile: 0,
 			initialPercentile: 0,
+			exportForecast: "",
+			initialExportForecast: "",
 			uploading: false,
 		};
 	},
@@ -248,6 +273,9 @@ export default {
 		percentileChanged() {
 			return this.percentile !== this.initialPercentile;
 		},
+		exportForecastChanged() {
+			return this.exportForecast !== this.initialExportForecast;
+		},
 		circuitChanged() {
 			return this.circuit !== this.initialCircuit;
 		},
@@ -283,6 +311,8 @@ export default {
 			this.initialCircuit = this.circuit;
 			this.percentile = store.state?.profilePercentile ?? 0;
 			this.initialPercentile = this.percentile;
+			this.exportForecast = state.exportForecastEntity || "";
+			this.initialExportForecast = this.exportForecast;
 		},
 		async uploadHomeProfile(event) {
 			const file = event.target.files?.[0];
@@ -334,6 +364,11 @@ export default {
 				return;
 			}
 
+			if (this.exportForecast && !/^sensor\.[a-z0-9_]+$/.test(this.exportForecast)) {
+				this.error = this.$t("config.lmadvanced.exportForecastInvalid");
+				return;
+			}
+
 			this.saving = true;
 			this.error = "";
 
@@ -350,6 +385,15 @@ export default {
 						await api.post(`profilepercentile/${this.percentile}`);
 					} else {
 						await api.delete("profilepercentile");
+					}
+				}
+				if (this.exportForecastChanged) {
+					if (this.exportForecast) {
+						await api.post(
+							`lmexportforecast/${encodeURIComponent(this.exportForecast)}`
+						);
+					} else {
+						await api.delete("lmexportforecast");
 					}
 				}
 				for (const name of this.changed) {
