@@ -603,7 +603,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone) |
-| `assets/js/views/Forecast.vue` | mounts `Forecast/SnowCoverSwitch.vue` twice: the switch in the solar card's `#actions` (which is now always rendered, evcc's own switch keeps its `v-if="showSolarAdjust"` on its inner `div`) and the row under the chart (switch below 768 px, detection) |
+| `assets/js/views/Forecast.vue` | mounts `Forecast/SnowCoverSwitch.vue` twice: the switch in the solar card's `#actions` (which is now always rendered, evcc's own switch keeps its `v-if="showSolarAdjust"` on its inner `div`) and the row under the chart (below 768 px also evcc's *adjust* switch, passed in as label, state and `changeAdjusted`; evcc's own one there gets `d-none d-md-block`) |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown; default mode labels Aus/Smart/Ein for a heater in stages (`chargerIsStages`) |

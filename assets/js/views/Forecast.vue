@@ -33,7 +33,11 @@
 					class="box-pull-out mb-4"
 				>
 					<template #actions>
-						<div v-if="showSolarAdjust" class="form-check form-switch mb-0 text-nowrap">
+						<div
+							v-if="showSolarAdjust"
+							class="form-check form-switch mb-0 text-nowrap d-none d-md-block"
+						>
+							<!-- custom: below md in the row under the chart, see SnowCoverSwitch -->
 							<input
 								id="solarForecastAdjust"
 								:checked="solarAdjusted"
@@ -60,7 +64,12 @@
 							@scroll="onChartScroll"
 						/>
 					</div>
-					<SnowCoverSwitch note />
+					<SnowCoverSwitch
+						note
+						:adjust="showSolarAdjust ? solarAdjustTextShort : ''"
+						:adjusted="!!solarAdjusted"
+						@adjust="changeAdjusted"
+					/>
 					<!-- custom -->
 					<SolarDetails :solar="solar" />
 				</Card>
