@@ -172,8 +172,8 @@ restart (`lmOff`). See `core/site_lm_switch.go`.
 
 ## 8. Overview
 
-*Mehr → Lastmanagement (Peak)* shows circuit load, peak shaving, battery grid
-charging, every load with its state (running, throttled, shed and held off
+*Mehr → Lastmanagement (Peak)* shows circuit load, peak shaving, every load
+including battery grid charging with its power and state (running, throttled, shed and held off
 until, waiting with what it needs and what is free, paused) and the last 20
 events. Published as `lmStatus` at the end of every cycle
 (`core/site_lm_status.go`, records in `core/lm/status.go`); it never feeds back

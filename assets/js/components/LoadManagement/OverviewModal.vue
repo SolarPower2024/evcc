@@ -72,12 +72,6 @@
 						{{ peak.follow }}
 					</div>
 				</div>
-
-				<div v-if="battery" class="tile" data-testid="lm-gridcharge">
-					<div class="tile-label">{{ $t("lmoverview.gridCharge") }}</div>
-					<div class="tile-value">{{ gridCharge.value }}</div>
-					<div class="tile-sub">{{ gridCharge.sub }}</div>
-				</div>
 			</div>
 
 			<h6 class="small evcc-gray mb-2">{{ $t("lmoverview.loads") }}</h6>
@@ -233,32 +227,6 @@ export default {
 		loads() {
 			return [...(this.status?.loads || [])].sort((a, b) => b.priority - a.priority);
 		},
-		battery() {
-			return this.loads.find((l) => l.battery);
-		},
-		gridCharge() {
-			const b = this.battery;
-			switch (b.state) {
-				case "running":
-					return {
-						value: this.fmtW(b.power),
-						sub: b.allowed
-							? this.$t("lmoverview.setpoint", { power: this.fmtW(b.allowed) })
-							: this.$t("lmoverview.state.running"),
-					};
-				case "paused":
-					return {
-						value: this.$t("lmoverview.state.paused"),
-						sub: this.$t("lmoverview.pausedPeak", { time: this.until(b) }),
-					};
-				case "shed":
-					return {
-						value: this.$t("lmoverview.state.blocked"),
-						sub: this.$t("lmoverview.blockedCircuit", { time: this.until(b) }),
-					};
-			}
-			return { value: this.$t("lmoverview.state.off"), sub: "" };
-		},
 		overall() {
 			if (!this.lmEnabled) {
 				return { text: this.$t("lmoverview.overall.off"), class: "pill-muted" };
@@ -305,10 +273,9 @@ export default {
 		stateText(l) {
 			const t = (key, params) => this.$t(`lmoverview.stateDetail.${key}`, params);
 			switch (l.state) {
+				// the power stands left of it
 				case "running":
-					return l.battery && l.allowed
-						? t("charging", { power: this.fmtW(l.allowed) })
-						: this.$t("lmoverview.state.running");
+					return l.battery ? t("charging") : this.$t("lmoverview.state.running");
 				case "throttled":
 					return t("throttled", {
 						allowed: this.fmtW(l.allowed, this.POWER_UNIT.KW, false),

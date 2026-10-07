@@ -594,7 +594,7 @@
       "percentileValue": "{percentile} %"
     },
     "lmpriorities": {
-      "battery": "Hausbatterie (Netzladen)",
+      "battery": "Batterie (Netzladen)",
       "description": "Oben der wichtigste Verbraucher. Reicht die Leistung nicht, wird von unten her gedrosselt oder abgeschaltet, bei gleicher Priorität zählt, wer zuerst da ist. Bei Ladepunkten ist es ihre normale Priorität, sie gilt auch für PV-Überschuss und Planer. Die Batterie hat einen eigenen Wert.",
       "entryLabel": "Prioritäten",
       "invalid": "Priorität konnte nicht gespeichert werden.",
@@ -1737,8 +1737,7 @@
     "version": "Version"
   },
   "lmoverview": {
-    "battery": "Hausbatterie (Netzladen)",
-    "blockedCircuit": "Stromkreis · bis {time}",
+    "battery": "Batterie (Netzladen)",
     "circuitFollows": "folgt der Monatsspitze, eingestellt {limit}",
     "circuitLifted": "Grenze {limit} aufgehoben",
     "disabledHelp": "Aus: Die Leistungsgrenzen der Stromkreise gelten nicht, nichts wird dafür gedrosselt. Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv.",
@@ -1754,7 +1753,6 @@
       "throttled": "{load} gedrosselt {requested} → {allowed}"
     },
     "events": "Letzte Ereignisse",
-    "gridCharge": "Batterie-Netzladen",
     "loads": "Verbraucher nach Priorität · dimmen/abschalten von unten nach oben",
     "menu": "Lastmanagement (Peak)",
     "noEvents": "Noch keine Ereignisse seit dem Start.",
@@ -1765,14 +1763,12 @@
       "off": "Aus",
       "overload": "Überlast"
     },
-    "pausedPeak": "Peak · wieder ab {time}",
     "peak": "Peak Shaving · 15-min-Mittel",
     "peakAllowed": "Erlaubt {power} bis {time}",
     "peakFree": "Über der Reserve · frei",
     "peakOff": "Aus",
     "peakReserve": "Reserve aktiv · Soll {setpoint}",
     "protected": "Abwurfschutz",
-    "setpoint": "Soll {power}",
     "state": {
       "blocked": "Gesperrt",
       "off": "Aus",
@@ -1781,7 +1777,7 @@
     },
     "stateDetail": {
       "blocked": "Gesperrt · bis {time}",
-      "charging": "Lädt · Soll {power}",
+      "charging": "Lädt",
       "paused": "Pausiert · Peak bis {time}",
       "shed": "Abgeworfen · gesperrt bis {time}",
       "throttled": "Gedrosselt · {allowed} von {requested}",
