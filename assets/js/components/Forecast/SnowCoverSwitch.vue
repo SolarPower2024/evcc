@@ -1,6 +1,6 @@
 <template>
-	<div v-if="note">
-		<div v-if="adjust" class="form-check form-switch mt-2 mb-0 d-md-none">
+	<div class="d-md-flex flex-wrap column-gap-4" data-testid="forecast-switches">
+		<div v-if="adjust" class="form-check form-switch mt-2 mb-0">
 			<input
 				id="solarForecastAdjustRow"
 				:checked="adjusted"
@@ -11,25 +11,26 @@
 				@change="$emit('adjust', $event)"
 			/>
 			<label class="form-check-label text-muted" for="solarForecastAdjustRow">
-				{{ adjust }}
+				<span class="d-md-none">{{ adjust }}</span>
+				<span class="d-none d-md-inline">{{ adjustMedium || adjust }}</span>
 			</label>
 		</div>
-		<div class="form-check form-switch mt-2 mb-0 d-md-none">
+		<div class="form-check form-switch mt-2 mb-0">
 			<input
-				id="snowCoverRow"
+				id="snowCover"
 				:checked="snowCover"
 				class="form-check-input"
 				type="checkbox"
 				role="switch"
-				data-testid="snowcover-switch-row"
+				data-testid="snowcover-switch"
 				@change="change"
 			/>
-			<label class="form-check-label text-muted" for="snowCoverRow">
+			<label class="form-check-label text-muted" for="snowCover">
 				{{ $t("snowCover.label") }}
 				<span
 					ref="coverHelp"
 					v-bind="infoProps"
-					data-testid="snowcover-help-row"
+					data-testid="snowcover-help"
 					@click.prevent
 				>
 					<shopicon-regular-info size="s"></shopicon-regular-info>
@@ -54,23 +55,6 @@
 			</label>
 		</div>
 	</div>
-	<div v-else class="form-check form-switch mb-0 text-nowrap d-none d-md-block">
-		<input
-			id="snowCover"
-			:checked="snowCover"
-			class="form-check-input"
-			type="checkbox"
-			role="switch"
-			data-testid="snowcover-switch"
-			@change="change"
-		/>
-		<label class="form-check-label text-muted" for="snowCover">
-			{{ $t("snowCover.label") }}
-			<span ref="coverHelp" v-bind="infoProps" data-testid="snowcover-help" @click.prevent>
-				<shopicon-regular-info size="s"></shopicon-regular-info>
-			</span>
-		</label>
-	</div>
 </template>
 
 <script lang="ts">
@@ -80,19 +64,18 @@ import Tooltip from "bootstrap/js/dist/tooltip";
 import api from "@/api";
 import store from "@/store";
 
-// Custom extension: switch "snow on pv" on the forecast page, see core/site_snow.go,
-// and the switch to detect it automatically under the chart, see core/site_snow_auto.go.
-// In the card header from md up; below that it sits under the chart, as the header
-// has no room for it next to the title and evcc's switch. Below md the row also
-// carries evcc's "adjust forecast" switch, so the title stands alone. The help texts are
-// tooltips on the info icons.
+// Custom extension: the switches of the solar card in one row under the chart, side
+// by side from md up, stacked below: evcc's "adjust forecast" (label, state and
+// handler from Forecast.vue, evcc's own one in the header is hidden), "snow on pv",
+// see core/site_snow.go, and its detection, see core/site_snow_auto.go. The help
+// texts are tooltips on the info icons.
 export default defineComponent({
 	name: "SnowCoverSwitch",
 	props: {
-		note: Boolean,
-		// evcc's "adjust forecast" switch, shown in the row below md: its label
-		// (empty = not shown), its state and its change handler, all from Forecast.vue
+		// evcc's "adjust forecast" switch: short label (empty = not shown), label
+		// from md up, its state and its change handler, all from Forecast.vue
 		adjust: { type: String, default: "" },
+		adjustMedium: { type: String, default: "" },
 		adjusted: Boolean,
 	},
 	emits: ["adjust"],

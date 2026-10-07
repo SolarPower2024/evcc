@@ -489,10 +489,10 @@ request is 0 (`core/site_snow.go`, `applySnowCover` from
 `applyLmOptimizerInputs`, after evcc has built the series, so it also overrides
 the adjusted forecast and the blend of the first slots). Switching runs the
 optimizer again at once, as evcc's *adjust forecast* switch does. The forecast
-display, the regulation and evcc's planner stay as they are. Below 768 px the
-switch sits under the chart instead of the card header, which has no room for
-it next to evcc's switch. The help of both switches is a tooltip on an info icon
-beside the label. It is not shown without a solar forecast.
+display, the regulation and evcc's planner stay as they are. The switch sits
+under the chart in one row with evcc's *adjust* switch and the detection (side by
+side from 768 px, stacked below); the card header only has the title. The help of
+both snow switches is a tooltip on an info icon beside the label. It is not shown without a solar forecast.
 
 It turns itself off: after each completed quarter hour the measured pv energy
 is compared with the forecast energy of that quarter hour (the collector values
@@ -603,7 +603,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone) |
-| `assets/js/views/Forecast.vue` | mounts `Forecast/SnowCoverSwitch.vue` twice: the switch in the solar card's `#actions` (which is now always rendered, evcc's own switch keeps its `v-if="showSolarAdjust"` on its inner `div`) and the row under the chart (below 768 px also evcc's *adjust* switch, passed in as label, state and `changeAdjusted`; evcc's own one there gets `d-none d-md-block`) |
+| `assets/js/views/Forecast.vue` | evcc's *adjust* switch in the solar card header gets `d-none`; `Forecast/SnowCoverSwitch.vue` under the chart shows it with the snow switches in one row, getting label, state and `changeAdjusted` from Forecast.vue |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown; default mode labels Aus/Smart/Ein for a heater in stages (`chargerIsStages`) |
