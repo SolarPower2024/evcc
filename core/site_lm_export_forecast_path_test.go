@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
-	_ "time/tzdata"
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/tariff"
@@ -65,11 +64,17 @@ func exportDay(t *testing.T) ([]exportRate, []exportRate, []float64) {
 	return merged, single, want
 }
 
-// haServing makes a tariff of this type read the list from a test server
-func haServing(t *testing.T, list []exportRate) api.Tariff {
+// haServing makes a tariff of this type read the list from a test server, its
+// times written in the given zone
+func haServing(t *testing.T, list []exportRate, zone *time.Location) api.Tariff {
 	t.Helper()
 
-	b, err := json.Marshal(list)
+	inZone := make([]exportRate, len(list))
+	for i, r := range list {
+		inZone[i] = exportRate{r.Start.In(zone), r.End.In(zone), r.Value}
+	}
+
+	b, err := json.Marshal(inZone)
 	require.NoError(t, err)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -118,44 +123,27 @@ func secondSolar(hours int) api.Tariff {
 	return &tariff.SlotWrapper{Tariff: hourlySolar{rates}}
 }
 
-// inZone runs a test with another local time zone. The tariffs' times are Local, the
-// list in the entity holds them as the instance that wrote it formats them (UTC as Z or
-// with an offset), and combined adds rates by comparing their start including the zone:
-// the sum must not depend on the zone of the instance.
-func inZone(t *testing.T, name string, test func(*testing.T)) {
-	t.Helper()
-
-	loc, err := time.LoadLocation(name)
-	require.NoError(t, err)
-
-	// as Local, time.UTC itself would give times without the zone Local() has: the
-	// process of a runner in UTC has its own Location for Local
-	if loc == time.UTC {
-		loc = time.FixedZone("UTC", 0)
-	}
-
-	t.Run(name, func(t *testing.T) {
-		prev := time.Local
-		time.Local = loc
-		t.Cleanup(func() { time.Local = prev })
-
-		test(t)
-	})
-}
-
+// The entity holds the times as the instance that wrote them formats them: with
+// the offset of its zone, or Z. Read back, none of them is in the Local zone the
+// other tariffs use, and combined adds rates by their start as map key, which also
+// compares the zone: the tariff has to put its slots into the Local zone, or the
+// second tariff drops out of the sum. Without changing time.Local, which goroutines
+// of other tests read.
 func TestExportForecastThroughSolarPath(t *testing.T) {
-	// UTC is the zone of the CI runners, Vienna has summer time, St. John's and
-	// Kolkata are not on full hours
-	for _, zone := range []string{"UTC", "Europe/Vienna", "America/St_Johns", "Asia/Kolkata"} {
-		inZone(t, zone, exportThroughSolarPath)
+	for name, zone := range map[string]*time.Location{
+		"local":  time.Local,
+		"utc":    time.UTC,
+		"offset": time.FixedZone("", 330*60), // not on a full hour
+	} {
+		t.Run(name, func(t *testing.T) { exportThroughSolarPath(t, zone) })
 	}
 }
 
-func exportThroughSolarPath(t *testing.T) {
+func exportThroughSolarPath(t *testing.T, zone *time.Location) {
 	merged, single, want := exportDay(t)
 
-	mixed := haServing(t, merged)
-	ref := haServing(t, single)
+	mixed := haServing(t, merged, zone)
+	ref := haServing(t, single, time.Local)
 
 	second := secondSolar(60) // longer than the export forecast
 
@@ -245,12 +233,6 @@ func slotAt(rr api.Rates, ts time.Time) int {
 // divided slot with a ramp towards the next one (see shapeSolar) would not stay 0
 // in the zero hours. That is why the tariff divides the entries itself.
 func TestExportForecastMixedLengthNeedsSplit(t *testing.T) {
-	for _, zone := range []string{"UTC", "Europe/Vienna"} {
-		inZone(t, zone, mixedLengthNeedsSplit)
-	}
-}
-
-func mixedLengthNeedsSplit(t *testing.T) {
 	merged, single, want := exportDay(t)
 
 	// the entries as the entity holds them, read without dividing them
