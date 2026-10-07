@@ -2,25 +2,30 @@
 	<div class="once border-top pt-3 mt-3" data-testid="battery-grid-charge-once">
 		<div class="d-flex align-items-center justify-content-between gap-2 mb-2">
 			<h6 class="mb-0">{{ $t("battery.gridChargeOnce.title") }}</h6>
+			<!-- power button: outlined to start, filled while running, tap again stops -->
 			<button
 				v-if="running"
 				type="button"
-				class="btn btn-sm btn-outline-secondary"
+				class="power btn btn-primary"
 				data-testid="battery-grid-charge-once-cancel"
+				:aria-label="$t('battery.gridChargeOnce.cancel')"
+				:title="$t('battery.gridChargeOnce.cancel')"
 				:disabled="busy"
 				@click="cancel"
 			>
-				{{ $t("battery.gridChargeOnce.cancel") }}
+				<PowerIcon />
 			</button>
 			<button
 				v-else
 				type="submit"
 				form="batteryGridChargeOnceForm"
-				class="btn btn-sm btn-primary"
+				class="power btn btn-outline-primary"
 				data-testid="battery-grid-charge-once-start"
+				:aria-label="$t('battery.gridChargeOnce.start')"
+				:title="$t('battery.gridChargeOnce.start')"
 				:disabled="busy"
 			>
-				{{ $t("battery.gridChargeOnce.start") }}
+				<PowerIcon />
 			</button>
 		</div>
 
@@ -92,6 +97,7 @@ import api from "@/api";
 import store from "@/store";
 import CustomSelect from "../Helper/CustomSelect.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
+import PowerIcon from "./PowerIcon.vue";
 
 interface GridChargeOnce {
 	target: number;
@@ -103,7 +109,7 @@ interface GridChargeOnce {
 // of day at the cheapest slots, see core/site_lm_once.go
 export default defineComponent({
 	name: "BatteryGridChargeOnce",
-	components: { CustomSelect, InlineSocSelect },
+	components: { CustomSelect, InlineSocSelect, PowerIcon },
 	mixins: [formatter],
 	data() {
 		// when: "now" or a time of day HH:MM
@@ -178,3 +184,18 @@ export default defineComponent({
 	},
 });
 </script>
+
+<style scoped>
+/* round, colours from the primary button so dark mode follows evcc */
+.power {
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	border-width: 2px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+</style>
