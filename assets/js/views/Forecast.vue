@@ -32,12 +32,9 @@
 					edge-to-edge
 					class="box-pull-out mb-4"
 				>
-					<template #actions>
-						<div
-							v-if="showSolarAdjust"
-							class="form-check form-switch mb-0 text-nowrap d-none d-md-block"
-						>
-							<!-- custom: below md in the row under the chart, see SnowCoverSwitch -->
+					<template v-if="showSolarAdjust" #actions>
+						<div class="form-check form-switch mb-0 text-nowrap d-none">
+							<!-- custom: shown in the row under the chart, see SnowCoverSwitch -->
 							<input
 								id="solarForecastAdjust"
 								:checked="solarAdjusted"
@@ -51,8 +48,6 @@
 								<span class="d-none d-md-inline">{{ solarAdjustTextMedium }}</span>
 							</label>
 						</div>
-						<SnowCoverSwitch />
-						<!-- custom -->
 					</template>
 					<div class="chart-edge">
 						<SolarChart
@@ -65,8 +60,8 @@
 						/>
 					</div>
 					<SnowCoverSwitch
-						note
 						:adjust="showSolarAdjust ? solarAdjustTextShort : ''"
+						:adjust-medium="solarAdjustTextMedium"
 						:adjusted="!!solarAdjusted"
 						@adjust="changeAdjusted"
 					/>

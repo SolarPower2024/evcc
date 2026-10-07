@@ -319,7 +319,7 @@
       "soc": "Ladestand",
       "solarForecast": "PV-Vorhersage",
       "stageOff": "aus",
-      "stageOn": "an",
+      "stageOn": "ein",
       "stages": "Stufen",
       "switchDevice": "Stromregelung",
       "temp": "Temperatur",
