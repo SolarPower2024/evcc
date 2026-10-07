@@ -6,6 +6,7 @@ package core
 // Home Assistant entities.
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -38,6 +39,7 @@ type scenarioLoad struct {
 	title   string
 	prio    int
 	power   float64
+	current float64
 	circuit api.Circuit
 }
 
@@ -45,7 +47,7 @@ func (l *scenarioLoad) GetTitle() string            { return l.title }
 func (l *scenarioLoad) LmPriority() int             { return l.prio }
 func (l *scenarioLoad) GetCircuit() api.Circuit     { return l.circuit }
 func (l *scenarioLoad) GetChargePower() float64     { return l.power }
-func (l *scenarioLoad) GetMaxPhaseCurrent() float64 { return 0 }
+func (l *scenarioLoad) GetMaxPhaseCurrent() float64 { return l.current }
 
 type scenario struct {
 	t       *testing.T
@@ -88,7 +90,12 @@ func newScenario(t *testing.T) *scenario {
 
 // withCircuit puts the battery and a wallbox on a meterless circuit
 func (sc *scenario) withCircuit(maxPower float64, wallbox *scenarioLoad, batteryPrio int) {
-	c, err := circuit.New(util.NewLogger("test"), "test", 0, maxPower, nil, 0)
+	sc.withCircuitLimits(0, maxPower, wallbox, batteryPrio)
+}
+
+// withCircuitLimits is withCircuit with a current limit as well
+func (sc *scenario) withCircuitLimits(maxCurrent, maxPower float64, wallbox *scenarioLoad, batteryPrio int) {
+	c, err := circuit.New(util.NewLogger("test"), "test", maxCurrent, maxPower, nil, 0)
 	require.NoError(sc.t, err)
 
 	sc.circuit = c
@@ -344,6 +351,64 @@ func TestScenarioCircuitOnOff(t *testing.T) {
 		sc := newScenario(t)
 		sc.site.peak().chargePower = 0
 		assert.True(t, sc.cycle(20, 3000, 0))
+	})
+}
+
+// TestScenarioCircuitCurrent verifies that battery grid charging respects a
+// circuit's current limit when its power limit leaves room or is not set: a
+// 35 A fuse, the battery's 6250 W draw 9.06 A per phase on three phases
+func TestScenarioCircuitCurrent(t *testing.T) {
+	batteryCurrent := 6250.0 / (3 * 230)
+
+	t.Run("fits", func(t *testing.T) {
+		sc := newScenario(t)
+		sc.withCircuitLimits(35, 0, &scenarioLoad{title: "wallbox", power: 11000, current: 16}, 0)
+		assert.True(t, sc.cycle(20, 3000, 0))
+	})
+
+	t.Run("current full, power free", func(t *testing.T) {
+		sc := newScenario(t)
+		sc.withCircuitLimits(35, 50000, &scenarioLoad{title: "wallbox", power: 20700, current: 30}, 0)
+
+		// 30 A + 9.06 A > 35 A: no charging, and the hold-off keeps it off
+		assert.False(t, sc.cycle(20, 3000, 0))
+		assert.False(t, sc.cycle(20, 3000, 0), "hold-off")
+	})
+
+	t.Run("battery outranks wallbox", func(t *testing.T) {
+		sc := newScenario(t)
+		wallbox := &scenarioLoad{title: "wallbox", prio: 1, power: 20700, current: 30}
+		sc.withCircuitLimits(35, 0, wallbox, 5)
+
+		assert.False(t, sc.cycle(20, 3000, 0))
+
+		// the wallbox leaves the battery's whole current free
+		allowed := sc.site.lmm().ValidateCurrent(wallbox, sc.circuit, 30, 30)
+		assert.InDelta(t, 35-batteryCurrent, allowed, 1e-9)
+		wallbox.current = math.Floor(allowed) // wallboxes set whole amps
+
+		sc.clearHoldOffs()
+		assert.True(t, sc.cycle(20, 3000, 0))
+	})
+
+	t.Run("one phase battery", func(t *testing.T) {
+		sc := newScenario(t)
+		one := 1.0
+		sc.site.lms().adv.Phases = &one
+		sc.withCircuitLimits(35, 0, &scenarioLoad{title: "wallbox", power: 6900, current: 10}, 0)
+
+		// 10 A + 27.2 A on one phase > 35 A, on three phases it would fit
+		assert.False(t, sc.cycle(20, 3000, 0))
+	})
+
+	t.Run("charge power trimmed to the current", func(t *testing.T) {
+		sc := newScenario(t)
+		sc.withDynamicCharge()
+		sc.withCircuitLimits(35, 0, &scenarioLoad{title: "wallbox", power: 20700, current: 30}, 0)
+
+		// peak room 4000 W, 5 A left on three phases: 3450 W
+		assert.True(t, sc.cycle(20, 1000, 0))
+		assert.Equal(t, 3450.0, val(sc.charge))
 	})
 }
 

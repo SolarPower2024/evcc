@@ -90,10 +90,12 @@ circuit:
 | phases, wait after a shed, reservation expiry | Lastmanagement-Details → Erweitert | 3, 5 min, 10 min |
 
 A battery switched through mode scripts is on or off, so the whole expected
-charge power has to fit into the circuit. Without a known charge power, grid
-charging on a circuit stays off and a warning is logged once. With a charge
-power entity, evcc writes the grid charge power instead: the expected power,
-trimmed to what fits below the peak limit and into the circuit, at least 500 W.
+charge power has to fit into the circuit, against its power and its current
+limit (the current spread over the phases set under *Erweitert*). Without a
+known charge power, grid charging on a circuit stays off and a warning is
+logged once. With a charge power entity, evcc writes the grid charge power
+instead: the expected power, trimmed to what fits below the peak limit and into
+the circuit, at least 500 W.
 After a shed, grid charging waits for the hold-off, as stopping it frees exactly
 the power that would let it start again. See `core/site_lm.go`.
 
@@ -244,8 +246,10 @@ setpoint rounds up so the peak stays covered, the charge power rounds down so it
 stays within the limits, and a free value above `max` becomes `max`
 (`TestRangeFit`). A value the entity already holds, within the write tolerance
 (0 W = every change; min and max always land), is not written again, as a
-device may store each write (`TestNumberWrite`). A 2 % hysteresis keeps the soc
-from flapping across the reserve.
+device may store each write (`TestNumberWrite`). An entity removed or replaced
+gets the free value, a charge power entity 0 W
+(`TestPeakEntityRemovedHandsBack`). A 2 % hysteresis keeps the soc from
+flapping across the reserve.
 
 The limit applies to the clock-aligned 15 minute window: `allowed` =
 `(limit × 15 min − energy drawn so far) / time left`, so energy left unused

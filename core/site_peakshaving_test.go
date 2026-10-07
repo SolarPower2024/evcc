@@ -89,6 +89,32 @@ func TestPeakHandsBackWhenOff(t *testing.T) {
 	assert.Equal(t, []float64{peak.DefaultFreeValue}, writes)
 }
 
+// TestPeakEntityRemovedHandsBack verifies that removing the entities while peak
+// shaving and grid charging run leaves neither on its last setpoint: the
+// discharge entity gets the free value, the charge power entity zero
+func TestPeakEntityRemovedHandsBack(t *testing.T) {
+	sc := newScenario(t)
+	sc.withDynamicCharge()
+
+	s := sc.site.peak()
+	s.entity = "number.discharge"
+	s.chargeEntity = "number.charge"
+
+	// below the reserve and grid charging
+	assert.True(t, sc.cycle(20, 1000, 0))
+	assert.Equal(t, 0.0, val(sc.peak))
+	assert.Equal(t, 4000.0, val(sc.charge))
+
+	require.NoError(t, sc.site.SetPeakShavingEntity(""))
+	assert.Equal(t, peak.DefaultFreeValue, val(sc.peak))
+	assert.False(t, sc.site.GetPeakShaving())
+
+	require.NoError(t, sc.site.SetPeakShavingChargeEntity(""))
+	assert.Equal(t, 0.0, val(sc.charge))
+	assert.False(t, sc.site.chargePowerControlled())
+	assert.Equal(t, 0.0, s.chargeSetpoint, "overview setpoint")
+}
+
 // TestBatteryChargeSetpoint verifies the controlled grid charge power: trimmed
 // to the room below the peak limit, zero below the minimum, and the full
 // expected power while peak shaving is off

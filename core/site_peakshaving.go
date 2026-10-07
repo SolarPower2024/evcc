@@ -54,6 +54,7 @@ const (
 type peakState struct {
 	once  sync.Once
 	mu    sync.Mutex
+	out   sync.Mutex // a write to an output against swapping that output
 	clock clock.Clock
 
 	enabled     bool    // peak shaving switch
@@ -516,6 +517,9 @@ func (site *Site) updatePeakShaving(state siteState) {
 func (site *Site) writePeakValue(value float64) bool {
 	s := site.peak()
 
+	s.out.Lock()
+	defer s.out.Unlock()
+
 	s.mu.Lock()
 	set := s.set
 	s.mu.Unlock()
@@ -544,6 +548,9 @@ func (site *Site) handBackPeak() {
 // writeChargeValue writes the grid charge power setpoint
 func (site *Site) writeChargeValue(value float64) {
 	s := site.peak()
+
+	s.out.Lock()
+	defer s.out.Unlock()
 
 	s.mu.Lock()
 	set := s.chargeSet
@@ -845,7 +852,21 @@ func (site *Site) SetPeakShavingEntity(entity string) error {
 		return nil
 	}
 
-	if err := site.rebuildPeakSetter(); err != nil {
+	// swapped and handed back in one go, a cycle writing in between could put its
+	// setpoint into the previous target after the free value
+	s.out.Lock()
+	s.mu.Lock()
+	previousSet := s.set
+	s.mu.Unlock()
+
+	err := site.rebuildPeakSetter()
+	if err == nil {
+		// the previous target would otherwise keep the last setpoint
+		site.writeOutput("peak shaving", previousSet, site.peakFreeValue())
+	}
+	s.out.Unlock()
+
+	if err != nil {
 		// keep the working target rather than leaving peak shaving mute
 		s.mu.Lock()
 		s.entity = previous
@@ -896,13 +917,33 @@ func (site *Site) SetPeakShavingChargeEntity(entity string) error {
 		return nil
 	}
 
-	if err := site.rebuildChargeSetter(); err != nil {
+	// swapped and handed back in one go, see SetPeakShavingEntity
+	s.out.Lock()
+	s.mu.Lock()
+	previousSet := s.chargeSet
+	s.mu.Unlock()
+
+	err := site.rebuildChargeSetter()
+	if err == nil {
+		// the previous target would otherwise keep charging at the last setpoint
+		site.writeOutput("grid charge power", previousSet, 0)
+
+		// on/off charging writes no setpoint, the overview would keep the last one
+		s.mu.Lock()
+		s.chargeSetpoint = 0
+		s.mu.Unlock()
+	}
+	s.out.Unlock()
+
+	if err != nil {
 		s.mu.Lock()
 		s.chargeEntity = previous
 		s.mu.Unlock()
 
 		return err
 	}
+
+	site.publish(keys.PeakShavingChargeSetpoint, 0.0)
 
 	site.log.DEBUG.Println("set grid charge power entity:", entity)
 	settings.SetString(keys.PeakShavingChargeEntity, entity)
