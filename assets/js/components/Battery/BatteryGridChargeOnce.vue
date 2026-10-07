@@ -1,8 +1,30 @@
 <template>
 	<div class="once border-top pt-3 mt-3" data-testid="battery-grid-charge-once">
-		<h6 class="mb-2">{{ $t("battery.gridChargeOnce.title") }}</h6>
+		<div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+			<h6 class="mb-0">{{ $t("battery.gridChargeOnce.title") }}</h6>
+			<button
+				v-if="running"
+				type="button"
+				class="btn btn-sm btn-outline-secondary"
+				data-testid="battery-grid-charge-once-cancel"
+				:disabled="busy"
+				@click="cancel"
+			>
+				{{ $t("battery.gridChargeOnce.cancel") }}
+			</button>
+			<button
+				v-else
+				type="submit"
+				form="batteryGridChargeOnceForm"
+				class="btn btn-sm btn-primary"
+				data-testid="battery-grid-charge-once-start"
+				:disabled="busy"
+			>
+				{{ $t("battery.gridChargeOnce.start") }}
+			</button>
+		</div>
 
-		<div v-if="running" class="d-flex flex-wrap align-items-center gap-2">
+		<div v-if="running">
 			<span data-testid="battery-grid-charge-once-status">
 				{{ $t("battery.gridChargeOnce.running", { soc: fmtSoc(once.target) }) }} ·
 				{{ whenText }} ·
@@ -12,18 +34,9 @@
 						: $t("battery.gridChargeOnce.waiting")
 				}}</span>
 			</span>
-			<button
-				type="button"
-				class="btn btn-sm btn-outline-secondary ms-auto"
-				data-testid="battery-grid-charge-once-cancel"
-				:disabled="busy"
-				@click="cancel"
-			>
-				{{ $t("battery.gridChargeOnce.cancel") }}
-			</button>
 		</div>
 
-		<form v-else class="d-flex flex-wrap align-items-center gap-2" @submit.prevent="start">
+		<form v-else id="batteryGridChargeOnceForm" @submit.prevent="start">
 			<i18n-t keypath="battery.gridChargeOnce.sentence" tag="span" scope="global">
 				<template #soc>
 					<InlineSocSelect
@@ -66,14 +79,6 @@
 					</CustomSelect>
 				</template>
 			</i18n-t>
-			<button
-				type="submit"
-				class="btn btn-sm btn-primary ms-auto"
-				data-testid="battery-grid-charge-once-start"
-				:disabled="busy"
-			>
-				{{ $t("battery.gridChargeOnce.start") }}
-			</button>
 		</form>
 
 		<p v-if="error" class="text-danger small mt-2 mb-0">{{ error }}</p>
