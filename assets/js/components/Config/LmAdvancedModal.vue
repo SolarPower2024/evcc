@@ -155,7 +155,15 @@
 					placeholder="sensor.evcc_einspeiseprognose"
 					autocomplete="off"
 					data-testid="lmadvanced-exportForecast"
+					@input="exportForecastError = ''"
 				/>
+				<p
+					v-if="exportForecastError"
+					class="text-danger small mt-1 mb-0"
+					data-testid="lmadvanced-exportForecast-error"
+				>
+					{{ exportForecastError }}
+				</p>
 			</FormRow>
 
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
@@ -237,6 +245,7 @@ export default {
 			initialPercentile: 0,
 			exportForecast: "",
 			initialExportForecast: "",
+			exportForecastError: "",
 			uploading: false,
 		};
 	},
@@ -313,6 +322,7 @@ export default {
 			this.initialPercentile = this.percentile;
 			this.exportForecast = state.exportForecastEntity || "";
 			this.initialExportForecast = this.exportForecast;
+			this.exportForecastError = "";
 		},
 		async uploadHomeProfile(event) {
 			const file = event.target.files?.[0];
@@ -364,8 +374,9 @@ export default {
 				return;
 			}
 
+			this.exportForecastError = "";
 			if (this.exportForecast && !/^sensor\.[a-z0-9_]+$/.test(this.exportForecast)) {
-				this.error = this.$t("config.lmadvanced.exportForecastInvalid");
+				this.exportForecastError = this.$t("config.lmadvanced.exportForecastInvalid");
 				return;
 			}
 
@@ -387,6 +398,23 @@ export default {
 						await api.delete("profilepercentile");
 					}
 				}
+				for (const name of this.changed) {
+					await api.post(`lmadvanced/${name}/${this.values[name]}`);
+				}
+			} catch (e) {
+				this.error = e?.response?.data?.error || e.message;
+				this.saving = false;
+				return;
+			}
+
+			// the others are saved: only the export field is left to save
+			this.initial = { ...this.values };
+			this.initialCircuit = this.circuit;
+			this.initialPercentile = this.percentile;
+			this.$emit("changed");
+
+			// last, as only this one can fail on the connection to Home Assistant
+			try {
 				if (this.exportForecastChanged) {
 					if (this.exportForecast) {
 						await api.post(
@@ -395,15 +423,11 @@ export default {
 					} else {
 						await api.delete("lmexportforecast");
 					}
+					this.initialExportForecast = this.exportForecast;
 				}
-				for (const name of this.changed) {
-					await api.post(`lmadvanced/${name}/${this.values[name]}`);
-				}
-
-				this.$emit("changed");
 				this.$refs.modal.close();
 			} catch (e) {
-				this.error = e?.response?.data?.error || e.message;
+				this.exportForecastError = e?.response?.data?.error || e.message;
 			}
 
 			this.saving = false;
