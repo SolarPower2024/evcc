@@ -246,7 +246,10 @@ func haForecastSlots(rates api.Rates, now time.Time) (api.Rates, error) {
 			continue
 		}
 
-		for s := start.Truncate(SlotDuration); s.Before(end); s = s.Add(SlotDuration) {
+		// in the local zone like the slots of every other tariff: combined adds the
+		// rates of equal start as map keys, which also compare the zone, and the entity
+		// holds the times in the zone of the instance that wrote it
+		for s := start.Local().Truncate(SlotDuration); s.Before(end); s = s.Add(SlotDuration) {
 			res = append(res, api.Rate{
 				Start: s,
 				End:   s.Add(SlotDuration),

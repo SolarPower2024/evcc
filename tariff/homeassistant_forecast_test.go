@@ -1,12 +1,15 @@
 package tariff
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/util"
@@ -361,4 +364,61 @@ func TestHAForecastTemplate(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(b, &res), string(b))
 	assert.Equal(t, "export", res["attribute"])
 	assert.Equal(t, "5m", res["interval"])
+}
+
+// combined adds rates of equal start as map keys, which also compare the zone. The
+// entity holds the times in the zone of the instance that wrote it (Z, +02:00 and
+// +01:00 around the end of summer time), the slots must be in the local zone as
+// those of every other tariff, whatever the zone of this instance is: UTC as on
+// CI runners, Vienna with its change of summer time inside the forecast, zones not
+// on full hours.
+func TestHAForecastZones(t *testing.T) {
+	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+
+	for _, zone := range []string{"UTC", "Europe/Vienna", "America/St_Johns", "Asia/Kolkata"} {
+		t.Run(zone, func(t *testing.T) {
+			loc, err := time.LoadLocation(zone)
+			require.NoError(t, err)
+			if loc == time.UTC { // as Local it would differ from the Local of a process in UTC
+				loc = time.FixedZone("UTC", 0)
+			}
+
+			prev := time.Local
+			time.Local = loc
+			t.Cleanup(func() { time.Local = prev })
+
+			// 34 hours from 20:00 UTC over the end of summer time in Vienna (25.10. 01:00 UTC)
+			start := time.Date(2026, 10, 24, 20, 0, 0, 0, time.UTC)
+			zones := []*time.Location{time.UTC, time.FixedZone("", 2*3600), time.FixedZone("", 3600)}
+
+			var list []string
+			for h := range 34 {
+				s := start.Add(time.Duration(h) * time.Hour)
+				list = append(list, fmt.Sprintf(`{"start":%q,"end":%q,"value":%d}`,
+					s.In(zones[h%3]).Format(time.RFC3339), s.Add(time.Hour).In(zones[(h+1)%3]).Format(time.RFC3339), 100+h))
+			}
+
+			var rates api.Rates
+			require.NoError(t, json.Unmarshal([]byte("["+strings.Join(list, ",")+"]"), &rates))
+
+			slots, err := haForecastSlots(rates, now)
+			require.NoError(t, err)
+			require.Len(t, slots, 34*4)
+
+			// an other tariff: its slots from time.Now-like Local times
+			var other api.Rates
+			for i := range 34 * 4 {
+				s := start.Local().Add(time.Duration(i) * SlotDuration)
+				other = append(other, api.Rate{Start: s, End: s.Add(SlotDuration), Value: 1000})
+			}
+
+			got, err := NewCombined([]api.Tariff{&tariff{rates: slots}, &tariff{rates: other}}).Rates()
+			require.NoError(t, err)
+			require.Len(t, got, 34*4, "one rate per slot")
+
+			for i, r := range got {
+				assert.Equal(t, float64(1000+100+i/4), r.Value, "slot %d at %v", i, r.Start)
+			}
+		})
+	}
 }

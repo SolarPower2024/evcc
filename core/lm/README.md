@@ -481,7 +481,14 @@ are taken, a longer entry only as far as that.
   hour) through the tariff, the sum with a second solar tariff, the energy per slot
   of the optimizer request and the series of the forecast page and checks each slot:
   the value of its step, 0 in the hours of zeros, equal to the same plan written as
-  single steps.
+  single steps, in several time zones of the instance (`UTC` as on the CI runners,
+  Vienna, zones not on full hours).
+- The slots are in the local zone like those of every other tariff: `combined` adds
+  the rates of equal start as map keys, which compare the zone as well, and the entity
+  holds the times in the zone of the writing instance (`Z` or an offset, which
+  changes with summer time). Without that, the second tariff was lost in the sum on
+  an instance running in UTC. `TestHAForecastZones` pins it around the end of summer
+  time.
 - Several solar tariffs are added per slot by evcc (`combined`), so the second
   instance can keep its own forecast and add the export of the first. The export is
   only planned as far as the optimizer's horizon reaches (48 hours, to the end of
