@@ -6,7 +6,8 @@
 # The review (.github/upstream-check/review.mjs) goes into the issue
 # "evcc-Update-Check": a) what changed, b) fork features evcc may now have
 # itself, c) which evcc commits cause merge conflicts, d) the PRs to open. The
-# merge itself is tested in the runner.
+# merge itself is tested in the runner. With nothing to do no issue is opened
+# and an open one is closed.
 #
 # With the secret UPDATE_TOKEN (a token of this repository with contents, pull
 # requests and workflows write) it also keeps the PR "evcc-Update" open: the
@@ -107,6 +108,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # this repository only: with evcc fetched as a second remote gh must not guess
           GH_REPO: ${{ github.repository }}
+          COUNT: ${{ steps.review.outputs.count }}
+          REF: ${{ steps.review.outputs.ref }}
         run: |
           if grep -qE '#[0-9]|evcc-io/' /tmp/report.md; then
             echo "report refers to evcc's repository, not posted"; exit 1
@@ -115,6 +118,14 @@ jobs:
           title="evcc-Update-Check"
           number=$(gh issue list --state open --search "in:title $title" --json number,title \
             --jq ".[] | select(.title == \"$title\") | .number" | head -1)
+          # nothing to do: no new issue, an open one is done
+          if [ "$COUNT" = "0" ]; then
+            if [ -n "$number" ]; then
+              gh issue close "$number" --reason completed \
+                --comment "Erledigt: alle Änderungen von $REF sind im Fork."
+            fi
+            exit 0
+          fi
           if [ -n "$number" ]; then
             gh issue edit "$number" --body-file /tmp/report.md
           else
