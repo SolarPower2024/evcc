@@ -4,7 +4,8 @@
 			<TopHeader :title="$t('log.title')" class="mx-4" />
 			<div class="logs d-flex flex-column overflow-hidden flex-grow-1 px-4 mx-2 mx-sm-4">
 				<div class="flex-grow-0 row py-4">
-					<div class="col-6 col-lg-3 mb-4 mb-lg-0 d-flex gap-2">
+					<div class="col-12 col-sm-6 col-lg-3 mb-4 mb-lg-0 d-flex gap-2">
+						<!-- custom: col-12 below sm, a row of its own like the search -->
 						<div class="btn-group w-100 w-lg-auto d-flex">
 							<button
 								type="button"
@@ -37,7 +38,7 @@
 							</a>
 						</div>
 					</div>
-					<div class="col-6 offset-lg-1 col-lg-4 mb-4 mb-lg-0 d-flex gap-2">
+					<div class="col-12 col-sm-6 offset-lg-1 col-lg-4 mb-4 mb-lg-0 d-flex gap-2">
 						<input
 							:value="q"
 							@input="changeSearch"
@@ -47,7 +48,7 @@
 							data-testid="log-search"
 						/>
 						<LogFileButton />
-						<!-- custom: log file next to the search (d-flex gap-2), see util/logstash/file_custom.go -->
+						<!-- custom: log file next to the search (d-flex gap-2, col-12 below sm), see util/logstash/file_custom.go -->
 					</div>
 					<div class="filterLevel col-6 col-lg-2">
 						<select
