@@ -1290,7 +1290,7 @@
       },
       "planner": {
         "description": "This advanced setting is usually not needed. The planner forecast serves as the basis for charging plans and cheap or clean grid charging (vehicles, heating devices, home battery). Without it, the dynamic grid price or CO₂ forecast is used automatically. Statistics, cost calculations and optimizer decisions are not affected.",
-        "optimizer": "With the optimizer: a fixed price here is the grid price it plans with. If the real price is just above the feed-in tariff, a higher planning price (at least 1.25 × feed-in) lets the battery discharge. Statistics and costs keep the grid tariff.",
+        "optimizer": "In this fork the optimizer does use a fixed price here as the grid price it plans with. If the real price is just above the feed-in tariff, a higher planning price (at least 1.25 × feed-in) lets the battery discharge. Statistics and costs keep the grid tariff.",
         "titleAdd": "Add Planner Forecast",
         "titleEdit": "Edit Planner Forecast"
       },
