@@ -203,7 +203,7 @@ as the ui sends a cleared field as "". See `core/loadpoint_phasecurrents.go`.
 
 ## 10. Battery grid charging by soc and one-time
 
-*Netzladen nach Ladestand* (battery page): a switch with a start and a stop
+*Netzladen nach SoC* (battery page): a switch with a start and a stop
 soc, independent of evcc's price limit. Charging starts at or below the start
 soc and runs until the stop soc, through evcc's battery mode path, so a Home
 Assistant battery runs its `modeCharge` script; the battery's `maxsoc` still

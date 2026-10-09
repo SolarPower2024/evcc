@@ -119,7 +119,7 @@
       "failed": "Profil „{name}“ nicht vollständig angewendet: {error}",
       "title": "Profil"
     },
-    "socGridChargeTab": "Netzladen nach Ladestand",
+    "socGridChargeTab": "Netzladen nach SoC",
     "usageTab": "Batterienutzung"
   },
   "colors": {

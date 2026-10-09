@@ -119,7 +119,7 @@
       "failed": "Profile “{name}” not fully applied: {error}",
       "title": "Profile"
     },
-    "socGridChargeTab": "Grid charging by state of charge",
+    "socGridChargeTab": "Grid charging by SoC",
     "usageTab": "Battery usage"
   },
   "colors": {
