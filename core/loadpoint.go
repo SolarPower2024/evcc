@@ -1598,7 +1598,7 @@ func (lp *Loadpoint) pvScalePhases(sitePower, minCurrent, maxCurrent float64, ma
 		// while charging, scaling down only helps if 1p is sustainable, otherwise it
 		// merely delays the pv disable timer by the phase timer duration. Without a
 		// disable to wait for, scaling down is the only way to reduce power (#33208).
-		min1pCurrent := lp.effectiveMinCurrentFor(1) // custom: 1p limits, see core/loadpoint_phasecurrents.go
+		min1pCurrent := lp.min1pCurrentOr(minCurrent) // custom: 1p limits, see core/loadpoint_phasecurrents.go
 		// Climater keep-alive suppresses the disable timer, checked last to avoid vehicle polling.
 		useful := !lp.enabled || !lp.charging() || !mayDisable || powerToCurrent(availablePower, 1) >= min1pCurrent || lp.vehicleClimateActive()
 		if insufficient && !useful {
