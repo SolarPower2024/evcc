@@ -37,6 +37,7 @@
       "discharging": "discharging",
       "energy": "Energy",
       "gridCharge": "grid charging",
+      "gridDischarge": "grid discharging",
       "hold": "discharge locked",
       "holdCharge": "charge locked",
       "ofTotal": "of {total}",
@@ -1288,8 +1289,8 @@
         "temperature": "Add temperature forecast"
       },
       "planner": {
-        "description": "Advanced setting. Usually not needed as dynamic electricity tariffs or CO₂ forecasts are used automatically. Enables an additional data source that's only used for charge planning, not for statistics and price calculations.",
-        "optimizer": "With the optimizer: a fixed price here is the grid price it plans with. If the real price is just above the feed-in tariff, a higher planning price (at least 1.25 × feed-in) lets the battery discharge. Statistics and costs keep the grid tariff.",
+        "description": "This advanced setting is usually not needed. The planner forecast serves as the basis for charging plans and cheap or clean grid charging (vehicles, heating devices, home battery). Without it, the dynamic grid price or CO₂ forecast is used automatically. Statistics, cost calculations and optimizer decisions are not affected.",
+        "optimizer": "In this fork the optimizer does use a fixed price here as the grid price it plans with. If the real price is just above the feed-in tariff, a higher planning price (at least 1.25 × feed-in) lets the battery discharge. Statistics and costs keep the grid tariff.",
         "titleAdd": "Add Planner Forecast",
         "titleEdit": "Edit Planner Forecast"
       },
@@ -1566,11 +1567,6 @@
       },
       "cost": "Cost",
       "others": "Others",
-      "source": {
-        "pv": "solar",
-        "battery": "battery",
-        "grid": "grid"
-      },
       "title": "Consumers",
       "view": {
         "river": "River",
@@ -1893,6 +1889,7 @@
       "batteryChargeGrid": "Battery charging (from grid)",
       "batteryChargeHold": "Battery (charge locked)",
       "batteryDischarge": "Battery discharging",
+      "batteryStatus": "Battery status",
       "batteryDischargeHold": "Battery (discharge locked)",
       "batteryGridChargeActive": "Grid charging: active",
       "batteryGridChargeLimit": "Grid charging: when",

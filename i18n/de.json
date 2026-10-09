@@ -37,6 +37,7 @@
       "discharging": "entlädt",
       "energy": "Energie",
       "gridCharge": "Netzladen",
+      "gridDischarge": "Netzentladen",
       "hold": "Entladesperre",
       "holdCharge": "Ladesperre",
       "ofTotal": "von {total}",
@@ -1288,8 +1289,8 @@
         "temperature": "Temperatur-Vorhersage hinzufügen"
       },
       "planner": {
-        "description": "Erweiterte Einstellung. Normalerweise nicht nötig, da dynamische Stromtarife oder CO₂-Vorhersagen automatisch verwendet werden. Ermöglicht eine zusätzliche Datenquelle, die nur für die Ladeplanung verwendet wird und nicht für Statistiken und Preisberechnungen.",
-        "optimizer": "Mit Optimizer: Ein fester Preis hier ist der Bezugspreis, mit dem er plant. Liegt der echte Preis knapp über der Einspeisevergütung, erlaubt ein höherer Planungspreis (mind. 1,25 × Einspeisevergütung) das Entladen. Statistik und Kosten nutzen weiter den Netztarif.",
+        "description": "Diese erweiterte Einstellung ist meist nicht nötig. Die Planer-Vorhersage dient als Grundlage für Ladepläne und günstiges oder sauberes Netzladen (Fahrzeuge, Wärmeerzeuger, Hausbatterie). Ohne diese Vorhersage wird automatisch der dynamische Strompreis oder die CO₂-Vorhersage verwendet. Statistiken, Kostenberechnungen und Entscheidungen des Optimizers werden dadurch nicht beeinflusst.",
+        "optimizer": "Im Fork plant der Optimizer abweichend davon mit einem festen Preis hier als Bezugspreis. Liegt der echte Preis knapp über der Einspeisevergütung, erlaubt ein höherer Planungspreis (mind. 1,25 × Einspeisevergütung) das Entladen. Statistik und Kosten nutzen weiter den Netztarif.",
         "titleAdd": "Planer-Vorhersage hinzufügen",
         "titleEdit": "Planer-Vorhersage bearbeiten"
       },
@@ -1566,11 +1567,6 @@
       },
       "cost": "Kosten",
       "others": "Sonstige",
-      "source": {
-        "pv": "Solar",
-        "battery": "Speicher",
-        "grid": "Netz"
-      },
       "title": "Verbraucher",
       "view": {
         "river": "River",
@@ -1893,6 +1889,7 @@
       "batteryChargeGrid": "Batterie laden (Netzladen)",
       "batteryChargeHold": "Batterie (Ladesperre)",
       "batteryDischarge": "Batterie entladen",
+      "batteryStatus": "Batteriestatus",
       "batteryDischargeHold": "Batterie (Entladesperre)",
       "batteryGridChargeActive": "Netzladen: aktiv",
       "batteryGridChargeLimit": "Netzladen: wenn",

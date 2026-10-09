@@ -154,6 +154,20 @@ func TestPvScalePhasesCurrents1p(t *testing.T) {
 	}
 }
 
+// TestScalePhasesUpMinCurrent1p: before scaling up, evcc drops to the min
+// current; with 1p values the 3p minimum (8A) if it is above the 1p one, else
+// the 1p minimum as evcc (setLimit refuses less than the active minimum)
+func TestScalePhasesUpMinCurrent1p(t *testing.T) {
+	for min1p, want := range map[float64]float64{6: 8, 10: 10} {
+		lp := phaseCurrentsLoadpoint(t, 1, min1p, 20)
+		lp.offeredCurrent = 20
+
+		require.NoError(t, lp.scalePhases(3))
+		assert.Equal(t, 3, lp.GetPhases())
+		assert.Equal(t, want, lp.offeredCurrent, "1p min %.0fA", min1p)
+	}
+}
+
 func TestSetCurrents1p(t *testing.T) {
 	store := settings.NewMemorySettings()
 	lp := NewLoadpoint(util.NewLogger("foo"), store)

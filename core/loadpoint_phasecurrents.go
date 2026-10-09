@@ -73,6 +73,21 @@ func (lp *Loadpoint) currents1pPhases() int {
 	return 0
 }
 
+// min1pCurrentOr returns the effective 1p min current, or minCurrent as upstream
+// when no 1p limits are set (then nothing else is looked up)
+func (lp *Loadpoint) min1pCurrentOr(minCurrent float64) float64 {
+	if lp.minCurrent1p == 0 && lp.maxCurrent1p == 0 {
+		return minCurrent
+	}
+	return lp.effectiveMinCurrentFor(1)
+}
+
+// minCurrentScaleUp returns the current set before scaling up: the min of the
+// new phase count, but never below the active min, which setLimit refuses
+func (lp *Loadpoint) minCurrentScaleUp(phases int) float64 {
+	return max(lp.effectiveMinCurrentFor(phases), lp.effectiveMinCurrent())
+}
+
 // uses1pCurrent returns true if the 1p limits apply for the given phases
 func (lp *Loadpoint) uses1pCurrent(phases int) bool {
 	return phases == 1 && lp.hasPhaseSwitching()

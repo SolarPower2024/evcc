@@ -94,7 +94,7 @@
     {
       "name": "Verbrauchsprognose nach Wochentag / Lastprofil",
       "files": ["core/site_load_weekday.go", "core/site_load_manual.go"],
-      "keywords": ["weekday", "Weekday", "loadProfile", "LoadProfile"],
+      "keywords": ["homeProfileWeekday", "homeWeekday", "weekdayHome", "loadProfile", "LoadProfile"],
       "paths": ["core/site_load_predictor.go", "core/metrics/"]
     },
     {
