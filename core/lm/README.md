@@ -203,7 +203,7 @@ as the ui sends a cleared field as "". See `core/loadpoint_phasecurrents.go`.
 
 ## 10. Battery grid charging by soc and one-time
 
-*Netzladen nach Ladestand* (battery page): a switch with a start and a stop
+*Netzladen nach SoC* (battery page): a switch with a start and a stop
 soc, independent of evcc's price limit. Charging starts at or below the start
 soc and runs until the stop soc, through evcc's battery mode path, so a Home
 Assistant battery runs its `modeCharge` script; the battery's `maxsoc` still
@@ -521,6 +521,12 @@ values are not stored, so a changed default applies.
 Also there: the load management circuit ([7](#7-load-management-circuit-and-switch))
 and evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
 
+The dialog shows the settings in four closed groups, so it stays short on a
+phone: *Lastmanagement* (circuit, `timeout`, `followCycles`), *Peak Shaving*
+(`hysteresis`, `freeValue`, `peakFreeze`, `peakCap`), *Batterie-Netzladen*
+(`holdOff`, `gridChargeWindow`, `phases`) and *Optimizer* (`homeForecast`, load
+profile, `profilePercentile`, `exportForecastEntity`). A rejected value opens its group.
+
 ## 18. Log file
 
 evcc keeps its log in a ring buffer of 10,000 lines for the log page, which at
@@ -688,7 +694,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
-| `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone) |
+| `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
 | `assets/js/views/Forecast.vue` | evcc's *adjust* switch in the solar card header gets `d-none`; `Forecast/SnowCoverSwitch.vue` under the chart shows it with the snow switches in one row, getting label, state and `changeAdjusted` from Forecast.vue |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |

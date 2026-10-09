@@ -59,7 +59,7 @@
 
 <script lang="ts">
 import "@h2d2/shopicons/es/regular/info";
-import { defineComponent, markRaw } from "vue";
+import { defineComponent } from "vue";
 import Tooltip from "bootstrap/js/dist/tooltip";
 import api from "@/api";
 import store from "@/store";
@@ -127,7 +127,8 @@ export default defineComponent({
 			for (const [ref, title] of Object.entries(titles)) {
 				const el = this.$refs[ref] as Element | undefined;
 				if (el && !this.tooltips[ref]) {
-					this.tooltips[ref] = markRaw(new Tooltip(el, { title }));
+					// not markRaw: its read-only __v_skip breaks Tooltip.dispose(), which nulls every own property
+					this.tooltips[ref] = new Tooltip(el, { title });
 				} else if (!el && this.tooltips[ref]) {
 					this.tooltips[ref].dispose();
 					delete this.tooltips[ref];

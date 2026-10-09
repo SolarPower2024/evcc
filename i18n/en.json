@@ -119,7 +119,7 @@
       "failed": "Profile “{name}” not fully applied: {error}",
       "title": "Profile"
     },
-    "socGridChargeTab": "Grid charging by state of charge",
+    "socGridChargeTab": "Grid charging by SoC",
     "usageTab": "Battery usage"
   },
   "colors": {
@@ -577,11 +577,11 @@
       "gridChargeWindowLabel": "Reach the battery grid charge goal within",
       "gridChargeWindowHelp": "Optimizer only: for soc-based battery grid charging it plans the stop soc after the charging time at the grid charge power: without peak shaving at most after this time, with it as long as the room below the limit takes.",
       "circuitLabel": "Load management (peak) circuit",
-      "circuitHelp": "The circuit holding your peak limit, not the fuse. Only it shows under More → Load management (peak), is lifted by the switch there and rises with follow the peak.",
-      "circuitAll": "None – all circuits, none rises along",
+      "circuitHelp": "The circuit holding your peak limit, not the fuse. Only it shows under More → Load management (peak), is lifted by the switch there and rises with follow the peak. None: all circuits, none rises along.",
+      "circuitAll": "None",
       "homeForecastLabel": "Consumption forecast",
       "homeForecastHelp": "For the optimizer. evcc: average of the last 28 days. By weekday: the same weekday of the last 8 weeks. Manual: your load profile, mixed with the last 8 weeks. Recent days count more, and the more the profile differs in shape or level, the more they count. A strong deviation of the last 3 hours carries over into the next hours.",
-      "homeForecastEvcc": "evcc (average of the last 28 days)",
+      "homeForecastEvcc": "evcc",
       "homeForecastWeekday": "By weekday",
       "homeForecastManual": "Manual (load profile)",
       "homeProfileLabel": "Load profile",
@@ -595,7 +595,13 @@
       "percentileLabel": "Consumption safety margin",
       "percentileHelp": "Instead of the mean per quarter hour a higher value from the past, e.g. 80 %: only 2 of 10 days were above it. The optimizer then keeps more battery back. Also applies to the heating devices’ profiles and, with the load profile, to the part of the last weeks.",
       "percentileAverage": "None (average)",
-      "percentileValue": "{percentile} %"
+      "percentileValue": "{percentile} %",
+      "group": {
+        "lm": "Load management",
+        "peak": "Peak shaving",
+        "gridCharge": "Battery grid charging",
+        "optimizer": "Optimizer"
+      }
     },
     "lmpriorities": {
       "battery": "Battery (grid charging)",
