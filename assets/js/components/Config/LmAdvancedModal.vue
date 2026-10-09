@@ -11,160 +11,195 @@
 		<p v-if="error" class="text-danger">{{ error }}</p>
 
 		<form ref="form" class="container mx-0 px-0" @submit.prevent="save">
-			<!-- custom: the load management (peak) circuit, see core/site_lm_switch.go -->
-			<FormRow
-				id="lmAdvanced-circuit"
-				:label="$t('config.lmadvanced.circuitLabel')"
-				:help="$t('config.lmadvanced.circuitHelp')"
-			>
-				<select
-					id="lmAdvanced-circuit"
-					v-model="circuit"
-					class="form-select"
-					data-testid="lmadvanced-circuit"
+			<!-- the settings in closed groups, so the dialog stays short on a phone -->
+			<section v-for="(g, i) in groups" :key="g" :class="{ 'border-top': i > 0 }">
+				<button
+					type="button"
+					class="btn btn-link group-toggle w-100 px-0 d-flex justify-content-between align-items-center text-reset text-decoration-none fw-bold"
+					:aria-expanded="!!openGroups[g]"
+					:data-testid="`lmadvanced-group-${g}`"
+					@click="openGroups[g] = !openGroups[g]"
 				>
-					<option value="">{{ $t("config.lmadvanced.circuitAll") }}</option>
-					<option v-for="c in circuitOptions" :key="c.name" :value="c.name">
-						{{ c.title }}
-					</option>
-				</select>
-			</FormRow>
-
-			<FormRow
-				v-for="field in numberFields"
-				:id="`lmAdvanced-${field.name}`"
-				:key="field.name"
-				:label="$t(`config.lmadvanced.${field.name}Label`)"
-				:help="$t(`config.lmadvanced.${field.name}Help`)"
-			>
-				<div class="input-group">
-					<input
-						:id="`lmAdvanced-${field.name}`"
-						v-model.number="values[field.name]"
-						type="number"
-						step="any"
-						class="form-control"
-						:data-testid="`lmadvanced-${field.name}`"
-					/>
-					<span class="input-group-text">{{
-						field.unitKey ? $t(field.unitKey) : field.unit
-					}}</span>
-				</div>
-			</FormRow>
-
-			<FormRow
-				id="lmAdvanced-phases"
-				:label="$t('config.lmadvanced.phasesLabel')"
-				:help="$t('config.lmadvanced.phasesHelp')"
-			>
-				<select
-					id="lmAdvanced-phases"
-					v-model.number="values.phases"
-					class="form-select"
-					data-testid="lmadvanced-phases"
-				>
-					<option :value="1">{{ $t("config.lmadvanced.phases1") }}</option>
-					<option :value="3">{{ $t("config.lmadvanced.phases3") }}</option>
-				</select>
-			</FormRow>
-
-			<!-- custom: home consumption forecast for the optimizer, see core/site_load_weekday.go and core/site_load_manual.go -->
-			<FormRow
-				id="lmAdvanced-homeForecast"
-				:label="$t('config.lmadvanced.homeForecastLabel')"
-				:help="$t('config.lmadvanced.homeForecastHelp')"
-			>
-				<select
-					id="lmAdvanced-homeForecast"
-					v-model.number="values.homeForecast"
-					class="form-select"
-					data-testid="lmadvanced-homeForecast"
-				>
-					<option :value="0">{{ $t("config.lmadvanced.homeForecastEvcc") }}</option>
-					<option :value="1">{{ $t("config.lmadvanced.homeForecastWeekday") }}</option>
-					<option :value="2">{{ $t("config.lmadvanced.homeForecastManual") }}</option>
-				</select>
-			</FormRow>
-			<FormRow
-				v-if="values.homeForecast === 2"
-				id="lmAdvanced-homeProfile"
-				:label="$t('config.lmadvanced.homeProfileLabel')"
-				:help="$t('config.lmadvanced.homeProfileHelp')"
-			>
-				<p v-if="homeProfile" class="small mb-2" data-testid="lmadvanced-homeProfile-info">
-					{{ homeProfileInfo }}
-					<a :href="homeProfileUrl" download="lastprofil.csv">{{
-						$t("config.lmadvanced.homeProfileDownload")
-					}}</a>
-					·
-					<button
-						type="button"
-						class="btn btn-link btn-sm p-0 align-baseline text-danger"
-						data-testid="lmadvanced-homeProfile-delete"
-						@click="deleteHomeProfile"
+					{{ $t(`config.lmadvanced.group.${g}`) }}
+					<DropdownIcon class="icon" :class="{ iconUp: openGroups[g] }" />
+				</button>
+				<div v-show="openGroups[g]" class="pt-2">
+					<!-- custom: the load management (peak) circuit, see core/site_lm_switch.go -->
+					<FormRow
+						v-if="g === 'lm'"
+						id="lmAdvanced-circuit"
+						:label="$t('config.lmadvanced.circuitLabel')"
+						:help="$t('config.lmadvanced.circuitHelp')"
 					>
-						{{ $t("config.lmadvanced.homeProfileDelete") }}
-					</button>
-				</p>
-				<p v-else class="small text-warning mb-2" data-testid="lmadvanced-homeProfile-none">
-					{{ $t("config.lmadvanced.homeProfileNone") }}
-				</p>
-				<input
-					id="lmAdvanced-homeProfile"
-					ref="homeProfileFile"
-					type="file"
-					accept=".csv,.txt,text/csv,text/plain"
-					class="form-control"
-					data-testid="lmadvanced-homeProfile"
-					:disabled="uploading"
-					@change="uploadHomeProfile"
-				/>
-			</FormRow>
-			<FormRow
-				id="lmAdvanced-percentile"
-				:label="$t('config.lmadvanced.percentileLabel')"
-				:help="$t('config.lmadvanced.percentileHelp')"
-			>
-				<select
-					id="lmAdvanced-percentile"
-					v-model.number="percentile"
-					class="form-select"
-					data-testid="lmadvanced-percentile"
-				>
-					<option v-for="p in percentiles" :key="p" :value="p">
-						{{
-							p
-								? $t("config.lmadvanced.percentileValue", { percentile: p })
-								: $t("config.lmadvanced.percentileAverage")
-						}}
-					</option>
-				</select>
-			</FormRow>
+						<select
+							id="lmAdvanced-circuit"
+							v-model="circuit"
+							class="form-select"
+							data-testid="lmadvanced-circuit"
+						>
+							<option value="">{{ $t("config.lmadvanced.circuitAll") }}</option>
+							<option v-for="c in circuitOptions" :key="c.name" :value="c.name">
+								{{ c.title }}
+							</option>
+						</select>
+					</FormRow>
 
-			<!-- custom: export forecast of the optimizer to Home Assistant, see core/site_lm_export_forecast.go -->
-			<FormRow
-				id="lmAdvanced-exportForecast"
-				:label="$t('config.lmadvanced.exportForecastLabel')"
-				:help="$t('config.lmadvanced.exportForecastHelp')"
-			>
-				<input
-					id="lmAdvanced-exportForecast"
-					v-model.trim="exportForecast"
-					type="text"
-					class="form-control"
-					placeholder="sensor.evcc_einspeiseprognose"
-					autocomplete="off"
-					data-testid="lmadvanced-exportForecast"
-					@input="exportForecastError = ''"
-				/>
-				<p
-					v-if="exportForecastError"
-					class="text-danger small mt-1 mb-0"
-					data-testid="lmadvanced-exportForecast-error"
-				>
-					{{ exportForecastError }}
-				</p>
-			</FormRow>
+					<FormRow
+						v-for="field in fieldsOf(g)"
+						:id="`lmAdvanced-${field.name}`"
+						:key="field.name"
+						:label="$t(`config.lmadvanced.${field.name}Label`)"
+						:help="$t(`config.lmadvanced.${field.name}Help`)"
+					>
+						<div class="input-group">
+							<input
+								:id="`lmAdvanced-${field.name}`"
+								v-model.number="values[field.name]"
+								type="number"
+								step="any"
+								class="form-control"
+								:data-testid="`lmadvanced-${field.name}`"
+							/>
+							<span class="input-group-text">{{
+								field.unitKey ? $t(field.unitKey) : field.unit
+							}}</span>
+						</div>
+					</FormRow>
+
+					<FormRow
+						v-if="g === 'gridCharge'"
+						id="lmAdvanced-phases"
+						:label="$t('config.lmadvanced.phasesLabel')"
+						:help="$t('config.lmadvanced.phasesHelp')"
+					>
+						<select
+							id="lmAdvanced-phases"
+							v-model.number="values.phases"
+							class="form-select"
+							data-testid="lmadvanced-phases"
+						>
+							<option :value="1">{{ $t("config.lmadvanced.phases1") }}</option>
+							<option :value="3">{{ $t("config.lmadvanced.phases3") }}</option>
+						</select>
+					</FormRow>
+
+					<template v-if="g === 'optimizer'">
+						<!-- custom: home consumption forecast for the optimizer, see core/site_load_weekday.go and core/site_load_manual.go -->
+						<FormRow
+							id="lmAdvanced-homeForecast"
+							:label="$t('config.lmadvanced.homeForecastLabel')"
+							:help="$t('config.lmadvanced.homeForecastHelp')"
+						>
+							<select
+								id="lmAdvanced-homeForecast"
+								v-model.number="values.homeForecast"
+								class="form-select"
+								data-testid="lmadvanced-homeForecast"
+							>
+								<option :value="0">
+									{{ $t("config.lmadvanced.homeForecastEvcc") }}
+								</option>
+								<option :value="1">
+									{{ $t("config.lmadvanced.homeForecastWeekday") }}
+								</option>
+								<option :value="2">
+									{{ $t("config.lmadvanced.homeForecastManual") }}
+								</option>
+							</select>
+						</FormRow>
+						<FormRow
+							v-if="values.homeForecast === 2"
+							id="lmAdvanced-homeProfile"
+							:label="$t('config.lmadvanced.homeProfileLabel')"
+							:help="$t('config.lmadvanced.homeProfileHelp')"
+						>
+							<p
+								v-if="homeProfile"
+								class="small mb-2"
+								data-testid="lmadvanced-homeProfile-info"
+							>
+								{{ homeProfileInfo }}
+								<a :href="homeProfileUrl" download="lastprofil.csv">{{
+									$t("config.lmadvanced.homeProfileDownload")
+								}}</a>
+								·
+								<button
+									type="button"
+									class="btn btn-link btn-sm p-0 align-baseline text-danger"
+									data-testid="lmadvanced-homeProfile-delete"
+									@click="deleteHomeProfile"
+								>
+									{{ $t("config.lmadvanced.homeProfileDelete") }}
+								</button>
+							</p>
+							<p
+								v-else
+								class="small text-warning mb-2"
+								data-testid="lmadvanced-homeProfile-none"
+							>
+								{{ $t("config.lmadvanced.homeProfileNone") }}
+							</p>
+							<input
+								id="lmAdvanced-homeProfile"
+								ref="homeProfileFile"
+								type="file"
+								accept=".csv,.txt,text/csv,text/plain"
+								class="form-control"
+								data-testid="lmadvanced-homeProfile"
+								:disabled="uploading"
+								@change="uploadHomeProfile"
+							/>
+						</FormRow>
+						<FormRow
+							id="lmAdvanced-percentile"
+							:label="$t('config.lmadvanced.percentileLabel')"
+							:help="$t('config.lmadvanced.percentileHelp')"
+						>
+							<select
+								id="lmAdvanced-percentile"
+								v-model.number="percentile"
+								class="form-select"
+								data-testid="lmadvanced-percentile"
+							>
+								<option v-for="p in percentiles" :key="p" :value="p">
+									{{
+										p
+											? $t("config.lmadvanced.percentileValue", {
+													percentile: p,
+												})
+											: $t("config.lmadvanced.percentileAverage")
+									}}
+								</option>
+							</select>
+						</FormRow>
+
+						<!-- custom: export forecast of the optimizer to Home Assistant, see core/site_lm_export_forecast.go -->
+						<FormRow
+							id="lmAdvanced-exportForecast"
+							:label="$t('config.lmadvanced.exportForecastLabel')"
+							:help="$t('config.lmadvanced.exportForecastHelp')"
+						>
+							<input
+								id="lmAdvanced-exportForecast"
+								v-model.trim="exportForecast"
+								type="text"
+								class="form-control"
+								placeholder="sensor.evcc_einspeiseprognose"
+								autocomplete="off"
+								data-testid="lmadvanced-exportForecast"
+								@input="exportForecastError = ''"
+							/>
+							<p
+								v-if="exportForecastError"
+								class="text-danger small mt-1 mb-0"
+								data-testid="lmadvanced-exportForecast-error"
+							>
+								{{ exportForecastError }}
+							</p>
+						</FormRow>
+					</template>
+				</div>
+			</section>
 
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
 				<button
@@ -202,35 +237,64 @@
 <script>
 import GenericModal from "../Helper/GenericModal.vue";
 import FormRow from "./FormRow.vue";
+import DropdownIcon from "../MaterialIcon/Dropdown.vue";
 import formatter from "@/mixins/formatter";
 import store from "@/store";
 import api from "@/api";
 
 // Ranges as checked by the server, see core/site_lm_advanced.go. The inputs have
 // no min, max or step: the browser would block the submit without a message.
+// group: the section of the dialog, see GROUPS.
 const FIELDS = [
-	{ name: "hysteresis", unit: "%", min: 0, max: 20, integer: false, default: 2 },
-	{ name: "freeValue", unit: "W", min: 1, max: 100000, integer: true, default: 10000 },
-	{ name: "holdOff", unit: "min", min: 1, max: 60, integer: true, default: 5 },
-	{ name: "timeout", unit: "min", min: 1, max: 60, integer: true, default: 10 },
-	{ name: "peakFreeze", unit: "min", min: 1, max: 14, integer: true, default: 12 },
-	{ name: "peakCap", unit: "×", min: 1, max: 10, integer: false, default: 2 },
-	{ name: "gridChargeWindow", unit: "h", min: 1, max: 24, integer: true, default: 3 },
+	{ name: "timeout", group: "lm", unit: "min", min: 1, max: 60, integer: true, default: 10 },
 	{
 		name: "followCycles",
+		group: "lm",
 		unitKey: "config.lmadvanced.cycles",
 		min: 0,
 		max: 20,
 		integer: true,
 		default: 3,
 	},
+	{ name: "hysteresis", group: "peak", unit: "%", min: 0, max: 20, integer: false, default: 2 },
+	{
+		name: "freeValue",
+		group: "peak",
+		unit: "W",
+		min: 1,
+		max: 100000,
+		integer: true,
+		default: 10000,
+	},
+	{ name: "peakFreeze", group: "peak", unit: "min", min: 1, max: 14, integer: true, default: 12 },
+	{ name: "peakCap", group: "peak", unit: "×", min: 1, max: 10, integer: false, default: 2 },
+	{
+		name: "holdOff",
+		group: "gridCharge",
+		unit: "min",
+		min: 1,
+		max: 60,
+		integer: true,
+		default: 5,
+	},
+	{
+		name: "gridChargeWindow",
+		group: "gridCharge",
+		unit: "h",
+		min: 1,
+		max: 24,
+		integer: true,
+		default: 3,
+	},
 ];
+
+const GROUPS = ["lm", "peak", "gridCharge", "optimizer"];
 
 // Advanced load management settings. Each value overrides the default; the
 // dialog shows the values in effect.
 export default {
 	name: "LmAdvancedModal",
-	components: { FormRow, GenericModal },
+	components: { DropdownIcon, FormRow, GenericModal },
 	mixins: [formatter],
 	emits: ["changed"],
 	data() {
@@ -247,11 +311,12 @@ export default {
 			initialExportForecast: "",
 			exportForecastError: "",
 			uploading: false,
+			openGroups: {},
 		};
 	},
 	computed: {
-		numberFields() {
-			return FIELDS;
+		groups() {
+			return GROUPS;
 		},
 		percentiles() {
 			// upstream profilePercentile in %, 0 = average
@@ -305,6 +370,9 @@ export default {
 		},
 	},
 	methods: {
+		fieldsOf(group) {
+			return FIELDS.filter((f) => f.group === group);
+		},
 		open() {
 			const state = store.state?.lmAdvanced || {};
 			const values = {};
@@ -323,6 +391,7 @@ export default {
 			this.exportForecast = state.exportForecastEntity || "";
 			this.initialExportForecast = this.exportForecast;
 			this.exportForecastError = "";
+			this.openGroups = {};
 		},
 		async uploadHomeProfile(event) {
 			const file = event.target.files?.[0];
@@ -366,6 +435,7 @@ export default {
 		async save() {
 			const invalid = this.invalidField();
 			if (invalid) {
+				this.openGroups[invalid.group] = true;
 				this.error = this.$t("config.lmadvanced.invalid", {
 					label: this.$t(`config.lmadvanced.${invalid.name}Label`),
 					min: invalid.min,
@@ -377,6 +447,7 @@ export default {
 			this.exportForecastError = "";
 			if (this.exportForecast && !/^sensor\.[a-z0-9_]+$/.test(this.exportForecast)) {
 				this.exportForecastError = this.$t("config.lmadvanced.exportForecastInvalid");
+				this.openGroups.optimizer = true;
 				return;
 			}
 
@@ -428,6 +499,7 @@ export default {
 				this.$refs.modal.close();
 			} catch (e) {
 				this.exportForecastError = e?.response?.data?.error || e.message;
+				this.openGroups.optimizer = true;
 			}
 
 			this.saving = false;
@@ -436,6 +508,15 @@ export default {
 };
 </script>
 <style scoped>
+.group-toggle {
+	min-height: 3rem;
+}
+.icon {
+	transition: transform var(--evcc-transition-medium) ease;
+}
+.iconUp {
+	transform: rotate(-180deg);
+}
 .container {
 	margin-left: calc(var(--bs-gutter-x) * -0.5);
 	margin-right: calc(var(--bs-gutter-x) * -0.5);

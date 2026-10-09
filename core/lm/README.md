@@ -521,6 +521,12 @@ values are not stored, so a changed default applies.
 Also there: the load management circuit ([7](#7-load-management-circuit-and-switch))
 and evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
 
+The dialog shows the settings in four closed groups, so it stays short on a
+phone: *Lastmanagement* (circuit, `timeout`, `followCycles`), *Peak Shaving*
+(`hysteresis`, `freeValue`, `peakFreeze`, `peakCap`), *Batterie-Netzladen*
+(`holdOff`, `gridChargeWindow`, `phases`) and *Optimizer* (`homeForecast`, load
+profile, `profilePercentile`, `exportForecastEntity`). A rejected value opens its group.
+
 ## 18. Log file
 
 evcc keeps its log in a ring buffer of 10,000 lines for the log page, which at
