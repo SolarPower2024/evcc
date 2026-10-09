@@ -1439,6 +1439,13 @@ func (lp *Loadpoint) scalePhases(phases int) error {
 	}
 
 	if lp.GetPhases() != phases {
+		// drop to min current before scaling up so the 1p current is not applied to all phases
+		if lp.enabled && phases > 1 {
+			if err := lp.setLimit(lp.effectiveMinCurrent()); err != nil {
+				return err
+			}
+		}
+
 		// switch phases
 		if err := cp.Phases1p3p(phases); err != nil {
 			return fmt.Errorf("switch phases: %w", err)
@@ -1592,7 +1599,8 @@ func (lp *Loadpoint) pvScalePhases(sitePower, minCurrent, maxCurrent float64, ma
 		// merely delays the pv disable timer by the phase timer duration. Without a
 		// disable to wait for, scaling down is the only way to reduce power (#33208).
 		min1pCurrent := lp.effectiveMinCurrentFor(1) // custom: 1p limits, see core/loadpoint_phasecurrents.go
-		useful := !lp.enabled || !lp.charging() || !mayDisable || powerToCurrent(availablePower, 1) >= min1pCurrent
+		// Climater keep-alive suppresses the disable timer, checked last to avoid vehicle polling.
+		useful := !lp.enabled || !lp.charging() || !mayDisable || powerToCurrent(availablePower, 1) >= min1pCurrent || lp.vehicleClimateActive()
 		if insufficient && !useful {
 			lp.log.DEBUG.Printf("available power %.0fW < %.0fW min 1p threshold, disabling instead of scaling down", availablePower, Voltage*min1pCurrent)
 		}
@@ -1848,8 +1856,8 @@ func (lp *Loadpoint) pvMaxCurrent(sitePower, batteryPower float64, batteryBuffer
 	activePhases := lp.ActivePhases()
 	effectiveCurrent := lp.effectiveCurrent()
 	if scaledTo == 3 {
-		// if we did scale, adjust the effective current to the new phase count
-		effectiveCurrent /= float64(lp.maxActivePhases())
+		// if we did scale, spread the power measured before the switch over the new phase count
+		effectiveCurrent = powerToCurrent(lp.chargePower, lp.maxActivePhases())
 	}
 	if lp.chargerHasFeature(api.IntegratedDevice) {
 		// for slow-acting heating devices, only take actually consumed power into account
