@@ -1072,7 +1072,7 @@
       "circuitNone": "None — battery outside load management",
       "circuitNoneConfigured": "No circuits are configured.",
       "circuitTitle": "Battery circuit",
-      "description": "evcc writes the discharge power needed for peak shaving to a Home Assistant entity: the battery's discharge limit or a helper for your automation.",
+      "description": "evcc tells Home Assistant what peak shaving needs. How depends on the battery type.",
       "energyEntityHelp": "Grid import counter in kWh or Wh. Only needed when the grid meter in evcc has no energy counter.",
       "energyEntityLabel": "Grid import energy counter",
       "entityHelp": "Receives the setpoint in W, fitted to the entity's min, max and step.",

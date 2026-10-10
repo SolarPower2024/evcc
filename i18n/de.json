@@ -1072,7 +1072,7 @@
       "circuitNone": "Keiner — Batterie nicht im Lastmanagement",
       "circuitNoneConfigured": "Es sind keine Stromkreise konfiguriert.",
       "circuitTitle": "Batterie-Stromkreis",
-      "description": "evcc schreibt die zum Kappen nötige Entladeleistung in eine Home-Assistant-Entität: die Entladebegrenzung der Batterie oder einen Helfer für deine Automation.",
+      "description": "evcc gibt Home Assistant vor, was zum Kappen nötig ist. Wie, hängt vom Batterietyp ab.",
       "energyEntityHelp": "Zählerstand Netzbezug in kWh oder Wh. Nur nötig, wenn der Netzzähler in evcc keinen Energiezähler liefert.",
       "energyEntityLabel": "Energiezähler Netzbezug",
       "entityHelp": "Erhält den Sollwert in W, passend zu Min, Max und Schritt der Entität.",
