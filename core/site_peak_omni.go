@@ -24,6 +24,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"slices"
 	"strconv"
@@ -86,17 +87,6 @@ func (site *Site) omniOwned() bool {
 	return site.omniType() && site.peakOwned()
 }
 
-// omniProtEnabled reports whether peak shaving with the battery type Marstek is
-// set up: the type and the three entities of Omnibattery's peak shaving
-func (site *Site) omniProtEnabled() bool {
-	s := site.peak()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.batteryType == batteryTypeMarstek && s.configured()
-}
-
 // omniTypeWithoutProt reports whether the battery type Marstek lacks one of the
 // three entities of Omnibattery's peak shaving
 func (site *Site) omniTypeWithoutProt() bool {
@@ -113,7 +103,7 @@ func (site *Site) omniTypeWithoutProt() bool {
 // Omnibattery's peak shaving. Called with mu held.
 func (s *peakState) configured() bool {
 	if s.batteryType == batteryTypeMarstek {
-		return s.protSwitch != "" && s.protLimitSet != nil && s.protSocSet != nil
+		return s.protSwitch != "" && s.protLimit != "" && s.protSocSet != nil
 	}
 
 	return s.set != nil
@@ -121,8 +111,9 @@ func (s *peakState) configured() bool {
 
 // effectiveReserve is the reserve peak shaving works with. For the battery type
 // Marstek it is at least Omnibattery's lowest soc threshold, so evcc's state of
-// the reserve, the optimizer and Omnibattery agree also with a lower reserve set
-// by a profile or the api. Called with s.mu held.
+// the reserve, the optimizer, Omnibattery and the ui agree also with a lower
+// reserve set by a profile or the api; the value set stays stored for BYD.
+// Called with s.mu held.
 func (s *peakState) effectiveReserve() float64 {
 	if s.batteryType == batteryTypeMarstek {
 		return max(minOmniProtSoc, s.reserve)
@@ -295,17 +286,20 @@ func (site *Site) applyOmniProtection() {
 // configuration write in nearly every cycle of a window.
 const minOmniLimitRise = 500.0
 
-// omniWriteLimit writes the limit, fitted to the entity and rounded down, when it
-// is below the limit in the entity or at least minOmniLimitRise above it. Below
-// the entity's minimum the minimum is written: Omnibattery takes no lower limit.
+// omniWriteLimit writes the limit, in whole watts, fitted to the entity and
+// rounded down, when it is below the limit in the entity or at least
+// minOmniLimitRise above it. Below the entity's minimum the minimum is written:
+// Omnibattery takes no lower limit. An entity that cannot be read is not written,
+// its minimum and step are unknown; the step fails and the next cycle tries again.
 func (site *Site) omniWriteLimit(conn *homeassistant.Connection, entity string, limit float64) bool {
 	r, current, err := numberState(conn, entity)
+	if !site.logWrite("peak shaving limit read", "read "+entity, err) {
+		return false
+	}
 
-	if err == nil {
-		limit = r.Fit(limit, false)
-		if v, perr := strconv.ParseFloat(current, 64); perr == nil && limit >= v && limit < v+minOmniLimitRise {
-			return true
-		}
+	limit = r.Fit(math.Floor(limit), false)
+	if v, perr := strconv.ParseFloat(current, 64); perr == nil && limit >= v && limit < v+minOmniLimitRise {
+		return true
 	}
 
 	if !site.logWrite("peak shaving limit", fmt.Sprintf("write %.0fW", limit), conn.CallNumberService(entity, limit)) {
@@ -540,6 +534,7 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 	s.mu.Lock()
 	s.batteryType = typ
 	s.handedBack = false
+	reserve := s.effectiveReserve()
 	s.mu.Unlock()
 
 	s.out.Unlock()
@@ -547,6 +542,7 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 	site.log.DEBUG.Println("set peak shaving battery type:", typ)
 	settings.SetString(keys.PeakShavingBatteryType, typ)
 	site.publish(keys.PeakShavingBatteryType, typ)
+	site.publish(keys.PeakShavingReserve, reserve) // the reserve in effect depends on the type
 
 	return nil
 }
@@ -726,9 +722,10 @@ func (site *Site) GetPeakShavingProtLimit() string {
 // Without it the battery type Marstek cannot shave peaks, so peak shaving is
 // turned off and Omnibattery's peak shaving released then.
 func (site *Site) SetPeakShavingProtLimit(entity string) error {
-	return site.setProtNumber(entity, keys.PeakShavingProtLimit, func(s *peakState) (*string, *func(float64) error) {
-		return &s.protLimit, &s.protLimitSet
-	}, false)
+	s := site.peak()
+
+	// written by omniWriteLimit, with its own rule for a rising limit
+	return site.setProtNumber(entity, keys.PeakShavingProtLimit, &s.protLimit, nil)
 }
 
 // GetPeakShavingProtSoc returns the number entity of Omnibattery's peak shaving
@@ -745,20 +742,20 @@ func (site *Site) GetPeakShavingProtSoc() string {
 // SetPeakShavingProtSoc sets the number entity receiving the reserve. Without it
 // the battery type Marstek cannot shave peaks, see SetPeakShavingProtLimit.
 func (site *Site) SetPeakShavingProtSoc(entity string) error {
-	return site.setProtNumber(entity, keys.PeakShavingProtSoc, func(s *peakState) (*string, *func(float64) error) {
-		return &s.protSoc, &s.protSocSet
-	}, true) // the threshold has to be at least the reserve
+	s := site.peak()
+
+	return site.setProtNumber(entity, keys.PeakShavingProtSoc, &s.protSoc, &s.protSocSet)
 }
 
-// setProtNumber sets one of the two number entities of Omnibattery's peak shaving
-// and resolves its setter. up rounds a value to the next step above.
-func (site *Site) setProtNumber(entity, key string, field func(*peakState) (*string, *func(float64) error), up bool) error {
+// setProtNumber sets one of the two number entities of Omnibattery's peak shaving,
+// name points to it in the state. set, if given, receives the setter resolved
+// from it, see protSocSetter.
+func (site *Site) setProtNumber(entity, key string, name *string, set *func(float64) error) error {
 	if entity != "" && !strings.HasPrefix(entity, "number.") && !strings.HasPrefix(entity, "input_number.") {
 		return fmt.Errorf("must be a number or input_number entity: %s", entity)
 	}
 
 	s := site.peak()
-	name, set := field(s)
 
 	s.mu.Lock()
 	changed := *name != entity
@@ -772,7 +769,12 @@ func (site *Site) setProtNumber(entity, key string, field func(*peakState) (*str
 
 	if entity != "" {
 		var err error
-		if setter, err = site.numberSetter(entity, up); err != nil {
+		if set != nil {
+			setter, err = site.protSocSetter(entity)
+		} else {
+			_, err = site.haConnection()
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -785,7 +787,10 @@ func (site *Site) setProtNumber(entity, key string, field func(*peakState) (*str
 		return errHandBack
 	}
 	s.mu.Lock()
-	*name, *set = entity, setter
+	*name = entity
+	if set != nil {
+		*set = setter
+	}
 	s.mu.Unlock()
 	s.out.Unlock()
 
@@ -796,30 +801,32 @@ func (site *Site) setProtNumber(entity, key string, field func(*peakState) (*str
 	return site.omniProtRemoved(entity)
 }
 
-// rebuildProtSetters resolves the setters of the two number entities
-func (site *Site) rebuildProtSetters() error {
+// protSocSetter returns the setter of the soc threshold entity. It rounds up to
+// the step: the threshold has to cover the reserve. The write tolerance is in W
+// and does not apply, every change of the reserve is written.
+func (site *Site) protSocSetter(entity string) (func(float64) error, error) {
+	return site.numberSetter(entity, true, nil)
+}
+
+// rebuildProtSetter resolves the setter of the soc threshold entity
+func (site *Site) rebuildProtSetter() error {
 	s := site.peak()
 
 	s.mu.Lock()
-	limit, soc := s.protLimit, s.protSoc
+	soc := s.protSoc
 	s.mu.Unlock()
 
-	var limitSet, socSet func(float64) error
-	var err error
+	var set func(float64) error
 
-	if limit != "" {
-		if limitSet, err = site.numberSetter(limit, false); err != nil { // an allowed power has to stay within the limit
-			return err
-		}
-	}
 	if soc != "" {
-		if socSet, err = site.numberSetter(soc, true); err != nil { // a threshold has to cover the reserve
+		var err error
+		if set, err = site.protSocSetter(soc); err != nil {
 			return err
 		}
 	}
 
 	s.mu.Lock()
-	s.protLimitSet, s.protSocSet = limitSet, socSet
+	s.protSocSet = set
 	s.mu.Unlock()
 
 	return nil

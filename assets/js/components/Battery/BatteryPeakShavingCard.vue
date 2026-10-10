@@ -46,8 +46,18 @@
 
 		<div v-if="error" class="alert alert-danger mt-3 mb-0 py-2 small">{{ error }}</div>
 
-		<div v-if="entityMissing" class="alert alert-warning mt-3 mb-0 py-2 small">
-			{{ $t("battery.peakShaving.noEntity") }}
+		<div
+			v-if="entityMissing"
+			class="alert alert-warning mt-3 mb-0 py-2 small"
+			data-testid="battery-peak-shaving-missing"
+		>
+			{{
+				$t(
+					marstek
+						? "battery.peakShaving.noMarstekEntities"
+						: "battery.peakShaving.noEntity"
+				)
+			}}
 		</div>
 	</Card>
 </template>
@@ -105,6 +115,9 @@ export default defineComponent({
 				this.shaving ? "battery.peakShaving.shaving" : "battery.peakShaving.normal"
 			);
 		},
+		marstek(): boolean {
+			return store.state?.peakShavingBatteryType === "marstek";
+		},
 		// a Marstek has no discharge entity, Omnibattery's peak shaving takes its place
 		entityMissing(): boolean {
 			return !peakShavingSetUp({ ...store.state, peakShavingEntity: this.entity });
@@ -126,11 +139,12 @@ export default defineComponent({
 		// a Marstek gets 5 % steps down to 20 %, the lowest threshold of Omnibattery's
 		// peak shaving, see utils/socSteps.ts
 		reserveOptions() {
-			const marstek = store.state?.peakShavingBatteryType === "marstek";
-			return socSteps(95, 5, marstek, this.selectedReserve, MARSTEK_MIN_RESERVE).map((i) => ({
-				value: i,
-				name: this.socText(i),
-			}));
+			return socSteps(95, 5, this.marstek, this.selectedReserve, MARSTEK_MIN_RESERVE).map(
+				(i) => ({
+					value: i,
+					name: this.socText(i),
+				})
+			);
 		},
 	},
 	watch: {

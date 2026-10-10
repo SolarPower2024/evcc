@@ -196,7 +196,7 @@ func newOmni(t *testing.T) (*scenario, *fakeHA) {
 	s.protSoc = haProtSoc
 	require.NoError(t, sc.site.rebuildPeakSetter())
 	require.NoError(t, sc.site.rebuildChargeSetter())
-	require.NoError(t, sc.site.rebuildProtSetters())
+	require.NoError(t, sc.site.rebuildProtSetter())
 
 	return sc, ha
 }
@@ -330,8 +330,8 @@ func TestOmniProtectionOn(t *testing.T) {
 }
 
 // TestOmniProtectionLimitFollowsWindow verifies that the limit is the allowed
-// power of the window, rounded down to the step of the entity, and written only
-// where the entity differs by more than half a step
+// power of the window, rounded down to the step of the entity, written right away
+// when it falls and only from minOmniLimitRise when it rises
 func TestOmniProtectionLimitFollowsWindow(t *testing.T) {
 	sc, ha := protecting(t)
 	clk := mockClock(sc)
@@ -379,9 +379,48 @@ func TestOmniProtectionLimitMinimum(t *testing.T) {
 	assert.Equal(t, "500", ha.get(haProtLimit))
 }
 
+// TestOmniProtectionLimitWholeWatts verifies that an entity without a step gets
+// whole watts, rounded down
+func TestOmniProtectionLimitWholeWatts(t *testing.T) {
+	sc, ha := newOmni(t)
+	conn := sc.site.peak().conn
+
+	ha.mu.Lock()
+	ha.states["number.limit_nostep"] = &haEntity{"20000", map[string]any{"min": 500.0, "max": 20000.0, "step": 0.0}}
+	ha.mu.Unlock()
+
+	require.True(t, sc.site.omniWriteLimit(conn, "number.limit_nostep", 4733.8))
+	assert.Equal(t, []string{"set_value number.limit_nostep 4733"}, ha.take())
+}
+
+// TestOmniProtectionLimitNotReadable verifies that a limit entity that cannot be
+// read is not written, its minimum is unknown: the step fails, the switch waits
+// and the next cycle tries again
+func TestOmniProtectionLimitNotReadable(t *testing.T) {
+	sc, ha := newOmni(t)
+
+	ha.mu.Lock()
+	limit := ha.states[haProtLimit]
+	delete(ha.states, haProtLimit)
+	ha.mu.Unlock()
+
+	sc.cycle(25, 8000, 0)
+	assert.Equal(t, []string{"set_value " + haProtSoc + " 30"}, ha.take(), "the threshold only, no limit and no switch")
+	assert.False(t, sc.site.peak().protOwned)
+
+	ha.mu.Lock()
+	ha.states[haProtLimit] = limit
+	ha.mu.Unlock()
+
+	sc.cycle(25, 8000, 0)
+	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000", "turn_on " + haProtSwitch}, ha.take())
+	assert.True(t, sc.site.peak().protOwned)
+}
+
 // TestOmniEffectiveReserve verifies that a reserve below Omnibattery's lowest
 // threshold, e.g. from a battery profile, counts as that threshold everywhere:
-// evcc's state of the reserve, the optimizer and Omnibattery agree
+// evcc's state of the reserve, the optimizer, Omnibattery and the ui agree; the
+// value set stays stored for BYD
 func TestOmniEffectiveReserve(t *testing.T) {
 	sc, ha := newOmni(t)
 	sc.site.peak().reserve = 15
@@ -394,12 +433,35 @@ func TestOmniEffectiveReserve(t *testing.T) {
 	assert.True(t, on)
 	assert.Equal(t, 20.0, reserve)
 
+	// the ui and the api show the reserve in effect, the value set stays stored
+	pub := make(chan util.Param, 1000)
+	sc.site.valueChan = pub
+	reservePublished := func() any {
+		var v any
+		for {
+			select {
+			case p := <-pub:
+				if p.Key == keys.PeakShavingReserve {
+					v = p.Val
+				}
+			default:
+				return v
+			}
+		}
+	}
+
+	assert.Equal(t, 20.0, sc.site.GetPeakShavingReserve())
+	sc.site.publishPeakSettings()
+	assert.Equal(t, 20.0, reservePublished())
+
+	require.NoError(t, sc.site.SetPeakShavingReserve(12))
+	assert.Equal(t, 20.0, reservePublished())
+	assert.Equal(t, 20.0, sc.site.GetPeakShavingReserve())
+
 	// BYD keeps the reserve as set
-	s := sc.site.peak()
-	s.mu.Lock()
-	s.batteryType = batteryTypeBYD
-	assert.Equal(t, 15.0, s.effectiveReserve())
-	s.mu.Unlock()
+	require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeBYD))
+	assert.Equal(t, 12.0, reservePublished(), "published again with the type")
+	assert.Equal(t, 12.0, sc.site.GetPeakShavingReserve())
 }
 
 // TestOmniGridChargeWithoutManualWarns verifies that grid charging for the
@@ -419,6 +481,15 @@ func TestOmniGridChargeWithoutManualWarns(t *testing.T) {
 	}
 	assert.Empty(t, ha.take())
 	assert.Equal(t, 1, strings.Count(buf.String(), "needs the manual control switch"), buf.String())
+
+	// set up again, then lost again: logged again
+	s.manualEntity = haSwitch
+	sc.site.writeChargeValue(4000)
+	s.modeEntity = ""
+	for range 3 {
+		sc.site.writeChargeValue(4000)
+	}
+	assert.Equal(t, 2, strings.Count(buf.String(), "needs the manual control switch"), buf.String())
 }
 
 // TestOmniProtectionThreshold verifies the soc threshold: the reserve, at least
@@ -442,6 +513,20 @@ func TestOmniProtectionThreshold(t *testing.T) {
 			assert.Equal(t, tc.want, ha.get(haProtSoc))
 		})
 	}
+}
+
+// TestOmniProtectionThresholdIgnoresWriteTolerance verifies that the write
+// tolerance, a power in W, does not hold back a changed reserve in %
+func TestOmniProtectionThresholdIgnoresWriteTolerance(t *testing.T) {
+	sc, ha := newOmni(t)
+	require.NoError(t, sc.site.SetLmAdvanced("writeTolerance", 100))
+
+	sc.cycle(50, 3000, 0)
+	assert.Equal(t, "30", ha.get(haProtSoc))
+
+	require.NoError(t, sc.site.SetPeakShavingReserve(40))
+	sc.cycle(50, 3000, 0)
+	assert.Equal(t, "40", ha.get(haProtSoc))
 }
 
 // TestOmniProtectionOrder verifies that threshold and limit are written before
@@ -778,7 +863,7 @@ func TestOmniTypeNeedsEntitiesWhileOn(t *testing.T) {
 		sc, ha := newOmni(t)
 		s := sc.site.peak()
 		s.batteryType = batteryTypeBYD
-		s.protLimit, s.protLimitSet = "", nil
+		s.protLimit = ""
 
 		require.ErrorIs(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek), errProtMissing)
 		assert.Equal(t, batteryTypeBYD, sc.site.GetPeakShavingBatteryType())
@@ -1004,7 +1089,7 @@ func TestOmniReleaseAfterRestart(t *testing.T) {
 	again.site.restorePeakSettings()
 
 	assert.True(t, again.site.omniEnabled())
-	assert.True(t, again.site.omniProtEnabled())
+	assert.True(t, again.site.peakConfigured())
 	assert.True(t, again.site.peakOwned())
 	assert.True(t, again.site.peak().protOwned)
 	assert.Equal(t, haProtSwitch, again.site.GetPeakShavingProtSwitch())
@@ -1084,7 +1169,7 @@ func TestOmniEntityChecks(t *testing.T) {
 	require.NoError(t, sc.site.SetPeakShavingProtSoc("input_number.soc"))
 	assert.Equal(t, "input_number.limit", sc.site.GetPeakShavingProtLimit())
 	assert.Equal(t, "input_number.soc", sc.site.GetPeakShavingProtSoc())
-	assert.True(t, sc.site.omniProtEnabled(), "swapped setters are there")
+	assert.True(t, sc.site.peakConfigured(), "the swapped setter is there")
 
 	// the battery type
 	require.Error(t, sc.site.SetPeakShavingBatteryType("zendure"))
@@ -1102,13 +1187,13 @@ func TestOmniPeakShavingNeedsEntities(t *testing.T) {
 
 	for _, missing := range []func(){
 		func() { s.protSwitch = "" },
-		func() { s.protLimit, s.protLimitSet = "", nil },
+		func() { s.protLimit = "" },
 		func() { s.protSoc, s.protSocSet = "", nil },
 	} {
 		missing()
 		require.ErrorIs(t, sc.site.SetPeakShaving(true), errProtMissing)
 		s.protSwitch, s.protLimit, s.protSoc = haProtSwitch, haProtLimit, haProtSoc
-		require.NoError(t, sc.site.rebuildProtSetters())
+		require.NoError(t, sc.site.rebuildProtSetter())
 	}
 
 	require.NoError(t, sc.site.SetPeakShaving(true), "neither discharge, switch nor mode")

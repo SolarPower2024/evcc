@@ -85,13 +85,12 @@ type peakState struct {
 	modeEntity   string // select of the forced mode
 	omniShown    string // the forced mode published, empty = not controlling
 
-	protSwitch   string              // switch of Omnibattery's peak shaving
-	protLimit    string              // number entity of its limit
-	protSoc      string              // number entity of its soc threshold
-	protOwned    bool                // evcc turned the switch on, persisted like owned
-	protLimitSet func(float64) error // resolved from protLimit, checks the entity
-	omniWarn     sync.Once           // grid charging without manual control, logged once
-	protSocSet   func(float64) error // resolved from protSoc
+	protSwitch string              // switch of Omnibattery's peak shaving
+	protLimit  string              // number entity of its limit, see omniWriteLimit
+	protSoc    string              // number entity of its soc threshold
+	protSocSet func(float64) error // resolved from protSoc
+	protOwned  bool                // evcc turned the switch on, persisted like owned
+	omniWarned bool                // grid charging without manual control logged, until it is set up again
 
 	conn *homeassistant.Connection // shared, built on first use
 
@@ -240,8 +239,8 @@ func (site *Site) restorePeakSettings() {
 	if err := site.rebuildChargeSetter(); err != nil {
 		site.log.ERROR.Printf("grid charge power: %v", err)
 	}
-	if err := site.rebuildProtSetters(); err != nil {
-		site.log.ERROR.Printf("peak shaving limit: %v", err)
+	if err := site.rebuildProtSetter(); err != nil {
+		site.log.ERROR.Printf("peak shaving soc threshold: %v", err)
 	}
 	if err := site.rebuildEnergyGetter(); err != nil {
 		site.log.ERROR.Printf("peak shaving energy: %v", err)
@@ -282,7 +281,7 @@ func (site *Site) rebuildPeakSetter() error {
 		return nil
 	}
 
-	set, err := site.numberSetter(entity, true) // a discharge setpoint has to cover the peak
+	set, err := site.numberSetter(entity, true, site.peakWriteTolerance) // a discharge setpoint has to cover the peak
 	if err != nil {
 		return err
 	}
@@ -307,7 +306,7 @@ func (site *Site) rebuildChargeSetter() error {
 
 	if entity != "" {
 		var err error
-		if set, err = site.numberSetter(entity, false); err != nil { // a charge power has to stay within the limits
+		if set, err = site.numberSetter(entity, false, site.peakWriteTolerance); err != nil { // a charge power has to stay within the limits
 			return err
 		}
 	}
@@ -376,10 +375,12 @@ func (site *Site) haConnection() (*homeassistant.Connection, error) {
 // value is fitted to the entity's min, max and step first, see peak.Range.Fit;
 // up rounds to the next step above. These are read on every write, as an
 // integration may only learn them from the device after it started. A value the
-// entity already holds, within the write tolerance, is not written again, see
+// entity already holds, within the tolerance, is not written again, see
 // peak.Range.Unchanged: a device may store every write. As the comparison is
-// against the entity, a value changed by hand is still corrected.
-func (site *Site) numberSetter(entity string, up bool) (func(float64) error, error) {
+// against the entity, a value changed by hand is still corrected. tolerance
+// returns the smallest change written; nil for an entity that is not a power, the
+// write tolerance is in W.
+func (site *Site) numberSetter(entity string, up bool, tolerance func() float64) (func(float64) error, error) {
 	conn, err := site.haConnection()
 	if err != nil {
 		return nil, err
@@ -391,7 +392,12 @@ func (site *Site) numberSetter(entity string, up bool) (func(float64) error, err
 			return conn.CallNumberService(entity, val)
 		}
 
-		val, write := numberWrite(r, current, val, up, site.peakWriteTolerance())
+		var tol float64
+		if tolerance != nil {
+			tol = tolerance()
+		}
+
+		val, write := numberWrite(r, current, val, up, tol)
 		if !write {
 			return nil
 		}
@@ -441,7 +447,7 @@ func (site *Site) publishPeakSettings() {
 	s := site.peak()
 
 	s.mu.Lock()
-	enabled, limit, reserve, entity, charge, circuit := s.enabled, s.limit, s.reserve, s.entity, s.chargePower, s.circuit
+	enabled, limit, reserve, entity, charge, circuit := s.enabled, s.limit, s.effectiveReserve(), s.entity, s.chargePower, s.circuit
 	chargeEntity, energyEntity := s.chargeEntity, s.energyEntity
 	s.mu.Unlock()
 
@@ -707,12 +713,17 @@ func (site *Site) writeChargeValue(value float64) {
 
 	// the battery type Marstek is written by applyOmni, after the manual control
 	// and the mode; without them Omnibattery would refuse the power, so it is not
-	// sent at all and the log says why
+	// sent at all and the log says why, once until both are set up again
 	if site.omniType() {
-		if value > 0 && !site.omniEnabled() {
-			s.omniWarn.Do(func() {
-				site.log.WARN.Println("grid charge power: battery type Marstek needs the manual control switch and the force mode for grid charging (Lastmanagement-Details → Peak Shaving)")
-			})
+		enabled := site.omniEnabled()
+
+		s.mu.Lock()
+		warn := value > 0 && !enabled && !s.omniWarned
+		s.omniWarned = !enabled && (s.omniWarned || warn)
+		s.mu.Unlock()
+
+		if warn {
+			site.log.WARN.Println("grid charge power: battery type Marstek needs the manual control switch and the force mode for grid charging (Lastmanagement-Details → Peak Shaving)")
 		}
 		return
 	}
@@ -1373,13 +1384,15 @@ func (site *Site) SetPeakShavingLimit(limit float64) error {
 	return nil
 }
 
+// GetPeakShavingReserve returns the reserve in effect, see effectiveReserve: for
+// the battery type Marstek at least 20 %. The value set stays stored, for BYD.
 func (site *Site) GetPeakShavingReserve() float64 {
 	s := site.peak()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.reserve
+	return s.effectiveReserve()
 }
 
 func (site *Site) SetPeakShavingReserve(soc float64) error {
@@ -1392,12 +1405,13 @@ func (site *Site) SetPeakShavingReserve(soc float64) error {
 	s.mu.Lock()
 	changed := s.reserve != soc
 	s.reserve = soc
+	effective := s.effectiveReserve()
 	s.mu.Unlock()
 
 	if changed {
 		site.log.DEBUG.Println("set peak shaving reserve:", soc)
 		settings.SetFloat(keys.PeakShavingReserve, soc)
-		site.publish(keys.PeakShavingReserve, soc)
+		site.publish(keys.PeakShavingReserve, effective)
 		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 	}
 

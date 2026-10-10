@@ -281,8 +281,9 @@ export default {
 					this.protSoc.trim() !== this.initialProtSoc)
 			);
 		},
+		// hidden for a Marstek, so not saved then
 		entityChanged() {
-			return this.entity.trim() !== this.initialEntity;
+			return this.batteryType !== "marstek" && this.entity.trim() !== this.initialEntity;
 		},
 		energyEntityChanged() {
 			return this.energyEntity.trim() !== this.initialEnergyEntity;
@@ -398,7 +399,14 @@ export default {
 
 			try {
 				// the entities first, the backend checks them; the type only changes
-				// once they are accepted
+				// once they are accepted (BYD with peak shaving on needs the discharge
+				// entity before the type)
+				const entity = this.entity.trim();
+				if (this.entityChanged) {
+					await this.postEntity("peakshavingentity", entity);
+					this.initialEntity = entity;
+				}
+
 				if (this.batteryType === "marstek") {
 					const manualEntity = this.manualEntity.trim();
 					if (manualEntity !== this.initialManualEntity) {
@@ -433,16 +441,6 @@ export default {
 				if (this.batteryTypeChanged) {
 					await api.post(`peakshavingbatterytype/${this.batteryType}`);
 					this.initialBatteryType = this.batteryType;
-				}
-
-				const entity = this.entity.trim();
-				if (this.entityChanged) {
-					if (entity) {
-						await api.post(`peakshavingentity/${encodeURIComponent(entity)}`);
-					} else {
-						await api.delete("peakshavingentity");
-					}
-					this.initialEntity = entity;
 				}
 
 				const energyEntity = this.energyEntity.trim();

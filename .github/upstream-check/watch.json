@@ -55,6 +55,11 @@
       ]
     },
     {
+      "name": "Marstek über Omnibattery (Netzladen, Spitzenlastkappung)",
+      "files": ["core/site_peak_omni.go"],
+      "keywords": ["Omnibattery", "omnibattery", "Spitzenlastkappung", "capacity protection"]
+    },
+    {
       "name": "Netzladen nach Ladestand / einmalig",
       "files": ["core/site_lm.go", "core/site_lm_once.go"],
       "keywords": [

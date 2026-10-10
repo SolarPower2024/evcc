@@ -347,8 +347,11 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
 | peak shaving off, battery type or an entity changed | off, only if evcc turned it on | stays | stays | as above |
 
 - **Limit:** `allowed` of the window (`peak.State`, i.e. limit, budget, follow,
-  cap and freeze as for BYD), fitted to `min`, `max` and `step` of the entity and
-  rounded down, so it is the stricter. A lower limit is written right away, a
+  cap and freeze as for BYD), in whole watts, fitted to `min`, `max` and `step` of
+  the entity and rounded down, so it is the stricter
+  (`TestOmniProtectionLimitWholeWatts`). An entity that cannot be read is not
+  written, its minimum is unknown; the step fails and the next cycle tries again
+  (`TestOmniProtectionLimitNotReadable`). A lower limit is written right away, a
   higher one only once it is at least 500 W above the entity, which spares
   Omnibattery a configuration write in nearly every cycle
   (`TestOmniProtectionLimitFollowsWindow`). Below the entity's minimum (500 W)
@@ -356,9 +359,12 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
   (`TestOmniProtectionLimitMinimum`). Omnibattery has no window of its own,
   this is how evcc passes the 15 minutes on.
 - **Soc threshold:** the reserve, at least 20 % (the lowest value of the entity),
-  rounded up to the step (`TestOmniProtectionThreshold`). The soc selects offer
+  rounded up to the step (`TestOmniProtectionThreshold`), every change written:
+  the write tolerance is in W and does not apply
+  (`TestOmniProtectionThresholdIgnoresWriteTolerance`). The soc selects offer
   95 to 20 % in 5 % steps for this type; a lower reserve from a profile or the
-  api counts as 20 % everywhere, for evcc's state, the optimizer and Omnibattery
+  api counts as 20 % everywhere, for evcc's state, the optimizer, Omnibattery and
+  the battery page and api, which show 20 %; the value set stays stored for BYD
   (`TestOmniEffectiveReserve`). There is no reserve hysteresis for
   Marstek (`TestOmniNoHysteresis`): evcc's state of the reserve changes exactly
   at the reserve, as Omnibattery's threshold does; the setting `hysteresis`
@@ -382,7 +388,8 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
   it off afterwards, its last limit would stay otherwise
   (`TestOmniProtectionLeavesSwitchWhenNotOwned`). Limit and threshold stay in any
   case. Grid charging without the manual switch or the mode sends nothing and
-  logs a warning once (`TestOmniGridChargeWithoutManualWarns`). The manual switch is released only if evcc held it (`peakShavingOwned`):
+  logs a warning, once until both are set up again
+  (`TestOmniGridChargeWithoutManualWarns`). The manual switch is released only if evcc held it (`peakShavingOwned`):
   the charge power to 0 first, written only where the entity shows another value,
   then the switch off; if the 0 fails the switch stays on and the next cycle
   tries again (`TestOmniGridChargeEndZeroFails`, `TestOmniGridCharge`). A switch
@@ -623,7 +630,7 @@ values are not stored, so a changed default applies.
 | --- | --- | --- | --- |
 | `hysteresis` | soc band of the peak reserve, BYD only | 2 % | 0-20 |
 | `freeValue` | setpoint for "discharge freely", BYD only | 10000 W | 1-100000 |
-| `writeTolerance` | smallest change written to the peak shaving and grid charge power entities, set in the *Peak Shaving* dialog | 0 W | 0-1000 |
+| `writeTolerance` | smallest change written to the peak shaving and grid charge power entities (not to the soc threshold of Marstek), set in the *Peak Shaving* dialog | 0 W | 0-1000 |
 | `holdOff` | wait after battery grid charging was stopped | 5 min | 1-60 |
 | `timeout` | expiry of unserved demand | 10 min | 1-60 |
 | `phases` | battery phases for current accounting | 3 | 1-3 |
