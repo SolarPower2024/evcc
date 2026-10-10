@@ -251,7 +251,7 @@ stays within the limits, and a free value above `max` becomes `max`
 device may store each write (`TestNumberWrite`). An entity removed or replaced
 gets the free value, a charge power entity 0 W
 (`TestPeakEntityRemovedHandsBack`). A 2 % hysteresis keeps the soc from
-flapping across the reserve.
+flapping across the reserve (BYD only: the battery type Marstek uses none, see 11).
 
 evcc only hands back what it held. It remembers that it wrote a value other than
 the free value (`peakShavingOwned`, stored, so a restart in the middle of a
@@ -319,46 +319,94 @@ Austrian draft for 2027 (33.82 EUR/kW/year up to 10 kW, double above, at least
 
 **Battery type Marstek (Omnibattery)** (*Lastmanagement-Details → Peak Shaving →
 Batterietyp*, default BYD). Omnibattery regulates the battery itself (zero
-feed-in) and takes a setpoint only under manual control. So for this type evcc
-also needs the *manual control switch* (`switch.` or `input_boolean.`) and the
-*force mode* select (`select.` or `input_select.`, offering `None`, `Charge`
-and `Discharge` exactly so; checked when set, `TestOmniModeEntityOptions`), next
-to the discharge power entity and, for grid charging, the charge power entity of
-*Batterie-Netzladen*. Peak shaving cannot be turned on without them.
+feed-in) and has a peak shaving of its own (capacity protection): below a soc
+threshold it discharges only while the grid power is above a limit, and it
+keeps charging from the pv surplus. For this type evcc is the input of that
+peak shaving instead of writing a discharge power (that entity is not used and
+hidden in the dialog):
+
+- the *switch* of the peak shaving (`switch.` or `input_boolean.`),
+- the *limit* and the *soc threshold* (`number.` or `input_number.` each).
+
+Peak shaving cannot be turned on without these three
+(`TestOmniPeakShavingNeedsEntities`). Grid charging additionally needs the
+*manual control switch* (`switch.` or `input_boolean.`) and the *force mode*
+select (`select.` or `input_select.`, offering `None`, `Charge` and `Discharge`
+exactly so; checked when set, `TestOmniEntityChecks`), next to the charge power
+entity of *Batterie-Netzladen*.
 
 At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
-evcc decides one wish, `omniWant`, from top to bottom:
+`applyOmni` does two independent things:
 
-| Situation | Switch | Mode | Power |
-| --- | --- | --- | --- |
-| grid charging with a setpoint > 0 | on | `Charge` | charge power = setpoint |
-| peak shaving, below the reserve, peak | on | `Discharge` | discharge power = setpoint |
-| peak shaving, below the reserve, no peak | on | `None` | nothing written |
-| otherwise (above the reserve, peak shaving off, meters lost, no grid charging) | off (release) | unchanged | nothing written |
+| Situation | Omnibattery peak shaving | Limit | Soc threshold | Manual switch |
+| --- | --- | --- | --- | --- |
+| peak shaving on, normal (also below the reserve) | on | allowed power of the 15 minute window | reserve, at least 20 % | off (Omnibattery regulates) |
+| grid charging with a setpoint > 0 | on | as above | as above | on, mode `Charge`, charge power = setpoint |
+| grid charging ends | on | as above | as above | charge power 0, then off |
+| no meter values for over 2 minutes | on | the peak limit (following the peak included), no window | reserve | off (grid charging pauses as before) |
+| peak shaving off, battery type or an entity changed | off, only if evcc turned it on | stays | stays | as above |
 
-`applyOmni` brings Home Assistant to it in the order switch, mode, power and
-writes a step only if Home Assistant shows something else (the state is read every
-time, so a change by hand is corrected in the next cycle, `TestOmniOrder`,
-`TestOmniSkipsUnchanged`, `TestOmniCorrectsHandChange`). A failing step stops the
-rest of that cycle. Released is only the switch (mode and power stay, Omnibattery
-overwrites them in automatic operation): when peak shaving is switched off, above the
-reserve, without meter values, with a removed or replaced entity and on a change
-of the battery type, and only if evcc controlled (`peakShavingOwned`;
-`TestOmniRelease`, `TestOmniReleaseAfterRestart`). A switch turned on by hand
-stays while evcc does not control; once evcc forced mode and power into it, evcc
-releases it afterwards (`TestOmniLeavesManualAloneWhenNotOwned`). A change of the
-switch, the mode, the discharge entity or the type is refused while the release
-fails (`TestOmniChangeRefusedWhenNotReleased`), and running peak shaving cannot be
-moved to Marstek without switch and mode (`TestOmniTypeNeedsEntitiesWhileOn`). The
-free value is never written to this type (`TestOmniNoFreeValue`); BYD stays
-as it was (`TestOmniInertForBYD`). Grid charging without a charge power entity
-switches nothing (`TestOmniGridChargeWithoutChargeEntity`). The scripts of the
-evcc battery modes should no longer touch the manual control, the mode and the
-power of this battery. `peakShavingManual` is published: the mode evcc holds,
-empty = not controlling. Code in `core/site_peak_omni.go`; no new hook. As a
-Marstek does not go below 11 % soc, the soc selects of *Netzladen nach SoC* and
-the peak reserve offer 15 % down to 11 % in 1 % steps for this type and nothing
-lower; BYD keeps 5 % steps (`assets/js/utils/socSteps.ts`).
+- **Limit:** `allowed` of the window (`peak.State`, i.e. limit, budget, follow,
+  cap and freeze as for BYD), fitted to `min`, `max` and `step` of the entity and
+  rounded down, so it is the stricter. A lower limit is written right away, a
+  higher one only once it is at least 500 W above the entity, which spares
+  Omnibattery a configuration write in nearly every cycle
+  (`TestOmniProtectionLimitFollowsWindow`). Below the entity's minimum (500 W)
+  the minimum is written, Omnibattery takes no lower limit
+  (`TestOmniProtectionLimitMinimum`). Omnibattery has no window of its own,
+  this is how evcc passes the 15 minutes on.
+- **Soc threshold:** the reserve, at least 20 % (the lowest value of the entity),
+  rounded up to the step (`TestOmniProtectionThreshold`). The soc selects offer
+  95 to 20 % in 5 % steps for this type; a lower reserve from a profile or the
+  api counts as 20 % everywhere, for evcc's state, the optimizer and Omnibattery
+  (`TestOmniEffectiveReserve`). There is no reserve hysteresis for
+  Marstek (`TestOmniNoHysteresis`): evcc's state of the reserve changes exactly
+  at the reserve, as Omnibattery's threshold does; the setting `hysteresis`
+  (17) is BYD only.
+- **Order:** threshold, limit, switch; a failing step stops the rest of that
+  cycle and the next cycle starts again (`TestOmniProtectionOrder`). Each is
+  written only if Home Assistant shows something else, so a change by hand is
+  corrected in the next cycle (`TestOmniCorrectsHandChange`).
+- **Below the reserve evcc never takes the battery into manual control**, writes
+  no `None`, no `Discharge` and no discharge power, whatever the soc and the grid
+  power are. The battery with manual control would stand still and not even
+  charge from the pv surplus (`TestOmniBelowReserveStaysAutomatic`, the failure
+  of 10 October). The free value is never written to this type
+  (`TestOmniNeverTouchesDischarge`). evcc still computes its setpoint
+  (`peak.Setpoint`), for the display, the statistics and the event "peak
+  covered" only.
+- **Owned:** evcc switches the peak shaving off only if it turned it on
+  (`peakShavingProtOwned`, stored, so it survives a restart,
+  `TestOmniReleaseAfterRestart`); one turned on by hand stays while evcc's peak
+  shaving is off, but once evcc drove it with its values evcc owns it and turns
+  it off afterwards, its last limit would stay otherwise
+  (`TestOmniProtectionLeavesSwitchWhenNotOwned`). Limit and threshold stay in any
+  case. Grid charging without the manual switch or the mode sends nothing and
+  logs a warning once (`TestOmniGridChargeWithoutManualWarns`). The manual switch is released only if evcc held it (`peakShavingOwned`):
+  the charge power to 0 first, written only where the entity shows another value,
+  then the switch off; if the 0 fails the switch stays on and the next cycle
+  tries again (`TestOmniGridChargeEndZeroFails`, `TestOmniGridCharge`). A switch
+  turned on by hand stays while evcc does not control
+  (`TestOmniLeavesManualAloneWhenNotOwned`).
+- **Changes:** removing or replacing a switch, removing the limit or the
+  threshold entity, and a change of the battery type release what evcc holds
+  first and are refused with `errHandBack` if that fails
+  (`TestOmniChangeRefusedWhenNotReleased`, `TestOmniRelease`). Without one of the
+  three entities peak shaving turns itself off; without the manual switch or the
+  mode only grid charging stops. Running peak shaving cannot be moved to a type
+  lacking what it needs (`TestOmniTypeNeedsEntitiesWhileOn`).
+- BYD stays as it was (`TestOmniInertForBYD`). Grid charging without a charge
+  power entity switches nothing (`TestOmniGridChargeWithoutChargeEntity`). The
+  scripts of the evcc battery modes should no longer touch the manual control,
+  the mode and the power of this battery. `peakShavingManual` is published: the
+  mode evcc holds while grid charging, empty = not controlling. Omnibattery
+  measures at its own grid meter, evcc at its own; if they differ, the cap is a
+  little off. Code in `core/site_peak_omni.go`; no new hook.
+
+As a Marstek does not go below 11 % soc, the soc selects of *Netzladen nach SoC*
+offer 15 % down to 11 % in 1 % steps for this type and nothing lower; the peak
+reserve starts at 20 % (Omnibattery's lowest threshold), in 5 % steps; BYD keeps
+5 % steps everywhere (`assets/js/utils/socSteps.ts`).
 
 ```
 POST   /api/peakshavingbatterytype/{byd|marstek}
@@ -366,6 +414,12 @@ POST   /api/peakshavingmanualentity/{entity}
 DELETE /api/peakshavingmanualentity
 POST   /api/peakshavingmodeentity/{entity}
 DELETE /api/peakshavingmodeentity
+POST   /api/peakshavingprotswitch/{entity}
+DELETE /api/peakshavingprotswitch
+POST   /api/peakshavingprotlimit/{entity}
+DELETE /api/peakshavingprotlimit
+POST   /api/peakshavingprotsoc/{entity}
+DELETE /api/peakshavingprotsoc
 ```
 
 ## 12. Battery profiles
@@ -567,7 +621,7 @@ values are not stored, so a changed default applies.
 
 | Name | Setting | Default | Range |
 | --- | --- | --- | --- |
-| `hysteresis` | soc band of the peak reserve | 2 % | 0-20 |
+| `hysteresis` | soc band of the peak reserve, BYD only | 2 % | 0-20 |
 | `freeValue` | setpoint for "discharge freely", BYD only | 10000 W | 1-100000 |
 | `writeTolerance` | smallest change written to the peak shaving and grid charge power entities, set in the *Peak Shaving* dialog | 0 W | 0-1000 |
 | `holdOff` | wait after battery grid charging was stopped | 5 min | 1-60 |
