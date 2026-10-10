@@ -53,6 +53,8 @@ import "@h2d2/shopicons/es/regular/batterythreequarters";
 import { defineComponent } from "vue";
 import formatter from "@/mixins/formatter";
 import api from "@/api";
+import store from "@/store";
+import { socSteps } from "@/utils/socSteps";
 import Card from "../Helper/Card.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
 import BatteryGridChargeOnce from "./BatteryGridChargeOnce.vue";
@@ -80,20 +82,24 @@ export default defineComponent({
 			const key = this.active ? "active" : this.enabled ? "waiting" : "off";
 			return this.$t(`battery.socGridCharge.${key}`);
 		},
+		// a Marstek gets 1 % steps from 15 % down to its minimum, see utils/socSteps.ts
+		marstek(): boolean {
+			return store.state?.peakShavingBatteryType === "marstek";
+		},
 		// the backend rejects a start at or above the stop, so those values are not offered
 		startOptions() {
-			const options = [];
-			for (let i = 95; i >= 0; i -= 5) {
-				options.push({ value: i, name: this.fmtSoc(i), disabled: i >= this.selectedStop });
-			}
-			return options;
+			return socSteps(95, 0, this.marstek, this.selectedStart).map((i) => ({
+				value: i,
+				name: this.fmtSoc(i),
+				disabled: i >= this.selectedStop,
+			}));
 		},
 		stopOptions() {
-			const options = [];
-			for (let i = 100; i >= 5; i -= 5) {
-				options.push({ value: i, name: this.fmtSoc(i), disabled: i <= this.selectedStart });
-			}
-			return options;
+			return socSteps(100, 5, this.marstek, this.selectedStop).map((i) => ({
+				value: i,
+				name: this.fmtSoc(i),
+				disabled: i <= this.selectedStart,
+			}));
 		},
 	},
 	watch: {

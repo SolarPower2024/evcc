@@ -58,6 +58,8 @@ import { defineComponent, type PropType } from "vue";
 import type { PeakFollow } from "@/types/evcc";
 import formatter from "@/mixins/formatter";
 import api from "@/api";
+import store from "@/store";
+import { socSteps } from "@/utils/socSteps";
 import Card from "../Helper/Card.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
 
@@ -116,12 +118,13 @@ export default defineComponent({
 			}
 			return options;
 		},
+		// a Marstek gets 1 % steps from 15 % down to its minimum, see utils/socSteps.ts
 		reserveOptions() {
-			const options = [];
-			for (let i = 95; i >= 5; i -= 5) {
-				options.push({ value: i, name: this.socText(i) });
-			}
-			return options;
+			const marstek = store.state?.peakShavingBatteryType === "marstek";
+			return socSteps(95, 5, marstek, this.selectedReserve).map((i) => ({
+				value: i,
+				name: this.socText(i),
+			}));
 		},
 	},
 	watch: {
