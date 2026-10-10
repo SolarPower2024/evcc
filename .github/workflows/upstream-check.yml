@@ -1,4 +1,4 @@
-# Fridays at noon: what evcc's newest release changed since the fork's last
+# Daily at noon: what evcc's newest release changed since the fork's last
 # merge. The fork takes in releases only, never the commits between them. Read
 # only towards evcc: it fetches evcc's release tags and never writes to evcc's
 # repository.
@@ -19,7 +19,7 @@ name: evcc update check
 
 on:
   schedule:
-    - cron: "0 10 * * 5" # Fridays 10:00 UTC = 12:00 summer time, 11:00 winter time
+    - cron: "0 10 * * *" # daily 10:00 UTC = 12:00 summer time, 11:00 winter time
   workflow_dispatch:
 
 permissions:
