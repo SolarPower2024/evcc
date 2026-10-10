@@ -489,6 +489,7 @@
       "entityInvalid": "Could not set the entity.",
       "entityLabel": "Charge power entity",
       "entryLabel": "Battery grid charging",
+      "marstekHint": "Needed for Marstek so evcc switches to manual while grid charging.",
       "setpoint": "Current setpoint:",
       "source": {
         "setting": "entered here",
@@ -556,7 +557,7 @@
       "exportForecastLabel": "Export forecast to Home Assistant",
       "followCyclesHelp": "If a reduced load draws more than allowed for this many cycles during an overload, the next load up the priority order is cut instead. 0 = off.",
       "followCyclesLabel": "Limit ignored after",
-      "freeValueHelp": "Written to the peak shaving entity while the battery may discharge freely.",
+      "freeValueHelp": "Written to the peak shaving entity while the battery may discharge freely. BYD only.",
       "freeValueLabel": "Free discharge value",
       "holdOffHelp": "Battery grid charging stays off this long after a peak or the circuit stopped it.",
       "holdOffLabel": "Hold-off after battery grid charging stopped",
@@ -1061,6 +1062,8 @@
       }
     },
     "peakshaving": {
+      "batteryTypeHelp": "BYD: evcc only writes the power. Marstek: evcc also switches Omnibattery to manual, only while it controls.",
+      "batteryTypeLabel": "Battery type",
       "circuitDescription": "Only with a circuit does the home battery take part in load management.",
       "circuitEntryLabel": "Battery circuit",
       "circuitHelp": "Grid charging and shedding of the battery follow its power limit.",
@@ -1081,6 +1084,11 @@
       "followBufferLabel": "Buffer",
       "followHelp": "Once the month's highest quarter hour is above your peak limit, the limit rises to that peak. A new month starts with your limit again.",
       "followLabel": "Follow the peak: limit follows the month's peak",
+      "manualEntityHelp": "Omnibattery switch of the battery. evcc turns it on while it charges or shaves peaks.",
+      "manualEntityLabel": "Manual control switch",
+      "marstekRequired": "Marstek needs the switch and the force mode.",
+      "modeEntityHelp": "Select with None, Charge and Discharge.",
+      "modeEntityLabel": "Force mode",
       "source": {
         "entity": "energy counter from Home Assistant",
         "meter": "energy counter of the grid meter",
