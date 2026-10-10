@@ -457,6 +457,15 @@ func TestOmniGridChargeWithoutManualWarns(t *testing.T) {
 	}
 	assert.Empty(t, ha.take())
 	assert.Equal(t, 1, strings.Count(buf.String(), "needs the manual control switch"), buf.String())
+
+	// set up again, then lost again: logged again
+	s.manualEntity = haSwitch
+	sc.site.writeChargeValue(4000)
+	s.modeEntity = ""
+	for range 3 {
+		sc.site.writeChargeValue(4000)
+	}
+	assert.Equal(t, 2, strings.Count(buf.String(), "needs the manual control switch"), buf.String())
 }
 
 // TestOmniProtectionThreshold verifies the soc threshold: the reserve, at least

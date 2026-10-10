@@ -387,7 +387,8 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
   it off afterwards, its last limit would stay otherwise
   (`TestOmniProtectionLeavesSwitchWhenNotOwned`). Limit and threshold stay in any
   case. Grid charging without the manual switch or the mode sends nothing and
-  logs a warning once (`TestOmniGridChargeWithoutManualWarns`). The manual switch is released only if evcc held it (`peakShavingOwned`):
+  logs a warning, once until both are set up again
+  (`TestOmniGridChargeWithoutManualWarns`). The manual switch is released only if evcc held it (`peakShavingOwned`):
   the charge power to 0 first, written only where the entity shows another value,
   then the switch off; if the 0 fails the switch stays on and the next cycle
   tries again (`TestOmniGridChargeEndZeroFails`, `TestOmniGridCharge`). A switch

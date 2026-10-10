@@ -90,7 +90,7 @@ type peakState struct {
 	protSoc    string              // number entity of its soc threshold
 	protSocSet func(float64) error // resolved from protSoc
 	protOwned  bool                // evcc turned the switch on, persisted like owned
-	omniWarn   sync.Once           // grid charging without manual control, logged once
+	omniWarned bool                // grid charging without manual control logged, until it is set up again
 
 	conn *homeassistant.Connection // shared, built on first use
 
@@ -713,12 +713,17 @@ func (site *Site) writeChargeValue(value float64) {
 
 	// the battery type Marstek is written by applyOmni, after the manual control
 	// and the mode; without them Omnibattery would refuse the power, so it is not
-	// sent at all and the log says why
+	// sent at all and the log says why, once until both are set up again
 	if site.omniType() {
-		if value > 0 && !site.omniEnabled() {
-			s.omniWarn.Do(func() {
-				site.log.WARN.Println("grid charge power: battery type Marstek needs the manual control switch and the force mode for grid charging (Lastmanagement-Details → Peak Shaving)")
-			})
+		enabled := site.omniEnabled()
+
+		s.mu.Lock()
+		warn := value > 0 && !enabled && !s.omniWarned
+		s.omniWarned = !enabled && (s.omniWarned || warn)
+		s.mu.Unlock()
+
+		if warn {
+			site.log.WARN.Println("grid charge power: battery type Marstek needs the manual control switch and the force mode for grid charging (Lastmanagement-Details → Peak Shaving)")
 		}
 		return
 	}
