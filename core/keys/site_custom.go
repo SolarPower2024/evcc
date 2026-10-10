@@ -15,6 +15,7 @@ const (
 	PeakShavingLimit                = "peakShavingLimit"
 	PeakShavingReserve              = "peakShavingReserve"
 	PeakShavingEntity               = "peakShavingEntity"
+	PeakShavingOwned                = "peakShavingOwned" // evcc holds the battery back through the entity, not published
 	PeakShavingActive               = "peakShavingActive"
 	PeakShavingChargePower          = "peakShavingChargePower"
 	PeakShavingChargePowerEffective = "peakShavingChargePowerEffective"

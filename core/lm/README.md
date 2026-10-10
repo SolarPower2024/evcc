@@ -253,6 +253,17 @@ gets the free value, a charge power entity 0 W
 (`TestPeakEntityRemovedHandsBack`). A 2 % hysteresis keeps the soc from
 flapping across the reserve.
 
+evcc only hands back what it held. It remembers that it wrote a value other than
+the free value (`peakShavingOwned`, stored, so a restart in the middle of a
+control still hands back) and writes the free value on switching off, a lost
+meter or a removed or replaced entity only while the mark is set, then clears
+it. A start with peak shaving off writes nothing (`TestPeakNoHandBackWithoutOwned`,
+`TestPeakHandBackAfterRestartWhenOwned`). A write that fails is logged as an
+error once; the same error then only at debug level until a write lands again
+(once at info), with the first 200 characters of the answer on one line, and for
+a general 500 of Home Assistant the hint to look into its log
+(`TestPeakWriteErrorLoggedOnce`, `TestPeakWriteErrorBody`).
+
 The limit applies to the clock-aligned 15 minute window: `allowed` =
 `(limit × 15 min − energy drawn so far) / time left`, so energy left unused
 earlier allows more and a short spike is only covered when the window would end

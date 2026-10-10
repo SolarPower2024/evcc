@@ -63,6 +63,7 @@ func TestRestoreCustomAfterRestart(t *testing.T) {
 	settings.SetString(keys.PeakShavingEnergyEntity, "sensor.grid_import")
 	settings.SetString(keys.FeedInEegEntity, "sensor.eeg_export")
 	settings.SetBool(keys.PeakShaving, true)
+	settings.SetBool(keys.PeakShavingOwned, true)
 
 	b := newSite()
 	b.restoreCustom()
@@ -86,6 +87,7 @@ func TestRestoreCustomAfterRestart(t *testing.T) {
 	assert.Equal(t, 1000.0, b.GetPeakFollowBuffer())
 	assert.Equal(t, 40.0, b.peak().tariff.Price)
 	assert.True(t, b.GetPeakShaving())
+	assert.True(t, b.peakOwned())
 	assert.Equal(t, "input_number.peak", b.GetPeakShavingEntity())
 	assert.Equal(t, "input_number.charge", b.GetPeakShavingChargeEntity())
 	assert.Equal(t, "sensor.grid_import", b.GetPeakShavingEnergyEntity())

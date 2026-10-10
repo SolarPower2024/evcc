@@ -65,6 +65,7 @@ type scenario struct {
 func newScenario(t *testing.T) *scenario {
 	t.Helper()
 	Voltage = 230
+	keepSettings(t)
 
 	sc := &scenario{t: t}
 

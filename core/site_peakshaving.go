@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -39,6 +40,7 @@ import (
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
 	"github.com/evcc-io/evcc/util/homeassistant"
+	"github.com/evcc-io/evcc/util/request"
 )
 
 const (
@@ -67,6 +69,13 @@ type peakState struct {
 	shaving    bool // hysteresis state: below the reserve
 	covering   bool // covering a peak right now, for the event log
 	handedBack bool // free value written since the last setpoint, nothing more to send while off
+
+	// owned is set once evcc wrote a value that holds the battery back (anything but
+	// the free value) and cleared again once it handed back. Only then there is
+	// something to hand back: an entity evcc never controlled is left alone.
+	// Persisted, so a restart in the middle of a control still hands back.
+	owned    bool
+	writeErr map[string]string // the last error logged per output, see writeOutput
 
 	demand      float64   // grid demand without the battery in W, from the last cycle
 	chargePause time.Time // grid charging gives way to peak shaving until then
@@ -160,6 +169,12 @@ func (site *Site) restorePeakSettings() {
 		s.mu.Unlock()
 	}
 
+	if v, err := settings.Bool(keys.PeakShavingOwned); err == nil {
+		s.mu.Lock()
+		s.owned = v
+		s.mu.Unlock()
+	}
+
 	// a start during a meter outage counts as without meter values from now on,
 	// see peakCheckMeters, rather than keeping the setpoint written before it
 	s.mu.Lock()
@@ -218,7 +233,7 @@ func (site *Site) rebuildPeakSetter() error {
 
 	s.mu.Lock()
 	s.set = set
-	s.handedBack = false // the new target gets the free value too
+	s.handedBack = false
 	s.mu.Unlock()
 
 	return nil
@@ -524,11 +539,43 @@ func (site *Site) writePeakValue(value float64) bool {
 	set := s.set
 	s.mu.Unlock()
 
-	return site.writeOutput("peak shaving", set, value)
+	if !site.writeOutput("peak shaving", set, value) {
+		return false
+	}
+
+	site.setPeakOwned(value != site.peakFreeValue())
+
+	return true
 }
 
-// handBackPeak writes the free value unless it is already in the entity. While
-// peak shaving is off nothing else is sent, a single write is enough.
+// setPeakOwned records whether evcc holds the battery back through the entity,
+// see peakState.owned
+func (site *Site) setPeakOwned(owned bool) {
+	s := site.peak()
+
+	s.mu.Lock()
+	changed := s.owned != owned
+	s.owned = owned
+	s.mu.Unlock()
+
+	if changed {
+		settings.SetBool(keys.PeakShavingOwned, owned)
+	}
+}
+
+// peakOwned reports whether evcc holds the battery back, see peakState.owned
+func (site *Site) peakOwned() bool {
+	s := site.peak()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.owned
+}
+
+// handBackPeak writes the free value, but only if evcc held the battery back
+// before: an entity evcc never controlled is not touched. While peak shaving is
+// off nothing else is sent, a single write is enough.
 func (site *Site) handBackPeak() {
 	s := site.peak()
 
@@ -536,7 +583,7 @@ func (site *Site) handBackPeak() {
 	done := s.handedBack
 	s.mu.Unlock()
 
-	if done || !site.writePeakValue(site.peakFreeValue()) {
+	if done || !site.peakOwned() || !site.writePeakValue(site.peakFreeValue()) {
 		return
 	}
 
@@ -570,14 +617,78 @@ func (site *Site) writeOutput(name string, set func(float64) error, value float6
 		return false
 	}
 
-	if err := set(value); err != nil {
-		site.log.ERROR.Printf("%s: write %.0fW: %v", name, value, err)
+	err := set(value)
+	if !site.logWrite(name, fmt.Sprintf("write %.0fW", value), err) {
 		return false
 	}
 
 	site.log.DEBUG.Printf("%s: %.0fW", name, value)
 
 	return true
+}
+
+// logWrite reports the result of a write to an output and returns whether it
+// landed. The same error is logged once as an error and then at debug level until
+// a write succeeds again, so a rejected write does not fill the log with one line
+// per cycle.
+func (site *Site) logWrite(name, what string, err error) bool {
+	s := site.peak()
+
+	s.mu.Lock()
+	last, failed := s.writeErr[name]
+
+	var text string
+	if err != nil {
+		text = writeErrorText(err)
+		if s.writeErr == nil {
+			s.writeErr = make(map[string]string)
+		}
+		s.writeErr[name] = text
+	} else {
+		delete(s.writeErr, name)
+	}
+	s.mu.Unlock()
+
+	switch {
+	case err == nil && failed:
+		site.log.INFO.Printf("%s: %s ok again", name, what)
+	case err == nil:
+	case failed && text == last:
+		site.log.DEBUG.Printf("%s: %s: %s", name, what, text)
+	default:
+		site.log.ERROR.Printf("%s: %s: %s", name, what, text)
+	}
+
+	return err == nil
+}
+
+// maxErrorBody is the length of an error response shown in the log
+const maxErrorBody = 200
+
+// writeErrorText returns the text of a failed write. It appends the response of
+// the server, shortened to one line. Home Assistant answers an exception of an
+// integration with a general 500 only, the reason is in its own log.
+func writeErrorText(err error) string {
+	text := err.Error()
+
+	var se *request.StatusError
+	if !errors.As(err, &se) {
+		return text
+	}
+
+	if body := strings.Join(strings.Fields(string(se.Body())), " "); body != "" {
+		if r := []rune(body); len(r) > maxErrorBody {
+			body = string(r[:maxErrorBody]) + "..."
+		}
+		text += ": " + body
+	}
+
+	if resp := se.Response(); resp != nil && resp.Request != nil && se.StatusCode() == http.StatusInternalServerError &&
+		strings.Contains(resp.Request.URL.Path, "/api/services/") {
+		text += " (details in the Home Assistant log)"
+	}
+
+	return text
 }
 
 // peakEnergy returns the grid import counter in kWh and where it came from: the
@@ -860,9 +971,11 @@ func (site *Site) SetPeakShavingEntity(entity string) error {
 	s.mu.Unlock()
 
 	err := site.rebuildPeakSetter()
-	if err == nil {
+	if err == nil && site.peakOwned() {
 		// the previous target would otherwise keep the last setpoint
-		site.writeOutput("peak shaving", previousSet, site.peakFreeValue())
+		if site.writeOutput("peak shaving", previousSet, site.peakFreeValue()) {
+			site.setPeakOwned(false)
+		}
 	}
 	s.out.Unlock()
 

@@ -47,6 +47,7 @@ func TestLmAdvancedSettings(t *testing.T) {
 	var written []float64
 	s := site.peak()
 	s.set = func(v float64) error { written = append(written, v); return nil }
+	s.owned = true
 	site.handBackPeak()
 	assert.Equal(t, []float64{12000}, written)
 
