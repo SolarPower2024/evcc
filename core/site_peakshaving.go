@@ -281,7 +281,7 @@ func (site *Site) rebuildPeakSetter() error {
 		return nil
 	}
 
-	set, err := site.numberSetter(entity, true) // a discharge setpoint has to cover the peak
+	set, err := site.numberSetter(entity, true, site.peakWriteTolerance) // a discharge setpoint has to cover the peak
 	if err != nil {
 		return err
 	}
@@ -306,7 +306,7 @@ func (site *Site) rebuildChargeSetter() error {
 
 	if entity != "" {
 		var err error
-		if set, err = site.numberSetter(entity, false); err != nil { // a charge power has to stay within the limits
+		if set, err = site.numberSetter(entity, false, site.peakWriteTolerance); err != nil { // a charge power has to stay within the limits
 			return err
 		}
 	}
@@ -375,10 +375,12 @@ func (site *Site) haConnection() (*homeassistant.Connection, error) {
 // value is fitted to the entity's min, max and step first, see peak.Range.Fit;
 // up rounds to the next step above. These are read on every write, as an
 // integration may only learn them from the device after it started. A value the
-// entity already holds, within the write tolerance, is not written again, see
+// entity already holds, within the tolerance, is not written again, see
 // peak.Range.Unchanged: a device may store every write. As the comparison is
-// against the entity, a value changed by hand is still corrected.
-func (site *Site) numberSetter(entity string, up bool) (func(float64) error, error) {
+// against the entity, a value changed by hand is still corrected. tolerance
+// returns the smallest change written; nil for an entity that is not a power, the
+// write tolerance is in W.
+func (site *Site) numberSetter(entity string, up bool, tolerance func() float64) (func(float64) error, error) {
 	conn, err := site.haConnection()
 	if err != nil {
 		return nil, err
@@ -390,7 +392,12 @@ func (site *Site) numberSetter(entity string, up bool) (func(float64) error, err
 			return conn.CallNumberService(entity, val)
 		}
 
-		val, write := numberWrite(r, current, val, up, site.peakWriteTolerance())
+		var tol float64
+		if tolerance != nil {
+			tol = tolerance()
+		}
+
+		val, write := numberWrite(r, current, val, up, tol)
 		if !write {
 			return nil
 		}

@@ -795,9 +795,10 @@ func (site *Site) setProtNumber(entity, key string, name *string, set *func(floa
 }
 
 // protSocSetter returns the setter of the soc threshold entity. It rounds up to
-// the step: the threshold has to cover the reserve.
+// the step: the threshold has to cover the reserve. The write tolerance is in W
+// and does not apply, every change of the reserve is written.
 func (site *Site) protSocSetter(entity string) (func(float64) error, error) {
-	return site.numberSetter(entity, true)
+	return site.numberSetter(entity, true, nil)
 }
 
 // rebuildProtSetter resolves the setter of the soc threshold entity
