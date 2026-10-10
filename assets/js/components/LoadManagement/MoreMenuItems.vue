@@ -25,6 +25,7 @@
 import { defineComponent } from "vue";
 import Modal from "bootstrap/js/dist/modal";
 import store from "@/store";
+import { peakShavingSetUp } from "@/utils/peakShaving";
 
 // Custom extension: the fork's entries in the "more" menu. The dialogs they
 // open are mounted once by GlobalModals.vue.
@@ -35,7 +36,7 @@ export default defineComponent({
 			return !!store.state?.lmStatus;
 		},
 		hasPeakShaving() {
-			return !!store.state?.peakShavingEntity || !!store.state?.peakMonths?.length;
+			return peakShavingSetUp(store.state) || !!store.state?.peakMonths?.length;
 		},
 	},
 	methods: {

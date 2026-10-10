@@ -120,6 +120,7 @@ import "@h2d2/shopicons/es/regular/lock";
 import GenericModal from "../Helper/GenericModal.vue";
 import formatter from "@/mixins/formatter";
 import store from "@/store";
+import { peakShavingSetUp } from "@/utils/peakShaving";
 import api from "@/api";
 
 // Custom extension: what load management is doing right now, see
@@ -192,7 +193,7 @@ export default {
 				});
 		},
 		peak() {
-			if (!this.state?.peakShavingEntity) return null;
+			if (!peakShavingSetUp(this.state)) return null;
 			let text = this.$t("lmoverview.peakOff");
 			if (this.state.peakShaving) {
 				text = this.state.peakShavingActive
