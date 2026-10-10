@@ -114,7 +114,7 @@ func (site *Site) advanced() lmAdvanced {
 
 func (site *Site) publishLmAdvanced() {
 	site.publish(keys.LmAdvanced, lmAdvancedState{
-		Hysteresis:           site.peakHysteresis(),
+		Hysteresis:           site.peakHysteresisSetting(),
 		FreeValue:            site.peakFreeValue(),
 		HoldOff:              site.lmHoldOff().Minutes(),
 		Timeout:              site.lmTimeout().Minutes(),

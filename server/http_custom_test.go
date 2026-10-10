@@ -136,6 +136,12 @@ var customRouteSamples = map[string]string{
 	"peakshavingmanualentitydelete": "/peakshavingmanualentity",
 	"peakshavingmodeentity":         "/peakshavingmodeentity/select.marstek_mode",
 	"peakshavingmodeentitydelete":   "/peakshavingmodeentity",
+	"peakshavingprotswitch":         "/peakshavingprotswitch/switch.marstek_venus_system_spitzenlastkappung",
+	"peakshavingprotswitchdelete":   "/peakshavingprotswitch",
+	"peakshavingprotlimit":          "/peakshavingprotlimit/number.marstek_venus_system_spitzenlastkappung_limit",
+	"peakshavingprotlimitdelete":    "/peakshavingprotlimit",
+	"peakshavingprotsoc":            "/peakshavingprotsoc/number.marstek_venus_system_spitzenlastkappung_soc_schwelle",
+	"peakshavingprotsocdelete":      "/peakshavingprotsoc",
 	"peakshavingchargeentity":       "/peakshavingchargeentity/input_number.charge",
 	"peakshavingchargeentitydelete": "/peakshavingchargeentity",
 	"peakshavingenergyentity":       "/peakshavingenergyentity/sensor.grid_import",
@@ -227,6 +233,26 @@ func TestPeakMarstekRoutes(t *testing.T) {
 	assert.Equal(t, "switch.manual", site.GetPeakShavingManualEntity())
 	assert.Equal(t, http.StatusOK, do(http.MethodDelete, "/peakshavingmanualentity"))
 	assert.Empty(t, site.GetPeakShavingManualEntity())
+
+	// the entities of Omnibattery's peak shaving: a switch and two numbers
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, "/peakshavingprotswitch/sensor.x"))
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, "/peakshavingprotswitch/number.x"))
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, "/peakshavingprotlimit/sensor.x"))
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, "/peakshavingprotlimit/switch.x"))
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, "/peakshavingprotsoc/sensor.x"))
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, "/peakshavingprotsoc/switch.x"))
+	assert.Empty(t, site.GetPeakShavingProtSwitch())
+	assert.Empty(t, site.GetPeakShavingProtLimit())
+	assert.Empty(t, site.GetPeakShavingProtSoc())
+
+	assert.Equal(t, http.StatusOK, do(http.MethodPost, "/peakshavingprotswitch/switch.prot"))
+	assert.Equal(t, "switch.prot", site.GetPeakShavingProtSwitch())
+	assert.Equal(t, http.StatusOK, do(http.MethodPost, "/peakshavingprotswitch/input_boolean.prot"))
+	assert.Equal(t, "input_boolean.prot", site.GetPeakShavingProtSwitch())
+	assert.Equal(t, http.StatusOK, do(http.MethodDelete, "/peakshavingprotswitch"))
+	assert.Empty(t, site.GetPeakShavingProtSwitch())
+	assert.Equal(t, http.StatusOK, do(http.MethodDelete, "/peakshavingprotlimit"))
+	assert.Equal(t, http.StatusOK, do(http.MethodDelete, "/peakshavingprotsoc"))
 }
 
 func must[T any](v T, err error) T {

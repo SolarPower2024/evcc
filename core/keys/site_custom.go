@@ -20,6 +20,10 @@ const (
 	PeakShavingManualEntity         = "peakShavingManualEntity" // Home Assistant switch of the manual control (marstek)
 	PeakShavingModeEntity           = "peakShavingModeEntity"   // Home Assistant select of the forced mode (marstek)
 	PeakShavingManual               = "peakShavingManual"       // published: the forced mode evcc holds, empty = not controlling
+	PeakShavingProtSwitch           = "peakShavingProtSwitch"   // Home Assistant switch of Omnibattery's peak shaving (marstek)
+	PeakShavingProtLimit            = "peakShavingProtLimit"    // number entity of its limit
+	PeakShavingProtSoc              = "peakShavingProtSoc"      // number entity of its soc threshold
+	PeakShavingProtOwned            = "peakShavingProtOwned"    // evcc turned its peak shaving on, not published
 	PeakShavingActive               = "peakShavingActive"
 	PeakShavingChargePower          = "peakShavingChargePower"
 	PeakShavingChargePowerEffective = "peakShavingChargePowerEffective"
