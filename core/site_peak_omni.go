@@ -188,9 +188,12 @@ func (site *Site) applyOmni() {
 	site.omniShow(string(mode))
 }
 
-// releaseOmni switches the manual control off, if evcc switched it on, and
-// reports whether it is released. The mode and the power stay: Omnibattery
-// overwrites them in automatic operation anyway. Called with s.out held.
+// releaseOmni zeroes the charge power and then switches the manual control off,
+// if evcc switched it on, and reports whether it is released. The charge power
+// would otherwise stay on its last value; the zero is only written where the
+// entity shows something else, see numberSetter. A zero that fails keeps the
+// switch on, the next cycle tries again. The mode stays: Omnibattery overwrites
+// it in automatic operation anyway. Called with s.out held.
 func (site *Site) releaseOmni() bool {
 	if !site.omniOwned() {
 		site.omniShow("")
@@ -200,8 +203,12 @@ func (site *Site) releaseOmni() bool {
 	s := site.peak()
 
 	s.mu.Lock()
-	manual := s.manualEntity
+	manual, chargeSet := s.manualEntity, s.chargeSet
 	s.mu.Unlock()
+
+	if chargeSet != nil && !site.writeOutput("grid charge power", chargeSet, 0) {
+		return false
+	}
 
 	if manual != "" && !site.omniSwitchOff(manual) {
 		return false

@@ -340,8 +340,10 @@ evcc decides one wish, `omniWant`, from top to bottom:
 writes a step only if Home Assistant shows something else (the state is read every
 time, so a change by hand is corrected in the next cycle, `TestOmniOrder`,
 `TestOmniSkipsUnchanged`, `TestOmniCorrectsHandChange`). A failing step stops the
-rest of that cycle. Released is only the switch (mode and power stay, Omnibattery
-overwrites them in automatic operation): when peak shaving is switched off, above the
+rest of that cycle. Released is the charge power at zero (written only if the entity
+shows another value; if that fails the switch stays on and the next cycle tries again,
+`TestOmniGridChargeEndZeroFails`), then the switch (the mode stays, Omnibattery
+overwrites it in automatic operation): when peak shaving is switched off, above the
 reserve, without meter values, with a removed or replaced entity and on a change
 of the battery type, and only if evcc controlled (`peakShavingOwned`;
 `TestOmniRelease`, `TestOmniReleaseAfterRestart`). A switch turned on by hand

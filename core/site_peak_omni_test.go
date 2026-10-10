@@ -306,9 +306,38 @@ func TestOmniGridCharge(t *testing.T) {
 	assert.True(t, sc.cycle(20, 2000, 0))
 	assert.Equal(t, []string{"set_value " + haChargeNum + " 3000"}, ha.take())
 
-	// done: released
+	// done: the charge power to zero first, then released
 	assert.False(t, sc.cycle(90, 1000, 0))
-	assert.Equal(t, []string{"turn_off " + haSwitch}, ha.take())
+	assert.Equal(t, []string{"set_value " + haChargeNum + " 0", "turn_off " + haSwitch}, ha.take())
+	assert.Equal(t, "0", ha.get(haChargeNum))
+	assert.False(t, sc.site.peakOwned())
+
+	// released once, and a charge power already at zero is not written again
+	assert.False(t, sc.cycle(90, 1000, 0))
+	assert.Empty(t, ha.take())
+}
+
+// TestOmniGridChargeEndZeroFails verifies that the switch stays on while the
+// charge power cannot be set to zero, and that the next cycle tries again
+func TestOmniGridChargeEndZeroFails(t *testing.T) {
+	sc, ha := newOmni(t)
+	sc.site.lms().socChargeEnabled = true
+
+	assert.True(t, sc.cycle(20, 1000, 0))
+	ha.take()
+
+	ha.fail["number/set_value"] = http.StatusInternalServerError
+	for range 2 {
+		assert.False(t, sc.cycle(90, 1000, 0))
+		assert.Equal(t, []string{"set_value " + haChargeNum + " 0"}, ha.take(), "no turn_off")
+		assert.Equal(t, "on", ha.get(haSwitch))
+		assert.True(t, sc.site.peakOwned())
+	}
+
+	delete(ha.fail, "number/set_value")
+	assert.False(t, sc.cycle(90, 1000, 0))
+	assert.Equal(t, []string{"set_value " + haChargeNum + " 0", "turn_off " + haSwitch}, ha.take())
+	assert.False(t, sc.site.peakOwned())
 }
 
 // TestOmniGridChargeWithoutChargeEntity verifies that grid charging without the
