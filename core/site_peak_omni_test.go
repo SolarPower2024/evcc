@@ -352,14 +352,73 @@ func TestOmniProtectionLimitFollowsWindow(t *testing.T) {
 		assert.Contains(t, c, "set_value "+haProtLimit)
 	}
 
-	// a deviation below half a step is not worth a write, a larger one is corrected
-	ha.set(haProtLimit, strconv.FormatFloat(want+40, 'f', -1, 64))
+	// a limit in the entity above the allowed power is corrected right away, the
+	// peak has to stay covered
+	ha.set(haProtLimit, strconv.FormatFloat(want+100, 'f', -1, 64))
+	sc.cycle(25, 8000, 0)
+	assert.Equal(t, []string{"set_value " + haProtLimit + " " + strconv.FormatFloat(want, 'f', -1, 64)}, ha.take())
+
+	// one below it only once the allowed power is minOmniLimitRise higher
+	ha.set(haProtLimit, strconv.FormatFloat(want-400, 'f', -1, 64))
 	sc.cycle(25, 8000, 0)
 	assert.Empty(t, ha.take())
 
-	ha.set(haProtLimit, strconv.FormatFloat(want+300, 'f', -1, 64))
+	ha.set(haProtLimit, strconv.FormatFloat(want-600, 'f', -1, 64))
 	sc.cycle(25, 8000, 0)
 	assert.Equal(t, []string{"set_value " + haProtLimit + " " + strconv.FormatFloat(want, 'f', -1, 64)}, ha.take())
+}
+
+// TestOmniProtectionLimitMinimum verifies that an allowed power below the
+// entity's minimum writes the minimum: Omnibattery takes no lower limit
+func TestOmniProtectionLimitMinimum(t *testing.T) {
+	sc, ha := newOmni(t)
+	conn := sc.site.peak().conn
+
+	require.True(t, sc.site.omniWriteLimit(conn, haProtLimit, 120))
+	assert.Equal(t, []string{"set_value " + haProtLimit + " 500"}, ha.take())
+	assert.Equal(t, "500", ha.get(haProtLimit))
+}
+
+// TestOmniEffectiveReserve verifies that a reserve below Omnibattery's lowest
+// threshold, e.g. from a battery profile, counts as that threshold everywhere:
+// evcc's state of the reserve, the optimizer and Omnibattery agree
+func TestOmniEffectiveReserve(t *testing.T) {
+	sc, ha := newOmni(t)
+	sc.site.peak().reserve = 15
+
+	sc.cycle(18, 3000, 0)
+	assert.True(t, sc.site.peakShavingActive(), "18 % is below the effective 20 %")
+	assert.Equal(t, "20", ha.get(haProtSoc))
+
+	on, _, reserve := sc.site.peakShavingConfigured()
+	assert.True(t, on)
+	assert.Equal(t, 20.0, reserve)
+
+	// BYD keeps the reserve as set
+	s := sc.site.peak()
+	s.mu.Lock()
+	s.batteryType = batteryTypeBYD
+	assert.Equal(t, 15.0, s.effectiveReserve())
+	s.mu.Unlock()
+}
+
+// TestOmniGridChargeWithoutManualWarns verifies that grid charging for the
+// battery type Marstek without manual control switch writes nothing and says
+// so in the log once
+func TestOmniGridChargeWithoutManualWarns(t *testing.T) {
+	sc, ha := newOmni(t)
+
+	var buf strings.Builder
+	sc.site.log = testLogger(&buf)
+
+	s := sc.site.peak()
+	s.manualEntity = ""
+
+	for range 3 {
+		sc.site.writeChargeValue(4000)
+	}
+	assert.Empty(t, ha.take())
+	assert.Equal(t, 1, strings.Count(buf.String(), "needs the manual control switch"), buf.String())
 }
 
 // TestOmniProtectionThreshold verifies the soc threshold: the reserve, at least
@@ -608,8 +667,9 @@ func TestOmniLeavesManualAloneWhenNotOwned(t *testing.T) {
 }
 
 // TestOmniProtectionLeavesSwitchWhenNotOwned verifies that Omnibattery's peak
-// shaving switched on by hand is not switched off by evcc, whether peak shaving
-// is off all along or evcc only wrote the values
+// shaving switched on by hand is left alone while evcc's peak shaving is off. Once
+// evcc drove it with its values, evcc owns it and turns it off afterwards, its
+// last limit would otherwise stay in place.
 func TestOmniProtectionLeavesSwitchWhenNotOwned(t *testing.T) {
 	t.Run("peak shaving off", func(t *testing.T) {
 		sc, ha := newOmni(t)
@@ -630,12 +690,12 @@ func TestOmniProtectionLeavesSwitchWhenNotOwned(t *testing.T) {
 
 		sc.cycle(25, 8000, 0)
 		assert.Equal(t, []string{"set_value " + haProtSoc + " 30", "set_value " + haProtLimit + " 5000"}, ha.take(), "no turn_on")
-		assert.False(t, sc.site.peak().protOwned)
+		assert.True(t, sc.site.peak().protOwned, "evcc drives it now")
 
 		require.NoError(t, sc.site.SetPeakShaving(false))
 		sc.cycle(25, 8000, 0)
-		assert.Empty(t, ha.take())
-		assert.Equal(t, "on", ha.get(haProtSwitch))
+		assert.Equal(t, []string{"turn_off " + haProtSwitch}, ha.take())
+		assert.Equal(t, "off", ha.get(haProtSwitch))
 	})
 }
 
@@ -868,6 +928,11 @@ func TestOmniMetersLost(t *testing.T) {
 		clk.Add(30 * time.Second)
 		sc.cycle(20, 1000, 0)
 	}
+
+	// a limit far below the allowed power is raised to it
+	ha.set(haProtLimit, "4000")
+	clk.Add(30 * time.Second)
+	sc.cycle(20, 1000, 0)
 	require.Greater(t, sc.site.peak().window.Allowed, 5100.0)
 	require.True(t, sc.site.peakOwned())
 	require.NotEqual(t, "5000", ha.get(haProtLimit))
@@ -902,7 +967,13 @@ func TestOmniMetersLost(t *testing.T) {
 	calls := ha.take()
 	require.NotEmpty(t, calls)
 	assert.Equal(t, "turn_on "+haSwitch, calls[0])
-	assert.Equal(t, strconv.FormatFloat(math.Floor(sc.site.peak().window.Allowed/100)*100, 'f', -1, 64), ha.get(haProtLimit))
+
+	// the window's limit again; a rise is written once it is minOmniLimitRise above
+	want := math.Floor(sc.site.peak().window.Allowed/100) * 100
+	if want < 5000+minOmniLimitRise {
+		want = 5000
+	}
+	assert.Equal(t, strconv.FormatFloat(want, 'f', -1, 64), ha.get(haProtLimit))
 }
 
 // TestOmniReleaseAfterRestart verifies that a restart in the middle of a control

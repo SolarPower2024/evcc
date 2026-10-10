@@ -348,13 +348,18 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
 
 - **Limit:** `allowed` of the window (`peak.State`, i.e. limit, budget, follow,
   cap and freeze as for BYD), fitted to `min`, `max` and `step` of the entity and
-  rounded down, so it is the stricter. It is written only if the entity differs
-  by more than the write tolerance (`TestOmniProtectionLimitFollowsWindow`).
-  Omnibattery has no window of its own, this is how evcc passes the 15 minutes
-  on.
+  rounded down, so it is the stricter. A lower limit is written right away, a
+  higher one only once it is at least 500 W above the entity, which spares
+  Omnibattery a configuration write in nearly every cycle
+  (`TestOmniProtectionLimitFollowsWindow`). Below the entity's minimum (500 W)
+  the minimum is written, Omnibattery takes no lower limit
+  (`TestOmniProtectionLimitMinimum`). Omnibattery has no window of its own,
+  this is how evcc passes the 15 minutes on.
 - **Soc threshold:** the reserve, at least 20 % (the lowest value of the entity),
   rounded up to the step (`TestOmniProtectionThreshold`). The soc selects offer
-  95 to 20 % in 5 % steps for this type. There is no reserve hysteresis for
+  95 to 20 % in 5 % steps for this type; a lower reserve from a profile or the
+  api counts as 20 % everywhere, for evcc's state, the optimizer and Omnibattery
+  (`TestOmniEffectiveReserve`). There is no reserve hysteresis for
   Marstek (`TestOmniNoHysteresis`): evcc's state of the reserve changes exactly
   at the reserve, as Omnibattery's threshold does; the setting `hysteresis`
   (17) is BYD only.
@@ -372,9 +377,12 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
   covered" only.
 - **Owned:** evcc switches the peak shaving off only if it turned it on
   (`peakShavingProtOwned`, stored, so it survives a restart,
-  `TestOmniReleaseAfterRestart`); one turned on by hand stays
+  `TestOmniReleaseAfterRestart`); one turned on by hand stays while evcc's peak
+  shaving is off, but once evcc drove it with its values evcc owns it and turns
+  it off afterwards, its last limit would stay otherwise
   (`TestOmniProtectionLeavesSwitchWhenNotOwned`). Limit and threshold stay in any
-  case. The manual switch is released only if evcc held it (`peakShavingOwned`):
+  case. Grid charging without the manual switch or the mode sends nothing and
+  logs a warning once (`TestOmniGridChargeWithoutManualWarns`). The manual switch is released only if evcc held it (`peakShavingOwned`):
   the charge power to 0 first, written only where the entity shows another value,
   then the switch off; if the 0 fails the switch stays on and the next cycle
   tries again (`TestOmniGridChargeEndZeroFails`, `TestOmniGridCharge`). A switch

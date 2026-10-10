@@ -294,7 +294,7 @@ func (site *Site) peakShavingConfigured() (bool, float64, float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.enabled && s.configured(), s.limit, s.reserve
+	return s.enabled && s.configured(), s.limit, s.effectiveReserve()
 }
 
 // lmGridChargeBlocked reports without side effects whether grid charging is

@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/evcc-io/evcc/core/keys"
@@ -116,6 +117,18 @@ func (s *peakState) configured() bool {
 	}
 
 	return s.set != nil
+}
+
+// effectiveReserve is the reserve peak shaving works with. For the battery type
+// Marstek it is at least Omnibattery's lowest soc threshold, so evcc's state of
+// the reserve, the optimizer and Omnibattery agree also with a lower reserve set
+// by a profile or the api. Called with s.mu held.
+func (s *peakState) effectiveReserve() float64 {
+	if s.batteryType == batteryTypeMarstek {
+		return max(minOmniProtSoc, s.reserve)
+	}
+
+	return s.reserve
 }
 
 // peakConfigured reports whether peak shaving has what it needs to run, see
@@ -230,8 +243,8 @@ func (site *Site) applyOmniProtection() {
 
 	s.mu.Lock()
 	want := s.batteryType == batteryTypeMarstek && s.enabled && s.configured() && site.batteryConfigured()
-	owned, sw, limitSet, socSet := s.protOwned, s.protSwitch, s.protLimitSet, s.protSocSet
-	threshold := max(minOmniProtSoc, s.reserve)
+	owned, sw, limitEntity, socSet := s.protOwned, s.protSwitch, s.protLimit, s.protSocSet
+	threshold := s.effectiveReserve()
 
 	// the window is there once a cycle metered it
 	limit := s.limit
@@ -252,12 +265,12 @@ func (site *Site) applyOmniProtection() {
 	if !site.omniWriteNumber("peak shaving soc threshold", "%", socSet, threshold) {
 		return
 	}
-	if !site.omniWriteNumber("peak shaving limit", "W", limitSet, limit) {
+	conn, err := site.haConnection()
+	if !site.logWrite("marstek connect", "connect", err) {
 		return
 	}
 
-	conn, err := site.haConnection()
-	if !site.logWrite("marstek connect", "connect", err) {
+	if !site.omniWriteLimit(conn, limitEntity, limit) {
 		return
 	}
 
@@ -265,13 +278,43 @@ func (site *Site) applyOmniProtection() {
 	if !site.logWrite("marstek peak shaving switch read", "read "+sw, err) {
 		return
 	}
-	if strings.EqualFold(state, "on") {
+
+	if !strings.EqualFold(state, "on") &&
+		!site.logWrite("marstek peak shaving switch", "switch on", conn.CallSwitchService(sw, true)) {
 		return
 	}
 
-	if site.logWrite("marstek peak shaving switch", "switch on", conn.CallSwitchService(sw, true)) {
-		site.setProtOwned(true)
+	// from here evcc drives it with its values, also a switch turned on by hand,
+	// so it turns it off afterwards rather than leaving its last limit in place
+	site.setProtOwned(true)
+}
+
+// minOmniLimitRise is how much the allowed power has to rise above the limit in
+// the entity before it is written again. A falling limit is written right away,
+// the peak has to stay covered; a rising one can wait, which saves Omnibattery a
+// configuration write in nearly every cycle of a window.
+const minOmniLimitRise = 500.0
+
+// omniWriteLimit writes the limit, fitted to the entity and rounded down, when it
+// is below the limit in the entity or at least minOmniLimitRise above it. Below
+// the entity's minimum the minimum is written: Omnibattery takes no lower limit.
+func (site *Site) omniWriteLimit(conn *homeassistant.Connection, entity string, limit float64) bool {
+	r, current, err := numberState(conn, entity)
+
+	if err == nil {
+		limit = r.Fit(limit, false)
+		if v, perr := strconv.ParseFloat(current, 64); perr == nil && limit >= v && limit < v+minOmniLimitRise {
+			return true
+		}
 	}
+
+	if !site.logWrite("peak shaving limit", fmt.Sprintf("write %.0fW", limit), conn.CallNumberService(entity, limit)) {
+		return false
+	}
+
+	site.log.DEBUG.Printf("peak shaving limit: %.0fW", limit)
+
+	return true
 }
 
 // omniWriteNumber writes a value through set, the setter skips what the entity

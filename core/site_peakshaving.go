@@ -89,7 +89,8 @@ type peakState struct {
 	protLimit    string              // number entity of its limit
 	protSoc      string              // number entity of its soc threshold
 	protOwned    bool                // evcc turned the switch on, persisted like owned
-	protLimitSet func(float64) error // resolved from protLimit
+	protLimitSet func(float64) error // resolved from protLimit, checks the entity
+	omniWarn     sync.Once           // grid charging without manual control, logged once
 	protSocSet   func(float64) error // resolved from protSoc
 
 	conn *homeassistant.Connection // shared, built on first use
@@ -543,7 +544,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 	site.applyCircuitLimits() // load management switch and follow circuit, see site_lm_switch.go
 
 	s.mu.Lock()
-	enabled, limit, reserve, configured, allowed := s.enabled, s.limit, s.reserve, s.configured(), s.window.Allowed
+	enabled, limit, reserve, configured, allowed := s.enabled, s.limit, s.effectiveReserve(), s.configured(), s.window.Allowed
 	// read by peakPausesGridCharge later in the same cycle
 	s.demand = state.gridPower + state.battery.Power
 	s.mu.Unlock()
@@ -705,8 +706,14 @@ func (site *Site) writeChargeValue(value float64) {
 	site.publish(keys.PeakShavingChargeSetpoint, value)
 
 	// the battery type Marstek is written by applyOmni, after the manual control
-	// and the mode
+	// and the mode; without them Omnibattery would refuse the power, so it is not
+	// sent at all and the log says why
 	if site.omniType() {
+		if value > 0 && !site.omniEnabled() {
+			s.omniWarn.Do(func() {
+				site.log.WARN.Println("grid charge power: battery type Marstek needs the manual control switch and the force mode for grid charging (Lastmanagement-Details → Peak Shaving)")
+			})
+		}
 		return
 	}
 
