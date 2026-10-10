@@ -16,6 +16,7 @@ package core
 // applyOmni brings Home Assistant to it, writing only what differs.
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"slices"
@@ -30,6 +31,10 @@ const (
 	batteryTypeBYD     = "byd"
 	batteryTypeMarstek = "marstek"
 )
+
+// errHandBack refuses a change while what evcc holds could not be handed back,
+// the battery would otherwise stay held with nothing left to release it
+var errHandBack = errors.New("could not hand the battery back, see the log")
 
 // omniMode is an option of the select "force mode" of Omnibattery
 type omniMode string
@@ -65,7 +70,7 @@ func (site *Site) omniType() bool {
 	return s.batteryType == batteryTypeMarstek
 }
 
-// omniOwned reports whether evcc turned the manual control on
+// omniOwned reports whether evcc controls the battery through the manual control
 func (site *Site) omniOwned() bool {
 	return site.omniType() && site.peakOwned()
 }
@@ -111,9 +116,8 @@ func (site *Site) omniWant() (on bool, mode omniMode, power float64, out func(fl
 
 // applyOmni brings the battery to what evcc wants: switch, then mode, then power,
 // each only if Home Assistant shows something else. A step failing stops the rest
-// for this cycle, the next cycle starts again. Released only if evcc switched the
-// manual control on (owned); a switch turned on by hand stays while evcc does not
-// control.
+// for this cycle, the next cycle starts again. Released only if evcc controlled
+// (owned); a switch turned on by hand stays while evcc does not control.
 func (site *Site) applyOmni() {
 	if !site.omniEnabled() {
 		return
@@ -153,8 +157,11 @@ func (site *Site) applyOmni() {
 		if !site.logWrite("marstek switch", "switch on", conn.CallSwitchService(manual, true)) {
 			return
 		}
-		site.setPeakOwned(true)
 	}
+
+	// from here evcc forces mode and power, also into a switch turned on by hand,
+	// so it releases the switch afterwards rather than leaving a forced discharge
+	site.setPeakOwned(true)
 
 	// 2. mode
 	state, _, err = omniRead(conn, modeEntity)
@@ -299,6 +306,14 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 
 	s := site.peak()
 
+	// running peak shaving would otherwise stay on without writing anything
+	s.mu.Lock()
+	missing := typ == batteryTypeMarstek && s.enabled && (s.manualEntity == "" || s.modeEntity == "")
+	s.mu.Unlock()
+	if missing {
+		return errors.New("no manual switch or mode entity configured")
+	}
+
 	// handed back and swapped in one go, a cycle in between would write for the
 	// previous type
 	s.out.Lock()
@@ -308,10 +323,18 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 		previous, set := s.batteryType, s.set
 		s.mu.Unlock()
 
+		released := false
 		if previous == batteryTypeMarstek {
-			site.releaseOmni()
+			released = site.releaseOmni()
 		} else if site.writeOutput("peak shaving", set, site.peakFreeValue()) {
 			site.setPeakOwned(false)
+			released = true
+		}
+
+		// what evcc holds would otherwise be left with the previous type
+		if !released {
+			s.out.Unlock()
+			return errHandBack
 		}
 	}
 
@@ -357,8 +380,12 @@ func (site *Site) SetPeakShavingManualEntity(entity string) error {
 		return nil
 	}
 
+	// a switch evcc holds is released before it is forgotten
 	s.out.Lock()
-	site.releaseOmni()
+	if !site.releaseOmni() {
+		s.out.Unlock()
+		return errHandBack
+	}
 	s.mu.Lock()
 	s.manualEntity = entity
 	s.mu.Unlock()
@@ -418,8 +445,9 @@ func (site *Site) SetPeakShavingModeEntity(entity string) error {
 	// a mode that cannot be forced any more: the manual control is released while
 	// the switch is still known
 	s.out.Lock()
-	if entity == "" {
-		site.releaseOmni()
+	if entity == "" && !site.releaseOmni() {
+		s.out.Unlock()
+		return errHandBack
 	}
 	s.mu.Lock()
 	s.modeEntity = entity

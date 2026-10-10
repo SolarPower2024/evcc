@@ -343,9 +343,13 @@ time, so a change by hand is corrected in the next cycle, `TestOmniOrder`,
 rest of that cycle. Released is only the switch (mode and power stay, Omnibattery
 overwrites them in automatic operation): when peak shaving is switched off, above the
 reserve, without meter values, with a removed or replaced entity and on a change
-of the battery type, and only if evcc switched it on itself (`peakShavingOwned`;
+of the battery type, and only if evcc controlled (`peakShavingOwned`;
 `TestOmniRelease`, `TestOmniReleaseAfterRestart`). A switch turned on by hand
-stays while evcc does not control (`TestOmniLeavesManualAloneWhenNotOwned`). The
+stays while evcc does not control; once evcc forced mode and power into it, evcc
+releases it afterwards (`TestOmniLeavesManualAloneWhenNotOwned`). A change of the
+switch, the mode, the discharge entity or the type is refused while the release
+fails (`TestOmniChangeRefusedWhenNotReleased`), and running peak shaving cannot be
+moved to Marstek without switch and mode (`TestOmniTypeNeedsEntitiesWhileOn`). The
 free value is never written to this type (`TestOmniNoFreeValue`); BYD stays
 as it was (`TestOmniInertForBYD`). Grid charging without a charge power entity
 switches nothing (`TestOmniGridChargeWithoutChargeEntity`). The scripts of the

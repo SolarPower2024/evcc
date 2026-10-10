@@ -1043,15 +1043,19 @@ func (site *Site) SetPeakShavingEntity(entity string) error {
 	previousSet := s.set
 	s.mu.Unlock()
 
-	err := site.rebuildPeakSetter()
+	// the battery type Marstek never gets the free value; without a target
+	// applyOmni is gone, so the manual control is released here, before
+	var err error
+	if omni && entity == "" && !site.releaseOmni() {
+		err = errHandBack
+	}
+
+	if err == nil {
+		err = site.rebuildPeakSetter()
+	}
+
 	switch {
-	case err != nil || !site.peakOwned():
-	case omni:
-		// the battery type Marstek never gets the free value; without a target
-		// applyOmni is gone, so the manual control is released here
-		if entity == "" {
-			site.releaseOmni()
-		}
+	case err != nil || omni || !site.peakOwned():
 	default:
 		// the previous target would otherwise keep the last setpoint
 		if site.writeOutput("peak shaving", previousSet, site.peakFreeValue()) {

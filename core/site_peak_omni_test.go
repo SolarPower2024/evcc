@@ -347,8 +347,9 @@ func TestOmniCorrectsHandChange(t *testing.T) {
 }
 
 // TestOmniLeavesManualAloneWhenNotOwned verifies that a switch turned on by hand
-// is left alone while evcc does not control, and also stays on when evcc takes
-// over and gives up again
+// is left alone while evcc does not control. Once evcc forced mode and power into
+// it, evcc owns it and releases it afterwards, a forced discharge would otherwise
+// stay.
 func TestOmniLeavesManualAloneWhenNotOwned(t *testing.T) {
 	sc, ha := newOmni(t)
 	s := sc.site.peak()
@@ -364,18 +365,79 @@ func TestOmniLeavesManualAloneWhenNotOwned(t *testing.T) {
 	assert.Empty(t, ha.take())
 	assert.Equal(t, "on", ha.get(haSwitch))
 
-	// evcc controls without having switched: mode and power, not the switch
+	// evcc controls without having to switch: mode and power, and owns it now
 	sc.cycle(25, 8000, 0)
 	assert.Equal(t, []string{
 		"select_option " + haSelect + " Discharge",
 		"set_value " + haDischargeNum + " 3000",
 	}, ha.take())
-	assert.False(t, sc.site.peakOwned())
+	assert.True(t, sc.site.peakOwned())
 
-	// and it is not turned off afterwards
+	// so the forced discharge does not stay once evcc gives up
 	sc.cycle(50, 8000, 0)
+	assertReleased(t, sc, ha)
+}
+
+// TestOmniChangeRefusedWhenNotReleased verifies that the switch, the mode, the
+// discharge entity and the battery type are kept while what evcc holds cannot be
+// released: the battery would otherwise stay in manual control with nothing left
+// to release it
+func TestOmniChangeRefusedWhenNotReleased(t *testing.T) {
+	changes := []struct {
+		name   string
+		change func(site *Site) error
+		kept   func(site *Site) bool
+	}{
+		{"switch replaced", func(site *Site) error { return site.SetPeakShavingManualEntity("switch.other") },
+			func(site *Site) bool { return site.GetPeakShavingManualEntity() == haSwitch }},
+		{"switch removed", func(site *Site) error { return site.SetPeakShavingManualEntity("") },
+			func(site *Site) bool { return site.GetPeakShavingManualEntity() == haSwitch }},
+		{"mode removed", func(site *Site) error { return site.SetPeakShavingModeEntity("") },
+			func(site *Site) bool { return site.GetPeakShavingModeEntity() == haSelect }},
+		{"discharge entity removed", func(site *Site) error { return site.SetPeakShavingEntity("") },
+			func(site *Site) bool { return site.GetPeakShavingEntity() == haDischargeNum && site.omniEnabled() }},
+		{"battery type changed", func(site *Site) error { return site.SetPeakShavingBatteryType(batteryTypeBYD) },
+			func(site *Site) bool { return site.GetPeakShavingBatteryType() == batteryTypeMarstek }},
+	}
+
+	for _, tc := range changes {
+		t.Run(tc.name, func(t *testing.T) {
+			sc, ha := newOmni(t)
+			sc.cycle(25, 8000, 0)
+			ha.take()
+
+			ha.fail["switch/turn_off"] = http.StatusInternalServerError
+			require.ErrorIs(t, tc.change(sc.site), errHandBack)
+			assert.True(t, tc.kept(sc.site))
+			assert.True(t, sc.site.peakOwned())
+			assert.True(t, sc.site.GetPeakShaving())
+
+			// once Home Assistant takes it, the change goes through and releases
+			delete(ha.fail, "switch/turn_off")
+			ha.take()
+			require.NoError(t, tc.change(sc.site))
+			assert.Equal(t, "off", ha.get(haSwitch))
+			assert.False(t, sc.site.peakOwned())
+		})
+	}
+}
+
+// TestOmniTypeNeedsEntitiesWhileOn verifies that running peak shaving cannot be
+// moved to the battery type Marstek without its switch and mode: it would stay on
+// writing nothing
+func TestOmniTypeNeedsEntitiesWhileOn(t *testing.T) {
+	sc, ha := newOmni(t)
+	s := sc.site.peak()
+	s.batteryType = batteryTypeBYD
+	s.manualEntity = ""
+
+	require.ErrorContains(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek), "no manual switch or mode entity configured")
+	assert.Equal(t, batteryTypeBYD, sc.site.GetPeakShavingBatteryType())
 	assert.Empty(t, ha.take())
-	assert.Equal(t, "on", ha.get(haSwitch))
+
+	// with peak shaving off the type can be chosen first
+	require.NoError(t, sc.site.SetPeakShaving(false))
+	require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek))
 }
 
 // assertReleased checks that only the manual control was switched off
