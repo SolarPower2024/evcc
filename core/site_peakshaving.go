@@ -77,6 +77,16 @@ type peakState struct {
 	owned    bool
 	writeErr map[string]string // the last error logged per output, see writeOutput
 
+	// battery type Marstek (Omnibattery), see site_peak_omni.go: evcc also switches
+	// the battery to manual control while it controls
+	batteryType   string  // "" and byd: only the power is written, marstek
+	manualEntity  string  // switch of the manual control
+	modeEntity    string  // select of the forced mode
+	omniPeakValue float64 // the discharge setpoint of this cycle, written by applyOmni
+	omniShown     string  // the forced mode published, empty = not controlling
+
+	conn *homeassistant.Connection // shared, built on first use
+
 	demand      float64   // grid demand without the battery in W, from the last cycle
 	chargePause time.Time // grid charging gives way to peak shaving until then
 
@@ -169,6 +179,21 @@ func (site *Site) restorePeakSettings() {
 		s.mu.Unlock()
 	}
 
+	if v, err := settings.String(keys.PeakShavingBatteryType); err == nil {
+		s.mu.Lock()
+		s.batteryType = v
+		s.mu.Unlock()
+	}
+	if v, err := settings.String(keys.PeakShavingManualEntity); err == nil {
+		s.mu.Lock()
+		s.manualEntity = v
+		s.mu.Unlock()
+	}
+	if v, err := settings.String(keys.PeakShavingModeEntity); err == nil {
+		s.mu.Lock()
+		s.modeEntity = v
+		s.mu.Unlock()
+	}
 	if v, err := settings.Bool(keys.PeakShavingOwned); err == nil {
 		s.mu.Lock()
 		s.owned = v
@@ -289,12 +314,31 @@ func (site *Site) rebuildEnergyGetter() error {
 }
 
 func (site *Site) haConnection() (*homeassistant.Connection, error) {
+	s := site.peak()
+
+	s.mu.Lock()
+	conn := s.conn
+	s.mu.Unlock()
+
+	if conn != nil {
+		return conn, nil
+	}
+
 	uri, err := site.peakURI()
 	if err != nil {
 		return nil, err
 	}
 
-	return homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", false)
+	conn, err = homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", false)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	s.conn = conn
+	s.mu.Unlock()
+
+	return conn, nil
 }
 
 // numberSetter returns a setter writing to a Home Assistant number entity. Each
@@ -379,6 +423,7 @@ func (site *Site) publishPeakSettings() {
 	site.publish(keys.PeakShavingChargeEntity, chargeEntity)
 	site.publish(keys.PeakShavingEnergyEntity, energyEntity)
 
+	site.publishOmniSettings()
 	site.publishChargePower()
 }
 
@@ -519,7 +564,16 @@ func (site *Site) updatePeakShaving(state siteState) {
 	// against a 5kW limit asks for exactly 10000W
 	site.publish(keys.PeakShavingActive, shaving)
 	site.publish(keys.PeakShavingPower, value)
-	site.writePeakValue(value)
+
+	// the battery type Marstek is switched and written at the end of the cycle,
+	// see applyOmni
+	if site.omniType() {
+		s.mu.Lock()
+		s.omniPeakValue = value
+		s.mu.Unlock()
+	} else {
+		site.writePeakValue(value)
+	}
 
 	// also covers a setpoint written while switching off, which then gets
 	// replaced by the free value in the next cycle
@@ -577,6 +631,12 @@ func (site *Site) peakOwned() bool {
 // before: an entity evcc never controlled is not touched. While peak shaving is
 // off nothing else is sent, a single write is enough.
 func (site *Site) handBackPeak() {
+	// the battery type Marstek is released by applyOmni at the end of the cycle,
+	// the free value is never written to it
+	if site.omniType() {
+		return
+	}
+
 	s := site.peak()
 
 	s.mu.Lock()
@@ -605,6 +665,13 @@ func (site *Site) writeChargeValue(value float64) {
 	s.mu.Unlock()
 
 	site.publish(keys.PeakShavingChargeSetpoint, value)
+
+	// the battery type Marstek is written by applyOmni, after the manual control
+	// and the mode
+	if site.omniType() {
+		return
+	}
+
 	site.writeOutput("grid charge power", set, value)
 }
 
@@ -860,6 +927,7 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 	defer site.publishLmStatus(gridCharge)
 	defer site.publishLmWallboxes()
 	defer site.checkLmFollowing()
+	defer site.applyOmni() // after the battery mode, see site_peak_omni.go
 
 	site.peakCheckMeters()
 
@@ -909,6 +977,9 @@ func (site *Site) SetPeakShaving(val bool) error {
 	if val && !configured {
 		return errors.New("no target entity configured")
 	}
+	if val && site.omniTypeWithoutEntities() {
+		return errors.New("no manual switch or mode entity configured")
+	}
 
 	site.log.DEBUG.Println("set peak shaving:", val)
 
@@ -929,6 +1000,7 @@ func (site *Site) SetPeakShaving(val bool) error {
 		// hand control back when switching off
 		if !val {
 			site.handBackPeak()
+			site.applyOmni()
 		}
 	}
 
@@ -966,12 +1038,21 @@ func (site *Site) SetPeakShavingEntity(entity string) error {
 	// swapped and handed back in one go, a cycle writing in between could put its
 	// setpoint into the previous target after the free value
 	s.out.Lock()
+	omni := site.omniType()
 	s.mu.Lock()
 	previousSet := s.set
 	s.mu.Unlock()
 
 	err := site.rebuildPeakSetter()
-	if err == nil && site.peakOwned() {
+	switch {
+	case err != nil || !site.peakOwned():
+	case omni:
+		// the battery type Marstek never gets the free value; without a target
+		// applyOmni is gone, so the manual control is released here
+		if entity == "" {
+			site.releaseOmni()
+		}
+	default:
 		// the previous target would otherwise keep the last setpoint
 		if site.writeOutput("peak shaving", previousSet, site.peakFreeValue()) {
 			site.setPeakOwned(false)
@@ -1038,8 +1119,11 @@ func (site *Site) SetPeakShavingChargeEntity(entity string) error {
 
 	err := site.rebuildChargeSetter()
 	if err == nil {
-		// the previous target would otherwise keep charging at the last setpoint
-		site.writeOutput("grid charge power", previousSet, 0)
+		// the previous target would otherwise keep charging at the last setpoint,
+		// which the battery type Marstek only accepted in manual control
+		if !site.omniType() || site.peakOwned() {
+			site.writeOutput("grid charge power", previousSet, 0)
+		}
 
 		// on/off charging writes no setpoint, the overview would keep the last one
 		s.mu.Lock()

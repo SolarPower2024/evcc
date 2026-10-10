@@ -181,8 +181,8 @@ func TestPeakHandBackAfterRestartWhenOwned(t *testing.T) {
 	assert.True(t, stored)
 }
 
-// testLogger returns a logger writing every line to the buffer
-func testLogger(buf *bytes.Buffer) *util.Logger {
+// testLogger returns a logger writing every line to w
+func testLogger(buf io.Writer) *util.Logger {
 	return &util.Logger{Notepad: jww.NewNotepad(jww.LevelTrace, jww.LevelTrace, buf, io.Discard, "", 0)}
 }
 

@@ -18,7 +18,7 @@ The original evcc description is in [README.md](../README.md).
 - Load management overview
 - Phase switching: 1p currents and delays
 - Battery grid charging by soc and one-time
-- Peak shaving
+- Peak shaving, also for a Marstek battery behind Omnibattery
 - Battery profiles
 - Home consumption forecast
 - Battery identification
