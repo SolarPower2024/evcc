@@ -732,7 +732,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 ## Taking in a new evcc version
 
 The fork takes in evcc **releases** only, never the commits between them. Every
-Friday the issue *evcc-Update-Check* reviews evcc's newest release (see
+day the issue *evcc-Update-Check* reviews evcc's newest release (see
 [Tests](#tests)): what changed, which fork features evcc may now have itself,
 which evcc commit causes which conflict, and whether the merge passes the
 tests. With the secret `UPDATE_TOKEN` the PR *evcc-Update* (branch
@@ -811,7 +811,7 @@ repository):
   the ui checks (format, lint, types, i18n, vitest, build) and a shuffled run
   that reports but does not block.
 - `custom-image.yml` builds an add-on image from a tag only after these passed.
-- `upstream-check.yml` Fridays at noon (10:00 UTC): fetches evcc's release tags
+- `upstream-check.yml` daily at noon (10:00 UTC): fetches evcc's release tags
   read only and runs the review `.github/upstream-check/review.mjs` into the
   issue *evcc-Update-Check* for the newest release: a) the commits by area and
   the evcc files with fork hooks that changed, b) fork features evcc may now
