@@ -238,9 +238,9 @@ func (site *Site) applyOmniProtection() {
 	threshold := s.effectiveReserve()
 
 	// the window is there once a cycle metered it
-	limit := s.limit
+	limit, basis := s.limit, omniLimitBasis(false, s.limit)
 	if !s.metersLost && !s.window.Start.IsZero() {
-		limit = s.window.Allowed
+		limit, basis = s.window.Allowed, omniLimitBasis(true, s.limit)
 	}
 	s.mu.Unlock()
 
@@ -261,7 +261,7 @@ func (site *Site) applyOmniProtection() {
 		return
 	}
 
-	if !site.omniWriteLimit(conn, limitEntity, limit) {
+	if !site.omniWriteLimit(conn, limitEntity, limit, basis) {
 		return
 	}
 
@@ -291,7 +291,8 @@ const minOmniLimitRise = 500.0
 // minOmniLimitRise above it. Below the entity's minimum the minimum is written:
 // Omnibattery takes no lower limit. An entity that cannot be read is not written,
 // its minimum and step are unknown; the step fails and the next cycle tries again.
-func (site *Site) omniWriteLimit(conn *homeassistant.Connection, entity string, limit float64) bool {
+// basis says in the log why the limit is what it is, see omniLimitBasis.
+func (site *Site) omniWriteLimit(conn *homeassistant.Connection, entity string, limit float64, basis string) bool {
 	r, current, err := numberState(conn, entity)
 	if !site.logWrite("peak shaving limit read", "read "+entity, err) {
 		return false
@@ -306,9 +307,24 @@ func (site *Site) omniWriteLimit(conn *homeassistant.Connection, entity string, 
 		return false
 	}
 
-	site.log.DEBUG.Printf("peak shaving limit: %.0fW", limit)
+	if basis != "" {
+		basis = " (" + basis + ")"
+	}
+	site.log.DEBUG.Printf("peak shaving limit: %.0fW%s", limit, basis)
 
 	return true
+}
+
+// omniLimitBasis explains the limit written to Omnibattery, which differs from
+// the peak limit set: within a window it is the grid power still allowed for the
+// rest of it, so it is above the peak limit while less than the budget was drawn
+// and below it after a surplus draw.
+func omniLimitBasis(windowed bool, peakLimit float64) string {
+	if windowed {
+		return fmt.Sprintf("allowed for the rest of the 15 min window, peak limit %.0fW", peakLimit)
+	}
+
+	return fmt.Sprintf("no window, peak limit %.0fW", peakLimit)
 }
 
 // omniWriteNumber writes a value through set, the setter skips what the entity
