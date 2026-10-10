@@ -24,6 +24,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"slices"
 	"strconv"
@@ -284,17 +285,20 @@ func (site *Site) applyOmniProtection() {
 // configuration write in nearly every cycle of a window.
 const minOmniLimitRise = 500.0
 
-// omniWriteLimit writes the limit, fitted to the entity and rounded down, when it
-// is below the limit in the entity or at least minOmniLimitRise above it. Below
-// the entity's minimum the minimum is written: Omnibattery takes no lower limit.
+// omniWriteLimit writes the limit, in whole watts, fitted to the entity and
+// rounded down, when it is below the limit in the entity or at least
+// minOmniLimitRise above it. Below the entity's minimum the minimum is written:
+// Omnibattery takes no lower limit. An entity that cannot be read is not written,
+// its minimum and step are unknown; the step fails and the next cycle tries again.
 func (site *Site) omniWriteLimit(conn *homeassistant.Connection, entity string, limit float64) bool {
 	r, current, err := numberState(conn, entity)
+	if !site.logWrite("peak shaving limit read", "read "+entity, err) {
+		return false
+	}
 
-	if err == nil {
-		limit = r.Fit(limit, false)
-		if v, perr := strconv.ParseFloat(current, 64); perr == nil && limit >= v && limit < v+minOmniLimitRise {
-			return true
-		}
+	limit = r.Fit(math.Floor(limit), false)
+	if v, perr := strconv.ParseFloat(current, 64); perr == nil && limit >= v && limit < v+minOmniLimitRise {
+		return true
 	}
 
 	if !site.logWrite("peak shaving limit", fmt.Sprintf("write %.0fW", limit), conn.CallNumberService(entity, limit)) {

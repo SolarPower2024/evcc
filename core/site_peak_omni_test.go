@@ -379,6 +379,44 @@ func TestOmniProtectionLimitMinimum(t *testing.T) {
 	assert.Equal(t, "500", ha.get(haProtLimit))
 }
 
+// TestOmniProtectionLimitWholeWatts verifies that an entity without a step gets
+// whole watts, rounded down
+func TestOmniProtectionLimitWholeWatts(t *testing.T) {
+	sc, ha := newOmni(t)
+	conn := sc.site.peak().conn
+
+	ha.mu.Lock()
+	ha.states["number.limit_nostep"] = &haEntity{"20000", map[string]any{"min": 500.0, "max": 20000.0, "step": 0.0}}
+	ha.mu.Unlock()
+
+	require.True(t, sc.site.omniWriteLimit(conn, "number.limit_nostep", 4733.8))
+	assert.Equal(t, []string{"set_value number.limit_nostep 4733"}, ha.take())
+}
+
+// TestOmniProtectionLimitNotReadable verifies that a limit entity that cannot be
+// read is not written, its minimum is unknown: the step fails, the switch waits
+// and the next cycle tries again
+func TestOmniProtectionLimitNotReadable(t *testing.T) {
+	sc, ha := newOmni(t)
+
+	ha.mu.Lock()
+	limit := ha.states[haProtLimit]
+	delete(ha.states, haProtLimit)
+	ha.mu.Unlock()
+
+	sc.cycle(25, 8000, 0)
+	assert.Equal(t, []string{"set_value " + haProtSoc + " 30"}, ha.take(), "the threshold only, no limit and no switch")
+	assert.False(t, sc.site.peak().protOwned)
+
+	ha.mu.Lock()
+	ha.states[haProtLimit] = limit
+	ha.mu.Unlock()
+
+	sc.cycle(25, 8000, 0)
+	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000", "turn_on " + haProtSwitch}, ha.take())
+	assert.True(t, sc.site.peak().protOwned)
+}
+
 // TestOmniEffectiveReserve verifies that a reserve below Omnibattery's lowest
 // threshold, e.g. from a battery profile, counts as that threshold everywhere:
 // evcc's state of the reserve, the optimizer and Omnibattery agree

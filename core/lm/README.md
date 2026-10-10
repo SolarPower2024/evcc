@@ -347,8 +347,11 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
 | peak shaving off, battery type or an entity changed | off, only if evcc turned it on | stays | stays | as above |
 
 - **Limit:** `allowed` of the window (`peak.State`, i.e. limit, budget, follow,
-  cap and freeze as for BYD), fitted to `min`, `max` and `step` of the entity and
-  rounded down, so it is the stricter. A lower limit is written right away, a
+  cap and freeze as for BYD), in whole watts, fitted to `min`, `max` and `step` of
+  the entity and rounded down, so it is the stricter
+  (`TestOmniProtectionLimitWholeWatts`). An entity that cannot be read is not
+  written, its minimum is unknown; the step fails and the next cycle tries again
+  (`TestOmniProtectionLimitNotReadable`). A lower limit is written right away, a
   higher one only once it is at least 500 W above the entity, which spares
   Omnibattery a configuration write in nearly every cycle
   (`TestOmniProtectionLimitFollowsWindow`). Below the entity's minimum (500 W)
