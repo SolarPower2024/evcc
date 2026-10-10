@@ -15,6 +15,11 @@ const (
 	PeakShavingLimit                = "peakShavingLimit"
 	PeakShavingReserve              = "peakShavingReserve"
 	PeakShavingEntity               = "peakShavingEntity"
+	PeakShavingOwned                = "peakShavingOwned"        // evcc holds the battery back through the entity, not published
+	PeakShavingBatteryType          = "peakShavingBatteryType"  // byd or marstek, see core/site_peak_omni.go
+	PeakShavingManualEntity         = "peakShavingManualEntity" // Home Assistant switch of the manual control (marstek)
+	PeakShavingModeEntity           = "peakShavingModeEntity"   // Home Assistant select of the forced mode (marstek)
+	PeakShavingManual               = "peakShavingManual"       // published: the forced mode evcc holds, empty = not controlling
 	PeakShavingActive               = "peakShavingActive"
 	PeakShavingChargePower          = "peakShavingChargePower"
 	PeakShavingChargePowerEffective = "peakShavingChargePowerEffective"

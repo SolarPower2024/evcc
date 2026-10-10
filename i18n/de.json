@@ -489,6 +489,7 @@
       "entityInvalid": "Entität konnte nicht gesetzt werden.",
       "entityLabel": "Entität für die Ladeleistung",
       "entryLabel": "Batterie-Netzladen",
+      "marstekHint": "Bei Marstek nötig, damit evcc beim Netzladen auf manuell schaltet.",
       "setpoint": "Aktuelle Vorgabe:",
       "source": {
         "setting": "hier eingetragen",
@@ -556,7 +557,7 @@
       "exportForecastLabel": "Einspeise-Prognose an Home Assistant",
       "followCyclesHelp": "Zieht ein reduzierter Verbraucher bei Überlast so viele Zyklen mehr als erlaubt, wird stattdessen der Nächste in der Prioritätenreihe gedrosselt. 0 = aus.",
       "followCyclesLabel": "Vorgabe ignoriert nach",
-      "freeValueHelp": "Wird in die Peak-Shaving-Entität geschrieben, solange die Batterie frei entladen darf.",
+      "freeValueHelp": "Wird in die Peak-Shaving-Entität geschrieben, solange die Batterie frei entladen darf. Nur BYD.",
       "freeValueLabel": "Freigabewert",
       "holdOffHelp": "So lange bleibt das Batterie-Netzladen aus, nachdem eine Spitze oder der Stromkreis es gestoppt hat.",
       "holdOffLabel": "Wartezeit nach Abbruch Batterie-Netzladen",
@@ -1061,6 +1062,8 @@
       }
     },
     "peakshaving": {
+      "batteryTypeHelp": "BYD: evcc schreibt nur die Leistung. Marstek: evcc schaltet Omnibattery dazu auf manuell, nur solange es steuert.",
+      "batteryTypeLabel": "Batterietyp",
       "circuitDescription": "Erst mit Stromkreis nimmt die Hausbatterie am Lastmanagement teil.",
       "circuitEntryLabel": "Batterie-Stromkreis",
       "circuitHelp": "Netzladen und Abwurf der Batterie richten sich nach seiner Leistungsgrenze.",
@@ -1081,6 +1084,11 @@
       "followBufferLabel": "Puffer",
       "followHelp": "Liegt die höchste Viertelstunde des Monats schon über deiner Peak-Grenze, steigt die Grenze auf diese Spitze. Zum Monatsbeginn gilt wieder deine Grenze.",
       "followLabel": "Follow the Peak: Grenze folgt der Monatsspitze",
+      "manualEntityHelp": "Omnibattery-Schalter der Batterie. evcc schaltet ihn ein, solange es lädt oder Spitzen kappt.",
+      "manualEntityLabel": "Schalter manuelle Steuerung",
+      "marstekRequired": "Bei Marstek sind Schalter und Betriebsmodus nötig.",
+      "modeEntityHelp": "Auswahl mit None, Charge und Discharge.",
+      "modeEntityLabel": "Betriebsmodus erzwingen",
       "source": {
         "entity": "Energiezähler aus Home Assistant",
         "meter": "Energiezähler des Netzzählers",

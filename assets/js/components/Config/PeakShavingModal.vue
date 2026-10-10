@@ -11,6 +11,55 @@
 		<p v-if="error" class="text-danger">{{ error }}</p>
 
 		<form ref="form" class="container mx-0 px-0" @submit.prevent="save">
+			<!-- custom: battery type Marstek (Omnibattery), see core/site_peak_omni.go -->
+			<FormRow
+				id="peakShavingBatteryType"
+				:label="$t('config.peakshaving.batteryTypeLabel')"
+				:help="$t('config.peakshaving.batteryTypeHelp')"
+			>
+				<select
+					id="peakShavingBatteryType"
+					v-model="batteryType"
+					class="form-select"
+					data-testid="peakshaving-battery-type"
+				>
+					<option value="marstek">Marstek (Omnibattery)</option>
+					<option value="byd">BYD</option>
+				</select>
+			</FormRow>
+
+			<template v-if="batteryType === 'marstek'">
+				<FormRow
+					id="peakShavingManualEntity"
+					:label="$t('config.peakshaving.manualEntityLabel')"
+					:help="$t('config.peakshaving.manualEntityHelp')"
+				>
+					<input
+						id="peakShavingManualEntity"
+						v-model="manualEntity"
+						type="text"
+						class="form-control"
+						placeholder="switch.marstek_venus_battery_manual_mode"
+						data-testid="peakshaving-manual-entity"
+					/>
+				</FormRow>
+
+				<FormRow
+					id="peakShavingModeEntity"
+					:label="$t('config.peakshaving.modeEntityLabel')"
+					:help="$t('config.peakshaving.modeEntityHelp')"
+				>
+					<input
+						id="peakShavingModeEntity"
+						v-model="modeEntity"
+						type="text"
+						class="form-control"
+						placeholder="select.marstek_venus_1_betriebsmodus_erzwingen"
+						data-testid="peakshaving-mode-entity"
+					/>
+				</FormRow>
+			</template>
+
 			<FormRow
 				id="peakShavingEntity"
 				:label="$t('config.peakshaving.entityLabel')"
@@ -135,8 +184,9 @@ import store from "@/store";
 import api from "@/api";
 
 // Target entity for the peak shaving discharge setpoint and the energy sensor
-// metering the 15 minute window. The switch, the peak limit and the reserve soc
-// are operating controls and live on the battery page.
+// metering the 15 minute window; for the battery type Marstek also the switch of
+// the manual control and the select of the forced mode. The switch, the peak
+// limit and the reserve soc are operating controls and live on the battery page.
 export default {
 	name: "PeakShavingModal",
 	components: { FormRow, GenericModal },
@@ -145,6 +195,12 @@ export default {
 		return {
 			saving: false,
 			error: "",
+			batteryType: "byd",
+			initialBatteryType: "byd",
+			manualEntity: "",
+			initialManualEntity: "",
+			modeEntity: "",
+			initialModeEntity: "",
 			entity: "",
 			initialEntity: "",
 			energyEntity: "",
@@ -158,6 +214,16 @@ export default {
 		};
 	},
 	computed: {
+		batteryTypeChanged() {
+			return this.batteryType !== this.initialBatteryType;
+		},
+		marstekChanged() {
+			return (
+				this.batteryType === "marstek" &&
+				(this.manualEntity.trim() !== this.initialManualEntity ||
+					this.modeEntity.trim() !== this.initialModeEntity)
+			);
+		},
 		entityChanged() {
 			return this.entity.trim() !== this.initialEntity;
 		},
@@ -175,6 +241,8 @@ export default {
 		},
 		changed() {
 			return (
+				this.batteryTypeChanged ||
+				this.marstekChanged ||
 				this.entityChanged ||
 				this.energyEntityChanged ||
 				this.followChanged ||
@@ -191,8 +259,17 @@ export default {
 		reset() {
 			const entity = store?.state?.peakShavingEntity || "";
 			const energyEntity = store?.state?.peakShavingEnergyEntity || "";
+			const manualEntity = store?.state?.peakShavingManualEntity || "";
+			const modeEntity = store?.state?.peakShavingModeEntity || "";
+			const batteryType = store?.state?.peakShavingBatteryType || "byd";
 			this.saving = false;
 			this.error = "";
+			this.batteryType = batteryType;
+			this.initialBatteryType = batteryType;
+			this.manualEntity = manualEntity;
+			this.initialManualEntity = manualEntity;
+			this.modeEntity = modeEntity;
+			this.initialModeEntity = modeEntity;
 			this.entity = entity;
 			this.initialEntity = entity;
 			this.energyEntity = energyEntity;
@@ -231,10 +308,41 @@ export default {
 				return;
 			}
 
+			// the battery type Marstek cannot run without its switch and mode
+			if (
+				this.batteryType === "marstek" &&
+				(!this.manualEntity.trim() || !this.modeEntity.trim())
+			) {
+				this.error = this.$t("config.peakshaving.marstekRequired");
+				return;
+			}
+
 			this.saving = true;
 			this.error = "";
 
 			try {
+				// the entities first, the backend checks them; the type only changes
+				// once they are accepted
+				if (this.batteryType === "marstek") {
+					const manualEntity = this.manualEntity.trim();
+					if (manualEntity !== this.initialManualEntity) {
+						await api.post(
+							`peakshavingmanualentity/${encodeURIComponent(manualEntity)}`
+						);
+						this.initialManualEntity = manualEntity;
+					}
+
+					const modeEntity = this.modeEntity.trim();
+					if (modeEntity !== this.initialModeEntity) {
+						await api.post(`peakshavingmodeentity/${encodeURIComponent(modeEntity)}`);
+						this.initialModeEntity = modeEntity;
+					}
+				}
+				if (this.batteryTypeChanged) {
+					await api.post(`peakshavingbatterytype/${this.batteryType}`);
+					this.initialBatteryType = this.batteryType;
+				}
+
 				const entity = this.entity.trim();
 				if (this.entityChanged) {
 					if (entity) {

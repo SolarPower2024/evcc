@@ -253,6 +253,17 @@ gets the free value, a charge power entity 0 W
 (`TestPeakEntityRemovedHandsBack`). A 2 % hysteresis keeps the soc from
 flapping across the reserve.
 
+evcc only hands back what it held. It remembers that it wrote a value other than
+the free value (`peakShavingOwned`, stored, so a restart in the middle of a
+control still hands back) and writes the free value on switching off, a lost
+meter or a removed or replaced entity only while the mark is set, then clears
+it. A start with peak shaving off writes nothing (`TestPeakNoHandBackWithoutOwned`,
+`TestPeakHandBackAfterRestartWhenOwned`). A write that fails is logged as an
+error once; the same error then only at debug level until a write lands again
+(once at info), with the first 200 characters of the answer on one line, and for
+a general 500 of Home Assistant the hint to look into its log
+(`TestPeakWriteErrorLoggedOnce`, `TestPeakWriteErrorBody`).
+
 The limit applies to the clock-aligned 15 minute window: `allowed` =
 `(limit × 15 min − energy drawn so far) / time left`, so energy left unused
 earlier allows more and a short spike is only covered when the window would end
@@ -305,6 +316,54 @@ battery and the saving are shown with the statistics; the saving only counts
 above the month's baseline, as the grid draw up to it is allowed anyway. Prefilled with the
 Austrian draft for 2027 (33.82 EUR/kW/year up to 10 kW, double above, at least
 20 % of the agreed power and 2 kW). See `core/site_peak_tariff.go`.
+
+**Battery type Marstek (Omnibattery)** (*Lastmanagement-Details → Peak Shaving →
+Batterietyp*, default BYD). Omnibattery regulates the battery itself (zero
+feed-in) and takes a setpoint only under manual control. So for this type evcc
+also needs the *manual control switch* (`switch.` or `input_boolean.`) and the
+*force mode* select (`select.` or `input_select.`, offering `None`, `Charge`
+and `Discharge` exactly so; checked when set, `TestOmniModeEntityOptions`), next
+to the discharge power entity and, for grid charging, the charge power entity of
+*Batterie-Netzladen*. Peak shaving cannot be turned on without them.
+
+At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
+evcc decides one wish, `omniWant`, from top to bottom:
+
+| Situation | Switch | Mode | Power |
+| --- | --- | --- | --- |
+| grid charging with a setpoint > 0 | on | `Charge` | charge power = setpoint |
+| peak shaving, below the reserve, peak | on | `Discharge` | discharge power = setpoint |
+| peak shaving, below the reserve, no peak | on | `None` | nothing written |
+| otherwise (above the reserve, peak shaving off, meters lost, no grid charging) | off (release) | unchanged | nothing written |
+
+`applyOmni` brings Home Assistant to it in the order switch, mode, power and
+writes a step only if Home Assistant shows something else (the state is read every
+time, so a change by hand is corrected in the next cycle, `TestOmniOrder`,
+`TestOmniSkipsUnchanged`, `TestOmniCorrectsHandChange`). A failing step stops the
+rest of that cycle. Released is only the switch (mode and power stay, Omnibattery
+overwrites them in automatic operation): when peak shaving is switched off, above the
+reserve, without meter values, with a removed or replaced entity and on a change
+of the battery type, and only if evcc controlled (`peakShavingOwned`;
+`TestOmniRelease`, `TestOmniReleaseAfterRestart`). A switch turned on by hand
+stays while evcc does not control; once evcc forced mode and power into it, evcc
+releases it afterwards (`TestOmniLeavesManualAloneWhenNotOwned`). A change of the
+switch, the mode, the discharge entity or the type is refused while the release
+fails (`TestOmniChangeRefusedWhenNotReleased`), and running peak shaving cannot be
+moved to Marstek without switch and mode (`TestOmniTypeNeedsEntitiesWhileOn`). The
+free value is never written to this type (`TestOmniNoFreeValue`); BYD stays
+as it was (`TestOmniInertForBYD`). Grid charging without a charge power entity
+switches nothing (`TestOmniGridChargeWithoutChargeEntity`). The scripts of the
+evcc battery modes should no longer touch the manual control, the mode and the
+power of this battery. `peakShavingManual` is published: the mode evcc holds,
+empty = not controlling. Code in `core/site_peak_omni.go`; no new hook.
+
+```
+POST   /api/peakshavingbatterytype/{byd|marstek}
+POST   /api/peakshavingmanualentity/{entity}
+DELETE /api/peakshavingmanualentity
+POST   /api/peakshavingmodeentity/{entity}
+DELETE /api/peakshavingmodeentity
+```
 
 ## 12. Battery profiles
 
@@ -506,7 +565,7 @@ values are not stored, so a changed default applies.
 | Name | Setting | Default | Range |
 | --- | --- | --- | --- |
 | `hysteresis` | soc band of the peak reserve | 2 % | 0-20 |
-| `freeValue` | setpoint for "discharge freely" | 10000 W | 1-100000 |
+| `freeValue` | setpoint for "discharge freely", BYD only | 10000 W | 1-100000 |
 | `writeTolerance` | smallest change written to the peak shaving and grid charge power entities, set in the *Peak Shaving* dialog | 0 W | 0-1000 |
 | `holdOff` | wait after battery grid charging was stopped | 5 min | 1-60 |
 | `timeout` | expiry of unserved demand | 10 min | 1-60 |
@@ -716,7 +775,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |
-| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_omni.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |

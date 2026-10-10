@@ -1,14 +1,23 @@
 package core
 
 import (
+	"bytes"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/benbjohnson/clock"
 	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/peak"
+	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/request"
+	jww "github.com/spf13/jwalterweatherman"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,14 +55,14 @@ func TestPeakPausesGridCharge(t *testing.T) {
 	assert.False(t, site.peakPausesGridCharge())
 }
 
-// TestPeakHandsBackWhenOff verifies that the free value is written once while
-// peak shaving is off, retried after a failed write, and written once more after
-// peak shaving ran again
+// TestPeakHandsBackWhenOff verifies that the free value is written once when
+// peak shaving is switched off after it held the battery back, retried after a
+// failed write, and written once more after peak shaving ran again
 func TestPeakHandsBackWhenOff(t *testing.T) {
 	sc := newScenario(t)
 
 	var writes []float64
-	fail := true
+	fail := false
 
 	s := sc.site.peak()
 	s.enabled = false
@@ -66,27 +75,205 @@ func TestPeakHandsBackWhenOff(t *testing.T) {
 		return nil
 	}
 
+	// never controlled: nothing to hand back
 	sc.cycle(50, 1000, 0)
 	sc.cycle(50, 1000, 0)
-	sc.cycle(50, 1000, 0)
-	sc.cycle(50, 1000, 0)
-
-	// first write fails, second lands, then nothing more is sent
-	assert.Equal(t, []float64{peak.DefaultFreeValue, peak.DefaultFreeValue}, writes)
+	assert.Empty(t, writes)
 
 	// peak shaving runs below the reserve and writes its setpoint every cycle
-	writes = nil
 	require.NoError(t, sc.site.SetPeakShaving(true))
 	sc.cycle(20, 7000, 0)
 	sc.cycle(20, 7000, 0)
 	assert.Equal(t, []float64{2000, 2000}, writes)
+	assert.True(t, sc.site.peakOwned())
 
-	// switching off hands back right away, the following cycles send nothing
+	// switching off hands back right away, the first write fails and is retried,
+	// then nothing more is sent
 	writes = nil
+	fail = true
 	require.NoError(t, sc.site.SetPeakShaving(false))
+	assert.True(t, sc.site.peakOwned())
 	sc.cycle(20, 7000, 0)
 	sc.cycle(20, 7000, 0)
+	sc.cycle(20, 7000, 0)
+	assert.Equal(t, []float64{peak.DefaultFreeValue, peak.DefaultFreeValue}, writes)
+	assert.False(t, sc.site.peakOwned())
+
+	// and once more after peak shaving ran again
+	writes = nil
+	require.NoError(t, sc.site.SetPeakShaving(true))
+	sc.cycle(20, 7000, 0)
+	require.NoError(t, sc.site.SetPeakShaving(false))
+	assert.Equal(t, []float64{2000, peak.DefaultFreeValue}, writes)
+}
+
+// TestPeakNoHandBackWithoutOwned verifies that an entity evcc never controlled is
+// not written to: peak shaving off at the start, entity removed, the meters
+// failing
+func TestPeakNoHandBackWithoutOwned(t *testing.T) {
+	sc := newScenario(t)
+	clk := clock.NewMock()
+
+	var writes []float64
+
+	s := sc.site.peak()
+	s.clock = clk
+	s.enabled = false
+	s.entity = "number.discharge"
+	s.set = func(v float64) error { writes = append(writes, v); return nil }
+
+	for range 5 {
+		sc.cycle(20, 7000, 0)
+		sc.cycle(50, 1000, 0)
+	}
+	require.NoError(t, sc.site.SetPeakShaving(false))
+	assert.Empty(t, writes)
+
+	// removed while off
+	require.NoError(t, sc.site.SetPeakShavingEntity(""))
+	assert.Empty(t, writes)
+
+	// enabled but above the reserve and the meters failing: not controlled either
+	s.set = func(v float64) error { writes = append(writes, v); return nil }
+	s.enabled = true
+	s.updated = clk.Now()
+	clk.Add(10 * time.Minute)
+	sc.site.peakCheckMeters()
+	assert.True(t, s.metersLost)
+	assert.Empty(t, writes)
+	assert.False(t, sc.site.peakOwned())
+}
+
+// TestPeakHandBackAfterRestartWhenOwned verifies that a restart in the middle of
+// a control still hands back: owned is stored, the free value is written once,
+// and owned is cleared afterwards
+func TestPeakHandBackAfterRestartWhenOwned(t *testing.T) {
+	sc := newScenario(t)
+
+	settings.SetBool(keys.PeakShavingOwned, true)
+	sc.site.restorePeakSettings()
+	assert.True(t, sc.site.peakOwned())
+
+	var writes []float64
+
+	s := sc.site.peak()
+	s.enabled = false
+	s.set = func(v float64) error { writes = append(writes, v); return nil }
+
+	for range 3 {
+		sc.cycle(50, 1000, 0)
+	}
+
 	assert.Equal(t, []float64{peak.DefaultFreeValue}, writes)
+	assert.False(t, sc.site.peakOwned())
+
+	stored, err := settings.Bool(keys.PeakShavingOwned)
+	require.NoError(t, err)
+	assert.False(t, stored)
+
+	// the control after the hand back is owned again, and kept in the settings
+	s.enabled = true
+	sc.cycle(20, 7000, 0)
+	assert.True(t, sc.site.peakOwned())
+
+	stored, err = settings.Bool(keys.PeakShavingOwned)
+	require.NoError(t, err)
+	assert.True(t, stored)
+}
+
+// testLogger returns a logger writing every line to w
+func testLogger(buf io.Writer) *util.Logger {
+	return &util.Logger{Notepad: jww.NewNotepad(jww.LevelTrace, jww.LevelTrace, buf, io.Discard, "", 0)}
+}
+
+// TestPeakWriteErrorLoggedOnce verifies that the same error is logged once as an
+// error and then at debug level, a different one is logged again, and a write
+// landing again is logged once
+func TestPeakWriteErrorLoggedOnce(t *testing.T) {
+	var buf bytes.Buffer
+
+	site := &Site{log: testLogger(&buf)}
+
+	var err error
+	set := func(float64) error { return err }
+
+	count := func(level string) int { return strings.Count(buf.String(), level) }
+
+	err = errors.New("rejected")
+	for range 10 {
+		assert.False(t, site.writeOutput("peak shaving", set, 2000))
+	}
+	assert.Equal(t, 1, count("ERROR"))
+	assert.Equal(t, 9, count("DEBUG"))
+
+	// another error is a new line
+	err = errors.New("unreachable")
+	for range 3 {
+		site.writeOutput("peak shaving", set, 2000)
+	}
+	assert.Equal(t, 2, count("ERROR"))
+
+	// another output has its own state
+	site.writeOutput("grid charge power", set, 0)
+	assert.Equal(t, 3, count("ERROR"))
+
+	// a landing write is reported once
+	err = nil
+	for range 3 {
+		assert.True(t, site.writeOutput("peak shaving", set, 2000))
+	}
+	assert.Equal(t, 1, count("INFO"))
+	assert.Contains(t, buf.String(), "peak shaving: write 2000W ok again")
+
+	// and the next failure is an error again
+	err = errors.New("unreachable")
+	site.writeOutput("peak shaving", set, 2000)
+	assert.Equal(t, 4, count("ERROR"))
+}
+
+// statusError returns the error of a failed request with the response body
+func statusError(t *testing.T, code int, path, body string) error {
+	t.Helper()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(code)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+path, nil)
+	require.NoError(t, err)
+
+	_, err = (&request.Helper{Client: srv.Client()}).DoBody(req)
+	require.Error(t, err)
+
+	return err
+}
+
+// TestPeakWriteErrorBody verifies that the response of the server is part of the
+// logged error, on one line and shortened, and that a general 500 of Home
+// Assistant points to its log
+func TestPeakWriteErrorBody(t *testing.T) {
+	err := statusError(t, http.StatusInternalServerError, "/api/services/number/set_value", "500 Internal Server Error\n\nServer got itself in trouble")
+	text := writeErrorText(err)
+	assert.Contains(t, text, "unexpected status: 500")
+	assert.Contains(t, text, ": 500 Internal Server Error Server got itself in trouble")
+	assert.NotContains(t, text, "\n")
+	assert.True(t, strings.HasSuffix(text, " (details in the Home Assistant log)"), text)
+
+	// shortened
+	err = statusError(t, http.StatusBadRequest, "/api/services/number/set_value", strings.Repeat("x", 500))
+	text = writeErrorText(err)
+	assert.Contains(t, text, strings.Repeat("x", maxErrorBody)+"...")
+	assert.NotContains(t, text, strings.Repeat("x", maxErrorBody+1))
+	assert.NotContains(t, text, "Home Assistant log", "only a 500")
+
+	// a 500 elsewhere is no service call
+	err = statusError(t, http.StatusInternalServerError, "/api/states/number.x", "")
+	assert.NotContains(t, writeErrorText(err), "Home Assistant log")
+
+	// a plain error stays as it is
+	assert.Equal(t, "boom", writeErrorText(errors.New("boom")))
 }
 
 // TestPeakEntityRemovedHandsBack verifies that removing the entities while peak

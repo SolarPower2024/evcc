@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -39,6 +40,7 @@ import (
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
 	"github.com/evcc-io/evcc/util/homeassistant"
+	"github.com/evcc-io/evcc/util/request"
 )
 
 const (
@@ -67,6 +69,23 @@ type peakState struct {
 	shaving    bool // hysteresis state: below the reserve
 	covering   bool // covering a peak right now, for the event log
 	handedBack bool // free value written since the last setpoint, nothing more to send while off
+
+	// owned is set once evcc wrote a value that holds the battery back (anything but
+	// the free value) and cleared again once it handed back. Only then there is
+	// something to hand back: an entity evcc never controlled is left alone.
+	// Persisted, so a restart in the middle of a control still hands back.
+	owned    bool
+	writeErr map[string]string // the last error logged per output, see writeOutput
+
+	// battery type Marstek (Omnibattery), see site_peak_omni.go: evcc also switches
+	// the battery to manual control while it controls
+	batteryType   string  // "" and byd: only the power is written, marstek
+	manualEntity  string  // switch of the manual control
+	modeEntity    string  // select of the forced mode
+	omniPeakValue float64 // the discharge setpoint of this cycle, written by applyOmni
+	omniShown     string  // the forced mode published, empty = not controlling
+
+	conn *homeassistant.Connection // shared, built on first use
 
 	demand      float64   // grid demand without the battery in W, from the last cycle
 	chargePause time.Time // grid charging gives way to peak shaving until then
@@ -160,6 +179,27 @@ func (site *Site) restorePeakSettings() {
 		s.mu.Unlock()
 	}
 
+	if v, err := settings.String(keys.PeakShavingBatteryType); err == nil {
+		s.mu.Lock()
+		s.batteryType = v
+		s.mu.Unlock()
+	}
+	if v, err := settings.String(keys.PeakShavingManualEntity); err == nil {
+		s.mu.Lock()
+		s.manualEntity = v
+		s.mu.Unlock()
+	}
+	if v, err := settings.String(keys.PeakShavingModeEntity); err == nil {
+		s.mu.Lock()
+		s.modeEntity = v
+		s.mu.Unlock()
+	}
+	if v, err := settings.Bool(keys.PeakShavingOwned); err == nil {
+		s.mu.Lock()
+		s.owned = v
+		s.mu.Unlock()
+	}
+
 	// a start during a meter outage counts as without meter values from now on,
 	// see peakCheckMeters, rather than keeping the setpoint written before it
 	s.mu.Lock()
@@ -218,7 +258,7 @@ func (site *Site) rebuildPeakSetter() error {
 
 	s.mu.Lock()
 	s.set = set
-	s.handedBack = false // the new target gets the free value too
+	s.handedBack = false
 	s.mu.Unlock()
 
 	return nil
@@ -274,12 +314,31 @@ func (site *Site) rebuildEnergyGetter() error {
 }
 
 func (site *Site) haConnection() (*homeassistant.Connection, error) {
+	s := site.peak()
+
+	s.mu.Lock()
+	conn := s.conn
+	s.mu.Unlock()
+
+	if conn != nil {
+		return conn, nil
+	}
+
 	uri, err := site.peakURI()
 	if err != nil {
 		return nil, err
 	}
 
-	return homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", false)
+	conn, err = homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", false)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	s.conn = conn
+	s.mu.Unlock()
+
+	return conn, nil
 }
 
 // numberSetter returns a setter writing to a Home Assistant number entity. Each
@@ -364,6 +423,7 @@ func (site *Site) publishPeakSettings() {
 	site.publish(keys.PeakShavingChargeEntity, chargeEntity)
 	site.publish(keys.PeakShavingEnergyEntity, energyEntity)
 
+	site.publishOmniSettings()
 	site.publishChargePower()
 }
 
@@ -504,7 +564,16 @@ func (site *Site) updatePeakShaving(state siteState) {
 	// against a 5kW limit asks for exactly 10000W
 	site.publish(keys.PeakShavingActive, shaving)
 	site.publish(keys.PeakShavingPower, value)
-	site.writePeakValue(value)
+
+	// the battery type Marstek is switched and written at the end of the cycle,
+	// see applyOmni
+	if site.omniType() {
+		s.mu.Lock()
+		s.omniPeakValue = value
+		s.mu.Unlock()
+	} else {
+		site.writePeakValue(value)
+	}
 
 	// also covers a setpoint written while switching off, which then gets
 	// replaced by the free value in the next cycle
@@ -524,19 +593,57 @@ func (site *Site) writePeakValue(value float64) bool {
 	set := s.set
 	s.mu.Unlock()
 
-	return site.writeOutput("peak shaving", set, value)
+	if !site.writeOutput("peak shaving", set, value) {
+		return false
+	}
+
+	site.setPeakOwned(value != site.peakFreeValue())
+
+	return true
 }
 
-// handBackPeak writes the free value unless it is already in the entity. While
-// peak shaving is off nothing else is sent, a single write is enough.
+// setPeakOwned records whether evcc holds the battery back through the entity,
+// see peakState.owned
+func (site *Site) setPeakOwned(owned bool) {
+	s := site.peak()
+
+	s.mu.Lock()
+	changed := s.owned != owned
+	s.owned = owned
+	s.mu.Unlock()
+
+	if changed {
+		settings.SetBool(keys.PeakShavingOwned, owned)
+	}
+}
+
+// peakOwned reports whether evcc holds the battery back, see peakState.owned
+func (site *Site) peakOwned() bool {
+	s := site.peak()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.owned
+}
+
+// handBackPeak writes the free value, but only if evcc held the battery back
+// before: an entity evcc never controlled is not touched. While peak shaving is
+// off nothing else is sent, a single write is enough.
 func (site *Site) handBackPeak() {
+	// the battery type Marstek is released by applyOmni at the end of the cycle,
+	// the free value is never written to it
+	if site.omniType() {
+		return
+	}
+
 	s := site.peak()
 
 	s.mu.Lock()
 	done := s.handedBack
 	s.mu.Unlock()
 
-	if done || !site.writePeakValue(site.peakFreeValue()) {
+	if done || !site.peakOwned() || !site.writePeakValue(site.peakFreeValue()) {
 		return
 	}
 
@@ -558,6 +665,13 @@ func (site *Site) writeChargeValue(value float64) {
 	s.mu.Unlock()
 
 	site.publish(keys.PeakShavingChargeSetpoint, value)
+
+	// the battery type Marstek is written by applyOmni, after the manual control
+	// and the mode
+	if site.omniType() {
+		return
+	}
+
 	site.writeOutput("grid charge power", set, value)
 }
 
@@ -570,14 +684,78 @@ func (site *Site) writeOutput(name string, set func(float64) error, value float6
 		return false
 	}
 
-	if err := set(value); err != nil {
-		site.log.ERROR.Printf("%s: write %.0fW: %v", name, value, err)
+	err := set(value)
+	if !site.logWrite(name, fmt.Sprintf("write %.0fW", value), err) {
 		return false
 	}
 
 	site.log.DEBUG.Printf("%s: %.0fW", name, value)
 
 	return true
+}
+
+// logWrite reports the result of a write to an output and returns whether it
+// landed. The same error is logged once as an error and then at debug level until
+// a write succeeds again, so a rejected write does not fill the log with one line
+// per cycle.
+func (site *Site) logWrite(name, what string, err error) bool {
+	s := site.peak()
+
+	s.mu.Lock()
+	last, failed := s.writeErr[name]
+
+	var text string
+	if err != nil {
+		text = writeErrorText(err)
+		if s.writeErr == nil {
+			s.writeErr = make(map[string]string)
+		}
+		s.writeErr[name] = text
+	} else {
+		delete(s.writeErr, name)
+	}
+	s.mu.Unlock()
+
+	switch {
+	case err == nil && failed:
+		site.log.INFO.Printf("%s: %s ok again", name, what)
+	case err == nil:
+	case failed && text == last:
+		site.log.DEBUG.Printf("%s: %s: %s", name, what, text)
+	default:
+		site.log.ERROR.Printf("%s: %s: %s", name, what, text)
+	}
+
+	return err == nil
+}
+
+// maxErrorBody is the length of an error response shown in the log
+const maxErrorBody = 200
+
+// writeErrorText returns the text of a failed write. It appends the response of
+// the server, shortened to one line. Home Assistant answers an exception of an
+// integration with a general 500 only, the reason is in its own log.
+func writeErrorText(err error) string {
+	text := err.Error()
+
+	var se *request.StatusError
+	if !errors.As(err, &se) {
+		return text
+	}
+
+	if body := strings.Join(strings.Fields(string(se.Body())), " "); body != "" {
+		if r := []rune(body); len(r) > maxErrorBody {
+			body = string(r[:maxErrorBody]) + "..."
+		}
+		text += ": " + body
+	}
+
+	if resp := se.Response(); resp != nil && resp.Request != nil && se.StatusCode() == http.StatusInternalServerError &&
+		strings.Contains(resp.Request.URL.Path, "/api/services/") {
+		text += " (details in the Home Assistant log)"
+	}
+
+	return text
 }
 
 // peakEnergy returns the grid import counter in kWh and where it came from: the
@@ -749,6 +927,7 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 	defer site.publishLmStatus(gridCharge)
 	defer site.publishLmWallboxes()
 	defer site.checkLmFollowing()
+	defer site.applyOmni() // after the battery mode, see site_peak_omni.go
 
 	site.peakCheckMeters()
 
@@ -798,6 +977,9 @@ func (site *Site) SetPeakShaving(val bool) error {
 	if val && !configured {
 		return errors.New("no target entity configured")
 	}
+	if val && site.omniTypeWithoutEntities() {
+		return errors.New("no manual switch or mode entity configured")
+	}
 
 	site.log.DEBUG.Println("set peak shaving:", val)
 
@@ -818,6 +1000,7 @@ func (site *Site) SetPeakShaving(val bool) error {
 		// hand control back when switching off
 		if !val {
 			site.handBackPeak()
+			site.applyOmni()
 		}
 	}
 
@@ -855,14 +1038,29 @@ func (site *Site) SetPeakShavingEntity(entity string) error {
 	// swapped and handed back in one go, a cycle writing in between could put its
 	// setpoint into the previous target after the free value
 	s.out.Lock()
+	omni := site.omniType()
 	s.mu.Lock()
 	previousSet := s.set
 	s.mu.Unlock()
 
-	err := site.rebuildPeakSetter()
+	// the battery type Marstek never gets the free value; without a target
+	// applyOmni is gone, so the manual control is released here, before
+	var err error
+	if omni && entity == "" && !site.releaseOmni() {
+		err = errHandBack
+	}
+
 	if err == nil {
+		err = site.rebuildPeakSetter()
+	}
+
+	switch {
+	case err != nil || omni || !site.peakOwned():
+	default:
 		// the previous target would otherwise keep the last setpoint
-		site.writeOutput("peak shaving", previousSet, site.peakFreeValue())
+		if site.writeOutput("peak shaving", previousSet, site.peakFreeValue()) {
+			site.setPeakOwned(false)
+		}
 	}
 	s.out.Unlock()
 
@@ -925,8 +1123,11 @@ func (site *Site) SetPeakShavingChargeEntity(entity string) error {
 
 	err := site.rebuildChargeSetter()
 	if err == nil {
-		// the previous target would otherwise keep charging at the last setpoint
-		site.writeOutput("grid charge power", previousSet, 0)
+		// the previous target would otherwise keep charging at the last setpoint,
+		// which the battery type Marstek only accepted in manual control
+		if !site.omniType() || site.peakOwned() {
+			site.writeOutput("grid charge power", previousSet, 0)
+		}
 
 		// on/off charging writes no setpoint, the overview would keep the last one
 		s.mu.Lock()

@@ -194,6 +194,14 @@ export interface LmState {
   peakShavingCircuit?: string;
   /** Home Assistant number entity receiving the peak shaving setpoint. */
   peakShavingEntity?: string;
+  /** Battery type: byd writes the power only, marstek also switches Omnibattery to manual control. */
+  peakShavingBatteryType?: "byd" | "marstek";
+  /** Home Assistant switch of the manual control (marstek). */
+  peakShavingManualEntity?: string;
+  /** Home Assistant select of the forced mode None, Charge, Discharge (marstek). */
+  peakShavingModeEntity?: string;
+  /** Forced mode evcc holds on a marstek battery, empty = not controlling. */
+  peakShavingManual?: "" | "None" | "Charge" | "Discharge";
   /** Average grid power in W of the running 15 minute metering window. */
   peakShavingWindowAvg?: number;
   /** Grid power that keeps the window's average at the limit, in W. */

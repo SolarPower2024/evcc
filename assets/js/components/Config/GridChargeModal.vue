@@ -26,6 +26,10 @@
 					data-testid="gridcharge-entity"
 				/>
 			</FormRow>
+			<!-- custom: Omnibattery is switched to manual control through it, see core/site_peak_omni.go -->
+			<p v-if="marstek" class="small text-muted" data-testid="gridcharge-marstek">
+				{{ $t("config.gridcharge.marstekHint") }}
+			</p>
 
 			<FormRow
 				id="gridChargePower"
@@ -119,6 +123,9 @@ export default {
 		},
 		normalizedChargePower() {
 			return Math.max(0, Math.round(Number(this.chargePower) || 0));
+		},
+		marstek() {
+			return store.state?.peakShavingBatteryType === "marstek";
 		},
 		dynamic() {
 			return !!store.state?.peakShavingChargeEntity;

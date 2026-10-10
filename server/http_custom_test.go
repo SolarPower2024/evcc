@@ -131,6 +131,11 @@ var customRouteSamples = map[string]string{
 	"peakshavingreserve":            "/peakshavingreserve/40",
 	"peakshavingentity":             "/peakshavingentity/input_number.peak",
 	"peakshavingentitydelete":       "/peakshavingentity",
+	"peakshavingbatterytype":        "/peakshavingbatterytype/marstek",
+	"peakshavingmanualentity":       "/peakshavingmanualentity/switch.marstek_manual",
+	"peakshavingmanualentitydelete": "/peakshavingmanualentity",
+	"peakshavingmodeentity":         "/peakshavingmodeentity/select.marstek_mode",
+	"peakshavingmodeentitydelete":   "/peakshavingmodeentity",
 	"peakshavingchargeentity":       "/peakshavingchargeentity/input_number.charge",
 	"peakshavingchargeentitydelete": "/peakshavingchargeentity",
 	"peakshavingenergyentity":       "/peakshavingenergyentity/sensor.grid_import",
@@ -184,9 +189,44 @@ func TestCustomRoutesMatch(t *testing.T) {
 	assert.Equal(t, 40.0, site.GetPeakShavingReserve())
 	assert.Equal(t, 1000.0, site.GetPeakFollowBuffer())
 	assert.Equal(t, 4000.0, site.GetPeakShavingChargePower())
+	assert.Equal(t, "marstek", site.GetPeakShavingBatteryType())
 	assert.False(t, site.GetLmEnabled())
 	assert.True(t, site.GetSnowCover())
 	assert.True(t, site.GetSnowAuto())
+}
+
+// TestPeakMarstekRoutes: the battery type takes byd and marstek only, the entities
+// of a wrong domain are a 400 and the type stays
+func TestPeakMarstekRoutes(t *testing.T) {
+	site := core.NewSite()
+
+	r := mux.NewRouter()
+	for _, rt := range customSiteRoutes(site) {
+		r.Methods(rt.Methods()...).Path(rt.Pattern).Handler(rt.HandlerFunc)
+	}
+
+	do := func(method, path string) int {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(method, path, nil))
+		return w.Code
+	}
+
+	assert.Equal(t, http.StatusOK, do(http.MethodPost, "/peakshavingbatterytype/marstek"))
+	assert.Equal(t, "marstek", site.GetPeakShavingBatteryType())
+	assert.Equal(t, http.StatusNotFound, do(http.MethodPost, "/peakshavingbatterytype/zendure"))
+	assert.Equal(t, "marstek", site.GetPeakShavingBatteryType())
+	assert.Equal(t, http.StatusOK, do(http.MethodPost, "/peakshavingbatterytype/byd"))
+	assert.Equal(t, "byd", site.GetPeakShavingBatteryType())
+
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, "/peakshavingmanualentity/sensor.x"))
+	assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, "/peakshavingmodeentity/sensor.x"))
+	assert.Empty(t, site.GetPeakShavingManualEntity())
+	assert.Empty(t, site.GetPeakShavingModeEntity())
+
+	assert.Equal(t, http.StatusOK, do(http.MethodPost, "/peakshavingmanualentity/switch.manual"))
+	assert.Equal(t, "switch.manual", site.GetPeakShavingManualEntity())
+	assert.Equal(t, http.StatusOK, do(http.MethodDelete, "/peakshavingmanualentity"))
+	assert.Empty(t, site.GetPeakShavingManualEntity())
 }
 
 func must[T any](v T, err error) T {
