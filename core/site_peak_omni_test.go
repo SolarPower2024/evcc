@@ -419,7 +419,8 @@ func TestOmniProtectionLimitNotReadable(t *testing.T) {
 
 // TestOmniEffectiveReserve verifies that a reserve below Omnibattery's lowest
 // threshold, e.g. from a battery profile, counts as that threshold everywhere:
-// evcc's state of the reserve, the optimizer and Omnibattery agree
+// evcc's state of the reserve, the optimizer, Omnibattery and the ui agree; the
+// value set stays stored for BYD
 func TestOmniEffectiveReserve(t *testing.T) {
 	sc, ha := newOmni(t)
 	sc.site.peak().reserve = 15
@@ -432,12 +433,35 @@ func TestOmniEffectiveReserve(t *testing.T) {
 	assert.True(t, on)
 	assert.Equal(t, 20.0, reserve)
 
+	// the ui and the api show the reserve in effect, the value set stays stored
+	pub := make(chan util.Param, 1000)
+	sc.site.valueChan = pub
+	reservePublished := func() any {
+		var v any
+		for {
+			select {
+			case p := <-pub:
+				if p.Key == keys.PeakShavingReserve {
+					v = p.Val
+				}
+			default:
+				return v
+			}
+		}
+	}
+
+	assert.Equal(t, 20.0, sc.site.GetPeakShavingReserve())
+	sc.site.publishPeakSettings()
+	assert.Equal(t, 20.0, reservePublished())
+
+	require.NoError(t, sc.site.SetPeakShavingReserve(12))
+	assert.Equal(t, 20.0, reservePublished())
+	assert.Equal(t, 20.0, sc.site.GetPeakShavingReserve())
+
 	// BYD keeps the reserve as set
-	s := sc.site.peak()
-	s.mu.Lock()
-	s.batteryType = batteryTypeBYD
-	assert.Equal(t, 15.0, s.effectiveReserve())
-	s.mu.Unlock()
+	require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeBYD))
+	assert.Equal(t, 12.0, reservePublished(), "published again with the type")
+	assert.Equal(t, 12.0, sc.site.GetPeakShavingReserve())
 }
 
 // TestOmniGridChargeWithoutManualWarns verifies that grid charging for the

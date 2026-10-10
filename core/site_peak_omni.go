@@ -111,8 +111,9 @@ func (s *peakState) configured() bool {
 
 // effectiveReserve is the reserve peak shaving works with. For the battery type
 // Marstek it is at least Omnibattery's lowest soc threshold, so evcc's state of
-// the reserve, the optimizer and Omnibattery agree also with a lower reserve set
-// by a profile or the api. Called with s.mu held.
+// the reserve, the optimizer, Omnibattery and the ui agree also with a lower
+// reserve set by a profile or the api; the value set stays stored for BYD.
+// Called with s.mu held.
 func (s *peakState) effectiveReserve() float64 {
 	if s.batteryType == batteryTypeMarstek {
 		return max(minOmniProtSoc, s.reserve)
@@ -533,6 +534,7 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 	s.mu.Lock()
 	s.batteryType = typ
 	s.handedBack = false
+	reserve := s.effectiveReserve()
 	s.mu.Unlock()
 
 	s.out.Unlock()
@@ -540,6 +542,7 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 	site.log.DEBUG.Println("set peak shaving battery type:", typ)
 	settings.SetString(keys.PeakShavingBatteryType, typ)
 	site.publish(keys.PeakShavingBatteryType, typ)
+	site.publish(keys.PeakShavingReserve, reserve) // the reserve in effect depends on the type
 
 	return nil
 }

@@ -363,7 +363,8 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
   the write tolerance is in W and does not apply
   (`TestOmniProtectionThresholdIgnoresWriteTolerance`). The soc selects offer
   95 to 20 % in 5 % steps for this type; a lower reserve from a profile or the
-  api counts as 20 % everywhere, for evcc's state, the optimizer and Omnibattery
+  api counts as 20 % everywhere, for evcc's state, the optimizer, Omnibattery and
+  the battery page and api, which show 20 %; the value set stays stored for BYD
   (`TestOmniEffectiveReserve`). There is no reserve hysteresis for
   Marstek (`TestOmniNoHysteresis`): evcc's state of the reserve changes exactly
   at the reserve, as Omnibattery's threshold does; the setting `hysteresis`

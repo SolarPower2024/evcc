@@ -447,7 +447,7 @@ func (site *Site) publishPeakSettings() {
 	s := site.peak()
 
 	s.mu.Lock()
-	enabled, limit, reserve, entity, charge, circuit := s.enabled, s.limit, s.reserve, s.entity, s.chargePower, s.circuit
+	enabled, limit, reserve, entity, charge, circuit := s.enabled, s.limit, s.effectiveReserve(), s.entity, s.chargePower, s.circuit
 	chargeEntity, energyEntity := s.chargeEntity, s.energyEntity
 	s.mu.Unlock()
 
@@ -1384,13 +1384,15 @@ func (site *Site) SetPeakShavingLimit(limit float64) error {
 	return nil
 }
 
+// GetPeakShavingReserve returns the reserve in effect, see effectiveReserve: for
+// the battery type Marstek at least 20 %. The value set stays stored, for BYD.
 func (site *Site) GetPeakShavingReserve() float64 {
 	s := site.peak()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.reserve
+	return s.effectiveReserve()
 }
 
 func (site *Site) SetPeakShavingReserve(soc float64) error {
@@ -1403,12 +1405,13 @@ func (site *Site) SetPeakShavingReserve(soc float64) error {
 	s.mu.Lock()
 	changed := s.reserve != soc
 	s.reserve = soc
+	effective := s.effectiveReserve()
 	s.mu.Unlock()
 
 	if changed {
 		site.log.DEBUG.Println("set peak shaving reserve:", soc)
 		settings.SetFloat(keys.PeakShavingReserve, soc)
-		site.publish(keys.PeakShavingReserve, soc)
+		site.publish(keys.PeakShavingReserve, effective)
 		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 	}
 
