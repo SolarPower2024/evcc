@@ -374,7 +374,7 @@ func TestOmniProtectionLimitMinimum(t *testing.T) {
 	sc, ha := newOmni(t)
 	conn := sc.site.peak().conn
 
-	require.True(t, sc.site.omniWriteLimit(conn, haProtLimit, 120))
+	require.True(t, sc.site.omniWriteLimit(conn, haProtLimit, 120, ""))
 	assert.Equal(t, []string{"set_value " + haProtLimit + " 500"}, ha.take())
 	assert.Equal(t, "500", ha.get(haProtLimit))
 }
@@ -389,8 +389,15 @@ func TestOmniProtectionLimitWholeWatts(t *testing.T) {
 	ha.states["number.limit_nostep"] = &haEntity{"20000", map[string]any{"min": 500.0, "max": 20000.0, "step": 0.0}}
 	ha.mu.Unlock()
 
-	require.True(t, sc.site.omniWriteLimit(conn, "number.limit_nostep", 4733.8))
+	require.True(t, sc.site.omniWriteLimit(conn, "number.limit_nostep", 4733.8, ""))
 	assert.Equal(t, []string{"set_value number.limit_nostep 4733"}, ha.take())
+}
+
+// TestOmniLimitBasis verifies the log explains a limit that differs from the
+// peak limit set
+func TestOmniLimitBasis(t *testing.T) {
+	assert.Equal(t, "allowed for the rest of the 15 min window, peak limit 3000W", omniLimitBasis(true, 3000))
+	assert.Equal(t, "no window, peak limit 3000W", omniLimitBasis(false, 3000))
 }
 
 // TestOmniProtectionLimitNotReadable verifies that a limit entity that cannot be
