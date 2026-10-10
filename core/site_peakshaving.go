@@ -85,13 +85,12 @@ type peakState struct {
 	modeEntity   string // select of the forced mode
 	omniShown    string // the forced mode published, empty = not controlling
 
-	protSwitch   string              // switch of Omnibattery's peak shaving
-	protLimit    string              // number entity of its limit
-	protSoc      string              // number entity of its soc threshold
-	protOwned    bool                // evcc turned the switch on, persisted like owned
-	protLimitSet func(float64) error // resolved from protLimit, checks the entity
-	omniWarn     sync.Once           // grid charging without manual control, logged once
-	protSocSet   func(float64) error // resolved from protSoc
+	protSwitch string              // switch of Omnibattery's peak shaving
+	protLimit  string              // number entity of its limit, see omniWriteLimit
+	protSoc    string              // number entity of its soc threshold
+	protSocSet func(float64) error // resolved from protSoc
+	protOwned  bool                // evcc turned the switch on, persisted like owned
+	omniWarn   sync.Once           // grid charging without manual control, logged once
 
 	conn *homeassistant.Connection // shared, built on first use
 
@@ -240,8 +239,8 @@ func (site *Site) restorePeakSettings() {
 	if err := site.rebuildChargeSetter(); err != nil {
 		site.log.ERROR.Printf("grid charge power: %v", err)
 	}
-	if err := site.rebuildProtSetters(); err != nil {
-		site.log.ERROR.Printf("peak shaving limit: %v", err)
+	if err := site.rebuildProtSetter(); err != nil {
+		site.log.ERROR.Printf("peak shaving soc threshold: %v", err)
 	}
 	if err := site.rebuildEnergyGetter(); err != nil {
 		site.log.ERROR.Printf("peak shaving energy: %v", err)

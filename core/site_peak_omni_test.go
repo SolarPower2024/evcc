@@ -196,7 +196,7 @@ func newOmni(t *testing.T) (*scenario, *fakeHA) {
 	s.protSoc = haProtSoc
 	require.NoError(t, sc.site.rebuildPeakSetter())
 	require.NoError(t, sc.site.rebuildChargeSetter())
-	require.NoError(t, sc.site.rebuildProtSetters())
+	require.NoError(t, sc.site.rebuildProtSetter())
 
 	return sc, ha
 }
@@ -330,8 +330,8 @@ func TestOmniProtectionOn(t *testing.T) {
 }
 
 // TestOmniProtectionLimitFollowsWindow verifies that the limit is the allowed
-// power of the window, rounded down to the step of the entity, and written only
-// where the entity differs by more than half a step
+// power of the window, rounded down to the step of the entity, written right away
+// when it falls and only from minOmniLimitRise when it rises
 func TestOmniProtectionLimitFollowsWindow(t *testing.T) {
 	sc, ha := protecting(t)
 	clk := mockClock(sc)
@@ -778,7 +778,7 @@ func TestOmniTypeNeedsEntitiesWhileOn(t *testing.T) {
 		sc, ha := newOmni(t)
 		s := sc.site.peak()
 		s.batteryType = batteryTypeBYD
-		s.protLimit, s.protLimitSet = "", nil
+		s.protLimit = ""
 
 		require.ErrorIs(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek), errProtMissing)
 		assert.Equal(t, batteryTypeBYD, sc.site.GetPeakShavingBatteryType())
@@ -1004,7 +1004,7 @@ func TestOmniReleaseAfterRestart(t *testing.T) {
 	again.site.restorePeakSettings()
 
 	assert.True(t, again.site.omniEnabled())
-	assert.True(t, again.site.omniProtEnabled())
+	assert.True(t, again.site.peakConfigured())
 	assert.True(t, again.site.peakOwned())
 	assert.True(t, again.site.peak().protOwned)
 	assert.Equal(t, haProtSwitch, again.site.GetPeakShavingProtSwitch())
@@ -1084,7 +1084,7 @@ func TestOmniEntityChecks(t *testing.T) {
 	require.NoError(t, sc.site.SetPeakShavingProtSoc("input_number.soc"))
 	assert.Equal(t, "input_number.limit", sc.site.GetPeakShavingProtLimit())
 	assert.Equal(t, "input_number.soc", sc.site.GetPeakShavingProtSoc())
-	assert.True(t, sc.site.omniProtEnabled(), "swapped setters are there")
+	assert.True(t, sc.site.peakConfigured(), "the swapped setter is there")
 
 	// the battery type
 	require.Error(t, sc.site.SetPeakShavingBatteryType("zendure"))
@@ -1102,13 +1102,13 @@ func TestOmniPeakShavingNeedsEntities(t *testing.T) {
 
 	for _, missing := range []func(){
 		func() { s.protSwitch = "" },
-		func() { s.protLimit, s.protLimitSet = "", nil },
+		func() { s.protLimit = "" },
 		func() { s.protSoc, s.protSocSet = "", nil },
 	} {
 		missing()
 		require.ErrorIs(t, sc.site.SetPeakShaving(true), errProtMissing)
 		s.protSwitch, s.protLimit, s.protSoc = haProtSwitch, haProtLimit, haProtSoc
-		require.NoError(t, sc.site.rebuildProtSetters())
+		require.NoError(t, sc.site.rebuildProtSetter())
 	}
 
 	require.NoError(t, sc.site.SetPeakShaving(true), "neither discharge, switch nor mode")
