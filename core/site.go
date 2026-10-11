@@ -452,6 +452,7 @@ func (site *Site) restoreSettings() error {
 	if testing.Testing() {
 		return nil
 	}
+	defer site.restoreCustom() // custom: runs also when a restore step below fails, see core/site_lm.go
 	if v, err := settings.Float(keys.BufferSoc); err == nil {
 		if err := site.SetBufferSoc(v); err != nil && !errors.Is(err, ErrBatteryNotConfigured) {
 			return err
@@ -509,8 +510,6 @@ func (site *Site) restoreSettings() error {
 	}
 	site.publish(keys.OptimizerChargingStrategy, site.GetOptimizerChargingStrategy())
 	site.publish(keys.OptimizerChargingStrategies, optimizerChargingStrategies)
-
-	site.restoreCustom() // custom: see core/site_lm.go
 
 	// drop legacy accumulator-based forecast settings (now stored via metrics collector)
 	settings.Delete("solarAccForecast")
