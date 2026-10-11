@@ -592,21 +592,81 @@ func TestHigherLoadpointStartsOnWhatCanBeFreed(t *testing.T) {
 
 // TestLoadpointDemand: a loadpoint runs on any power from its minimum up, so
 // load management only needs that much of its demand to let it start; one that
-// is on and idle stands for it, one that charges does not
+// is on and idle stands for it, one that charges does not. One that does not use
+// what it is offered is not regulated, more headroom does not make it draw more.
 func TestLoadpointDemand(t *testing.T) {
 	s := newIdleSetup(t, 22000, 2000)
 	min := currentToPower(6, 3)
 
-	d := s.high.lmCircuit().demand(11040, 0, min)
+	d := s.high.lmCircuit().demand(11040, 0, min, false)
 	assert.Equal(t, lm.Demand{Regulated: true, Min: min, Standing: min}, d, "idle")
 
 	// asking for less than the minimum is not asking for anything to stand
-	d = s.high.lmCircuit().demand(min-1, 0, min)
+	d = s.high.lmCircuit().demand(min-1, 0, min, false)
 	assert.Zero(t, d.Standing)
 
-	d = s.low.lmCircuit().demand(11040, 2000, min)
+	d = s.low.lmCircuit().demand(11040, 2000, min, false)
 	assert.Equal(t, lm.Demand{Regulated: true, Min: min - 2000}, d, "charging, the minimum less what it draws")
 
-	d = s.low.lmCircuit().demand(11040, 5000, min)
+	d = s.low.lmCircuit().demand(11040, 5000, min, false)
 	assert.Equal(t, lm.Demand{Regulated: true}, d, "charging above its minimum")
+
+	d = s.low.lmCircuit().demand(11040, 2000, min, true)
+	assert.Equal(t, lm.Demand{Min: min - 2000}, d, "charging, but not using what it is offered")
+}
+
+// TestUnusedOffer: only a charging loadpoint that draws more than the slack
+// less than it is offered does not use its offer
+func TestUnusedOffer(t *testing.T) {
+	s := newIdleSetup(t, 22000, 2000)
+
+	// offered 16 A
+	assert.False(t, s.low.lmCircuit().unusedOffer(16), "draws its offer")
+	assert.False(t, s.low.lmCircuit().unusedOffer(15), "within the slack")
+	assert.True(t, s.low.lmCircuit().unusedOffer(14.9), "clearly below its offer")
+	assert.True(t, s.low.lmCircuit().unusedOffer(0))
+
+	s.low.offeredCurrent = 0
+	assert.False(t, s.low.lmCircuit().unusedOffer(0), "nothing offered")
+
+	s.high.offeredCurrent = 16
+	assert.False(t, s.high.lmCircuit().unusedOffer(0), "not charging, in state B")
+}
+
+// TestLoadpointBelowItsOfferDoesNotShedLowerLoad: the circuit has 11 kW with
+// 2 kW base load and a 3 kW heater of low priority. The loadpoint of higher
+// priority asks for 16 A. If it takes what it is offered, the heater gives way
+// for it. A car in its taper takes less than it is offered, 5 A of 16 A: freeing
+// the heater would not make it draw more, and the heater would stay off until the
+// car is full.
+func TestLoadpointBelowItsOfferDoesNotShedLowerLoad(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		offered float64 // A
+		drawn   float64 // A
+		heater  bool    // runs on
+	}{
+		{"draws what it is offered", 6, 6, false},
+		{"draws less than it is offered", 16, 5, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newIdleSetup(t, 11000, 2000)
+
+			s.high.status = api.StatusC
+			s.high.offeredCurrent = tc.offered
+			s.high.chargePower = currentToPower(tc.drawn, 3)
+
+			s.low.charger = &lmSwitch{rated: 3000}
+			s.low.chargePower = 3000
+
+			for i := range 4 {
+				s.meter.power = s.base + s.low.chargePower + s.high.chargePower
+				require.NoError(t, s.circuit.Update(nil))
+				s.high.lmLimit(16)
+
+				limited := s.low.lmLimit(16)
+				assert.Equal(t, tc.heater, limited > 0, "round %d: heater limit %.3gA", i, limited)
+			}
+		})
+	}
 }

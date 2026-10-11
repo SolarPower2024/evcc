@@ -83,7 +83,11 @@ the demand. For a loadpoint it is enough to cover its minimum power less what
 it draws: the lower loads then leave all there is, and the loadpoint starts on
 that. Only a load that runs in full or not at all, a heater or the battery,
 needs its whole demand (`TestRegulatedLoadGetsItsMinimum`,
-`TestHigherLoadpointStartsOnWhatCanBeFreed`).
+`TestHigherLoadpointStartsOnWhatCanBeFreed`). So does a loadpoint that draws
+more than 1 A less than it is offered, like a car in its taper: part of the
+increase would not make it draw more, so the loads below are only shed for it
+when its whole demand can be freed
+(`TestLoadpointBelowItsOfferDoesNotShedLowerLoad`).
 
 All state lives in one `lm.Manager` per site (`site.lmm()`); loadpoints reach it
 through their site (`lp.lmm()`). The check runs inside evcc's `setLimit` through
