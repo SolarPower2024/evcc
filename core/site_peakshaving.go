@@ -77,6 +77,11 @@ type peakState struct {
 	owned    bool
 	writeErr map[string]string // the last error logged per output, see writeOutput
 
+	// evcc is stopping: the cycle writes nothing any more while the shutdown
+	// function hands back, see site_peak_shutdown.go
+	stopped      bool
+	shutdownOnce sync.Once
+
 	// battery type Marstek (Omnibattery), see site_peak_omni.go: evcc drives
 	// Omnibattery's own peak shaving and switches the battery to manual control
 	// while grid charging
@@ -252,6 +257,8 @@ func (site *Site) restorePeakSettings() {
 	site.restorePeakTariff()
 	site.publishPeakSettings()
 	site.publishLmPriorities()
+
+	site.registerPeakShutdown() // hands the battery back on stopping, see site_peak_shutdown.go
 }
 
 // peakURI returns the Home Assistant endpoint. Running as an add-on, the
@@ -649,6 +656,10 @@ func (site *Site) writePeakValue(value float64) bool {
 	s.out.Lock()
 	defer s.out.Unlock()
 
+	if site.peakStopped() {
+		return false
+	}
+
 	s.mu.Lock()
 	set := s.set
 	s.mu.Unlock()
@@ -719,6 +730,10 @@ func (site *Site) writeChargeValue(value float64) {
 	s.out.Lock()
 	defer s.out.Unlock()
 
+	if site.peakStopped() {
+		return
+	}
+
 	s.mu.Lock()
 	set := s.chargeSet
 	s.chargeSetpoint = value
@@ -773,6 +788,12 @@ func (site *Site) logWrite(name, what string, err error) bool {
 	// refused after a call timed out in this cycle, that call logged the cause
 	if errors.Is(err, errHAHung) {
 		site.log.TRACE.Printf("%s: %s: %v", name, what, err)
+		return false
+	}
+
+	// stopping, e.g. with the host: Home Assistant may refuse the call, expected
+	if err != nil && site.peakStopped() {
+		site.log.INFO.Printf("%s: %s: %s (stopping)", name, what, writeErrorText(err))
 		return false
 	}
 

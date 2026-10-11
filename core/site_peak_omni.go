@@ -161,6 +161,10 @@ func (site *Site) applyOmni() {
 	s.out.Lock()
 	defer s.out.Unlock()
 
+	if site.peakStopped() {
+		return
+	}
+
 	site.applyOmniCharge()
 	site.applyOmniProtection()
 }
