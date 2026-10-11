@@ -357,6 +357,7 @@ func (site *Site) setProtOwned(owned bool) {
 
 	if changed {
 		settings.SetBool(keys.PeakShavingProtOwned, owned)
+		site.persistHeld()
 	}
 }
 

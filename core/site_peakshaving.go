@@ -685,7 +685,17 @@ func (site *Site) setPeakOwned(owned bool) {
 
 	if changed {
 		settings.SetBool(keys.PeakShavingOwned, owned)
+		site.persistHeld()
 	}
+}
+
+// persistHeld stores the mark of what evcc holds at once. SetBool only keeps it
+// in memory until the next flush (every minute and when evcc stops); a crash in
+// between would lose the mark, and nothing would hand the battery back after the
+// start. Called with s.out held and only on a change, blocks up to the busy
+// timeout of the database at worst. A failing save is logged once per cause.
+func (site *Site) persistHeld() {
+	site.logWrite("peak shaving mark", "save", settings.Persist())
 }
 
 // peakOwned reports whether evcc holds the battery back, see peakState.owned
