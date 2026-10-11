@@ -212,7 +212,8 @@ applies. Survives a restart halfway.
 *Einmalig laden* (battery page): charges once up to a soc and switches itself
 off, right away or by a time at the cheapest slots before it (evcc's planner on
 the planner tariff; right away once the time passed or the duration is
-unknown). Cancelled when the battery is removed. A round power button starts it
+unknown, but an order more than 2 h past its time is ended, also after a
+restart). Cancelled when the battery is removed. A round power button starts it
 (outlined) and stops it (filled while running). See `core/site_lm_once.go`.
 
 Both pass the same gate as price-based grid charging: the circuit

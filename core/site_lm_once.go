@@ -51,6 +51,17 @@ func (site *Site) publishGridChargeOnce(o gridChargeOnce) {
 // maxGridChargeOnceAhead is how far ahead the time of day may be
 const maxGridChargeOnceAhead = 48 * time.Hour
 
+// maxGridChargeOnceLate is how long after its time an order still charges right
+// away: a restart or an outage in the night, or the peak gate holding the
+// charging back until then. An order later than that is ended.
+const maxGridChargeOnceLate = 2 * time.Hour
+
+// onceExpired reports whether an order by a time is past it by more than
+// maxGridChargeOnceLate
+func onceExpired(o gridChargeOnce, now time.Time) bool {
+	return o.Target > 0 && !o.Until.IsZero() && now.After(o.Until.Add(maxGridChargeOnceLate))
+}
+
 func (site *Site) gridChargeOnce() gridChargeOnce {
 	s := site.lms()
 
@@ -81,9 +92,20 @@ func (site *Site) restoreGridChargeOnce() {
 		s.mu.Lock()
 		s.gridOnce = o
 		s.mu.Unlock()
+
+		if onceExpired(o, time.Now()) {
+			site.endExpiredGridChargeOnce()
+		}
 	}
 
 	site.publishGridChargeOnce(site.gridChargeOnce())
+}
+
+// endExpiredGridChargeOnce ends an order whose time is long past, so that it does
+// not charge right away much later
+func (site *Site) endExpiredGridChargeOnce() {
+	site.log.INFO.Println("battery grid charge once: time passed, cancelled")
+	site.setGridChargeOnce(gridChargeOnce{})
 }
 
 // SetBatteryGridChargeOnce starts one-time grid charging up to target soc, right
@@ -141,6 +163,11 @@ func (site *Site) batteryGridChargeOnceActive() bool {
 	if !site.batteryConfigured() {
 		site.log.INFO.Println("battery grid charge once: no battery, cancelled")
 		site.setGridChargeOnce(gridChargeOnce{})
+		return false
+	}
+
+	if onceExpired(o, time.Now()) {
+		site.endExpiredGridChargeOnce()
 		return false
 	}
 
