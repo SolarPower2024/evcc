@@ -294,10 +294,12 @@ to such an entity with success and does nothing (`TestNumberSetterReadFailure`,
 `TestOmniNotAvailableKeepsHold`). A release that meets one keeps what evcc holds
 (`peakShavingOwned`, `peakShavingProtOwned`) and tries again in the next cycle,
 also while Home Assistant starts and does not know the entities yet
-(`TestOmniReleaseHangs`, `TestOmniEntityNotLoaded`). Only a switch that Home
-Assistant does not know at all (deleted, renamed; 404) counts as off, as the
-release would otherwise never land and block every change of the entities
-(`TestOmniSwitchGone`).
+(`TestOmniReleaseHangs`, `TestOmniEntityNotLoaded`). Only an entity that Home
+Assistant does not know at all (deleted, renamed; 404 when reading it) counts as
+handed back in a release, with a warning in the log: a switch as off, the charge
+power and the setpoint as written. The release would otherwise never land, keep
+the manual control of a Marstek on in the mode Charge and block every change of
+the entities (`TestOmniSwitchGone`, `TestOmniReleaseEntityGone`).
 
 The limit applies to the clock-aligned 15 minute window: `allowed` =
 `(limit × 15 min − energy drawn so far) / time left`, so energy left unused
@@ -432,7 +434,8 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
   (`TestOmniGridChargeWithoutManualWarns`). The manual switch is released only if evcc held it (`peakShavingOwned`):
   the charge power to 0 first, written only where the entity shows another value,
   then the switch off; if the 0 fails the switch stays on and the next cycle
-  tries again (`TestOmniGridChargeEndZeroFails`, `TestOmniGridCharge`). A switch
+  tries again (`TestOmniGridChargeEndZeroFails`, `TestOmniGridCharge`); a charge
+  power entity Home Assistant does not know counts as written. A switch
   turned on by hand stays while evcc does not control
   (`TestOmniLeavesManualAloneWhenNotOwned`).
 - **Changes:** removing or replacing a switch, removing the limit or the

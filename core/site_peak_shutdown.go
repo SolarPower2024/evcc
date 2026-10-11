@@ -107,10 +107,10 @@ func (site *Site) releasePeak() {
 	}
 
 	if charging && chargeSet != nil {
-		site.writeOutput("grid charge power", chargeSet, 0)
+		site.releaseOutput("grid charge power", chargeSet, 0)
 	}
 
-	if site.peakOwned() && set != nil && site.writeOutput("peak shaving", set, site.peakFreeValue()) {
+	if site.peakOwned() && set != nil && site.releaseOutput("peak shaving", set, site.peakFreeValue()) {
 		site.setPeakOwned(false)
 	}
 }

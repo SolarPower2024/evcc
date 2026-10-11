@@ -391,7 +391,8 @@ func (site *Site) releaseProt() bool {
 // if evcc switched it on, and reports whether it is released. The charge power
 // would otherwise stay on its last value; the zero is only written where the
 // entity shows another value, see numberSetter. A zero that fails keeps the
-// switch on, the next cycle tries again. The mode stays: Omnibattery overwrites
+// switch on, the next cycle tries again; an entity Home Assistant does not know
+// counts as written, see releaseOutput. The mode stays: Omnibattery overwrites
 // it in automatic operation anyway. Called with s.out held.
 func (site *Site) releaseOmni() bool {
 	if !site.omniOwned() {
@@ -405,7 +406,7 @@ func (site *Site) releaseOmni() bool {
 	manual, chargeSet := s.manualEntity, s.chargeSet
 	s.mu.Unlock()
 
-	if chargeSet != nil && !site.writeOutput("grid charge power", chargeSet, 0) {
+	if chargeSet != nil && !site.releaseOutput("grid charge power", chargeSet, 0) {
 		return false
 	}
 
@@ -447,6 +448,29 @@ func (site *Site) omniSwitchOff(name, entity string) bool {
 	}
 
 	return site.logWrite(name, "switch off", conn.CallSwitchService(entity, false))
+}
+
+// releaseOutput writes the value that hands an output back, like writeOutput, and
+// reports whether it is handed back. Home Assistant not knowing the entity (404
+// when reading it, deleted or renamed) counts as handed back: nothing is left to
+// hand back, and the release would otherwise never land and keep the manual
+// control of a Marstek on, or block every change of the entities. Any other
+// failure leaves it held, the next cycle tries again.
+func (site *Site) releaseOutput(name string, set func(float64) error, value float64) bool {
+	if set == nil {
+		return false
+	}
+
+	return site.writeOutput(name, func(v float64) error {
+		err := set(v)
+
+		if notFound(err) {
+			site.log.WARN.Printf("%s: %v, nothing to hand back", name, err)
+			return nil
+		}
+
+		return err
+	}, value)
 }
 
 // omniShow publishes the forced mode evcc holds, empty = not controlling
@@ -575,7 +599,7 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 		released = omni && prot
 
 	case site.peakOwned():
-		if released = site.writeOutput("peak shaving", set, site.peakFreeValue()); released {
+		if released = site.releaseOutput("peak shaving", set, site.peakFreeValue()); released {
 			site.setPeakOwned(false)
 		}
 	}

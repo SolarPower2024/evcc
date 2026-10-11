@@ -1163,7 +1163,7 @@ func (site *Site) SetPeakShavingEntity(entity string) error {
 	case err != nil || omni || !site.peakOwned():
 	default:
 		// the previous target would otherwise keep the last setpoint
-		if site.writeOutput("peak shaving", previousSet, site.peakFreeValue()) {
+		if site.releaseOutput("peak shaving", previousSet, site.peakFreeValue()) {
 			site.setPeakOwned(false)
 		}
 	}
