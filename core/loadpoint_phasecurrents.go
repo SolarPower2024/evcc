@@ -142,8 +142,10 @@ func (lp *Loadpoint) SetCurrents1p(minCurrent, maxCurrent float64) error {
 		return errors.New("current must not be negative")
 	}
 
-	// unset values fall back to the regular limits
-	if cmp.Or(minCurrent, lp.minCurrent) > cmp.Or(maxCurrent, lp.maxCurrent) {
+	// only the 1p pair is checked against each other: a regular min or max
+	// current changed later is not checked against the 1p values either (see
+	// getMinCurrentFor), and a conflict must not stop the start with them
+	if minCurrent > 0 && maxCurrent > 0 && minCurrent > maxCurrent {
 		return errors.New("1p min current must be smaller or equal than 1p max current")
 	}
 

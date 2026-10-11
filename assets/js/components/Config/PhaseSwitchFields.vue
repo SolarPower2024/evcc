@@ -107,8 +107,10 @@ export default {
 	},
 	computed: {
 		maxCurrent1pWarning() {
-			const { minCurrent, minCurrent1p, maxCurrent1p } = this.values;
-			return maxCurrent1p && maxCurrent1p < (minCurrent1p || minCurrent)
+			// the 1p range as it applies: empty fields fall back to the regular ones
+			const { minCurrent, maxCurrent, minCurrent1p, maxCurrent1p } = this.values;
+			return (minCurrent1p || maxCurrent1p) &&
+				(maxCurrent1p || maxCurrent) < (minCurrent1p || minCurrent)
 				? this.$t("config.loadpoint.maxCurrent1pHelp")
 				: undefined;
 		},
