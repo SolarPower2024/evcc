@@ -908,10 +908,10 @@ func (site *Site) peakPausesGridCharge() bool {
 		return true
 	}
 
-	if s.demand > s.limit {
+	if limit := s.chargeLimit(now); s.demand > limit {
 		if !now.Before(s.chargePause) {
-			site.log.DEBUG.Printf("battery grid charge: paused, demand %.0fW exceeds the %.0fW peak limit", s.demand, s.limit)
-			site.lmm().AddEvent(lm.Event{At: now, Type: lm.EventGridChargePaused, A: s.demand, B: s.limit})
+			site.log.DEBUG.Printf("battery grid charge: paused, demand %.0fW exceeds the %.0fW allowed (peak limit %.0fW)", s.demand, limit, s.limit)
+			site.lmm().AddEvent(lm.Event{At: now, Type: lm.EventGridChargePaused, A: s.demand, B: limit})
 		}
 		s.chargePause = now.Add(site.lmHoldOff())
 		return true
@@ -959,9 +959,25 @@ func (site *Site) peakCheckMeters() {
 	site.handBackPeak()
 }
 
-// peakChargeHeadroom returns how much grid charge power fits below the peak
-// limit on top of the current demand. ok is false while peak shaving is off,
-// there is no limit to fit under then.
+// chargeLimit is the grid power grid charging has to stay under: the peak limit,
+// or what the running 15 minute window still allows if that is less, as an
+// earlier peak in the window has used up its budget and charging on top would
+// push the window over the limit. Without a metered current window (before its
+// first sample, meters failing) the peak limit alone. Called with mu held.
+func (s *peakState) chargeLimit(now time.Time) float64 {
+	if s.window.Start.Equal(now.Truncate(peak.Window)) && !s.metersStale(now) {
+		// the allowed power is the limit up to rounding while the window is on budget
+		if allowed := s.window.Allowed; allowed < s.limit-1 {
+			return allowed
+		}
+	}
+
+	return s.limit
+}
+
+// peakChargeHeadroom returns how much grid charge power fits below the grid
+// power the window allows (see chargeLimit) on top of the current demand. ok is
+// false while peak shaving is off, there is no limit to fit under then.
 func (site *Site) peakChargeHeadroom() (headroom float64, ok bool) {
 	s := site.peak()
 
@@ -972,7 +988,7 @@ func (site *Site) peakChargeHeadroom() (headroom float64, ok bool) {
 		return 0, false
 	}
 
-	return max(0, s.limit-s.demand), true
+	return max(0, s.chargeLimit(s.clock.Now())-s.demand), true
 }
 
 // updateBatteryModePeakAware keeps the battery in normal mode while the reserve

@@ -94,8 +94,9 @@ charge power has to fit into the circuit, against its power and its current
 limit (the current spread over the phases set under *Erweitert*). Without a
 known charge power, grid charging on a circuit stays off and a warning is
 logged once. With a charge power entity, evcc writes the grid charge power
-instead: the expected power, trimmed to what fits below the peak limit and into
-the circuit, at least 500 W.
+instead: the expected power, trimmed to what fits into the rest budget of the
+running 15 minute window (at most below the peak limit) and into the circuit,
+at least 500 W.
 After a shed, grid charging waits for the hold-off, as stopping it frees exactly
 the power that would let it start again. See `core/site_lm.go`.
 
@@ -285,8 +286,10 @@ the rest of the window (`peakShavingSource`).
 
 Below the reserve the battery is kept in normal mode, as hold would block the
 discharge controller; a battery mode set from outside through the api stays.
-While the demand without the battery exceeds the limit, grid charging pauses
-and stays off for the hold-off, so it cannot add to the peak.
+While the demand without the battery exceeds the limit, or the grid power the
+running window still allows if that is less (an earlier peak used up its
+budget), grid charging pauses and stays off for the hold-off, so it cannot add
+to the peak.
 
 Without meter values for over 2 minutes the free value is written and grid
 charging pauses until they are back: the battery covers any demand by ordinary

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/circuit"
 	"github.com/evcc-io/evcc/util"
@@ -79,6 +80,7 @@ func newScenario(t *testing.T) *scenario {
 	lms.socChargeEnabled = true
 
 	s := site.peak()
+	s.clock = clock.NewMock() // stands still at the start of a window, so its allowed power is the limit
 	s.enabled = true
 	s.chargePower = 6250
 	s.set = func(v float64) error { sc.peak = &v; return nil }
