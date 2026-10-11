@@ -42,6 +42,9 @@ const (
 	// an energy counter standing still while the grid power says this much was
 	// drawn over MaxGap has stopped updating
 	staleWs = 20 * 3600.0 // 20Wh
+
+	// no grid connection draws more: a counter advancing faster is no measurement
+	maxGridPower = 100e3 // W
 )
 
 // Where the energy drawn in the window comes from

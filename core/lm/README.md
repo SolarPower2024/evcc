@@ -273,10 +273,16 @@ draw into the next window, and the last cycle borrows the next window's
 budget. What evcc did not see, after a start or a gap, counts at the limit.
 
 The energy drawn comes from the grid meter's import counter, else a Home
-Assistant energy sensor (kWh or Wh), else the grid power. A failed or backward
-reading is replaced by the grid power for that interval; a counter standing
-still while the grid power says more than 20 Wh in 2 minutes is replaced for
-the rest of the window (`peakShavingSource`).
+Assistant energy sensor (kWh or Wh), else the grid power. A failed reading, a 0
+of the sensor (as evcc takes it for the grid meter) and a reading below the last
+are replaced by the grid power for that interval. The lower reading only becomes
+the new base once the next one confirms it (a real reset); back at the old level
+it was a glitch, and the counter's step leaves out what the grid power already
+counted (`TestMeterCounterGlitch`). A step beyond what a grid connection draws
+(100 kW) is no measurement either. A counter standing still while the grid power
+says more than 20 Wh in 2 minutes is replaced for the rest of the window
+(`peakShavingSource`). A failing sensor is logged once, then at debug level
+until it works again (`TestPeakEnergyReadLoggedOnce`).
 
 Below the reserve the battery is kept in normal mode, as hold would block the
 discharge controller; a battery mode set from outside through the api stays.

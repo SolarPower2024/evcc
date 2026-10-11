@@ -38,6 +38,7 @@ type State struct {
 	Source      string    // where this sample's energy came from
 	Stale       bool      // the counter stopped updating, grid power used for the rest of the window
 	StaleNow    bool      // ... and did so with this sample
+	GlitchNow   bool      // this sample's counter reading was not taken as it was, see Meter
 	Completed   *Completed
 }
 
@@ -49,7 +50,10 @@ func (s State) End() time.Time {
 // Meter tracks the grid energy of the running window. The energy drawn comes
 // from an import counter when the sample has one, else from the grid power.
 // What it did not see, after a start or a gap, counts at the limit: assuming
-// less could spend a budget that was already used. Not safe for concurrent use.
+// less could spend a budget that was already used. A counter reading lower than
+// the last is taken for a glitch (a sensor reporting 0 for a moment) until the
+// next reading confirms it, one further ahead than any grid connection draws is
+// no measurement. The grid power counts meanwhile. Not safe for concurrent use.
 type Meter struct {
 	windowStart time.Time
 	meteredFrom time.Time
@@ -65,24 +69,85 @@ type Meter struct {
 	unmovedWs    float64   // drawn according to the grid power while the counter stood still
 	unmovedSince time.Time // the counter has not moved since
 	stale        bool
+
+	// a reading below the last one is a reset, a replaced counter or a glitch (a
+	// sensor reporting 0 for a moment). It only becomes the new base once the next
+	// reading confirms it; back at the old level it never was one.
+	pending       bool
+	pendingEnergy float64 // the lower reading in kWh
+	pendingWs     float64 // drawn according to the grid power while it waited
+	glitch        bool    // the last sample's reading was not taken as it was
+}
+
+// rebase takes this reading as the base for the next step
+func (m *Meter) rebase(source string, energy float64) {
+	m.source, m.lastEnergy = source, energy
+	m.pending, m.pendingWs = false, 0
 }
 
 // drawn returns the energy drawn since the last sample in Ws. A counter is used
 // when it was read now and last time from the same source, the grid power fills
-// in otherwise.
+// in otherwise. A reading the counter cannot have reached, or one lower than
+// the last, does not count until it is confirmed: the grid power fills in.
 func (m *Meter) drawn(now time.Time, imported, energy float64, source string) float64 {
-	powerWs := imported * now.Sub(m.lastSample).Seconds()
+	interval := now.Sub(m.lastSample)
+	powerWs := imported * interval.Seconds()
+	m.glitch = false
 
 	if source == SourcePower || source != m.source || m.stale {
+		m.rebase(source, energy)
 		return powerWs
 	}
 
-	switch d := (energy - m.lastEnergy) * 3600e3; {
-	case d < 0:
-		// counter reset or replaced
-		return powerWs
+	// grid power counted for a lower reading that turned out to be a glitch
+	var counted float64
+	back := false
 
-	case d > 0:
+	if m.pending {
+		switch {
+		case energy < m.pendingEnergy:
+			// still falling: keep waiting
+			m.pendingEnergy, m.pendingWs = energy, m.pendingWs+powerWs
+			return powerWs
+
+		case energy >= m.lastEnergy:
+			// back at the old level: the counter covers what the grid power counted
+			counted, back = m.pendingWs, true
+
+		default:
+			// the lower level holds: a reset or a replaced counter, continue from it
+			m.lastEnergy = m.pendingEnergy
+		}
+
+		m.pending, m.pendingWs = false, 0
+	}
+
+	d := (energy - m.lastEnergy) * 3600e3
+
+	if d < 0 {
+		m.pending, m.pendingEnergy, m.pendingWs = true, energy, powerWs
+		m.glitch = true
+		return powerWs
+	}
+
+	// no grid connection draws this much: not a measurement, the grid power
+	// counts (also what the counter was late with) and the next step starts here
+	if d > maxGridPower*max(interval, time.Second).Seconds() {
+		drawn := powerWs + m.unmovedWs
+		m.unmovedWs, m.unmovedSince = 0, time.Time{}
+		m.rebase(source, energy)
+		m.glitch = true
+		return drawn
+	}
+
+	m.lastEnergy = energy
+
+	if back {
+		m.unmovedWs, m.unmovedSince = 0, time.Time{}
+		return max(0, d-counted)
+	}
+
+	if d > 0 {
 		m.unmovedWs, m.unmovedSince = 0, time.Time{}
 		return d
 	}
@@ -126,6 +191,9 @@ func (m *Meter) Update(s Sample, set Settings) State {
 		drawn = m.drawn(now, imported, s.Energy, source)
 		demand = max(0, drawn+s.BatteryPower*now.Sub(m.lastSample).Seconds())
 		res.StaleNow = m.stale && !wasStale
+		res.GlitchNow = m.glitch
+	} else {
+		m.rebase(source, s.Energy)
 	}
 
 	if !m.windowStart.Equal(start) {
@@ -156,7 +224,6 @@ func (m *Meter) Update(s Sample, set Settings) State {
 	}
 
 	m.lastSample = now
-	m.source, m.lastEnergy = source, s.Energy
 	if m.stale {
 		source = SourcePower
 	}

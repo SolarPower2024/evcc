@@ -193,3 +193,82 @@ func TestMeterCompleted(t *testing.T) {
 		assert.InDelta(t, 6000, c.DemandWs/peak.Window.Seconds(), 0.001)
 	}
 }
+
+// TestMeterCounterGlitch verifies that a counter reading 0 or lower for a moment
+// does not count its return as a draw, while a real reset stays correct. 3kW are
+// 90000Ws per 30s cycle, 0.025kWh.
+func TestMeterCounterGlitch(t *testing.T) {
+	const (
+		kWhStep = 0.025
+		wsStep  = 90000.0
+	)
+
+	// the reading drops for one cycle: the grid power counts, and the counter's
+	// return does not count that interval a second time
+	for name, dip := range map[string]float64{"zero": 0, "half a kWh back": 12344.5} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(0)
+			h.counterNow(3000, 12345)
+			h.counter(3000, 12345+kWhStep)
+			assert.InDelta(t, wsStep, h.st.DrawnWs, 0.001)
+
+			h.counter(3000, dip)
+			assert.True(t, h.st.GlitchNow)
+			assert.InDelta(t, 2*wsStep, h.st.DrawnWs, 0.001)
+
+			h.counter(3000, 12345+3*kWhStep)
+			assert.False(t, h.st.GlitchNow)
+			assert.InDelta(t, 3*wsStep, h.st.DrawnWs, 0.001)
+			assert.Equal(t, peak.SourceMeter, h.st.Source)
+
+			h.counter(3000, 12345+4*kWhStep)
+			assert.InDelta(t, 4*wsStep, h.st.DrawnWs, 0.001)
+			assert.InDelta(t, 3000, h.st.Avg, 0.001)
+		})
+	}
+
+	t.Run("real reset", func(t *testing.T) {
+		h := newHarness(0)
+		h.counterNow(3000, 1000)
+		h.counter(3000, 1000+kWhStep)
+
+		// the counter starts again: the reset interval counts by the grid power,
+		// the next reading confirms the new level and counts from it
+		h.counter(3000, 0)
+		assert.InDelta(t, 2*wsStep, h.st.DrawnWs, 0.001)
+		h.counter(3000, kWhStep)
+		assert.InDelta(t, 3*wsStep, h.st.DrawnWs, 0.001)
+		h.counter(3000, 2*kWhStep)
+		assert.InDelta(t, 4*wsStep, h.st.DrawnWs, 0.001)
+		assert.False(t, h.st.GlitchNow)
+	})
+
+	t.Run("two zero readings", func(t *testing.T) {
+		h := newHarness(0)
+		h.counterNow(3000, 12345)
+		h.counter(3000, 12345+kWhStep)
+		h.counter(3000, 0)
+		h.counter(3000, 0)
+
+		// the reading that is back is further ahead than any connection draws
+		h.counter(3000, 12345+4*kWhStep)
+		assert.True(t, h.st.GlitchNow)
+		assert.InDelta(t, 4*wsStep, h.st.DrawnWs, 0.001, "the grid power counts, the counter's step does not")
+
+		h.counter(3000, 12345+5*kWhStep)
+		assert.InDelta(t, 5*wsStep, h.st.DrawnWs, 0.001)
+	})
+
+	t.Run("jump ahead", func(t *testing.T) {
+		h := newHarness(0)
+		h.counterNow(3000, 100)
+		h.counter(3000, 100+kWhStep)
+
+		h.counter(3000, 200)
+		assert.True(t, h.st.GlitchNow)
+		assert.InDelta(t, 2*wsStep, h.st.DrawnWs, 0.001)
+
+		h.counter(3000, 200+kWhStep)
+		assert.InDelta(t, 3*wsStep, h.st.DrawnWs, 0.001)
+	})
+}
