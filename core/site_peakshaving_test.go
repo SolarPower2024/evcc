@@ -451,7 +451,7 @@ func peakWindowSite(t *testing.T, minute int) (*Site, *clock.Mock) {
 // power and the grid meter's counter, nil = meter without counter
 func energyStep(site *Site, clk *clock.Mock, grid float64, meter *float64) {
 	clk.Add(30 * time.Second)
-	site.setPeakGridEnergy(meter)
+	site.setPeakGridEnergy(meter, true)
 	site.updatePeakWindow(grid, 0)
 }
 

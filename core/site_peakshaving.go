@@ -97,8 +97,9 @@ type peakState struct {
 	demand      float64   // grid demand without the battery in W, from the last cycle
 	chargePause time.Time // grid charging gives way to peak shaving until then
 
-	updated    time.Time // last cycle with meter values, see peakCheckMeters
-	metersLost bool      // the meters failed for longer than peak.MaxGap
+	updated    time.Time    // last cycle with meter values, see peakCheckMeters
+	metersLost bool         // the meters failed for longer than peak.MaxGap
+	read       peakReadings // outages evcc does not report, see site_peak_readings.go
 
 	set func(float64) error // resolved from config
 
@@ -535,14 +536,27 @@ func (site *Site) updatePeakShaving(state siteState) {
 	s := site.peak()
 	defer site.savePeakMonths()
 
+	ok, back := site.peakReadingsOk(state)
+
 	s.mu.Lock()
-	s.updated = s.clock.Now()
-	recovered := s.metersLost
-	s.metersLost = false
+	recovered := back || (ok && s.metersLost)
+	if ok {
+		s.metersLost = false
+	}
 	s.mu.Unlock()
 
 	if recovered {
 		site.log.INFO.Println("peak shaving: meters back")
+	}
+
+	if !ok {
+		// the meter values cannot be trusted (no grid power, a grid power that stands
+		// still): like for a failing meter nothing is metered and the setpoint stays,
+		// see peakCheckMeters
+		site.updatePeakFollow()
+		site.applyCircuitLimits() // load management switch and follow circuit, see site_lm_switch.go
+
+		return
 	}
 
 	site.updatePeakWindow(state.gridPower, state.battery.Power)
@@ -841,14 +855,17 @@ func (site *Site) peakEnergy() (float64, string) {
 }
 
 // setPeakGridEnergy takes the grid meter's import counter of this cycle, nil if
-// the meter has none
-func (site *Site) setPeakGridEnergy(kWh *float64) {
+// the meter has none, and whether the grid power was read: evcc keeps the last
+// value when it is not available, which peak shaving must not take for a reading,
+// see peakReadingsOk
+func (site *Site) setPeakGridEnergy(kWh *float64, powerRead bool) {
 	s := site.peak()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.gridEnergy = kWh
+	s.read.gridUnread = !powerRead
 }
 
 // updatePeakWindow meters the running 15 minute window with the energy source of
