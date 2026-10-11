@@ -408,14 +408,21 @@ func (site *Site) releaseOmni() bool {
 }
 
 // omniSwitchOff switches the entity off unless it is already, and reports
-// whether it is. An entity not readable is written to anyway.
+// whether it is. An entity not readable is not written to: Home Assistant answers
+// a call to an entity it has not loaded with success and does nothing, so the
+// release would count as done. The next cycle tries again.
 func (site *Site) omniSwitchOff(name, entity string) bool {
 	conn, err := site.haConnection()
 	if !site.logWrite("marstek connect", "connect", err) {
 		return false
 	}
 
-	if state, _, err := omniRead(conn, entity); err == nil && strings.EqualFold(state, "off") {
+	state, _, err := omniRead(conn, entity)
+	if !site.logWrite(name+" read", "read "+entity, err) {
+		return false
+	}
+
+	if strings.EqualFold(state, "off") {
 		return true
 	}
 

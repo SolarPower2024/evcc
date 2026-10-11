@@ -264,6 +264,17 @@ error once; the same error then only at debug level until a write lands again
 a general 500 of Home Assistant the hint to look into its log
 (`TestPeakWriteErrorLoggedOnce`, `TestPeakWriteErrorBody`).
 
+The calls to Home Assistant run inside the cycle, each limited by the client
+timeout (10 s). One that does not answer would cost a timeout per call and
+stretch the cycle by 40 s and more, so after the first timeout the other calls
+of the cycle are refused and the next cycle asks again: a cycle costs one
+timeout (`TestHAGuardOneTimeoutPerCycle`, `TestHAGuardOneTimeoutPerCycleBYD`).
+The EEG counter is not read for a minute after a timeout of its own
+(`TestHAGuardEegCounter`). An entity that cannot be read (timeout, 404, 5xx) is
+not written to: Home Assistant answers a call to an entity it has not loaded with
+success and does nothing (`TestNumberSetterReadFailure`); a release that cannot
+be read keeps what evcc holds and tries again (`TestOmniReleaseHangs`).
+
 The limit applies to the clock-aligned 15 minute window: `allowed` =
 `(limit × 15 min − energy drawn so far) / time left`, so energy left unused
 earlier allows more and a short spike is only covered when the window would end
@@ -839,7 +850,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |
-| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_omni.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_omni.go`, `core/site_ha_guard.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |

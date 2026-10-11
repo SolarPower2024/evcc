@@ -359,10 +359,14 @@ func (site *Site) haConnection() (*homeassistant.Connection, error) {
 		return nil, err
 	}
 
-	conn, err = homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", false)
+	log := util.NewLogger("peakshaving")
+
+	conn, err = homeassistant.NewConnection(log, uri, "", false)
 	if err != nil {
 		return nil, err
 	}
+
+	guardHA(conn, log) // one timeout per cycle at most, see site_ha_guard.go
 
 	s.mu.Lock()
 	s.conn = conn
@@ -379,7 +383,9 @@ func (site *Site) haConnection() (*homeassistant.Connection, error) {
 // peak.Range.Unchanged: a device may store every write. As the comparison is
 // against the entity, a value changed by hand is still corrected. tolerance
 // returns the smallest change written; nil for an entity that is not a power, the
-// write tolerance is in W.
+// write tolerance is in W. An entity that cannot be read is not written: its
+// range is unknown, and a write to an entity Home Assistant has not loaded (yet)
+// is answered with success and does nothing.
 func (site *Site) numberSetter(entity string, up bool, tolerance func() float64) (func(float64) error, error) {
 	conn, err := site.haConnection()
 	if err != nil {
@@ -389,7 +395,7 @@ func (site *Site) numberSetter(entity string, up bool, tolerance func() float64)
 	return func(val float64) error {
 		r, current, err := numberState(conn, entity)
 		if err != nil {
-			return conn.CallNumberService(entity, val)
+			return fmt.Errorf("read %s: %w", entity, err)
 		}
 
 		var tol float64
@@ -753,8 +759,14 @@ func (site *Site) writeOutput(name string, set func(float64) error, value float6
 // logWrite reports the result of a write to an output and returns whether it
 // landed. The same error is logged once as an error and then at debug level until
 // a write succeeds again, so a rejected write does not fill the log with one line
-// per cycle.
+// per cycle. A call refused by the guard, see haGuard, is not logged.
 func (site *Site) logWrite(name, what string, err error) bool {
+	// refused after a call timed out in this cycle, that call logged the cause
+	if errors.Is(err, errHAHung) {
+		site.log.TRACE.Printf("%s: %s: %v", name, what, err)
+		return false
+	}
+
 	s := site.peak()
 
 	s.mu.Lock()
@@ -834,7 +846,10 @@ func (site *Site) peakEnergy() (float64, string) {
 		if err == nil {
 			return v, peak.SourceEntity
 		}
-		site.log.WARN.Printf("peak shaving: energy %s: %v, using the grid power", entity, err)
+
+		if !errors.Is(err, errHAHung) {
+			site.log.WARN.Printf("peak shaving: energy %s: %v, using the grid power", entity, err)
+		}
 	}
 
 	return 0, peak.SourcePower
@@ -979,7 +994,10 @@ func (site *Site) peakChargeHeadroom() (headroom float64, ok bool) {
 // running peak (see batteryGridChargeRequested), and a mode set from outside
 // through the api stays the caller's decision.
 func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rate api.Rate) {
-	// the last hook of the cycle: everything the overview shows is decided now
+	// the last hook of the cycle: the calls to Home Assistant are done
+	defer site.haCycleEnd()
+
+	// everything the overview shows is decided now
 	defer site.publishLmStatus(gridCharge)
 	defer site.publishLmWallboxes()
 	defer site.checkLmFollowing()

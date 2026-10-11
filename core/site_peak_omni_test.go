@@ -145,7 +145,12 @@ func (f *fakeHA) RoundTrip(req *http.Request) (*http.Response, error) {
 		return reply(code, "500 Internal Server Error\n\nServer got itself in trouble")
 	}
 
-	e := f.states[id]
+	// an entity Home Assistant has not loaded: the call is answered with success
+	// and does nothing
+	e, ok := f.states[id]
+	if !ok {
+		return reply(http.StatusOK, "[]")
+	}
 
 	switch name {
 	case "turn_on":
@@ -182,6 +187,7 @@ func newOmni(t *testing.T) (*scenario, *fakeHA) {
 	conn, err := homeassistant.NewConnection(util.NewLogger("test"), homeassistant.SupervisorURI, "", false)
 	require.NoError(t, err)
 	conn.Client.Transport = ha
+	guardHA(conn, util.NewLogger("test"))
 
 	s := sc.site.peak()
 	s.clock = clock.NewMock()
