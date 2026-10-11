@@ -551,8 +551,8 @@ func (site *Site) updatePeakShaving(state siteState) {
 
 	if !ok {
 		// the meter values cannot be trusted (no grid power, a grid power that stands
-		// still): like for a failing meter nothing is metered and the setpoint stays,
-		// see peakCheckMeters
+		// still, a battery power that cannot be read): like for a failing meter nothing
+		// is metered and the setpoint stays, see peakCheckMeters
 		site.updatePeakFollow()
 		site.applyCircuitLimits() // load management switch and follow circuit, see site_lm_switch.go
 

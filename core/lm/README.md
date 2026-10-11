@@ -288,7 +288,7 @@ charging pauses until they are back: the battery covers any demand by ordinary
 self-consumption, where a stale setpoint of 0 would keep it blocked
 (`TestPeakMetersLost`).
 
-Two outages come without an error from the meter and count the same
+Three outages come without an error from the meter and count the same
 (`core/site_peak_readings.go`). A grid meter that has no power (a Home Assistant
 sensor `unavailable` or `unknown`): evcc keeps the last value, the hook
 `setPeakGridEnergy` reports that the power was not read, and the cycle meters
@@ -298,8 +298,13 @@ exactly the same for over 2 minutes while the battery power moves by more than
 500 W (a template sensor or an mqtt topic that does not expire): a battery that
 follows the demand shifts the grid power, so it is no reading
 (`TestPeakGridFrozenIsAnOutage`, `TestPeakGridFollowingBatteryIsNoOutage`); the
-outage then counts from the start of the standstill. Logged once per cause as a
-warning. Template sensors for the grid power and the energy counter have to
+outage then counts from the start of the standstill. A battery whose
+power cannot be read (evcc leaves it at 0 W, for an unavailable Home Assistant
+sensor without a log line; `setPeakMeterRead` in `collectMeters` takes the
+result of each read): the setpoint adds the battery power back, so it would
+jump between the value with and without it every cycle (3000, 0, 3107, 0 W) and
+write to Home Assistant each time (`TestPeakBatteryUnreadIsAnOutage`,
+`TestPeakMeterHookReportsRead`). Logged once per cause as a warning. Template sensors for the grid power and the energy counter have to
 report `unavailable` or `unknown` when their source fails (`has_value()`), not
 0: a 0 is a reading, evcc cannot tell it from a real one.
 
@@ -814,7 +819,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `custom` field; `meteredPower` in `updateLoadpoints` (an assumed heater power stays in the home consumption); `restoreCustom` in `restoreSettings`; `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter` (with `powerRead`: whether the grid power was read, evcc keeps the old value for a meter that is not available); `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
+| `core/site.go` | `custom` field; `meteredPower` in `updateLoadpoints` (an assumed heater power stays in the home consumption); `restoreCustom` in `restoreSettings`; `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter` (with `powerRead`: whether the grid power was read, evcc keeps the old value for a meter that is not available); `setPeakMeterRead` in `collectMeters` (the result of each power read: evcc leaves a failed read at 0 W without a mark); `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerResult` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |

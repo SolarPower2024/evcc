@@ -22,6 +22,7 @@ var forkHooks = []struct {
 }{
 	{"core/site.go", "Site.restoreSettings", []string{"restoreCustom"}},
 	{"core/site.go", "Site.updateGridMeter", []string{"setPeakGridEnergy", "powerRead"}},
+	{"core/site.go", "Site.collectMeters", []string{"setPeakMeterRead"}},
 	{"core/site.go", "Site.update", []string{"updateCustom", "batteryGridChargeRequested", "updateBatteryModePeakAware"}},
 	{"core/site.go", "Site.updateLoadpoints", []string{"meteredPower"}},
 	{"core/site_circuits.go", "Site.updateCircuits", []string{"circuitLoads"}},
