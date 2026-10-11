@@ -188,8 +188,9 @@ func TestSwitchStagesDelay(t *testing.T) {
 }
 
 func TestSwitchStagesRunningAtStart(t *testing.T) {
-	// switches found on, e.g. after a restart, count as enabled: the current
-	// evcc sends applies without a new Enable
+	// switches found on, e.g. after a restart, count as enabled and as running at
+	// the current of their stages: the first request, the minimum, keeps them,
+	// the current evcc sends next applies without a new Enable
 	c, f, _ := stagesCharger(t, 0)
 	f.on = []bool{true, true, true}
 
@@ -201,7 +202,37 @@ func TestSwitchStagesRunningAtStart(t *testing.T) {
 	assert.True(t, ok)
 
 	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, []bool{true, true, true}, f.on, "the first request is taken as the running current")
+	assert.Empty(t, f.writes)
+
+	cur, err := c.GetMaxCurrent()
+	require.NoError(t, err)
+	assert.InDelta(t, amps(9000), cur, 1e-9)
+
+	// so evcc writes the minimum it wants instead of finding it already set
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
 	assert.Equal(t, []bool{true, false, false}, f.on)
+}
+
+func TestSwitchStagesRunningAtStartPartly(t *testing.T) {
+	c, f, _ := stagesCharger(t, 0)
+	f.on = []bool{true, true, false}
+
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, []bool{true, true, false}, f.on)
+
+	cur, err := c.GetMaxCurrent()
+	require.NoError(t, err)
+	assert.InDelta(t, amps(6000), cur, 1e-9)
+
+	// nothing running: the request is stored as before
+	c, f, _ = stagesCharger(t, 0)
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, 0, f.count())
+
+	cur, err = c.GetMaxCurrent()
+	require.NoError(t, err)
+	assert.InDelta(t, amps(3000), cur, 1e-9)
 }
 
 func TestSwitchStagesStatusAndPower(t *testing.T) {

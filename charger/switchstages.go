@@ -453,7 +453,9 @@ var _ api.ChargerEx = (*SwitchStages)(nil)
 
 // MaxCurrentMillis implements the api.ChargerEx interface. While off it only
 // stores the current, Enable switches on. A heater found running, e.g. after a
-// restart, is taken as enabled.
+// restart, is taken as enabled and, before evcc sets a current, as running at
+// the current of its stages: evcc's first request is the minimum, which would
+// drop it to one stage, and a smaller request later would never be written.
 func (c *SwitchStages) MaxCurrentMillis(current float64) error {
 	if current < 0 || math.IsNaN(current) || math.IsInf(current, 0) {
 		return fmt.Errorf("invalid current: %g", current)
@@ -464,9 +466,15 @@ func (c *SwitchStages) MaxCurrentMillis(current float64) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	prev := c.current
+	if prev == 0 && !c.enabled {
+		if adopted, err := c.adopt(phases); adopted || err != nil {
+			return err
+		}
+	}
+
 	// a failed switch does not take the request over: evcc reads the current
 	// back and, still seeing the old one, sets the new one again
-	prev := c.current
 	c.current = current
 
 	if err := c.update(phases); err != nil {
@@ -475,6 +483,25 @@ func (c *SwitchStages) MaxCurrentMillis(current float64) error {
 	}
 
 	return nil
+}
+
+// adopt takes over the stages found running with the current they stand for,
+// without switching. Called with the mutex held.
+func (c *SwitchStages) adopt(phases int) (bool, error) {
+	states, err := c.states()
+	if err != nil {
+		return false, err
+	}
+
+	n := countOn(states)
+	if n == 0 {
+		return false, nil
+	}
+
+	c.enabled, c.level = true, n
+	c.current = float64(n) * c.stagePower / (voltage * float64(phases))
+
+	return true, nil
 }
 
 // update switches the stages to the current. Called with the mutex held.

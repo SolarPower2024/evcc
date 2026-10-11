@@ -152,6 +152,9 @@ the whole heater: status, enabled and switching go by the readable stages
 power counts as on for circuits, and the outage is one WARN. The config page
 shows it as an error (`TestSwitchStagesUnreadableStage`,
 `TestSwitchStagesUnreadableStageStepUp`).
+A heater found running at start (restart of evcc) is taken over with the current
+of its stages, so evcc's first request, the minimum, does not drop it to one
+stage, and a smaller request later is written (`TestSwitchStagesRunningAtStart`).
 
 ## 5. Shed guard
 
