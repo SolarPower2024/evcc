@@ -427,6 +427,29 @@ func TestLmOptimizerScenarios(t *testing.T) {
 		assert.InDelta(t, scenarioCapacity*0.9, r.req.Batteries[0].SGoal[7], 1)
 	})
 
+	// contract: the optimizer ignores a goal in step 0 and binds one from step 1 on,
+	// which is why the fork never sets one in step 0 (applyLmBatteryInputs)
+	t.Run("goal soc binds from step 1", func(t *testing.T) {
+		solve := func(goalStep int) scenarioResult {
+			req, batteries := winter.request(30)
+			if goalStep >= 0 {
+				batteries[0].cfg.SGoal = make([]float32, len(req.TimeSeries.Dt))
+				batteries[0].cfg.SGoal[goalStep] = batteries[0].cfg.SInitial + 1000
+			}
+			finish(&req, batteries)
+			return solveReq(t, req)
+		}
+
+		base := solve(-1)
+		step0 := solve(0)
+		step1 := solve(1)
+
+		goal := step1.req.Batteries[0].SGoal[1]
+		assert.Less(t, base.soc(0)[1], goal-1, "without a goal the battery does not get there")
+		assert.InDeltaSlice(t, base.soc(0), step0.soc(0), 1, "a goal in step 0 changes nothing")
+		assert.GreaterOrEqual(t, step1.soc(0)[1], goal-1, "a goal in step 1 binds")
+	})
+
 	// by a time: at the cheapest slots before it
 	t.Run("once by a time, cheap night", func(t *testing.T) {
 		cheap := func(i int) bool { return i >= 16 && i < 28 } // 22:00-01:00

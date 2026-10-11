@@ -529,6 +529,8 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   grid charge power with the charging efficiency; with peak shaving only with
   the room below the limit, paused while a peak runs.
 - one-time grid charging: the target as goal at the chosen time, or right away.
+- a goal is set for step 1 at the earliest, the optimizer ignores one in step 0
+  (a goal reached within the current step, an order past its time).
 - grid charging refused right now (shed hold-off, unknown charge power on a
   circuit) is not offered (`charge_from_grid`).
 - load management: a loadpoint plans with at most its circuits' power,

@@ -413,3 +413,59 @@ func TestSocPass(t *testing.T) {
 	k, _ = site.socPassStart(req, home, res)
 	assert.Equal(t, -1, k, "switched off")
 }
+
+// The optimizer ignores a goal in step 0, so a goal the battery reaches within
+// the current step goes into step 1. Without peak shaving.
+func TestLmOptimizerGoalNotInStepZero(t *testing.T) {
+	config.Reset()
+	t.Cleanup(config.Reset)
+
+	apply := func(site *Site, soc float32) []float32 {
+		req := optimizer.OptimizationInput{TimeSeries: optimizer.TimeSeries{Dt: quarterHours(16)}}
+		batteries := []optimizerBattery{homeBattery()}
+		batteries[0].cfg.SInitial = soc
+		site.applyLmOptimizerInputs(&req, batteries)
+		return batteries[0].cfg.SGoal
+	}
+
+	t.Run("one-time, time passed without reaching the target", func(t *testing.T) {
+		site := &Site{log: util.NewLogger("test")}
+		site.lms().gridOnce = gridChargeOnce{Target: 90, Until: time.Now().Add(-time.Minute)}
+
+		goal := apply(site, 5000)
+		require.Len(t, goal, 16)
+		assert.Zero(t, goal[0])
+		assert.Equal(t, float32(9000), goal[1], "as soon as the optimizer binds it")
+	})
+
+	t.Run("one-time, right away with a small rest", func(t *testing.T) {
+		site := &Site{log: util.NewLogger("test")}
+		site.lms().gridOnce = gridChargeOnce{Target: 80}
+
+		goal := apply(site, 7900)
+		require.Len(t, goal, 16)
+		assert.Zero(t, goal[0])
+		assert.Equal(t, float32(8000), goal[1])
+	})
+
+	t.Run("running soc charging, stop reached within the step", func(t *testing.T) {
+		site := &Site{log: util.NewLogger("test")}
+		s := site.lms()
+		s.socChargeEnabled, s.socChargeStart, s.socChargeStop, s.socChargeRunning = true, 20, 80, true
+
+		goal := apply(site, 7950)
+		require.Len(t, goal, 16)
+		assert.Zero(t, goal[0])
+		assert.Equal(t, float32(8000), goal[1])
+	})
+
+	t.Run("a horizon of one step has no goal to set", func(t *testing.T) {
+		site := &Site{log: util.NewLogger("test")}
+		site.lms().gridOnce = gridChargeOnce{Target: 80}
+
+		req := optimizer.OptimizationInput{TimeSeries: optimizer.TimeSeries{Dt: quarterHours(1)}}
+		batteries := []optimizerBattery{homeBattery()}
+		assert.NotPanics(t, func() { site.applyLmOptimizerInputs(&req, batteries) })
+		assert.Empty(t, batteries[0].cfg.SGoal)
+	})
+}
