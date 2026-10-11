@@ -14,7 +14,9 @@ package core
 // haGuard sits in the transport of the shared connection (see haConnection). After
 // the first call timing out in a cycle it refuses the further calls with errHAHung
 // until the cycle ends (haCycleEnd); the first call of the next cycle asks again.
-// So a cycle costs one timeout at most.
+// So a cycle costs one timeout at most. Once evcc is stopping the guard refuses
+// nothing (stop): the hand back of the battery has to try every call, also when a
+// call timed out earlier in the cycle still running beside the shutdown function.
 
 import (
 	"context"
@@ -35,8 +37,9 @@ type haGuard struct {
 	base http.RoundTripper
 	log  *util.Logger
 
-	mu   sync.Mutex
-	hung bool // a call timed out in this cycle
+	mu       sync.Mutex
+	hung     bool // a call timed out in this cycle
+	stopping bool // evcc is stopping, nothing is refused any more
 }
 
 // guardHA puts the guard in the transport of the connection
@@ -47,7 +50,7 @@ func guardHA(conn *homeassistant.Connection, log *util.Logger) {
 // RoundTrip implements http.RoundTripper
 func (g *haGuard) RoundTrip(req *http.Request) (*http.Response, error) {
 	g.mu.Lock()
-	hung := g.hung
+	hung := g.hung && !g.stopping
 	g.mu.Unlock()
 
 	if hung {
@@ -63,7 +66,7 @@ func (g *haGuard) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	if err != nil && isTimeout(err) {
 		g.mu.Lock()
-		first := !g.hung
+		first := !g.hung && !g.stopping
 		g.hung = true
 		g.mu.Unlock()
 
@@ -80,6 +83,15 @@ func (g *haGuard) endCycle() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
+	g.hung = false
+}
+
+// stop ends the refusals for good: evcc is stopping
+func (g *haGuard) stop() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.stopping = true
 	g.hung = false
 }
 
@@ -106,5 +118,20 @@ func (site *Site) haCycleEnd() {
 
 	if g, ok := conn.Client.Transport.(*haGuard); ok {
 		g.endCycle()
+	}
+}
+
+// haStop ends the refusals of the guard for good, see haGuard.stop: called when
+// evcc stops, before the hand back. The connection is built if it does not exist
+// yet, so the guard is there to be told; without Home Assistant nothing is held
+// through it.
+func (site *Site) haStop() {
+	conn, err := site.haConnection()
+	if err != nil {
+		return
+	}
+
+	if g, ok := conn.Client.Transport.(*haGuard); ok {
+		g.stop()
 	}
 }

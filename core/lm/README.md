@@ -273,7 +273,10 @@ the allowed power of the window; a BYD gets the charge power 0 and the free
 value. The cycle writes nothing any more from then on. It is best effort and
 never holds the stop up (`TestPeakShutdownDoesNotBlock`): stop budget add-on 30 s
 (`timeout` in its manifest), evcc waits `max(interval, 5 s)` for the shutdown
-functions, the hand back takes 8 s at most. When the host shuts down, the
+functions, the hand back takes 8 s at most. The shutdown function runs beside the
+cycle; the guard below refuses nothing from then on, so a call that timed out
+earlier in the running cycle does not have the hand back refused
+(`TestPeakReleasedAfterTimeout`). When the host shuts down, the
 supervisor refuses the calls (400 or 503 "not ready", logged at info), and
 Omnibattery keeps its last value until evcc runs again. A crash or a kill is not
 covered either; there the stored mark hands back with the first cycle after the

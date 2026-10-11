@@ -58,6 +58,10 @@ func (site *Site) releasePeakOnShutdown() {
 	s.stopped = true
 	s.mu.Unlock()
 
+	// a call that timed out in that cycle would have every call of the hand back
+	// refused until the cycle ends, see site_ha_guard.go
+	site.haStop()
+
 	done := make(chan struct{})
 
 	go func() {

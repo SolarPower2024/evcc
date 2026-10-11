@@ -795,15 +795,16 @@ func (site *Site) writeOutput(name string, set func(float64) error, value float6
 // a write succeeds again, so a rejected write does not fill the log with one line
 // per cycle. A call refused by the guard, see haGuard, is not logged.
 func (site *Site) logWrite(name, what string, err error) bool {
-	// refused after a call timed out in this cycle, that call logged the cause
-	if errors.Is(err, errHAHung) {
-		site.log.TRACE.Printf("%s: %s: %v", name, what, err)
+	// stopping, e.g. with the host: Home Assistant may refuse the call, expected;
+	// also a call the guard refused, the hand back would otherwise fail unnoticed
+	if err != nil && site.peakStopped() {
+		site.log.INFO.Printf("%s: %s: %s (stopping)", name, what, writeErrorText(err))
 		return false
 	}
 
-	// stopping, e.g. with the host: Home Assistant may refuse the call, expected
-	if err != nil && site.peakStopped() {
-		site.log.INFO.Printf("%s: %s: %s (stopping)", name, what, writeErrorText(err))
+	// refused after a call timed out in this cycle, that call logged the cause
+	if errors.Is(err, errHAHung) {
+		site.log.TRACE.Printf("%s: %s: %v", name, what, err)
 		return false
 	}
 

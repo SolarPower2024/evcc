@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/homeassistant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -131,5 +133,75 @@ func TestPeakShutdownDoesNotBlock(t *testing.T) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		assert.Empty(t, s.writeErr, "expected while stopping: no error of an output")
+	})
+}
+
+// timedOut lets the first call of a cycle time out, as one to a Home Assistant
+// that is slow does, and checks that the guard then refuses the calls. The
+// scenario's Home Assistant answers again afterwards.
+func timedOut(t *testing.T, sc *scenario) {
+	t.Helper()
+
+	h := hangHA(sc)
+	conn := sc.site.peak().conn
+
+	h.hang.Store(true)
+	_, _, err := numberState(conn, haChargeNum)
+	require.Error(t, err)
+	h.hang.Store(false)
+
+	_, _, err = numberState(conn, haChargeNum)
+	require.ErrorIs(t, err, errHAHung)
+}
+
+// TestPeakReleasedAfterTimeout verifies that the hand back is not refused by the
+// guard when evcc stops after a call of the running cycle timed out: the shutdown
+// function runs beside the cycle, which ends the refusals only at its end.
+func TestPeakReleasedAfterTimeout(t *testing.T) {
+	t.Run("marstek", func(t *testing.T) {
+		sc, ha := charging(t)
+		timedOut(t, sc)
+
+		sc.site.releasePeakOnShutdown()
+		assert.Equal(t, []string{
+			"set_value " + haChargeNum + " 0",
+			"turn_off " + haSwitch,
+		}, ha.take())
+		assert.False(t, sc.site.peakOwned())
+		assert.Equal(t, "off", ha.get(haSwitch))
+	})
+
+	t.Run("byd", func(t *testing.T) {
+		sc, ha := newOmni(t)
+		sc.site.lms().socChargeEnabled = true
+
+		s := sc.site.peak()
+		s.batteryType = batteryTypeBYD
+		require.NoError(t, sc.site.rebuildPeakSetter())
+		require.NoError(t, sc.site.rebuildChargeSetter())
+
+		require.True(t, sc.cycle(20, 1000, 0))
+		require.True(t, sc.site.peakOwned())
+		ha.take()
+
+		timedOut(t, sc)
+
+		sc.site.releasePeakOnShutdown()
+		assert.Equal(t, []string{
+			"set_value " + haChargeNum + " 0",
+			"set_value " + haDischargeNum + " 10000",
+		}, ha.take())
+		assert.False(t, sc.site.peakOwned())
+	})
+
+	t.Run("guard of a connection built while stopping", func(t *testing.T) {
+		t.Setenv(homeassistant.SupervisorToken, "token")
+
+		site := &Site{log: util.NewLogger("test")}
+		site.haStop()
+
+		g, ok := site.peak().conn.Client.Transport.(*haGuard)
+		require.True(t, ok)
+		assert.True(t, g.stopping)
 	})
 }
