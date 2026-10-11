@@ -25,13 +25,19 @@ type fakeSwitches struct {
 	writes []string
 	fail   int // stage that fails to switch, 0 = none
 	tries  int // switch attempts, failed ones too
+	lost   int // stage whose switch cannot be read, 0 = none
 }
 
 func (f *fakeSwitches) stages() []switchStage {
 	res := make([]switchStage, len(f.on))
 	for i := range f.on {
 		res[i] = switchStage{
-			enabled: func() (bool, error) { return f.on[i], nil },
+			enabled: func() (bool, error) {
+				if f.lost == i+1 {
+					return false, api.ErrNotAvailable
+				}
+				return f.on[i], nil
+			},
 			enable: func(on bool) error {
 				f.tries++
 				if f.fail == i+1 {
@@ -47,7 +53,13 @@ func (f *fakeSwitches) stages() []switchStage {
 }
 
 func (f *fakeSwitches) count() int {
-	return countOn(f.on)
+	var n int
+	for _, on := range f.on {
+		if on {
+			n++
+		}
+	}
+	return n
 }
 
 // stagesCharger returns a three stage 3kW heater on a 3-phase loadpoint
@@ -369,6 +381,104 @@ func TestSwitchStagesCatchUpLogOnce(t *testing.T) {
 
 	c.logCatchUp(errors.New("stage 3 on: unavailable"))
 	assert.Equal(t, 2, strings.Count(buf.String(), "ERROR"), "new cause")
+}
+
+func TestSwitchStagesUnreadableStage(t *testing.T) {
+	c, f, _ := stagesCharger(t, 0)
+
+	var buf bytes.Buffer
+	c.log = &util.Logger{Notepad: jww.NewNotepad(jww.LevelTrace, jww.LevelTrace, &buf, io.Discard, "", 0)}
+
+	f.on = []bool{true, true, true}
+	f.lost = 3
+
+	// the readable stages decide, no error
+	s, err := c.Status()
+	require.NoError(t, err)
+	assert.Equal(t, api.StatusC, s)
+
+	ok, err := c.Enabled()
+	require.NoError(t, err)
+	assert.True(t, ok)
+
+	// the unreadable stage counts as on
+	p, err := c.CurrentPower()
+	require.NoError(t, err)
+	assert.Equal(t, 9000.0, p)
+
+	// switching off reaches the readable stages and writes nothing blind to the other
+	require.NoError(t, c.Enable(false))
+	assert.Equal(t, []string{"off2", "off1"}, f.writes)
+
+	s, err = c.Status()
+	require.NoError(t, err)
+	assert.Equal(t, api.StatusB, s)
+
+	ok, err = c.Enabled()
+	require.NoError(t, err)
+	assert.False(t, ok)
+
+	p, err = c.CurrentPower()
+	require.NoError(t, err)
+	assert.Equal(t, 3000.0, p, "the unreadable stage may still run")
+
+	assert.Equal(t, 1, strings.Count(buf.String(), "WARN"), "once per outage, not per read")
+
+	// the config page reports it
+	_, err = c.StageStates()
+	assert.ErrorIs(t, err, api.ErrNotAvailable)
+
+	// readable again, reported once
+	f.lost = 0
+	_, err = c.Status()
+	require.NoError(t, err)
+	_, err = c.Status()
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(buf.String(), "readable again"))
+
+	states, err := c.StageStates()
+	require.NoError(t, err)
+	assert.Equal(t, []bool{false, false, true}, states)
+}
+
+func TestSwitchStagesUnreadableStageStepUp(t *testing.T) {
+	// an unreadable stage in the way keeps the target out of reach: the readable
+	// ones are switched, nothing is written to it and the attempts keep the delay
+	c, f, clk := stagesCharger(t, time.Minute)
+	f.lost = 2
+
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	require.NoError(t, c.Enable(true))
+	assert.Equal(t, []bool{true, false, true}, f.on)
+	assert.Equal(t, []string{"on1", "on3"}, f.writes)
+
+	f.writes = nil
+	for range 12 {
+		clk.Add(5 * time.Second)
+		require.NoError(t, c.catchUp())
+	}
+	assert.Empty(t, f.writes)
+}
+
+func TestSwitchStagesNoStageReadable(t *testing.T) {
+	c, f, _ := stagesCharger(t, 0)
+	f.on = []bool{true, true, true}
+
+	for i := range c.stages {
+		c.stages[i].enabled = func() (bool, error) { return false, api.ErrNotAvailable }
+	}
+
+	_, err := c.Status()
+	assert.ErrorIs(t, err, api.ErrNotAvailable)
+
+	_, err = c.Enabled()
+	assert.ErrorIs(t, err, api.ErrNotAvailable)
+
+	_, err = c.CurrentPower()
+	assert.ErrorIs(t, err, api.ErrNotAvailable)
+
+	assert.ErrorIs(t, c.Enable(false), api.ErrNotAvailable)
+	assert.Empty(t, f.writes, "nothing written blind")
 }
 
 func TestSwitchStagesSinglePhaseLoadpoint(t *testing.T) {

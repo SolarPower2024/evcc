@@ -143,6 +143,12 @@ enable never turns the heater on later by itself. The catch-up of a held back
 step up only runs on a heater that is on and tries again after the delay at the
 earliest; a repeated cause is logged once (`TestSwitchStagesCatchUpAfterFailedEnable`,
 `TestSwitchStagesCatchUpRetry`).
+A switch that cannot be read (unavailable, deleted) makes its stage unknown, not
+the whole heater: status, enabled and switching go by the readable stages
+(an error only if none can be read), nothing is written to the unknown one, its
+power counts as on for circuits, and the outage is one WARN. The config page
+shows it as an error (`TestSwitchStagesUnreadableStage`,
+`TestSwitchStagesUnreadableStageStepUp`).
 
 ## 5. Shed guard
 

@@ -14,6 +14,10 @@ package charger
 // A heater with its own thermostat draws nothing while the switches stay on.
 // With a power sensor, a draw up to standbypower then reports ready instead of
 // heating, as upstream's switch socket does.
+//
+// A switch that cannot be read leaves its stage unknown: the others are still
+// read and switched, nothing is written to the unknown one, and its power
+// counts as on.
 
 import (
 	"context"
@@ -21,6 +25,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/benbjohnson/clock"
@@ -50,6 +55,7 @@ type SwitchStages struct {
 	clock clock.Clock
 
 	stages     []switchStage
+	down       []atomic.Bool // per stage: its switch could not be read, logged once
 	stagePower float64
 	delay      time.Duration
 	power      func() (float64, error) // optional measurement
@@ -141,6 +147,7 @@ func NewSwitchStages(embed *embed, stages []switchStage, stagePower float64, del
 		log:        util.NewLogger("switchstages"),
 		clock:      clock.New(),
 		stages:     stages,
+		down:       make([]atomic.Bool, len(stages)),
 		stagePower: stagePower,
 		delay:      delay,
 		power:      power,
@@ -198,23 +205,67 @@ func (c *SwitchStages) catchUp() error {
 	return err
 }
 
-// states reads all switches
-func (c *SwitchStages) states() ([]bool, error) {
-	res := make([]bool, len(c.stages))
+// stageState is what the heater knows of one stage's switch
+type stageState int
+
+const (
+	stageOff stageState = iota
+	stageOn
+	stageUnknown // not readable, e.g. unavailable or deleted
+)
+
+// readStates reads all switches, a stage that cannot be read is unknown and
+// carries its error
+func (c *SwitchStages) readStates() ([]stageState, []error) {
+	res := make([]stageState, len(c.stages))
+	errs := make([]error, len(c.stages))
+
 	for i, s := range c.stages {
 		on, err := s.enabled()
-		if err != nil {
-			return nil, fmt.Errorf("stage %d: %w", i+1, err)
+		switch {
+		case err != nil:
+			res[i], errs[i] = stageUnknown, fmt.Errorf("stage %d: %w", i+1, err)
+		case on:
+			res[i] = stageOn
 		}
-		res[i] = on
 	}
+
+	return res, errs
+}
+
+// states reads all switches. An unreadable stage stays unknown, so one lost
+// switch does not keep evcc from switching off the others; it is logged once
+// per outage. Only if no stage can be read there is nothing to go on.
+func (c *SwitchStages) states() ([]stageState, error) {
+	res, errs := c.readStates()
+
+	var readable int
+	for i, err := range errs {
+		switch {
+		case err != nil:
+			if c.down[i].CompareAndSwap(false, true) {
+				c.log.WARN.Printf("%v, switching the others", err)
+			}
+		default:
+			readable++
+			if c.down[i].CompareAndSwap(true, false) {
+				c.log.INFO.Printf("stage %d: readable again", i+1)
+			}
+		}
+	}
+
+	if readable == 0 {
+		return nil, errs[0]
+	}
+
 	return res, nil
 }
 
-func countOn(states []bool) int {
+// countOn returns the stages known to be on
+func countOn(states []stageState) int {
 	var n int
-	for _, on := range states {
-		if on {
+	for _, s := range states {
+		if s == stageOn {
 			n++
 		}
 	}
@@ -272,35 +323,52 @@ func (c *SwitchStages) switchTo(phases int) error {
 	}
 
 	// lowest stages first on, highest first off, so a partial failure never
-	// leaves more switched on than wanted
+	// leaves more switched on than wanted. An unknown stage is left alone,
+	// nothing is written blind to a switch that cannot be read.
 	for i := len(states) - 1; i >= level; i-- {
-		if states[i] {
+		if states[i] == stageOn {
 			if err := c.stages[i].enable(false); err != nil {
 				return fmt.Errorf("stage %d off: %w", i+1, err)
 			}
+			states[i] = stageOff
 		}
 	}
 
 	for i := range level {
-		if !states[i] {
+		if states[i] == stageOff {
 			if err := c.stages[i].enable(true); err != nil {
 				return fmt.Errorf("stage %d on: %w", i+1, err)
 			}
+			states[i] = stageOn
 		}
 	}
 
-	if level != on || level != c.level {
-		c.log.DEBUG.Printf("stages: %d of %d", level, len(c.stages))
+	// an unknown stage in the way keeps the target out of reach, the next
+	// attempt waits for the delay
+	reached := countOn(states)
+	if reached != on || reached != c.level || reached < level {
+		c.log.DEBUG.Printf("stages: %d of %d", reached, len(c.stages))
 		c.changed = c.clock.Now()
 	}
-	c.level = level
+	c.level = reached
 
 	return nil
 }
 
-// StageStates returns each stage's switch, lowest first, for the config page
+// StageStates returns each stage's switch, lowest first, for the config page.
+// A stage that cannot be read is an error there.
 func (c *SwitchStages) StageStates() ([]bool, error) {
-	return c.states()
+	states, errs := c.readStates()
+
+	res := make([]bool, len(states))
+	for i, s := range states {
+		if errs[i] != nil {
+			return nil, errs[i]
+		}
+		res[i] = s == stageOn
+	}
+
+	return res, nil
 }
 
 // PowerEstimated reports that without a power sensor the power is the stages
@@ -347,7 +415,11 @@ func (c *SwitchStages) Status() (api.ChargeStatus, error) {
 // Enabled implements the api.Charger interface
 func (c *SwitchStages) Enabled() (bool, error) {
 	states, err := c.states()
-	return countOn(states) > 0, err
+	if err != nil {
+		return false, err
+	}
+
+	return countOn(states) > 0, nil
 }
 
 // Enable implements the api.Charger interface
@@ -439,7 +511,19 @@ func (c *SwitchStages) CurrentPower() (float64, error) {
 	}
 
 	states, err := c.states()
-	return float64(countOn(states)) * c.stagePower, err
+	if err != nil {
+		return 0, err
+	}
+
+	// an unreadable stage may be running: counted on, the safe side for circuits
+	var n int
+	for _, s := range states {
+		if s != stageOff {
+			n++
+		}
+	}
+
+	return float64(n) * c.stagePower, nil
 }
 
 var _ loadpoint.Controller = (*SwitchStages)(nil)
