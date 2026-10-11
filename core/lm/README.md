@@ -219,6 +219,10 @@ Both pass the same gate as price-based grid charging: the circuit
 ([2](#2-battery-in-load-management)) and a running peak
 ([11](#11-peak-shaving)).
 
+All of this acts only from the first soc read: until a battery returned one
+(after the start, or while every read fails) the soc-based charging, the order
+and peak shaving's reserve keep their state instead of deciding on a soc of 0.
+
 ```
 POST   /api/batterysocgridcharge/{true|false}
 POST   /api/batterysocgridchargestart/{soc}

@@ -144,7 +144,12 @@ func (site *Site) batteryGridChargeOnceActive() bool {
 		return false
 	}
 
-	soc := site.GetBatterySoc()
+	// nothing to decide on before the first read: the order carries on as stored
+	soc, known := site.batterySocRead()
+	if !known {
+		return o.Active
+	}
+
 	if soc >= o.Target {
 		site.log.INFO.Printf("battery grid charge once: %.0f%% reached", o.Target)
 		site.setGridChargeOnce(gridChargeOnce{})

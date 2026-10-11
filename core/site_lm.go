@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/loadpoint"
+	"github.com/evcc-io/evcc/core/types"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/config"
 )
@@ -494,15 +496,28 @@ func (site *Site) batteryChargeSetpoint() float64 {
 	return power
 }
 
+// batterySocRead returns the battery soc and whether any battery returned one in
+// its last read. Until then the soc is 0 (after the start) or stale (all reads
+// fail): no decision may be taken from it.
+func (site *Site) batterySocRead() (float64, bool) {
+	site.RLock()
+	defer site.RUnlock()
+
+	known := slices.ContainsFunc(site.battery.Devices, func(m types.Measurement) bool { return m.Soc != nil })
+
+	return site.battery.Soc, known
+}
+
 // batterySocChargeActive implements soc-based grid charging: charging starts at
-// or below the start soc and continues until the stop soc is reached
+// or below the start soc and continues until the stop soc is reached. Without a
+// read soc the state stays as it was.
 func (site *Site) batterySocChargeActive() bool {
 	if !site.batteryConfigured() {
 		return false
 	}
 
-	// read before locking, GetBatterySoc takes the site lock
-	soc := site.GetBatterySoc()
+	// read before locking, the site lock is taken
+	soc, known := site.batterySocRead()
 
 	s := site.lms()
 
@@ -512,6 +527,9 @@ func (site *Site) batterySocChargeActive() bool {
 	switch {
 	case !s.socChargeEnabled:
 		running = false
+
+	case !known:
+		// nothing read yet: keep running as it is
 
 	case s.socChargeStop > 0 && soc >= s.socChargeStop:
 		if running {

@@ -30,7 +30,7 @@ func onceSite(t *testing.T, soc float64) *Site {
 		log:           util.NewLogger("test"),
 		batteryMeters: []config.Device[api.Meter]{config.NewStaticDevice(config.Named{Name: "bat"}, api.Meter(&capacityBattery{kWh: 10}))},
 	}
-	site.battery.Soc = soc
+	setBatterySoc(site, soc)
 	site.peak().chargePower = 5000
 	return site
 }
@@ -53,7 +53,7 @@ func TestGridChargeOnceRightAway(t *testing.T) {
 	restarted.restoreGridChargeOnce()
 	assert.Equal(t, 80.0, restarted.gridChargeOnce().Target)
 
-	site.battery.Soc = 80
+	setBatterySoc(site, 80)
 	assert.False(t, site.batteryGridChargeRequested(api.Rate{}))
 	assert.Zero(t, site.gridChargeOnce().Target, "ended at the target")
 }

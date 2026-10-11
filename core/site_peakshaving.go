@@ -572,12 +572,15 @@ func (site *Site) updatePeakShaving(state siteState) {
 		return
 	}
 
-	soc := site.GetBatterySoc()
+	soc, known := site.batterySocRead()
 	hyst := site.peakHysteresis()
 
 	s.mu.Lock()
-	// below the reserve the battery is for peaks only
-	s.shaving = peak.Reserved(s.shaving, soc, reserve, hyst)
+	// below the reserve the battery is for peaks only. Without a read soc (start,
+	// all reads failing) the state stays as it was.
+	if known {
+		s.shaving = peak.Reserved(s.shaving, soc, reserve, hyst)
+	}
 	shaving := s.shaving
 	s.mu.Unlock()
 

@@ -119,7 +119,7 @@ func (sc *scenario) withDynamicCharge() {
 func (sc *scenario) cycle(soc, grid, battery float64) bool {
 	site := sc.site
 
-	site.battery.Soc = soc
+	setBatterySoc(site, soc)
 	site.battery.Power = battery
 	site.gridPower = grid
 

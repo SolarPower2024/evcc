@@ -3,6 +3,7 @@ package core
 import (
 	"testing"
 
+	"github.com/evcc-io/evcc/core/types"
 	"github.com/evcc-io/evcc/db"
 	"github.com/evcc-io/evcc/db/settings"
 )
@@ -15,6 +16,12 @@ func noSettingsDB(t *testing.T) {
 	prev := db.Instance
 	db.Instance = nil
 	t.Cleanup(func() { db.Instance = prev })
+}
+
+// setBatterySoc sets the soc as a successful read of the battery does
+func setBatterySoc(site *Site, soc float64) {
+	site.battery.Soc = soc
+	site.battery.Devices = []types.Measurement{{Soc: &soc}}
 }
 
 // keepSettings restores the settings store after the test: keys it added are
