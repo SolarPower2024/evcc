@@ -1,14 +1,19 @@
 package charger
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/benbjohnson/clock"
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/loadpoint"
+	"github.com/evcc-io/evcc/util"
+	jww "github.com/spf13/jwalterweatherman"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -19,6 +24,7 @@ type fakeSwitches struct {
 	on     []bool
 	writes []string
 	fail   int // stage that fails to switch, 0 = none
+	tries  int // switch attempts, failed ones too
 }
 
 func (f *fakeSwitches) stages() []switchStage {
@@ -27,6 +33,7 @@ func (f *fakeSwitches) stages() []switchStage {
 		res[i] = switchStage{
 			enabled: func() (bool, error) { return f.on[i], nil },
 			enable: func(on bool) error {
+				f.tries++
 				if f.fail == i+1 {
 					return errors.New("unavailable")
 				}
@@ -276,6 +283,92 @@ func TestSwitchStagesFailure(t *testing.T) {
 	f.fail = 0
 	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
 	assert.Equal(t, []bool{true, false, false}, f.on)
+}
+
+func TestSwitchStagesCatchUpAfterFailedEnable(t *testing.T) {
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+
+	// the first switch fails: evcc sees the error and the heater stays disabled
+	f.fail = 1
+	require.Error(t, c.Enable(true))
+
+	// the catch-up does not carry the failed Enable out once the switch is back
+	f.fail = 0
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, 0, f.count())
+
+	// partly switched on: nothing is caught up either, evcc retries the Enable
+	f.fail = 2
+	require.Error(t, c.Enable(true))
+	assert.Equal(t, []bool{true, false, false}, f.on)
+
+	f.fail = 0
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, 1, f.count())
+
+	require.NoError(t, c.Enable(true))
+	assert.Equal(t, 3, f.count())
+}
+
+func TestSwitchStagesCatchUpOnlyRunning(t *testing.T) {
+	// from no stage apply never holds a step back, so the catch-up leaves it to evcc
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	c.enabled, c.current = true, amps(9000)
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, 0, f.count())
+}
+
+func TestSwitchStagesCatchUpRetry(t *testing.T) {
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	require.NoError(t, c.Enable(true))
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	assert.Equal(t, 1, f.count(), "held back")
+
+	// a stage keeps failing: one attempt per delay, not one per tick
+	f.fail = 2
+	f.tries = 0
+	clk.Add(time.Minute)
+
+	for i := range 12 {
+		if i > 0 {
+			clk.Add(5 * time.Second)
+		}
+		_ = c.catchUp()
+		assert.Equal(t, 1, f.tries, "tick %d", i)
+	}
+
+	clk.Add(5 * time.Second)
+	require.Error(t, c.catchUp())
+	assert.Equal(t, 2, f.tries)
+
+	// back again: caught up after the next delay
+	f.fail = 0
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, 3, f.count())
+}
+
+func TestSwitchStagesCatchUpLogOnce(t *testing.T) {
+	c, _, _ := stagesCharger(t, time.Minute)
+
+	var buf bytes.Buffer
+	c.log = &util.Logger{Notepad: jww.NewNotepad(jww.LevelTrace, jww.LevelTrace, &buf, io.Discard, "", 0)}
+
+	c.logCatchUp(errors.New("stage 2 on: unavailable"))
+	c.logCatchUp(errors.New("stage 2 on: unavailable"))
+	assert.Equal(t, 1, strings.Count(buf.String(), "ERROR"), "same cause once")
+	assert.Equal(t, 1, strings.Count(buf.String(), "DEBUG"))
+
+	c.logCatchUp(errors.New("stage 3 on: unavailable"))
+	assert.Equal(t, 2, strings.Count(buf.String(), "ERROR"), "new cause")
 }
 
 func TestSwitchStagesSinglePhaseLoadpoint(t *testing.T) {

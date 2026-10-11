@@ -60,7 +60,8 @@ type SwitchStages struct {
 	enabled bool      // as last set by evcc or found on
 	current float64   // last requested current, 0 = unknown
 	level   int       // stages switched on by the last write
-	changed time.Time // last change of the level
+	changed time.Time // last change of the level or failed attempt
+	lastErr string    // cause of the last failed catch-up, logged once
 }
 
 // NewSwitchStagesFromConfig creates a stepped switch charger from generic config
@@ -155,24 +156,46 @@ func (c *SwitchStages) run(ctx context.Context, interval time.Duration) {
 			return
 		}
 
-		if err := c.catchUp(); err != nil {
-			c.log.ERROR.Println(err)
-		}
+		c.logCatchUp(c.catchUp())
 	}
 }
 
-// catchUp applies a step up that was held back by the delay
+// logCatchUp logs a failed catch-up once per cause, a repeat only on debug level
+func (c *SwitchStages) logCatchUp(err error) {
+	if err == nil {
+		return
+	}
+
+	c.mu.Lock()
+	repeat := err.Error() == c.lastErr
+	c.lastErr = err.Error()
+	c.mu.Unlock()
+
+	if repeat {
+		c.log.DEBUG.Println(err)
+		return
+	}
+	c.log.ERROR.Println(err)
+}
+
+// catchUp applies a step up that was held back by the delay. Only a running
+// heater has one: from no stage apply never holds back, so a heater that is
+// off, or whose switch-on failed, is left to evcc.
 func (c *SwitchStages) catchUp() error {
 	phases := c.phases()
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if !c.enabled || c.level >= c.target(phases) || c.clock.Since(c.changed) < c.delay {
+	if !c.enabled || c.level == 0 || c.level >= c.target(phases) || c.clock.Since(c.changed) < c.delay {
 		return nil
 	}
 
-	return c.apply(phases)
+	err := c.apply(phases)
+	if err == nil {
+		c.lastErr = ""
+	}
+	return err
 }
 
 // states reads all switches
@@ -219,8 +242,18 @@ func (c *SwitchStages) target(phases int) int {
 }
 
 // apply switches the stages to the target, holding back a step up while the
-// delay runs. Called with the mutex held.
+// delay runs. A failure restarts the delay, so the catch-up tries again only
+// after it. Called with the mutex held.
 func (c *SwitchStages) apply(phases int) error {
+	err := c.switchTo(phases)
+	if err != nil {
+		c.changed = c.clock.Now()
+	}
+	return err
+}
+
+// switchTo switches the stages to the target, see apply
+func (c *SwitchStages) switchTo(phases int) error {
 	states, err := c.states()
 	if err != nil {
 		return err
@@ -324,8 +357,16 @@ func (c *SwitchStages) Enable(enable bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// a failed switch leaves the setting as it was, else the catch-up would
+	// carry it out later without evcc asking
+	prev := c.enabled
 	c.enabled = enable
-	return c.apply(phases)
+	if err := c.apply(phases); err != nil {
+		c.enabled = prev
+		return err
+	}
+
+	return nil
 }
 
 // MaxCurrent implements the api.Charger interface

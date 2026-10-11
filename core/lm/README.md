@@ -138,6 +138,12 @@ loadpoint card shows the assumption as "≈ 6 kW" (whole kW, fits a phone) (`cha
 not apply there. `TestStagesCircuitStepsDown`,
 `TestStagesGiveWayToHigherPriority`, `TestStagesEstimatedPower`.
 
+Failing switches: a failed switch leaves the setting as it was, so a failed
+enable never turns the heater on later by itself. The catch-up of a held back
+step up only runs on a heater that is on and tries again after the delay at the
+earliest; a repeated cause is logged once (`TestSwitchStagesCatchUpAfterFailedEnable`,
+`TestSwitchStagesCatchUpRetry`).
+
 ## 5. Shed guard
 
 *Lastmanagement-Details → Abwurfschutz*: a protected loadpoint that load
