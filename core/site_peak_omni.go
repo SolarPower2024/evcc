@@ -33,6 +33,7 @@ import (
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/core/peak"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/homeassistant"
 	"github.com/evcc-io/evcc/util/request"
@@ -244,9 +245,12 @@ func (site *Site) applyOmniProtection() {
 	owned, sw, limitEntity, socSet := s.protOwned, s.protSwitch, s.protLimit, s.protSocSet
 	threshold := s.effectiveReserve()
 
-	// the window is there once a cycle metered it
+	// the window of the allowed power is the running one: it is renewed by a cycle
+	// with meter values only, and past its end (a meter failing at the end of the
+	// window, up to metersLost) it would go on with the allowed power frozen in
+	// the old window, up to twice the limit
 	limit, basis := s.limit, omniLimitBasis(false, s.limit)
-	if !s.metersLost && !s.window.Start.IsZero() {
+	if !s.metersLost && s.window.Start.Equal(s.clock.Now().Truncate(peak.Window)) {
 		limit, basis = s.window.Allowed, omniLimitBasis(true, s.limit)
 	}
 	s.mu.Unlock()

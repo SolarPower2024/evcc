@@ -1409,3 +1409,31 @@ func TestOmniSwitchGone(t *testing.T) {
 	assert.False(t, sc.site.peakOwned())
 	assert.True(t, sc.site.peak().protOwned, "the peak shaving of Omnibattery is not part of it")
 }
+
+// TestOmniWindowEnded verifies that the allowed power is that of the running
+// window only: a meter failing at the end of a window leaves the window of the
+// last cycle behind, and its allowed power, up to twice the limit, must not go on
+// into the next one before the meters count as lost.
+func TestOmniWindowEnded(t *testing.T) {
+	sc, ha := newOmni(t)
+	clk := mockClock(sc)
+
+	// the last cycle of a window with little drawn: it allows more than the limit
+	clk.Add(peak.Window - 30*time.Second)
+	sc.cycle(25, 1000, 0)
+	ha.take()
+
+	s := sc.site.peak()
+	s.mu.Lock()
+	s.window.Allowed = 7000
+	s.mu.Unlock()
+
+	sc.site.updateBatteryModePeakAware(false, false, sc.rate)
+	assert.Equal(t, []string{"set_value " + haProtLimit + " 7000"}, ha.take(), "the running window")
+
+	// the next window, the meters failed: the peak limit, not the old window
+	clk.Add(40 * time.Second)
+	sc.site.updateBatteryModePeakAware(false, false, sc.rate)
+	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000"}, ha.take())
+	assert.Equal(t, "5000", ha.get(haProtLimit))
+}

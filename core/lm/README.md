@@ -389,7 +389,12 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
   (`TestOmniProtectionLimitFollowsWindow`). Below the entity's minimum (500 W)
   the minimum is written, Omnibattery takes no lower limit
   (`TestOmniProtectionLimitMinimum`). Omnibattery has no window of its own,
-  this is how evcc passes the 15 minutes on.
+  this is how evcc passes the 15 minutes on. The allowed power counts for the
+  running window only: a meter failing at the end of a window leaves the window
+  of the last cycle behind, and its frozen value (up to twice the limit) would go
+  on into the next one for the 2 minutes until the meters count as lost; from
+  the first cycle in the new window the peak limit applies
+  (`TestOmniWindowEnded`).
 - **Soc threshold:** the reserve, at least 20 % (the lowest value of the entity),
   rounded up to the step (`TestOmniProtectionThreshold`), every change written:
   the write tolerance is in W and does not apply
