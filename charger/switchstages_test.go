@@ -292,9 +292,37 @@ func TestSwitchStagesFailure(t *testing.T) {
 	require.Error(t, c.MaxCurrentMillis(amps(3000)))
 	assert.Equal(t, []bool{true, true, false}, f.on)
 
+	// the failed request is not taken over, evcc reads back the old current and
+	// so sets the new one again; the level is what is really on
+	cur, err := c.GetMaxCurrent()
+	require.NoError(t, err)
+	assert.InDelta(t, amps(9000), cur, 1e-9)
+	assert.Equal(t, 2, c.level)
+
 	f.fail = 0
 	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
 	assert.Equal(t, []bool{true, false, false}, f.on)
+}
+
+func TestSwitchStagesFailureStepUp(t *testing.T) {
+	c, f, _ := stagesCharger(t, 0)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	require.NoError(t, c.Enable(true))
+
+	// the second stage comes on, the third fails
+	f.fail = 3
+	require.Error(t, c.MaxCurrentMillis(amps(9000)))
+	assert.Equal(t, []bool{true, true, false}, f.on)
+	assert.Equal(t, 2, c.level)
+
+	cur, err := c.GetMaxCurrent()
+	require.NoError(t, err)
+	assert.InDelta(t, amps(3000), cur, 1e-9, "the request is still the old one")
+
+	f.fail = 0
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	assert.Equal(t, []bool{true, true, true}, f.on)
 }
 
 func TestSwitchStagesCatchUpAfterFailedEnable(t *testing.T) {

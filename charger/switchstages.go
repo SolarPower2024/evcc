@@ -294,7 +294,8 @@ func (c *SwitchStages) target(phases int) int {
 
 // apply switches the stages to the target, holding back a step up while the
 // delay runs. A failure restarts the delay, so the catch-up tries again only
-// after it. Called with the mutex held.
+// after it, and leaves the level at the stages switched on so far. Called with
+// the mutex held.
 func (c *SwitchStages) apply(phases int) error {
 	err := c.switchTo(phases)
 	if err != nil {
@@ -328,6 +329,7 @@ func (c *SwitchStages) switchTo(phases int) error {
 	for i := len(states) - 1; i >= level; i-- {
 		if states[i] == stageOn {
 			if err := c.stages[i].enable(false); err != nil {
+				c.level = countOn(states)
 				return fmt.Errorf("stage %d off: %w", i+1, err)
 			}
 			states[i] = stageOff
@@ -337,6 +339,7 @@ func (c *SwitchStages) switchTo(phases int) error {
 	for i := range level {
 		if states[i] == stageOff {
 			if err := c.stages[i].enable(true); err != nil {
+				c.level = countOn(states)
 				return fmt.Errorf("stage %d on: %w", i+1, err)
 			}
 			states[i] = stageOn
@@ -461,8 +464,21 @@ func (c *SwitchStages) MaxCurrentMillis(current float64) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// a failed switch does not take the request over: evcc reads the current
+	// back and, still seeing the old one, sets the new one again
+	prev := c.current
 	c.current = current
 
+	if err := c.update(phases); err != nil {
+		c.current = prev
+		return err
+	}
+
+	return nil
+}
+
+// update switches the stages to the current. Called with the mutex held.
+func (c *SwitchStages) update(phases int) error {
 	if !c.enabled {
 		states, err := c.states()
 		if err != nil {

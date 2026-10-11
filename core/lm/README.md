@@ -139,9 +139,12 @@ not apply there. `TestStagesCircuitStepsDown`,
 `TestStagesGiveWayToHigherPriority`, `TestStagesEstimatedPower`.
 
 Failing switches: a failed switch leaves the setting as it was, so a failed
-enable never turns the heater on later by itself. The catch-up of a held back
-step up only runs on a heater that is on and tries again after the delay at the
-earliest; a repeated cause is logged once (`TestSwitchStagesCatchUpAfterFailedEnable`,
+enable never turns the heater on later by itself, and a failed current stays
+unset (evcc reads the old one back and sets the new one again; the level is
+what is really on after a partial switch, `TestSwitchStagesFailure`,
+`TestSwitchStagesFailureStepUp`). The catch-up of a held back step up only runs
+on a heater that is on and tries again after the delay at the earliest; a
+repeated cause is logged once (`TestSwitchStagesCatchUpAfterFailedEnable`,
 `TestSwitchStagesCatchUpRetry`).
 A switch that cannot be read (unavailable, deleted) makes its stage unknown, not
 the whole heater: status, enabled and switching go by the readable stages
