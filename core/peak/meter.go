@@ -69,6 +69,7 @@ type Meter struct {
 	unmovedWs    float64   // drawn according to the grid power while the counter stood still
 	unmovedSince time.Time // the counter has not moved since
 	stale        bool
+	gapped       bool // a gap inside the window was counted at the limit
 
 	// a reading below the last one is a reset, a replaced counter or a glitch (a
 	// sensor reporting 0 for a moment). It only becomes the new base once the next
@@ -87,16 +88,26 @@ func (m *Meter) rebase(source string, energy float64) {
 
 // drawn returns the energy drawn since the last sample in Ws. A counter is used
 // when it was read now and last time from the same source, the grid power fills
-// in otherwise. A reading the counter cannot have reached, or one lower than
-// the last, does not count until it is confirmed: the grid power fills in.
-func (m *Meter) drawn(now time.Time, imported, energy float64, source string) float64 {
+// in otherwise: for a gap longer than MaxGap the power after it says nothing
+// about the gap, it counts at the limit. A reading the counter cannot have
+// reached, or one lower than the last, does not count until it is confirmed.
+func (m *Meter) drawn(now time.Time, imported, energy float64, source string, limit float64) float64 {
 	interval := now.Sub(m.lastSample)
 	powerWs := imported * interval.Seconds()
 	m.glitch = false
 
+	// what counts where the counter does not tell
+	fallback := func() float64 {
+		if interval > MaxGap {
+			m.gapped = true
+			return limit * interval.Seconds()
+		}
+		return powerWs
+	}
+
 	if source == SourcePower || source != m.source || m.stale {
 		m.rebase(source, energy)
-		return powerWs
+		return fallback()
 	}
 
 	// grid power counted for a lower reading that turned out to be a glitch
@@ -107,8 +118,9 @@ func (m *Meter) drawn(now time.Time, imported, energy float64, source string) fl
 		switch {
 		case energy < m.pendingEnergy:
 			// still falling: keep waiting
-			m.pendingEnergy, m.pendingWs = energy, m.pendingWs+powerWs
-			return powerWs
+			fb := fallback()
+			m.pendingEnergy, m.pendingWs = energy, m.pendingWs+fb
+			return fb
 
 		case energy >= m.lastEnergy:
 			// back at the old level: the counter covers what the grid power counted
@@ -125,15 +137,16 @@ func (m *Meter) drawn(now time.Time, imported, energy float64, source string) fl
 	d := (energy - m.lastEnergy) * 3600e3
 
 	if d < 0 {
-		m.pending, m.pendingEnergy, m.pendingWs = true, energy, powerWs
+		fb := fallback()
+		m.pending, m.pendingEnergy, m.pendingWs = true, energy, fb
 		m.glitch = true
-		return powerWs
+		return fb
 	}
 
 	// no grid connection draws this much: not a measurement, the grid power
 	// counts (also what the counter was late with) and the next step starts here
 	if d > maxGridPower*max(interval, time.Second).Seconds() {
-		drawn := powerWs + m.unmovedWs
+		drawn := fallback() + m.unmovedWs
 		m.unmovedWs, m.unmovedSince = 0, time.Time{}
 		m.rebase(source, energy)
 		m.glitch = true
@@ -188,7 +201,7 @@ func (m *Meter) Update(s Sample, set Settings) State {
 	var drawn, demand float64
 	if !m.lastSample.IsZero() {
 		wasStale := m.stale
-		drawn = m.drawn(now, imported, s.Energy, source)
+		drawn = m.drawn(now, imported, s.Energy, source, set.Limit)
 		demand = max(0, drawn+s.BatteryPower*now.Sub(m.lastSample).Seconds())
 		res.StaleNow = m.stale && !wasStale
 		res.GlitchNow = m.glitch
@@ -202,8 +215,8 @@ func (m *Meter) Update(s Sample, set Settings) State {
 		if !m.lastSample.IsZero() && m.lastSample.Before(start) && now.Sub(m.lastSample) <= MaxGap {
 			after := now.Sub(start).Seconds() / now.Sub(m.lastSample).Seconds()
 
-			// only a window metered from its start counts for the statistics
-			if m.meteredFrom.Equal(m.windowStart) && !m.windowStart.IsZero() {
+			// only a window metered from its start, without a gap, counts for the statistics
+			if m.meteredFrom.Equal(m.windowStart) && !m.windowStart.IsZero() && !m.gapped {
 				res.Completed = &Completed{m.windowStart, m.windowWs + drawn*(1-after), m.demandWs + demand*(1-after)}
 			}
 
@@ -216,7 +229,7 @@ func (m *Meter) Update(s Sample, set Settings) State {
 
 		m.windowStart = start
 		m.isFrozen = false
-		m.stale = false
+		m.stale, m.gapped = false, false
 		m.unmovedWs, m.unmovedSince = 0, time.Time{}
 	} else {
 		m.windowWs += drawn

@@ -270,7 +270,10 @@ earlier allows more and a short spike is only covered when the window would end
 above the limit. It is at most `cap × limit` (default 2), stops growing from the
 freeze minute (default 12) as a meter clock off by seconds could move a late
 draw into the next window, and the last cycle borrows the next window's
-budget. What evcc did not see, after a start or a gap, counts at the limit.
+budget. What evcc did not see, after a start or a gap, counts at the limit; so
+does a gap of over 2 minutes inside a window that the grid power or a changed
+source has to fill in (a counter of the same source before and after covers it),
+and such a window stays out of the statistics (`TestMeterUnmetered`).
 
 The energy drawn comes from the grid meter's import counter, else a Home
 Assistant energy sensor (kWh or Wh), else the grid power. A failed reading, a 0

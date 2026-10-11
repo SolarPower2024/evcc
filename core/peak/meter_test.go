@@ -127,6 +127,44 @@ func TestMeterUnmetered(t *testing.T) {
 	h.update(0)
 	assert.Equal(t, h.now, h.st.MeteredFrom)
 	assert.Equal(t, 5000.0, h.st.Allowed)
+
+	// a gap inside a window counts at the limit, not at the power after it, and
+	// the window is not handed out for the statistics
+	h = newHarness(0)
+	h.update(9000)
+	h.sample(9000, time.Minute)
+	assert.InDelta(t, 9000*60, h.st.DrawnWs, 0.001)
+
+	h.now = time.Date(2026, 9, 25, 10, 9, 0, 0, time.UTC)
+	h.update(500)
+	assert.InDelta(t, 9000*60+5000*480, h.st.DrawnWs, 0.001, "8 minutes at the limit")
+
+	h.sample(500, 6*time.Minute)
+	assert.Equal(t, time.Date(2026, 9, 25, 10, 15, 0, 0, time.UTC), h.st.Start)
+	assert.Nil(t, h.st.Completed)
+
+	// a source changing across the gap is the same
+	h = newHarness(0)
+	h.counterNow(9000, 100)
+	h.counter(9000, 100.075)
+	h.now = time.Date(2026, 9, 25, 10, 9, 0, 0, time.UTC)
+	h.update(500)
+	assert.InDelta(t, 270000+5000*510, h.st.DrawnWs, 0.001)
+
+	// the same counter before and after covers the gap
+	h = newHarness(0)
+	h.counterNow(9000, 100)
+	h.counter(9000, 100.075)
+	h.now = time.Date(2026, 9, 25, 10, 9, 0, 0, time.UTC)
+	h.counterNow(500, 100.5)
+	assert.InDelta(t, 0.5*3600e3, h.st.DrawnWs, 0.001)
+
+	for range 12 {
+		h.counter(0, 100.5)
+	}
+	if assert.NotNil(t, h.st.Completed, "metered from its start by the counter") {
+		assert.InDelta(t, 0.5*3600e3, h.st.Completed.DrawnWs, 0.001)
+	}
 }
 
 // TestMeterLateCounter verifies that a counter updating less often than
