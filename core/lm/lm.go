@@ -337,16 +337,41 @@ func unmet(old, new, allowed float64) float64 {
 	return max(0, new-old)
 }
 
+// Demand qualifies a load's request: what it tells load management beyond the
+// amounts asked for. The zero value is the plain request.
+type Demand struct {
+	// Standing is the demand of a load that is on but draws nothing, like a
+	// wallbox in state B whose car is full: it asks for its maximum every cycle
+	// and takes nothing. The amount stands as its recorded demand whether the
+	// request fits or not. Following what the circuit denies instead would hold
+	// the lower loads back for one cycle, show the request as met the next
+	// and let them take the power back, over and over.
+	Standing float64
+}
+
+// need returns the demand to record for an unserved amount
+func (d Demand) need(unserved float64) float64 {
+	if d.Standing > 0 {
+		return d.Standing
+	}
+	return unserved
+}
+
 // ValidatePower caps a power request against the circuit while withholding the
 // headroom reserved for higher-priority loads, and records what the circuit
 // denied so that lower-priority loads give way.
 func (m *Manager) ValidatePower(l Load, c api.Circuit, old, new float64) float64 {
+	return m.RequestPower(l, c, old, new, Demand{})
+}
+
+// RequestPower is ValidatePower for a load that qualifies its request
+func (m *Manager) RequestPower(l Load, c api.Circuit, old, new float64, d Demand) float64 {
 	if c == nil {
 		return new
 	}
 
 	capped := c.ValidatePower(old, new)
-	need := unmet(old, new, capped)
+	need := d.need(unmet(old, new, capped))
 	m.remember(c, l, m.Priority(l), &need, nil)
 
 	return m.peekPower(l, c, old, new, &capped)
@@ -356,12 +381,17 @@ func (m *Manager) ValidatePower(l Load, c api.Circuit, old, new float64) float64
 // the headroom reserved for higher-priority loads, and records what the circuit
 // denied so that lower-priority loads give way.
 func (m *Manager) ValidateCurrent(l Load, c api.Circuit, old, new float64) float64 {
+	return m.RequestCurrent(l, c, old, new, Demand{})
+}
+
+// RequestCurrent is ValidateCurrent for a load that qualifies its request
+func (m *Manager) RequestCurrent(l Load, c api.Circuit, old, new float64, d Demand) float64 {
 	if c == nil {
 		return new
 	}
 
 	capped := c.ValidateCurrent(old, new)
-	need := unmet(old, new, capped)
+	need := d.need(unmet(old, new, capped))
 	m.remember(c, l, m.Priority(l), nil, &need)
 
 	return m.peekCurrent(l, c, old, new, &capped)

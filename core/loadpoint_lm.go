@@ -77,6 +77,17 @@ func (lp *Loadpoint) lmCircuit() *lmCircuit {
 	return c
 }
 
+// demand qualifies a loadpoint's request. A loadpoint that is enabled but draws
+// nothing, its car full or at its own limit, asks for its maximum every cycle
+// without taking any of it. What it stands for is the minimum it needs to
+// start, whatever the circuit allows of the maximum, see lm.Demand.
+func (c *lmCircuit) demand(request, min float64) lm.Demand {
+	if c.lp.enabled && !c.lp.charging() && min > 0 && request >= min {
+		return lm.Demand{Standing: min}
+	}
+	return lm.Demand{}
+}
+
 // ValidateCurrent caps the current with the priorities on top. A switch device
 // cannot be limited: it asks for the current its power draws on its phases and
 // gets all or nothing, as for the power below.
@@ -86,7 +97,7 @@ func (c *lmCircuit) ValidateCurrent(old, new float64) float64 {
 		return 0
 
 	case !c.switchDevice:
-		c.allowedCurrent = c.lp.lmm().ValidateCurrent(c.lp, c.Circuit, old, new)
+		c.allowedCurrent = c.lp.lmm().RequestCurrent(c.lp, c.Circuit, old, new, c.demand(new, c.lp.effectiveMinCurrent()))
 		return c.allowedCurrent
 
 	case new <= 0:
@@ -121,7 +132,7 @@ func (c *lmCircuit) ValidatePower(old, new float64) float64 {
 
 	case !c.switchDevice:
 		c.requested = new
-		c.allowedPower = c.lp.lmm().ValidatePower(c.lp, c.Circuit, old, new)
+		c.allowedPower = c.lp.lmm().RequestPower(c.lp, c.Circuit, old, new, c.demand(new, currentToPower(c.lp.effectiveMinCurrent(), c.lp.ActivePhases())))
 		return c.allowedPower
 
 	case new <= 0:

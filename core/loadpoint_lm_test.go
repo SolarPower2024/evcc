@@ -437,3 +437,127 @@ func TestLoadpointUsesSiteLoadManagement(t *testing.T) {
 	assert.Same(t, alone.lmm(), alone.lmm())
 	assert.NotSame(t, site.lmm(), alone.lmm())
 }
+
+// lmIdleSetup is two regulated loadpoints on a circuit metered at the grid:
+// "high" is enabled but draws nothing, its car is full, and asks for its maximum
+// every cycle; "low" charges. They are visited in turn, one per cycle.
+type lmIdleSetup struct {
+	t         *testing.T
+	meter     *lmMeter
+	circuit   api.Circuit
+	base      float64
+	high, low *Loadpoint
+}
+
+func newIdleSetup(t *testing.T, limit, base float64) *lmIdleSetup {
+	t.Helper()
+	Voltage = 230
+
+	m := &lmMeter{}
+	c, err := circuit.New(util.NewLogger("test"), "main", 0, limit, m, 0)
+	require.NoError(t, err)
+
+	site := &Site{log: util.NewLogger("test")}
+
+	mk := func(prio int, status api.ChargeStatus) *Loadpoint {
+		return &Loadpoint{
+			log:        util.NewLogger("lp"),
+			clock:      clock.NewMock(),
+			site:       site,
+			circuit:    c,
+			charger:    &fakeCharger{},
+			priority:   prio,
+			status:     status,
+			enabled:    true,
+			phases:     3,
+			minCurrent: 6,
+			maxCurrent: 16,
+		}
+	}
+
+	s := &lmIdleSetup{t: t, meter: m, circuit: c, base: base, high: mk(5, api.StatusB), low: mk(1, api.StatusC)}
+
+	// the low one charges with its maximum
+	s.low.offeredCurrent = 16
+	s.low.chargePower = currentToPower(16, 3)
+
+	return s
+}
+
+// visit runs the limit check of one loadpoint. The charging one takes what it is
+// allowed down to its minimum, the idle one only offers it.
+func (s *lmIdleSetup) visit(lp *Loadpoint) float64 {
+	s.t.Helper()
+
+	s.meter.power = s.base + s.low.chargePower + s.high.chargePower
+	require.NoError(s.t, s.circuit.Update(nil))
+
+	limited := lp.lmLimit(16)
+	if limited < 6 {
+		limited = 0
+	}
+
+	lp.offeredCurrent = limited
+	lp.enabled = limited > 0
+
+	if lp == s.low {
+		lp.chargePower = currentToPower(limited, 3)
+	}
+
+	return limited
+}
+
+// run visits high and low alternately and returns what the low one was allowed
+func (s *lmIdleSetup) run(rounds int) []float64 {
+	s.t.Helper()
+
+	var res []float64
+	for range rounds {
+		s.visit(s.high)
+		res = append(res, s.visit(s.low))
+		s.high.enabled = true // the car's own limit, not the circuit, keeps it idle
+	}
+	return res
+}
+
+// TestIdleLoadpointDoesNotMakeLowerOneOscillate: a loadpoint of high priority is
+// enabled without drawing anything and asks for its maximum every cycle. The
+// circuit caps that request, the load below gives way, the request fits in the
+// next cycle, the load below takes the power back, and so on. The idle
+// loadpoint stands for its minimum instead, so the load below settles. The free
+// power may be above or below that minimum.
+func TestIdleLoadpointDoesNotMakeLowerOneOscillate(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		limit float64 // circuit power
+		want  float64 // current of the low one once settled
+	}{
+		// 22 kW - 2 kW base - 11.04 kW low leave 8.96 kW, above the minimum of 4.14 kW
+		{"free power above the minimum", 22000, 16},
+		// 14 kW leave 0.96 kW, so the low one gives way until 4.14 kW are free
+		{"free power below the minimum", 14000, 11},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newIdleSetup(t, tc.limit, 2000)
+
+			res := s.run(16)
+			for i, got := range res[4:] {
+				assert.Equal(t, tc.want, got, "round %d: %v", i+4, res)
+			}
+		})
+	}
+}
+
+// TestIdleLoadpointDemandEnds: the demand only stands while the loadpoint is on
+// and idle, a charging one is served like any other
+func TestIdleLoadpointDemandEnds(t *testing.T) {
+	s := newIdleSetup(t, 14000, 2000)
+	require.Equal(t, 11.0, s.run(16)[15], "settled below the idle loadpoint")
+
+	// the car charges: the high one draws what it is offered and takes its share
+	s.high.status = api.StatusC
+	s.high.chargePower = currentToPower(s.high.offeredCurrent, 3)
+
+	s.visit(s.high)
+	assert.Equal(t, 0.0, s.visit(s.low), "the low one gives way to a charging load")
+}

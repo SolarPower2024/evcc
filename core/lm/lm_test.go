@@ -283,3 +283,28 @@ func TestValidateAsksCircuitOnce(t *testing.T) {
 	assert.Equal(t, 8.0, m.ValidateCurrent(load, c, 0, 8))
 	assert.Equal(t, 1, c.current)
 }
+
+// TestStandingDemand: a load that is on but draws nothing stands for a fixed
+// demand, whatever the circuit denied of its request
+func TestStandingDemand(t *testing.T) {
+	m := lm.New()
+
+	low := &testLoad{title: "low", prio: 1, power: 10500}
+	c := newCircuit(t, 11000, low)
+	high := &testLoad{title: "high", prio: 5, circuit: c}
+
+	// 500W are free, of 2000W asked: the standing 1000W count, not the denied 1500W
+	assert.Equal(t, 500.0, m.RequestPower(high, c, 0, 2000, lm.Demand{Standing: 1000}))
+	assert.Equal(t, 10000.0, m.ValidatePower(low, c, 10500, 10500))
+
+	// the low one gave way, 1000W are free and the request for them fits: the
+	// standing demand stays
+	low.power = 10000
+	require.NoError(t, c.Update([]api.CircuitLoad{low, high}))
+	assert.Equal(t, 1000.0, m.RequestPower(high, c, 0, 1000, lm.Demand{Standing: 1000}))
+	assert.Equal(t, 10000.0, m.ValidatePower(low, c, 10000, 10500), "the low one is not allowed back to 10500")
+
+	// the plain request that fits demands nothing, the low one takes the power
+	assert.Equal(t, 1000.0, m.ValidatePower(high, c, 0, 1000))
+	assert.Equal(t, 10500.0, m.ValidatePower(low, c, 10000, 10500))
+}

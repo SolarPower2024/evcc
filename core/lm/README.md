@@ -72,6 +72,12 @@ while a higher one records unmet demand, so it goes up the ladder first, one
 rung per cycle (`TestRecoveryFavoursHigherPriority`). A load that is off and not
 asking holds no claim until its first request.
 
+A loadpoint that is on but draws nothing, its car full or at its own limit,
+asks for its maximum in every cycle. For as long as it stays on, its demand is
+its minimum power, whether the request fits or not. Following the denied amount
+would hold the loads below back for one cycle and let them take the power back
+in the next, over and over (`TestIdleLoadpointDoesNotMakeLowerOneOscillate`).
+
 All state lives in one `lm.Manager` per site (`site.lmm()`); loadpoints reach it
 through their site (`lp.lmm()`). The check runs inside evcc's `setLimit` through
 `lmCircuit` (`core/loadpoint_lm.go`), which keeps evcc's calculation and adds
