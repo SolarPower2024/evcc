@@ -11,6 +11,10 @@ package charger
 // not toggle the switches every cycle. Switching on from off is not delayed,
 // the loadpoint's own enable delay already applies there.
 //
+// In pv mode core steps the heater down only after the loadpoint's disable delay,
+// see core/loadpoint_stages.go; a limit of the circuit or of load management
+// applies at once.
+//
 // A heater with its own thermostat draws nothing while the switches stay on.
 // With a power sensor, a draw up to standbypower then reports ready instead of
 // heating, as upstream's switch socket does.
@@ -384,6 +388,16 @@ func (c *SwitchStages) PowerEstimated() bool {
 // Stages returns the number of stages, core shows the heater as switched by it
 func (c *SwitchStages) Stages() int {
 	return len(c.stages)
+}
+
+// RunningCurrent returns the current the stages switched on by the last write
+// stand for on the given phases, without reading the switches. Core holds the
+// heater on them while the pv surplus falls short, see core/loadpoint_stages.go.
+func (c *SwitchStages) RunningCurrent(phases int) float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return float64(c.level) * c.stagePower / (voltage * float64(phases))
 }
 
 // Status implements the api.Charger interface

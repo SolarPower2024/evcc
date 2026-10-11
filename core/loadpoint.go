@@ -1962,6 +1962,8 @@ func (lp *Loadpoint) pvMaxCurrent(sitePower, batteryPower float64, batteryBuffer
 	// reset timer to disabled state
 	lp.resetPVTimer()
 
+	targetCurrent = lp.holdStage(targetCurrent, sitePower, lp.pvDisableThreshold(minCurrent, activePhases)) // custom: a heater in stages steps down after the disable delay, see core/loadpoint_stages.go
+
 	// cap at maximum current
 	targetCurrent = min(targetCurrent, maxCurrent)
 

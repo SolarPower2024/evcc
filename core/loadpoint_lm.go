@@ -22,6 +22,8 @@ type loadpointCustom struct {
 
 	switchMu    sync.Mutex
 	switchPower float64 // switch power last measured while on
+
+	stageTimer time.Time // since when a heater in stages is short of its running stages, see core/loadpoint_stages.go
 }
 
 // lmm returns the load management of the loadpoint's site. A loadpoint

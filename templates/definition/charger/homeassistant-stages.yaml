@@ -88,8 +88,8 @@ params:
       de: Wartezeit für höhere Stufe
       en: Delay before a higher stage
     help:
-      de: Eine höhere Stufe wird erst eingeschaltet, wenn die letzte Änderung so lange her ist. Abschalten geschieht sofort. 0 = ohne Wartezeit.
-      en: A higher stage is only switched on once the last change is this old. Switching down is immediate. 0 = no delay.
+      de: Eine höhere Stufe wird erst eingeschaltet, wenn die letzte Änderung so lange her ist. Herunterschalten im PV-Betrieb folgt der Abschaltverzögerung des Ladepunkts, bei Stromkreis-Grenzen geschieht es sofort. 0 = ohne Wartezeit.
+      en: A higher stage is only switched on once the last change is this old. Switching down in pv mode follows the loadpoint's disable delay, at circuit limits it is immediate. 0 = no delay.
     type: duration
     default: 1m
     advanced: true

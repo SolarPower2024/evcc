@@ -1,6 +1,10 @@
 package core
 
-import "github.com/evcc-io/evcc/core/keys"
+import (
+	"time"
+
+	"github.com/evcc-io/evcc/core/keys"
+)
 
 // Custom extension: tells the ui that the charger switches a heater in stages,
 // see charger/switchstages.go. Its mode buttons then read Off/Smart/On as for
@@ -58,4 +62,49 @@ func (lp *Loadpoint) publishChargePower(power float64) {
 	}
 	lp.publish(keys.ChargePower, power)
 	lp.publish(keys.ChargePowerEstimate, estimate)
+}
+
+// stageRunner is implemented by charger.SwitchStages
+type stageRunner interface {
+	RunningCurrent(phases int) float64
+}
+
+// holdStage keeps a heater in stages on the stages it runs while the pv surplus
+// falls short of them, as a charger that switches off below its minimum waits
+// for the loadpoint's disable threshold and delay. The charger itself steps down
+// at once, so a surplus hovering around a stage boundary would toggle the
+// relays: the stage goes only once the grid import has stayed at the disable
+// threshold for the disable delay. Imports below the threshold are tolerated.
+// The circuit limit in setLimit applies afterwards, at once.
+func (lp *Loadpoint) holdStage(target, sitePower, threshold float64) float64 {
+	c, ok := lp.charger.(stageRunner)
+	if !ok {
+		return target
+	}
+
+	running := c.RunningCurrent(lp.ActivePhases())
+	if !lp.enabled || target+1e-6 >= running {
+		lp.stageTimer = time.Time{}
+		return target
+	}
+
+	if sitePower < threshold {
+		lp.stageTimer = time.Time{}
+		return running
+	}
+
+	now, delay := lp.clock.Now(), lp.GetDisableDelay()
+	if lp.stageTimer.IsZero() {
+		lp.log.DEBUG.Printf("stages short of %.3gA: %.0fW >= %.0fW disable threshold, down in %v", running, sitePower, threshold, delay)
+		lp.stageTimer = now
+	}
+
+	if now.Sub(lp.stageTimer) < delay {
+		return running
+	}
+
+	lp.log.DEBUG.Println("stages down: disable delay elapsed")
+	lp.stageTimer = time.Time{}
+
+	return target
 }

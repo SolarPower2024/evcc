@@ -582,3 +582,14 @@ func TestSwitchStagesConfig(t *testing.T) {
 	_, err = NewSwitchStagesFromConfig(t.Context(), map[string]any{"stagepower": 3000})
 	assert.Error(t, err, "stages required")
 }
+
+func TestSwitchStagesRunningCurrent(t *testing.T) {
+	// the current of the stages switched on, for core's pv hold
+	c, _, _ := stagesCharger(t, 0)
+	assert.Equal(t, 0.0, c.RunningCurrent(3))
+
+	require.NoError(t, c.MaxCurrentMillis(amps(6000)))
+	require.NoError(t, c.Enable(true))
+	assert.InDelta(t, amps(6000), c.RunningCurrent(3), 1e-9)
+	assert.InDelta(t, 6000/voltage, c.RunningCurrent(1), 1e-9)
+}
