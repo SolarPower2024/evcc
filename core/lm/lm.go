@@ -148,6 +148,18 @@ func competes(a, b api.Circuit) bool {
 	return false
 }
 
+// under reports whether a load on circuit c draws through the level, i.e.
+// whether the level is c itself or one of its parents. Shedding such a load
+// relieves the level, shedding any other does not.
+func under(c, level api.Circuit) bool {
+	for ; c != nil; c = c.GetParent() {
+		if c == level {
+			return true
+		}
+	}
+	return false
+}
+
 // remember stores a load's unserved demand. A nil power or current leaves the
 // respective value untouched, as the two are recorded by separate calls.
 func (m *Manager) remember(c api.Circuit, l Load, prio int, power, current *float64) {
@@ -205,14 +217,14 @@ func (m *Manager) snapshot() []entry {
 	return res
 }
 
-// below returns what the loads with a priority below prio draw on circuits
-// competing with c, i.e. what shedding them could free. The calling load's own
-// draw is passed in rather than queried, as it may hold its own lock.
-func (m *Manager) below(entries []entry, c api.Circuit, prio int, self Load, selfPower, selfCurrent float64) (float64, float64) {
+// below returns what the loads with a priority below prio draw through the
+// level, i.e. what shedding them frees on it. The calling load's own draw is
+// passed in rather than queried, as it may hold its own lock.
+func (m *Manager) below(entries []entry, level api.Circuit, prio int, self Load, selfPower, selfCurrent float64) (float64, float64) {
 	var power, current float64
 
 	for _, e := range entries {
-		if e.prio >= prio || !competes(c, e.circuit) {
+		if e.prio >= prio || !under(e.circuit, level) {
 			continue
 		}
 
@@ -251,12 +263,44 @@ func headroom(c api.Circuit) (float64, float64) {
 	return power, current
 }
 
+// relief returns what shedding the loads below prio adds to the headroom of a
+// request on circuit c. Each level of the parent chain counts the loads below
+// it only: a load in a sibling circuit does not relieve an overloaded circuit,
+// while one in a sibling of the next level up does relieve that level. Added to
+// the request's old value it makes the circuit's own chain check come to the
+// tightest level's answer. Without a limited level there is nothing to relieve.
+func (m *Manager) relief(entries []entry, c api.Circuit, prio int, self Load, selfPower, selfCurrent float64) (float64, float64) {
+	freePower, freeCurrent := headroom(c)
+	power, current := math.Inf(1), math.Inf(1)
+
+	for level := c; level != nil; level = level.GetParent() {
+		lowerPower, lowerCurrent := m.below(entries, level, prio, self, selfPower, selfCurrent)
+
+		if limit := level.GetMaxPower(); limit > 0 {
+			power = min(power, limit-level.GetChargePower()-freePower+lowerPower)
+		}
+		if limit := level.GetMaxCurrent(); limit > 0 {
+			current = min(current, limit-level.GetMaxPhaseCurrent()-freeCurrent+lowerCurrent)
+		}
+	}
+
+	if math.IsInf(power, 1) {
+		power = 0
+	}
+	if math.IsInf(current, 1) {
+		current = 0
+	}
+
+	return power, current
+}
+
 // reserved returns the power and current that must be left to loads with a
 // higher priority than prio and are hence unavailable to the calling load.
 //
-// A reservation only counts while it can be met: the free headroom plus what
-// the loads below the reserving one draw has to cover it. Otherwise shedding
-// them would not let it run anyway, and the power would just sit idle.
+// A reservation only counts while it can be met: on every level of the
+// reserving load's circuit chain the free headroom plus what the loads below it
+// draw through that level has to cover it. Otherwise shedding them would not
+// let it run anyway, and the power would just sit idle.
 func (m *Manager) reserved(c api.Circuit, self Load, prio int, selfPower, selfCurrent float64) (float64, float64) {
 	entries := m.snapshot()
 
@@ -268,7 +312,7 @@ func (m *Manager) reserved(c api.Circuit, self Load, prio int, selfPower, selfCu
 		}
 
 		freePower, freeCurrent := headroom(e.circuit)
-		lowerPower, lowerCurrent := m.below(entries, e.circuit, e.prio, self, selfPower, selfCurrent)
+		lowerPower, lowerCurrent := m.relief(entries, e.circuit, e.prio, self, selfPower, selfCurrent)
 
 		if e.power > 0 && freePower+lowerPower >= e.power {
 			power += e.power
@@ -352,9 +396,10 @@ func (m *Manager) peekPower(l Load, c api.Circuit, old, new float64, capped *flo
 		res = c.ValidatePower(old-reserve, new)
 	}
 
-	// cutting into what the load draws right now: the loads below it go first
+	// cutting into what the load draws right now: the loads below it go first, as
+	// far as shedding them relieves the level that is short
 	if keep := min(old, new); res < keep {
-		lower, _ := m.below(m.snapshot(), c, prio, l, old, 0)
+		lower, _ := m.relief(m.snapshot(), c, prio, l, old, 0)
 		res = max(res, min(keep, c.ValidatePower(old-reserve+lower, keep)))
 	}
 
@@ -381,9 +426,10 @@ func (m *Manager) peekCurrent(l Load, c api.Circuit, old, new float64, capped *f
 		res = c.ValidateCurrent(old-reserve, new)
 	}
 
-	// cutting into what the load draws right now: the loads below it go first
+	// cutting into what the load draws right now: the loads below it go first, as
+	// far as shedding them relieves the level that is short
 	if keep := min(old, new); res < keep {
-		_, lower := m.below(m.snapshot(), c, prio, l, 0, old)
+		_, lower := m.relief(m.snapshot(), c, prio, l, 0, old)
 		res = max(res, min(keep, c.ValidateCurrent(old-reserve+lower, keep)))
 	}
 

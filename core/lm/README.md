@@ -64,7 +64,8 @@ load never exceeds the circuit limit, it only claims power that was freed. As
 evcc updates one loadpoint per cycle, a full shed takes up to
 `interval × number of loadpoints`. In an overload a load keeps what it draws
 while the loads below it draw enough to cover the excess, so shedding starts at
-the bottom.
+the bottom. Only loads that draw through the overloaded circuit count: a lower
+priority load in a sibling circuit does not relieve it (`TestOverloadNotRelievedBySibling`).
 
 Recovery uses the same reserve: freed power stays withheld from lower loads
 while a higher one records unmet demand, so it goes up the ladder first, one
