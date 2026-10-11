@@ -185,7 +185,8 @@ func (m *Meter) drawn(now time.Time, imported, energy float64, source string, li
 
 // Update takes the sample of a cycle and returns the window's state. A window
 // that ends with it and was metered from its start is returned as Completed,
-// with the battery power added back for the demand without it.
+// with the battery power added back for the demand without it (as far as it
+// went to the house, not to the grid).
 func (m *Meter) Update(s Sample, set Settings) State {
 	now := s.Now
 	source := s.Source
@@ -202,7 +203,9 @@ func (m *Meter) Update(s Sample, set Settings) State {
 	if !m.lastSample.IsZero() {
 		wasStale := m.stale
 		drawn = m.drawn(now, imported, s.Energy, source, set.Limit)
-		demand = max(0, drawn+s.BatteryPower*now.Sub(m.lastSample).Seconds())
+		// what the battery discharged into the grid was not the house's demand. With
+		// a counter this is an approximation: the import counter knows no export.
+		demand = max(0, drawn+(s.BatteryPower+min(0, s.GridPower))*now.Sub(m.lastSample).Seconds())
 		res.StaleNow = m.stale && !wasStale
 		res.GlitchNow = m.glitch
 	} else {

@@ -311,7 +311,9 @@ starts there again. The load management circuit rises along. See
 **Statistics** (*Mehr → Peak Shaving*): per month the highest quarter hour with
 and without the battery and how often it covered a peak; only quarter hours
 metered from their start count, kept for 24 months (`peakMonths`,
-`core/site_peak_stats.go`). Each month also keeps its baseline, the highest
+`core/site_peak_stats.go`). "Without the battery" adds back only what the
+battery gave to the house, not what it fed into the grid (`TestMeterCompleted`;
+with a counter an approximation, as the import counter knows no export). Each month also keeps its baseline, the highest
 limit set by hand in it (the base while following the peak); months from before
 get the current one at the start. The dialog shows the current month in two
 tiles (highest quarter hour with and without the battery next to each other

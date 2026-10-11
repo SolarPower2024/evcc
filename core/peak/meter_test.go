@@ -230,6 +230,33 @@ func TestMeterCompleted(t *testing.T) {
 		assert.InDelta(t, 4000, c.DrawnWs/peak.Window.Seconds(), 0.001)
 		assert.InDelta(t, 6000, c.DemandWs/peak.Window.Seconds(), 0.001)
 	}
+
+	// 10:30 to 10:45 exporting 5 kW while the battery discharges 3 kW: nothing
+	// drawn, and without the battery nothing would have been
+	for range 30 {
+		h.now = h.now.Add(peak.Cycle)
+		h.st = h.m.Update(peak.Sample{Now: h.now, GridPower: -5000, BatteryPower: 3000, Source: peak.SourcePower}, h.set)
+	}
+
+	c = h.st.Completed
+	if assert.NotNil(t, c) {
+		assert.Equal(t, time.Date(2026, 9, 25, 10, 30, 0, 0, time.UTC), c.Start)
+		assert.Zero(t, c.DrawnWs)
+		assert.Zero(t, c.DemandWs)
+	}
+
+	// 10:45 to 11:00 exporting 2 kW while the battery discharges 3 kW: without the
+	// battery the house would have drawn 1 kW
+	for range 30 {
+		h.now = h.now.Add(peak.Cycle)
+		h.st = h.m.Update(peak.Sample{Now: h.now, GridPower: -2000, BatteryPower: 3000, Source: peak.SourcePower}, h.set)
+	}
+
+	c = h.st.Completed
+	if assert.NotNil(t, c) {
+		assert.Zero(t, c.DrawnWs)
+		assert.InDelta(t, 1000, c.DemandWs/peak.Window.Seconds(), 0.001)
+	}
 }
 
 // TestMeterCounterGlitch verifies that a counter reading 0 or lower for a moment
