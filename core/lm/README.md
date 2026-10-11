@@ -533,7 +533,8 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   the room below the limit, paused while a peak runs.
 - one-time grid charging: the target as goal at the chosen time, or right away.
 - a goal is set for step 1 at the earliest, the optimizer ignores one in step 0
-  (a goal reached within the current step, an order past its time).
+  (a goal reached within the current step, an order past its time). The rule is
+  pinned by `TestLmOptimizerScenarios/goal_soc_binds_from_step_1`.
 - grid charging refused right now (shed hold-off, unknown charge power on a
   circuit) is not offered (`charge_from_grid`).
 - load management: a loadpoint plans with at most its circuits' power,
@@ -929,7 +930,13 @@ and `server`; many replay logged situations. Two optimizer tests only run
 against a running optimizer: `TestLmOptimizerScenarios` (`OPTIMIZER_URI`)
 solves synthetic days and checks soc bounds, import limit, energy balance and
 goals; `TestLmOptimizerReplay` (`OPTIMIZER_REPLAY`, `OPTIMIZER_URI`) replays a
-recorded request.
+recorded request. Without `OPTIMIZER_URI` both are skipped, so a green `ok` of
+`./core/` alone proves nothing about them. The scenarios include the contract
+test of the optimizer rule "a goal binds from step 1, one in step 0 is
+ignored" (`goal_soc_binds_from_step_1`); the weekly check of a new optimizer
+image runs them (`WSLTEST_ENV="OPTIMIZER_URI=http://localhost:<port>"
+bash testtools/wsltest.sh ./core/ -- -test.run TestLmOptimizerScenarios`), so a
+changed rule shows up there.
 
 Tests touching the settings store call `noSettingsDB` (keeps it in memory, as
 evcc's `newDeleteTestSite` leaves its database open) and `keepSettings`
