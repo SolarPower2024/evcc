@@ -25,14 +25,17 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/homeassistant"
+	"github.com/evcc-io/evcc/util/request"
 )
 
 const (
@@ -408,9 +411,12 @@ func (site *Site) releaseOmni() bool {
 }
 
 // omniSwitchOff switches the entity off unless it is already, and reports
-// whether it is. An entity not readable is not written to: Home Assistant answers
-// a call to an entity it has not loaded with success and does nothing, so the
-// release would count as done. The next cycle tries again.
+// whether it is. An entity not readable (not available, timeout, error) is not
+// written to: Home Assistant answers a call to such an entity with success and does
+// nothing, so the release would count as done while the switch stays on. What evcc
+// holds stays held and the next cycle tries again. Only an entity Home Assistant
+// does not know (404) counts as off: nothing is left to switch off, and the release
+// would otherwise never land and block every change of the entities.
 func (site *Site) omniSwitchOff(name, entity string) bool {
 	conn, err := site.haConnection()
 	if !site.logWrite("marstek connect", "connect", err) {
@@ -418,6 +424,11 @@ func (site *Site) omniSwitchOff(name, entity string) bool {
 	}
 
 	state, _, err := omniRead(conn, entity)
+	if notFound(err) {
+		site.log.WARN.Printf("%s: %s not found, nothing to switch off", name, entity)
+		return true
+	}
+
 	if !site.logWrite(name+" read", "read "+entity, err) {
 		return false
 	}
@@ -444,7 +455,16 @@ func (site *Site) omniShow(mode string) {
 	}
 }
 
-// omniRead reads the state and the options of a switch or select entity
+// notFound reports whether Home Assistant does not know the entity
+func notFound(err error) bool {
+	var se *request.StatusError
+
+	return errors.As(err, &se) && se.StatusCode() == http.StatusNotFound
+}
+
+// omniRead reads the state and the options of a switch or select entity. As
+// GetState does, it reports an entity that is unknown or not available as
+// api.ErrNotAvailable: a call to it is answered with success and does nothing.
 func omniRead(conn *homeassistant.Connection, entity string) (string, []string, error) {
 	var res struct {
 		State      string `json:"state"`
@@ -454,6 +474,9 @@ func omniRead(conn *homeassistant.Connection, entity string) (string, []string, 
 	}
 
 	err := conn.GetJSON(fmt.Sprintf("%s/api/states/%s", conn.URI(), url.PathEscape(entity)), &res)
+	if err == nil && notAvailable(res.State) {
+		err = api.ErrNotAvailable
+	}
 
 	return res.State, res.Attributes.Options, err
 }

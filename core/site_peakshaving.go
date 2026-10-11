@@ -417,7 +417,7 @@ func (site *Site) numberSetter(entity string, up bool, tolerance func() float64)
 func numberWrite(r peak.Range, current string, val float64, up bool, tolerance float64) (float64, bool) {
 	val = r.Fit(val, up)
 
-	// an unavailable entity has no current value and gets the write
+	// a state that is no number has no current value and gets the write
 	v, err := strconv.ParseFloat(current, 64)
 
 	return val, err != nil || !r.Unchanged(v, val, tolerance)
@@ -431,8 +431,14 @@ func (site *Site) peakWriteTolerance() float64 {
 	return 0
 }
 
+// notAvailable reports whether the state is that of an entity without a value
+func notAvailable(state string) bool {
+	return state == "unknown" || state == "unavailable"
+}
+
 // numberState reads the min, max and step attributes and the state of a number
-// entity
+// entity. An entity that is unknown or not available is reported as
+// api.ErrNotAvailable, as GetState does.
 func numberState(conn *homeassistant.Connection, entity string) (peak.Range, string, error) {
 	var res struct {
 		State      string `json:"state"`
@@ -445,6 +451,9 @@ func numberState(conn *homeassistant.Connection, entity string) (peak.Range, str
 
 	uri := fmt.Sprintf("%s/api/states/%s", conn.URI(), url.PathEscape(entity))
 	err := conn.GetJSON(uri, &res)
+	if err == nil && notAvailable(res.State) {
+		err = api.ErrNotAvailable
+	}
 
 	return peak.Range(res.Attributes), res.State, err
 }

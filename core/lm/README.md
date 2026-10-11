@@ -270,10 +270,16 @@ stretch the cycle by 40 s and more, so after the first timeout the other calls
 of the cycle are refused and the next cycle asks again: a cycle costs one
 timeout (`TestHAGuardOneTimeoutPerCycle`, `TestHAGuardOneTimeoutPerCycleBYD`).
 The EEG counter is not read for a minute after a timeout of its own
-(`TestHAGuardEegCounter`). An entity that cannot be read (timeout, 404, 5xx) is
-not written to: Home Assistant answers a call to an entity it has not loaded with
-success and does nothing (`TestNumberSetterReadFailure`); a release that cannot
-be read keeps what evcc holds and tries again (`TestOmniReleaseHangs`).
+(`TestHAGuardEegCounter`). An entity that cannot be read (timeout, 404, 5xx) or
+is `unavailable` or `unknown` is not written to: Home Assistant answers a call
+to such an entity with success and does nothing (`TestNumberSetterReadFailure`,
+`TestOmniNotAvailableKeepsHold`). A release that meets one keeps what evcc holds
+(`peakShavingOwned`, `peakShavingProtOwned`) and tries again in the next cycle,
+also while Home Assistant starts and does not know the entities yet
+(`TestOmniReleaseHangs`, `TestOmniEntityNotLoaded`). Only a switch that Home
+Assistant does not know at all (deleted, renamed; 404) counts as off, as the
+release would otherwise never land and block every change of the entities
+(`TestOmniSwitchGone`).
 
 The limit applies to the clock-aligned 15 minute window: `allowed` =
 `(limit × 15 min − energy drawn so far) / time left`, so energy left unused
