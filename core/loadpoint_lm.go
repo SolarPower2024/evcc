@@ -77,15 +77,22 @@ func (lp *Loadpoint) lmCircuit() *lmCircuit {
 	return c
 }
 
-// demand qualifies a loadpoint's request. A loadpoint that is enabled but draws
-// nothing, its car full or at its own limit, asks for its maximum every cycle
-// without taking any of it. What it stands for is the minimum it needs to
-// start, whatever the circuit allows of the maximum, see lm.Demand.
-func (c *lmCircuit) demand(request, min float64) lm.Demand {
-	if c.lp.enabled && !c.lp.charging() && min > 0 && request >= min {
-		return lm.Demand{Standing: min}
+// demand qualifies a loadpoint's request, see lm.Demand. The amounts are the
+// request, what the loadpoint draws now and its minimum (lowest), all in one unit.
+//
+// A loadpoint runs on any power from its minimum up, so it gets going on that
+// much of its demand. One that is enabled but draws nothing, its car full or at
+// its own limit, asks for its maximum every cycle without taking any of it. It
+// stands for the minimum it needs to start, whatever the circuit allows of the
+// maximum.
+func (c *lmCircuit) demand(request, draw, lowest float64) lm.Demand {
+	d := lm.Demand{Regulated: true, Min: max(0, lowest-draw)}
+
+	if c.lp.enabled && !c.lp.charging() && lowest > 0 && request >= lowest {
+		d.Standing = lowest
 	}
-	return lm.Demand{}
+
+	return d
 }
 
 // ValidateCurrent caps the current with the priorities on top. A switch device
@@ -97,7 +104,7 @@ func (c *lmCircuit) ValidateCurrent(old, new float64) float64 {
 		return 0
 
 	case !c.switchDevice:
-		c.allowedCurrent = c.lp.lmm().RequestCurrent(c.lp, c.Circuit, old, new, c.demand(new, c.lp.effectiveMinCurrent()))
+		c.allowedCurrent = c.lp.lmm().RequestCurrent(c.lp, c.Circuit, old, new, c.demand(new, old, c.lp.effectiveMinCurrent()))
 		return c.allowedCurrent
 
 	case new <= 0:
@@ -132,7 +139,7 @@ func (c *lmCircuit) ValidatePower(old, new float64) float64 {
 
 	case !c.switchDevice:
 		c.requested = new
-		c.allowedPower = c.lp.lmm().RequestPower(c.lp, c.Circuit, old, new, c.demand(new, currentToPower(c.lp.effectiveMinCurrent(), c.lp.ActivePhases())))
+		c.allowedPower = c.lp.lmm().RequestPower(c.lp, c.Circuit, old, new, c.demand(new, old, currentToPower(c.lp.effectiveMinCurrent(), c.lp.ActivePhases())))
 		return c.allowedPower
 
 	case new <= 0:

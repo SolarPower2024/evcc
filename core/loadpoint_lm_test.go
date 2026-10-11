@@ -447,6 +447,7 @@ type lmIdleSetup struct {
 	circuit   api.Circuit
 	base      float64
 	high, low *Loadpoint
+	highDraws bool // the high one takes what it is allowed instead of staying idle
 }
 
 func newIdleSetup(t *testing.T, limit, base float64) *lmIdleSetup {
@@ -500,8 +501,15 @@ func (s *lmIdleSetup) visit(lp *Loadpoint) float64 {
 	lp.offeredCurrent = limited
 	lp.enabled = limited > 0
 
-	if lp == s.low {
+	if lp == s.low || s.highDraws {
 		lp.chargePower = currentToPower(limited, 3)
+	}
+
+	if lp == s.high && s.highDraws {
+		lp.status = api.StatusB
+		if limited > 0 {
+			lp.status = api.StatusC
+		}
 	}
 
 	return limited
@@ -515,7 +523,9 @@ func (s *lmIdleSetup) run(rounds int) []float64 {
 	for range rounds {
 		s.visit(s.high)
 		res = append(res, s.visit(s.low))
-		s.high.enabled = true // the car's own limit, not the circuit, keeps it idle
+		if !s.highDraws {
+			s.high.enabled = true // the car's own limit, not the circuit, keeps it idle
+		}
 	}
 	return res
 }
@@ -560,4 +570,43 @@ func TestIdleLoadpointDemandEnds(t *testing.T) {
 
 	s.visit(s.high)
 	assert.Equal(t, 0.0, s.visit(s.low), "the low one gives way to a charging load")
+}
+
+// TestHigherLoadpointStartsOnWhatCanBeFreed: the circuit has 11 kW, 2 kW are
+// base load and the low loadpoint draws 8.97 kW. The one of higher priority
+// wants 11.04 kW, which cannot be freed in full. It gets going on the minimum of
+// 4.14 kW anyway, and the low one gives way for it.
+func TestHigherLoadpointStartsOnWhatCanBeFreed(t *testing.T) {
+	s := newIdleSetup(t, 11000, 2000)
+	s.highDraws = true
+
+	s.low.offeredCurrent = 13
+	s.low.chargePower = currentToPower(13, 3)
+	s.high.enabled = false
+
+	s.run(8)
+
+	assert.GreaterOrEqual(t, s.high.chargePower, currentToPower(6, 3), "the high one runs")
+	assert.Zero(t, s.low.chargePower, "the low one gives way, its minimum does not fit next to it")
+}
+
+// TestLoadpointDemand: a loadpoint runs on any power from its minimum up, so
+// load management only needs that much of its demand to let it start; one that
+// is on and idle stands for it, one that charges does not
+func TestLoadpointDemand(t *testing.T) {
+	s := newIdleSetup(t, 22000, 2000)
+	min := currentToPower(6, 3)
+
+	d := s.high.lmCircuit().demand(11040, 0, min)
+	assert.Equal(t, lm.Demand{Regulated: true, Min: min, Standing: min}, d, "idle")
+
+	// asking for less than the minimum is not asking for anything to stand
+	d = s.high.lmCircuit().demand(min-1, 0, min)
+	assert.Zero(t, d.Standing)
+
+	d = s.low.lmCircuit().demand(11040, 2000, min)
+	assert.Equal(t, lm.Demand{Regulated: true, Min: min - 2000}, d, "charging, the minimum less what it draws")
+
+	d = s.low.lmCircuit().demand(11040, 5000, min)
+	assert.Equal(t, lm.Demand{Regulated: true}, d, "charging above its minimum")
 }

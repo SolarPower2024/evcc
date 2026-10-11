@@ -42,9 +42,9 @@ const (
 	// DefaultTimeout is how long an unserved demand keeps reserving headroom.
 	// It must outlast a full loadpoint round-robin, as evcc updates only one
 	// loadpoint per cycle: interval x number of loadpoints. The default covers
-	// 20 loadpoints at the default 30s interval. A load that is satisfied or
-	// idle records a demand of zero on every visit, so a generous value costs
-	// nothing; only a load that stops updating entirely would keep reserving.
+	// 20 loadpoints at the default 30s interval. A load that is satisfied or off
+	// records a demand of zero on every visit, so a generous value costs nothing;
+	// only a load that stops updating entirely would keep reserving.
 	DefaultTimeout = 10 * time.Minute
 
 	// DefaultHoldOff is how long battery grid charging stays off after load
@@ -56,12 +56,29 @@ const (
 	DefaultPhases = 3
 )
 
+// amount is a load's unserved demand in one unit
+type amount struct {
+	need float64 // everything the load asked for and did not get
+	min  float64 // the part of it that is worth granting on its own, see Demand
+}
+
+// reserve returns how much of the available headroom the demand claims: all of
+// the need if the headroom covers it, else as much as there is, but only when
+// that is worth granting. A load that runs in full or not at all, like a
+// heater or the battery, has its whole need as the minimum.
+func (a amount) reserve(available float64) float64 {
+	if a.need <= 0 || available <= 0 || available < a.min {
+		return 0
+	}
+	return min(a.need, available)
+}
+
 // record is a load's unserved demand
 type record struct {
 	circuit api.Circuit
 	prio    int
-	power   float64 // unserved power in W
-	current float64 // unserved current in A
+	power   amount // in W
+	current amount // in A
 	updated time.Time
 }
 
@@ -162,7 +179,7 @@ func under(c, level api.Circuit) bool {
 
 // remember stores a load's unserved demand. A nil power or current leaves the
 // respective value untouched, as the two are recorded by separate calls.
-func (m *Manager) remember(c api.Circuit, l Load, prio int, power, current *float64) {
+func (m *Manager) remember(c api.Circuit, l Load, prio int, power, current *amount) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -300,7 +317,8 @@ func (m *Manager) relief(entries []entry, c api.Circuit, prio int, self Load, se
 // A reservation only counts while it can be met: on every level of the
 // reserving load's circuit chain the free headroom plus what the loads below it
 // draw through that level has to cover it. Otherwise shedding them would not
-// let it run anyway, and the power would just sit idle.
+// let it run anyway, and the power would just sit idle. A load that can run on
+// part of its demand claims what there is as soon as that covers its minimum.
 func (m *Manager) reserved(c api.Circuit, self Load, prio int, selfPower, selfCurrent float64) (float64, float64) {
 	entries := m.snapshot()
 
@@ -314,12 +332,8 @@ func (m *Manager) reserved(c api.Circuit, self Load, prio int, selfPower, selfCu
 		freePower, freeCurrent := headroom(e.circuit)
 		lowerPower, lowerCurrent := m.relief(entries, e.circuit, e.prio, self, selfPower, selfCurrent)
 
-		if e.power > 0 && freePower+lowerPower >= e.power {
-			power += e.power
-		}
-		if e.current > 0 && freeCurrent+lowerCurrent >= e.current {
-			current += e.current
-		}
+		power += e.power.reserve(freePower + lowerPower)
+		current += e.current.reserve(freeCurrent + lowerCurrent)
 	}
 
 	return power, current
@@ -347,14 +361,31 @@ type Demand struct {
 	// the lower loads back for one cycle, show the request as met the next
 	// and let them take the power back, over and over.
 	Standing float64
+
+	// Regulated marks a load that runs on any power from its minimum up, like a
+	// wallbox. Of its demand only Min is needed to get it going; as soon as the
+	// headroom covers that, the lower loads leave what there is. Without it the
+	// load needs the whole increase, like a heater or the battery, which take
+	// nothing of a partial budget.
+	Regulated bool
+
+	// Min is the smallest increase that gets a regulated load going: its minimum
+	// less what it draws now. Zero for one that runs above its minimum already.
+	Min float64
 }
 
-// need returns the demand to record for an unserved amount
-func (d Demand) need(unserved float64) float64 {
+// amount returns what to record for an unserved amount
+func (d Demand) amount(unserved float64) amount {
+	need := unserved
 	if d.Standing > 0 {
-		return d.Standing
+		need = d.Standing
 	}
-	return unserved
+
+	if !d.Regulated {
+		return amount{need, need}
+	}
+
+	return amount{need, min(max(d.Min, 0), need)}
 }
 
 // ValidatePower caps a power request against the circuit while withholding the
@@ -371,7 +402,7 @@ func (m *Manager) RequestPower(l Load, c api.Circuit, old, new float64, d Demand
 	}
 
 	capped := c.ValidatePower(old, new)
-	need := d.need(unmet(old, new, capped))
+	need := d.amount(unmet(old, new, capped))
 	m.remember(c, l, m.Priority(l), &need, nil)
 
 	return m.peekPower(l, c, old, new, &capped)
@@ -391,7 +422,7 @@ func (m *Manager) RequestCurrent(l Load, c api.Circuit, old, new float64, d Dema
 	}
 
 	capped := c.ValidateCurrent(old, new)
-	need := d.need(unmet(old, new, capped))
+	need := d.amount(unmet(old, new, capped))
 	m.remember(c, l, m.Priority(l), nil, &need)
 
 	return m.peekCurrent(l, c, old, new, &capped)

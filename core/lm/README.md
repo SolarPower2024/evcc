@@ -78,6 +78,13 @@ its minimum power, whether the request fits or not. Following the denied amount
 would hold the loads below back for one cycle and let them take the power back
 in the next, over and over (`TestIdleLoadpointDoesNotMakeLowerOneOscillate`).
 
+A reservation counts when the headroom plus what the loads below draw covers
+the demand. For a loadpoint it is enough to cover its minimum power less what
+it draws: the lower loads then leave all there is, and the loadpoint starts on
+that. Only a load that runs in full or not at all, a heater or the battery,
+needs its whole demand (`TestRegulatedLoadGetsItsMinimum`,
+`TestHigherLoadpointStartsOnWhatCanBeFreed`).
+
 All state lives in one `lm.Manager` per site (`site.lmm()`); loadpoints reach it
 through their site (`lp.lmm()`). The check runs inside evcc's `setLimit` through
 `lmCircuit` (`core/loadpoint_lm.go`), which keeps evcc's calculation and adds
