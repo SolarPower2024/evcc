@@ -105,7 +105,7 @@
     {
       "name": "Batterie-Vermessung (Kapazität, Wirkungsgrad)",
       "files": ["core/site_battery_ident.go"],
-      "keywords": ["roundtrip efficiency", "round trip efficiency", "RoundTripEfficiency", "usable capacity"]
+      "keywords": ["roundtrip efficiency", "round trip efficiency", "round-trip efficiency", "RoundTripEfficiency", "roundTripEfficiency", "RoundtripEfficiency", "usable capacity", "UsableCapacity"]
     },
     {
       "name": "Zweiter Einspeisetarif (EEG) / Energieseite",
