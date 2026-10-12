@@ -30,7 +30,7 @@ func onceSite(t *testing.T, soc float64) *Site {
 		log:           util.NewLogger("test"),
 		batteryMeters: []config.Device[api.Meter]{config.NewStaticDevice(config.Named{Name: "bat"}, api.Meter(&capacityBattery{kWh: 10}))},
 	}
-	site.battery.Soc = soc
+	setBatterySoc(site, soc)
 	site.peak().chargePower = 5000
 	return site
 }
@@ -53,7 +53,7 @@ func TestGridChargeOnceRightAway(t *testing.T) {
 	restarted.restoreGridChargeOnce()
 	assert.Equal(t, 80.0, restarted.gridChargeOnce().Target)
 
-	site.battery.Soc = 80
+	setBatterySoc(site, 80)
 	assert.False(t, site.batteryGridChargeRequested(api.Rate{}))
 	assert.Zero(t, site.gridChargeOnce().Target, "ended at the target")
 }
@@ -112,4 +112,49 @@ func TestGridChargeOnceOptimizerGoal(t *testing.T) {
 	goal := batteries[0].cfg.SGoal
 	require.Len(t, goal, 16)
 	assert.Equal(t, float32(8000), goal[3], "48 min at 5 kW: the 4th quarter hour")
+}
+
+// An order whose time is long past is ended after a restart and in the cycle; one
+// that is only late still charges right away (the peak gate may have held it back).
+func TestGridChargeOnceExpired(t *testing.T) {
+	noSettingsDB(t)
+
+	now := time.Now()
+	assert.True(t, onceExpired(gridChargeOnce{Target: 80, Until: now.Add(-50 * time.Hour)}, now))
+	assert.True(t, onceExpired(gridChargeOnce{Target: 80, Until: now.Add(-maxGridChargeOnceLate - time.Minute)}, now))
+	assert.False(t, onceExpired(gridChargeOnce{Target: 80, Until: now.Add(-10 * time.Minute)}, now))
+	assert.False(t, onceExpired(gridChargeOnce{Target: 80, Until: now.Add(time.Hour)}, now))
+	assert.False(t, onceExpired(gridChargeOnce{Target: 80}, now), "right away has no time")
+	assert.False(t, onceExpired(gridChargeOnce{Until: now.Add(-50 * time.Hour)}, now), "no order")
+
+	restore := func(until time.Duration) *Site {
+		site := onceSite(t, 40)
+		settings.SetJson(keys.BatteryGridChargeOnce, gridChargeOnce{Target: 80, Until: time.Now().Add(until), Active: true})
+		site.restoreGridChargeOnce()
+		return site
+	}
+
+	site := restore(-50 * time.Hour)
+	assert.Zero(t, site.gridChargeOnce().Target, "ended after the restart")
+
+	var stored gridChargeOnce
+	require.NoError(t, settings.Json(keys.BatteryGridChargeOnce, &stored))
+	assert.Zero(t, stored.Target, "and not restored again")
+
+	site = restore(-10 * time.Minute)
+	assert.Equal(t, 80.0, site.gridChargeOnce().Target, "late: carries on")
+	assert.True(t, site.batteryGridChargeOnceActive(), "late: right away")
+
+	// in the cycle
+	site = onceSite(t, 40)
+	site.lms().gridOnce = gridChargeOnce{Target: 80, Until: time.Now().Add(-50 * time.Hour), Active: true}
+	assert.False(t, site.batteryGridChargeOnceActive())
+	assert.Zero(t, site.gridChargeOnce().Target, "ended in the cycle")
+
+	// no soc read yet: the time decides all the same
+	site = onceSite(t, 40)
+	site.battery.Devices = nil
+	site.lms().gridOnce = gridChargeOnce{Target: 80, Until: time.Now().Add(-50 * time.Hour)}
+	assert.False(t, site.batteryGridChargeOnceActive())
+	assert.Zero(t, site.gridChargeOnce().Target)
 }

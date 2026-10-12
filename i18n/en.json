@@ -1765,7 +1765,7 @@
     "enabledHelp": "The circuits' power limits (peak) throttle wallboxes, heaters and battery grid charging.",
     "event": {
       "gridChargeDenied": "Grid charging blocked · circuit allows {allowed} of {wanted}",
-      "gridChargePaused": "Grid charging paused · demand {demand} above peak limit {limit}",
+      "gridChargePaused": "Grid charging paused · demand {demand} above allowed grid draw {limit}",
       "notFollowing": "{load} ignores its limit · {power} instead of {allowed}",
       "peak": "Peak covered · demand {demand}, limit {limit}",
       "shed": "{load} shed · circuit at {power}",

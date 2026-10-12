@@ -22,7 +22,7 @@ type Decision struct {
 const (
 	EventShed             = "shed"             // a running load was switched off, A = guard minutes, B = circuit power
 	EventThrottled        = "throttled"        // a load was limited, A = requested, B = allowed
-	EventGridChargePaused = "gridChargePaused" // a peak paused battery grid charging, A = demand, B = peak limit
+	EventGridChargePaused = "gridChargePaused" // a peak paused battery grid charging, A = demand, B = grid power allowed
 	EventGridChargeDenied = "gridChargeDenied" // the circuit denied battery grid charging, A = allowed, B = wanted
 	EventPeak             = "peak"             // the battery started to cover a peak, A = demand, B = peak limit
 	EventNotFollowing     = "notFollowing"     // a load keeps drawing more than allowed, A = power, B = allowed

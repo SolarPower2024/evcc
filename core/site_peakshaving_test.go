@@ -612,3 +612,103 @@ func TestNumberWrite(t *testing.T) {
 		})
 	}
 }
+
+// spikeThenHouse meters a window from its start: the car draws 6 kW for 8
+// minutes, then the house 500 W until 13 minutes
+func spikeThenHouse(site *Site, clk *clock.Mock) {
+	site.setPeakGridEnergy(nil, true)
+	site.updatePeakWindow(6000, 0) // the first sample of the window
+
+	for range 16 {
+		energyStep(site, clk, 6000, nil)
+	}
+	for range 10 {
+		energyStep(site, clk, 500, nil)
+	}
+}
+
+// TestChargeSetpointWindowBudget replays a spike early in the window: a car draws
+// 6 kW from the grid for 8 minutes, then the house needs 500 W. The window allows
+// 833 W for the rest, so grid charging with the battery's 1800 W would end the
+// window above the limit; it stays off until the window has room.
+func TestChargeSetpointWindowBudget(t *testing.T) {
+	site, clk := peakWindowSite(t, 0)
+
+	s := site.peak()
+	s.enabled = true
+	s.limit = 3500
+	s.chargePower = 1800
+	s.set = func(float64) error { return nil }
+
+	spikeThenHouse(site, clk)
+	s.demand = 500
+
+	assert.InDelta(t, 833, s.window.Allowed, 1, "the window's rest")
+	assert.Zero(t, site.batteryChargeSetpoint(), "333 W of room is below the minimum")
+	assert.False(t, site.peakPausesGridCharge(), "the house alone fits")
+
+	// a larger load: above what the window allows, though below the limit
+	s.demand = 1200
+	assert.True(t, site.peakPausesGridCharge())
+	assert.Zero(t, site.batteryChargeSetpoint())
+
+	// the charge power is trimmed to the room under the window's allowed power
+	s.chargePause = time.Time{}
+	s.demand = 100
+	s.chargePower = 6250
+	assert.False(t, site.peakPausesGridCharge())
+	assert.Equal(t, 733.0, site.batteryChargeSetpoint(), "833 - 100 W")
+}
+
+// A window with budget left over never allows more than the fixed limit.
+func TestChargeSetpointWindowBudgetAboveLimit(t *testing.T) {
+	site, clk := peakWindowSite(t, 0)
+
+	s := site.peak()
+	s.enabled = true
+	s.limit = 3500
+	s.chargePower = 6250
+	s.set = func(float64) error { return nil }
+
+	site.setPeakGridEnergy(nil, true)
+	site.updatePeakWindow(500, 0) // the first sample of the window
+	for range 2 {
+		energyStep(site, clk, 500, nil)
+	}
+	s.demand = 500
+
+	assert.Greater(t, s.window.Allowed, 3500.0, "unused budget lifts the allowed power")
+	assert.Equal(t, 3000.0, site.batteryChargeSetpoint(), "limit - demand")
+	assert.False(t, site.peakPausesGridCharge())
+
+	s.demand = 3600
+	assert.True(t, site.peakPausesGridCharge(), "above the limit")
+}
+
+// Without a metered current window the fixed limit applies: before its first
+// sample, and while the meters fail.
+func TestChargeSetpointWindowStale(t *testing.T) {
+	site, clk := peakWindowSite(t, 0)
+
+	s := site.peak()
+	s.enabled = true
+	s.limit = 3500
+	s.chargePower = 1800
+	s.set = func(float64) error { return nil }
+
+	spikeThenHouse(site, clk)
+	s.demand = 500
+	require.Zero(t, site.batteryChargeSetpoint(), "window used up")
+
+	// the next window began, the cycle did not meter it yet
+	clk.Add(3 * time.Minute)
+	assert.Equal(t, 1800.0, site.batteryChargeSetpoint(), "the old window's budget no longer counts")
+
+	// the meters failed: charging pauses, the headroom is the fixed one
+	clk.Set(time.Date(2026, 9, 25, 10, 13, 0, 0, time.UTC))
+	s.updated = clk.Now().Add(-5 * time.Minute)
+	headroom, ok := site.peakChargeHeadroom()
+	assert.True(t, ok)
+	assert.Equal(t, 3000.0, headroom)
+	assert.True(t, site.peakPausesGridCharge())
+}

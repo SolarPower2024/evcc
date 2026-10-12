@@ -169,7 +169,12 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 		bat.ChargeFromGrid = false
 	}
 
+	// the optimizer binds a goal from step 1 on and ignores one in step 0, so a
+	// goal the battery reaches within the current step is set for step 1
 	setGoal := func(i int, goal float32) {
+		if i = max(i, firstGoalStep); i >= len(dt) {
+			return
+		}
 		if len(bat.SGoal) != len(dt) {
 			bat.SGoal = make([]float32, len(dt))
 		}
@@ -202,6 +207,8 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 	// only what the room below the limit allows.
 	if o := site.gridChargeOnce(); o.Target > 0 && bat.ChargeFromGrid {
 		if goal := min(wh(o.Target), top); goal > bat.SInitial {
+			// right away, also once the time has passed
+			rightAway := o.Until.IsZero() || time.Until(o.Until) <= 0
 			d := time.Until(o.Until)
 			if o.Until.IsZero() {
 				d = site.onceRequiredDuration(o.Target, float64(bat.SInitial/bat.SCapacity*100))
@@ -210,10 +217,9 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 					d = time.Duration(float64(goal-bat.SInitial) / (float64(bat.CMax) * site.identChargeEta()) * float64(time.Hour))
 				}
 			}
-			i := slotAfter(dt, max(d, 0))
+			i := max(slotAfter(dt, max(d, 0)), firstGoalStep)
 			if plan.limit > 0 {
-				// right away, also once the time has passed
-				if o.Until.IsZero() || d <= 0 {
+				if rightAway {
 					if j := plan.chargeSlot(req.TimeSeries, *bat, 0, bat.SInitial, goal, nil); j >= 0 {
 						i = max(i, j)
 					} else {
@@ -273,6 +279,9 @@ func setLevel(goals []float32, n, i int, v float32) []float32 {
 	}
 	return goals
 }
+
+// firstGoalStep is the first time step the optimizer binds a goal soc in
+const firstGoalStep = 1
 
 // slotAfter returns the index of the time step in which d has passed
 func slotAfter(dt []int, d time.Duration) int {

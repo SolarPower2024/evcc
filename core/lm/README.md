@@ -112,8 +112,9 @@ charge power has to fit into the circuit, against its power and its current
 limit (the current spread over the phases set under *Erweitert*). Without a
 known charge power, grid charging on a circuit stays off and a warning is
 logged once. With a charge power entity, evcc writes the grid charge power
-instead: the expected power, trimmed to what fits below the peak limit and into
-the circuit, at least 500 W.
+instead: the expected power, trimmed to what fits into the rest budget of the
+running 15 minute window (at most below the peak limit) and into the circuit,
+at least 500 W.
 After a shed, grid charging waits for the hold-off, as stopping it frees exactly
 the power that would let it start again. See `core/site_lm.go`.
 
@@ -232,12 +233,17 @@ applies. Survives a restart halfway.
 *Einmalig laden* (battery page): charges once up to a soc and switches itself
 off, right away or by a time at the cheapest slots before it (evcc's planner on
 the planner tariff; right away once the time passed or the duration is
-unknown). Cancelled when the battery is removed. A round power button starts it
+unknown, but an order more than 2 h past its time is ended, also after a
+restart). Cancelled when the battery is removed. A round power button starts it
 (outlined) and stops it (filled while running). See `core/site_lm_once.go`.
 
 Both pass the same gate as price-based grid charging: the circuit
 ([2](#2-battery-in-load-management)) and a running peak
 ([11](#11-peak-shaving)).
+
+All of this acts only from the first soc read: until a battery returned one
+(after the start, or while every read fails) the soc-based charging, the order
+and peak shaving's reserve keep their state instead of deciding on a soc of 0.
 
 ```
 POST   /api/batterysocgridcharge/{true|false}
@@ -346,8 +352,10 @@ until it works again (`TestPeakEnergyReadLoggedOnce`).
 
 Below the reserve the battery is kept in normal mode, as hold would block the
 discharge controller; a battery mode set from outside through the api stays.
-While the demand without the battery exceeds the limit, grid charging pauses
-and stays off for the hold-off, so it cannot add to the peak.
+While the demand without the battery exceeds the limit, or the grid power the
+running window still allows if that is less (an earlier peak used up its
+budget), grid charging pauses and stays off for the hold-off, so it cannot add
+to the peak.
 
 Without meter values for over 2 minutes the free value is written and grid
 charging pauses until they are back: the battery covers any demand by ordinary
@@ -618,6 +626,9 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   grid charge power with the charging efficiency; with peak shaving only with
   the room below the limit, paused while a peak runs.
 - one-time grid charging: the target as goal at the chosen time, or right away.
+- a goal is set for step 1 at the earliest, the optimizer ignores one in step 0
+  (a goal reached within the current step, an order past its time). The rule is
+  pinned by `TestLmOptimizerScenarios/goal_soc_binds_from_step_1`.
 - grid charging refused right now (shed hold-off, unknown charge power on a
   circuit) is not offered (`charge_from_grid`).
 - load management: a loadpoint plans with at most its circuits' power,
@@ -1018,7 +1029,13 @@ and `server`; many replay logged situations. Two optimizer tests only run
 against a running optimizer: `TestLmOptimizerScenarios` (`OPTIMIZER_URI`)
 solves synthetic days and checks soc bounds, import limit, energy balance and
 goals; `TestLmOptimizerReplay` (`OPTIMIZER_REPLAY`, `OPTIMIZER_URI`) replays a
-recorded request.
+recorded request. Without `OPTIMIZER_URI` both are skipped, so a green `ok` of
+`./core/` alone proves nothing about them. The scenarios include the contract
+test of the optimizer rule "a goal binds from step 1, one in step 0 is
+ignored" (`goal_soc_binds_from_step_1`); the weekly check of a new optimizer
+image runs them (`WSLTEST_ENV="OPTIMIZER_URI=http://localhost:<port>"
+bash testtools/wsltest.sh ./core/ -- -test.run TestLmOptimizerScenarios`), so a
+changed rule shows up there.
 
 Tests touching the settings store call `noSettingsDB` (keeps it in memory, as
 evcc's `newDeleteTestSite` leaves its database open) and `keepSettings`
