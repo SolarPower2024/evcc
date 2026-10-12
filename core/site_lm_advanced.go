@@ -37,6 +37,9 @@ type lmAdvanced struct {
 	// Home Assistant entity the optimizer's planned grid export is written to, empty = off,
 	// see site_lm_export_forecast.go
 	ExportForecastEntity string `json:"exportForecastEntity,omitempty"`
+	// the load management (peak) circuit's power limit is the peak limit while peak
+	// shaving is on, see site_lm_switch.go. Set through the number route, 1 = on.
+	CircuitFromPeak bool `json:"circuitFromPeak,omitempty"`
 }
 
 // home consumption forecasts, see HomeForecast
@@ -61,6 +64,7 @@ type lmAdvancedState struct {
 	HomeWeekday          bool    `json:"homeWeekday"`
 	HomeForecast         int     `json:"homeForecast"`
 	ExportForecastEntity string  `json:"exportForecastEntity"`
+	CircuitFromPeak      bool    `json:"circuitFromPeak"`
 }
 
 // lmAdvancedLimit is a setting's valid range
@@ -82,6 +86,7 @@ var lmAdvancedLimits = map[string]lmAdvancedLimit{
 	"gridChargeWindow": {1, 24, true},
 	"homeWeekday":      {0, 1, true},
 	"homeForecast":     {0, 2, true},
+	"circuitFromPeak":  {0, 1, true},
 }
 
 // restoreLmAdvanced restores the persisted advanced settings
@@ -127,6 +132,7 @@ func (site *Site) publishLmAdvanced() {
 		HomeWeekday:          site.homeWeekday(),
 		HomeForecast:         site.homeForecast(),
 		ExportForecastEntity: site.exportForecastEntity(),
+		CircuitFromPeak:      site.advanced().CircuitFromPeak,
 	})
 }
 
@@ -191,6 +197,8 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 	case "homeWeekday", "homeForecast":
 		s.adv.HomeForecast = &v
 		s.adv.HomeWeekday = nil
+	case "circuitFromPeak":
+		s.adv.CircuitFromPeak = value == 1
 	}
 	adv := s.adv
 	s.advMu.Unlock()
@@ -206,6 +214,9 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 	}
 	if name == "homeWeekday" || name == "homeForecast" {
 		site.Optimize() // the home demand forecast changed
+	}
+	if name == "circuitFromPeak" {
+		site.applyCircuitLimits()
 	}
 
 	site.publishLmAdvanced()
