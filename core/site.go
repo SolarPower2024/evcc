@@ -676,6 +676,7 @@ func (site *Site) collectMeters(key string, meters []config.Device[api.Meter]) [
 		// power
 		var b bytes.Buffer
 		power, err := backoff.RetryWithData(meter.CurrentPower, modbus.Backoff())
+		site.setPeakMeterRead(key, i, err) // custom: a failed power read leaves 0 below, see core/site_peak_readings.go
 		if err == nil {
 			mm[i].Power = power
 			site.log.DEBUG.Printf("%s %d power: %.0fW", key, i+1, power)
@@ -1015,8 +1016,10 @@ func (site *Site) updateGridMeter() error {
 
 	meter := site.gridMeter.Instance()
 
+	var powerRead bool // custom: the power was read this cycle, see setPeakGridEnergy
 	if res, err := backoff.RetryWithData(meter.CurrentPower, modbus.Backoff()); err == nil {
 		mm.Power = res
+		powerRead = true // custom: see above
 
 		site.Lock()
 		site.gridPower = res
@@ -1073,7 +1076,7 @@ func (site *Site) updateGridMeter() error {
 		c.AddEnergy(mm.Energy, mm.ReturnEnergy, mm.Power)
 	}
 
-	site.setPeakGridEnergy(mm.Energy) // custom: peak shaving window, see core/site_peakshaving.go
+	site.setPeakGridEnergy(mm.Energy, powerRead) // custom: peak shaving window and meter outage, see core/site_peakshaving.go
 	site.publish(keys.Grid, mm)
 
 	return nil

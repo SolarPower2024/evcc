@@ -354,6 +354,26 @@ charging pauses until they are back: the battery covers any demand by ordinary
 self-consumption, where a stale setpoint of 0 would keep it blocked
 (`TestPeakMetersLost`).
 
+Three outages come without an error from the meter and count the same
+(`core/site_peak_readings.go`). A grid meter that has no power (a Home Assistant
+sensor `unavailable` or `unknown`): evcc keeps the last value, the hook
+`setPeakGridEnergy` reports that the power was not read, and the cycle meters
+nothing and keeps the setpoint instead of integrating on the old value
+(`TestPeakGridUnreadIsAnOutage`). A grid power that is a number but stays
+exactly the same for over 2 minutes while the battery power moves by more than
+500 W (a template sensor or an mqtt topic that does not expire): a battery that
+follows the demand shifts the grid power, so it is no reading
+(`TestPeakGridFrozenIsAnOutage`, `TestPeakGridFollowingBatteryIsNoOutage`); the
+outage then counts from the start of the standstill. A battery whose
+power cannot be read (evcc leaves it at 0 W, for an unavailable Home Assistant
+sensor without a log line; `setPeakMeterRead` in `collectMeters` takes the
+result of each read): the setpoint adds the battery power back, so it would
+jump between the value with and without it every cycle (3000, 0, 3107, 0 W) and
+write to Home Assistant each time (`TestPeakBatteryUnreadIsAnOutage`,
+`TestPeakMeterHookReportsRead`). Logged once per cause as a warning. Template sensors for the grid power and the energy counter have to
+report `unavailable` or `unknown` when their source fails (`has_value()`), not
+0: a 0 is a reading, evcc cannot tell it from a real one.
+
 The window, the allowed power, the setpoint and the hysteresis are in
 `core/peak`, which knows nothing about the site and has its own tests;
 `core/site_peakshaving.go` feeds it and handles settings, Home Assistant and the
@@ -873,7 +893,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `custom` field; `meteredPower` in `updateLoadpoints` (an assumed heater power stays in the home consumption); `restoreCustom` deferred at the start of `restoreSettings` (after the guard for tests, so it also runs when an evcc restore step returns an error); `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter`; `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
+| `core/site.go` | `custom` field; `meteredPower` in `updateLoadpoints` (an assumed heater power stays in the home consumption); `restoreCustom` deferred at the start of `restoreSettings` (after the guard for tests, so it also runs when an evcc restore step returns an error); `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter` (with `powerRead`: whether the grid power was read, evcc keeps the old value for a meter that is not available); `setPeakMeterRead` in `collectMeters` (the result of each power read: evcc leaves a failed read at 0 W without a mark); `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerResult` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
@@ -913,7 +933,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |
-| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_omni.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_omni.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
