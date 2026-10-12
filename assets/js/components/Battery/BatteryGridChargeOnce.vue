@@ -1,90 +1,90 @@
 <template>
 	<div class="once border-top pt-3 mt-3" data-testid="battery-grid-charge-once">
-		<div class="d-flex align-items-center justify-content-between gap-2 mb-2">
-			<h6 class="mb-0">{{ $t("battery.gridChargeOnce.title") }}</h6>
-			<!-- power button: outlined to start, filled while running, tap again stops -->
-			<button
-				v-if="running"
-				type="button"
-				class="power btn btn-primary"
-				data-testid="battery-grid-charge-once-cancel"
-				:aria-label="$t('battery.gridChargeOnce.cancel')"
-				:title="$t('battery.gridChargeOnce.cancel')"
+		<h6 class="mb-2">{{ $t("battery.gridChargeOnce.title") }}</h6>
+
+		<!-- standard switch in front of the sentence: on starts, off stops -->
+		<div class="form-check form-switch mb-0">
+			<input
+				id="batteryGridChargeOnceSwitch"
+				:checked="running"
+				class="form-check-input"
+				type="checkbox"
+				role="switch"
+				data-testid="battery-grid-charge-once-switch"
+				:aria-label="
+					running
+						? $t('battery.gridChargeOnce.cancel')
+						: $t('battery.gridChargeOnce.start')
+				"
 				:disabled="busy"
-				@click="cancel"
-			>
-				<PowerIcon />
-			</button>
-			<button
+				@change="toggle"
+			/>
+			<div v-if="running" class="form-check-label">
+				<span data-testid="battery-grid-charge-once-status">
+					{{ $t("battery.gridChargeOnce.running", { soc: fmtSoc(once.target) }) }} ·
+					{{ whenText }} ·
+					<span :class="once.active ? 'text-primary' : 'evcc-gray'">{{
+						once.active
+							? $t("battery.gridChargeOnce.active")
+							: $t("battery.gridChargeOnce.waiting")
+					}}</span>
+				</span>
+			</div>
+
+			<form
 				v-else
-				type="submit"
-				form="batteryGridChargeOnceForm"
-				class="power btn btn-outline-primary"
-				data-testid="battery-grid-charge-once-start"
-				:aria-label="$t('battery.gridChargeOnce.start')"
-				:title="$t('battery.gridChargeOnce.start')"
-				:disabled="busy"
+				id="batteryGridChargeOnceForm"
+				class="form-check-label"
+				@submit.prevent="start"
 			>
-				<PowerIcon />
-			</button>
-		</div>
-
-		<div v-if="running">
-			<span data-testid="battery-grid-charge-once-status">
-				{{ $t("battery.gridChargeOnce.running", { soc: fmtSoc(once.target) }) }} ·
-				{{ whenText }} ·
-				<span :class="once.active ? 'text-primary' : 'evcc-gray'">{{
-					once.active
-						? $t("battery.gridChargeOnce.active")
-						: $t("battery.gridChargeOnce.waiting")
-				}}</span>
-			</span>
-		</div>
-
-		<form v-else id="batteryGridChargeOnceForm" @submit.prevent="start">
-			<i18n-t keypath="battery.gridChargeOnce.sentence" tag="span" scope="global">
-				<template #soc>
-					<InlineSocSelect
-						id="batteryGridChargeOnceSoc"
-						:options="socOptions"
-						:selected="target"
-						:label="fmtSoc(target)"
-						nowrap
-						@change="target = parseInt(($event.target as HTMLInputElement).value, 10)"
-					/>
-				</template>
-				<template #when>
-					<CustomSelect
-						id="batteryGridChargeOnceWhen"
-						:options="whenOptions"
-						:selected="when"
-						:aria-label="$t('battery.gridChargeOnce.whenLabel')"
-						data-testid="battery-grid-charge-once-when"
-						inline
-						@change="when = ($event.target as HTMLSelectElement).value"
-					>
-						<span
-							v-if="when === 'now'"
-							class="text-decoration-underline fw-bold text-nowrap"
+				<i18n-t keypath="battery.gridChargeOnce.sentence" tag="span" scope="global">
+					<template #soc>
+						<InlineSocSelect
+							id="batteryGridChargeOnceSoc"
+							:options="socOptions"
+							:selected="target"
+							:label="fmtSoc(target)"
+							nowrap
+							@change="
+								target = parseInt(($event.target as HTMLInputElement).value, 10)
+							"
+						/>
+					</template>
+					<template #when>
+						<CustomSelect
+							id="batteryGridChargeOnceWhen"
+							:options="whenOptions"
+							:selected="when"
+							:aria-label="$t('battery.gridChargeOnce.whenLabel')"
+							data-testid="battery-grid-charge-once-when"
+							inline
+							@change="when = ($event.target as HTMLSelectElement).value"
 						>
-							{{ $t("battery.gridChargeOnce.now") }}
-						</span>
-						<!-- "bis" stays with the time when the sentence wraps -->
-						<i18n-t
-							v-else
-							keypath="battery.gridChargeOnce.until"
-							tag="span"
-							class="text-nowrap"
-							scope="global"
-						>
-							<template #time>
-								<span class="text-decoration-underline fw-bold">{{ when }}</span>
-							</template>
-						</i18n-t>
-					</CustomSelect>
-				</template>
-			</i18n-t>
-		</form>
+							<span
+								v-if="when === 'now'"
+								class="text-decoration-underline fw-bold text-nowrap"
+							>
+								{{ $t("battery.gridChargeOnce.now") }}
+							</span>
+							<!-- "bis" stays with the time when the sentence wraps -->
+							<i18n-t
+								v-else
+								keypath="battery.gridChargeOnce.until"
+								tag="span"
+								class="text-nowrap"
+								scope="global"
+							>
+								<template #time>
+									<span class="text-decoration-underline fw-bold">{{
+										when
+									}}</span>
+								</template>
+							</i18n-t>
+						</CustomSelect>
+					</template>
+				</i18n-t>
+			</form>
+		</div>
 
 		<p v-if="error" class="text-danger small mt-2 mb-0">{{ error }}</p>
 	</div>
@@ -97,7 +97,6 @@ import api from "@/api";
 import store from "@/store";
 import CustomSelect from "../Helper/CustomSelect.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
-import PowerIcon from "./PowerIcon.vue";
 
 interface GridChargeOnce {
 	target: number;
@@ -109,7 +108,7 @@ interface GridChargeOnce {
 // of day at the cheapest slots, see core/site_lm_once.go
 export default defineComponent({
 	name: "BatteryGridChargeOnce",
-	components: { CustomSelect, InlineSocSelect, PowerIcon },
+	components: { CustomSelect, InlineSocSelect },
 	mixins: [formatter],
 	data() {
 		// when: "now" or a time of day HH:MM
@@ -157,6 +156,13 @@ export default defineComponent({
 		fmtSoc(soc: number) {
 			return this.fmtPercentage(soc);
 		},
+		toggle(e: Event) {
+			const on = (e.target as HTMLInputElement).checked;
+			// the switch follows the state from the server, not the click
+			(e.target as HTMLInputElement).checked = this.running;
+			if (on) this.start();
+			else this.cancel();
+		},
 		async start() {
 			this.busy = true;
 			this.error = "";
@@ -184,18 +190,3 @@ export default defineComponent({
 	},
 });
 </script>
-
-<style scoped>
-/* round, colours from the primary button so dark mode follows evcc */
-.power {
-	width: 36px;
-	height: 36px;
-	padding: 0;
-	border-width: 2px;
-	border-radius: 50%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	flex-shrink: 0;
-}
-</style>
