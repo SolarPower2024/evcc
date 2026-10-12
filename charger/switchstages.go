@@ -11,9 +11,17 @@ package charger
 // not toggle the switches every cycle. Switching on from off is not delayed,
 // the loadpoint's own enable delay already applies there.
 //
+// In pv mode core steps the heater down only after the loadpoint's disable delay,
+// see core/loadpoint_stages.go; a limit of the circuit or of load management
+// applies at once.
+//
 // A heater with its own thermostat draws nothing while the switches stay on.
 // With a power sensor, a draw up to standbypower then reports ready instead of
 // heating, as upstream's switch socket does.
+//
+// A switch that cannot be read leaves its stage unknown: the others are still
+// read and switched, nothing is written to the unknown one, and its power
+// counts as on.
 
 import (
 	"context"
@@ -21,6 +29,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/benbjohnson/clock"
@@ -50,6 +59,7 @@ type SwitchStages struct {
 	clock clock.Clock
 
 	stages     []switchStage
+	down       []atomic.Bool // per stage: its switch could not be read, logged once
 	stagePower float64
 	delay      time.Duration
 	power      func() (float64, error) // optional measurement
@@ -60,7 +70,14 @@ type SwitchStages struct {
 	enabled bool      // as last set by evcc or found on
 	current float64   // last requested current, 0 = unknown
 	level   int       // stages switched on by the last write
-	changed time.Time // last change of the level
+	changed time.Time // last change of the level or failed attempt
+	lastErr string    // cause of the last failed catch-up, logged once
+
+	// a step down failed and is left to evcc's retry: the request is not taken
+	// over, so the catch-up must not step up to the old one. Until evcc writes
+	// again successfully, or has not tried for twice the delay: then evcc wants
+	// the old current again and writes nothing, the catch-up takes over.
+	lowering bool
 }
 
 // NewSwitchStagesFromConfig creates a stepped switch charger from generic config
@@ -140,6 +157,7 @@ func NewSwitchStages(embed *embed, stages []switchStage, stagePower float64, del
 		log:        util.NewLogger("switchstages"),
 		clock:      clock.New(),
 		stages:     stages,
+		down:       make([]atomic.Bool, len(stages)),
 		stagePower: stagePower,
 		delay:      delay,
 		power:      power,
@@ -155,43 +173,129 @@ func (c *SwitchStages) run(ctx context.Context, interval time.Duration) {
 			return
 		}
 
-		if err := c.catchUp(); err != nil {
-			c.log.ERROR.Println(err)
-		}
+		c.logCatchUp(c.catchUp())
 	}
 }
 
-// catchUp applies a step up that was held back by the delay
+// logCatchUp logs a failed catch-up once per cause, a repeat only on debug level
+func (c *SwitchStages) logCatchUp(err error) {
+	if err == nil {
+		return
+	}
+
+	c.mu.Lock()
+	repeat := err.Error() == c.lastErr
+	c.lastErr = err.Error()
+	c.mu.Unlock()
+
+	if repeat {
+		c.log.DEBUG.Println(err)
+		return
+	}
+	c.log.ERROR.Println(err)
+}
+
+// catchUp applies a step up that was held back by the delay. Only a running
+// heater has one: from no stage apply never holds back, so a heater that is
+// off, or whose switch-on failed, is left to evcc. So is one whose step down
+// failed: the old current is still the request, but evcc asked for less and
+// retries, stepping up meanwhile would add load against its limit. That ends
+// once evcc has not tried again for twice the delay (each failed try restarts
+// it): evcc then offers the old current again and, seeing it set, writes nothing.
 func (c *SwitchStages) catchUp() error {
 	phases := c.phases()
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if !c.enabled || c.level >= c.target(phases) || c.clock.Since(c.changed) < c.delay {
+	if c.lowering && c.clock.Since(c.changed) > 2*c.delay {
+		c.lowering = false
+	}
+
+	if !c.enabled || c.lowering || c.level == 0 || c.level >= c.target(phases) || c.clock.Since(c.changed) < c.delay {
 		return nil
 	}
 
-	return c.apply(phases)
+	err := c.apply(phases)
+	if err == nil {
+		c.lastErr = ""
+	}
+	return err
 }
 
-// states reads all switches
-func (c *SwitchStages) states() ([]bool, error) {
-	res := make([]bool, len(c.stages))
+// stageState is what the heater knows of one stage's switch
+type stageState int
+
+const (
+	stageOff stageState = iota
+	stageOn
+	stageUnknown // not readable, e.g. unavailable or deleted
+)
+
+// readStates reads all switches, a stage that cannot be read is unknown and
+// carries its error
+func (c *SwitchStages) readStates() ([]stageState, []error) {
+	res := make([]stageState, len(c.stages))
+	errs := make([]error, len(c.stages))
+
 	for i, s := range c.stages {
 		on, err := s.enabled()
-		if err != nil {
-			return nil, fmt.Errorf("stage %d: %w", i+1, err)
+		switch {
+		case err != nil:
+			res[i], errs[i] = stageUnknown, fmt.Errorf("stage %d: %w", i+1, err)
+		case on:
+			res[i] = stageOn
 		}
-		res[i] = on
 	}
+
+	return res, errs
+}
+
+// states reads all switches. An unreadable stage stays unknown, so one lost
+// switch does not keep evcc from switching off the others; it is logged once
+// per outage. Only if no stage can be read there is nothing to go on.
+func (c *SwitchStages) states() ([]stageState, error) {
+	res, errs := c.readStates()
+
+	var readable int
+	for i, err := range errs {
+		switch {
+		case err != nil:
+			if c.down[i].CompareAndSwap(false, true) {
+				c.log.WARN.Printf("%v, switching the others", err)
+			}
+		default:
+			readable++
+			if c.down[i].CompareAndSwap(true, false) {
+				c.log.INFO.Printf("stage %d: readable again", i+1)
+			}
+		}
+	}
+
+	if readable == 0 {
+		return nil, errs[0]
+	}
+
 	return res, nil
 }
 
-func countOn(states []bool) int {
+// countOn returns the stages known to be on
+func countOn(states []stageState) int {
 	var n int
-	for _, on := range states {
-		if on {
+	for _, s := range states {
+		if s == stageOn {
+			n++
+		}
+	}
+	return n
+}
+
+// countRunning returns the stages that are on or may be: an unreadable stage is
+// counted on, the safe side for circuits
+func countRunning(states []stageState) int {
+	var n int
+	for _, s := range states {
+		if s != stageOff {
 			n++
 		}
 	}
@@ -219,8 +323,19 @@ func (c *SwitchStages) target(phases int) int {
 }
 
 // apply switches the stages to the target, holding back a step up while the
-// delay runs. Called with the mutex held.
+// delay runs. A failure restarts the delay, so the catch-up tries again only
+// after it, and leaves the level at the stages switched on so far. Called with
+// the mutex held.
 func (c *SwitchStages) apply(phases int) error {
+	err := c.switchTo(phases)
+	if err != nil {
+		c.changed = c.clock.Now()
+	}
+	return err
+}
+
+// switchTo switches the stages to the target, see apply
+func (c *SwitchStages) switchTo(phases int) error {
 	states, err := c.states()
 	if err != nil {
 		return err
@@ -239,35 +354,54 @@ func (c *SwitchStages) apply(phases int) error {
 	}
 
 	// lowest stages first on, highest first off, so a partial failure never
-	// leaves more switched on than wanted
+	// leaves more switched on than wanted. An unknown stage is left alone,
+	// nothing is written blind to a switch that cannot be read.
 	for i := len(states) - 1; i >= level; i-- {
-		if states[i] {
+		if states[i] == stageOn {
 			if err := c.stages[i].enable(false); err != nil {
+				c.level = countOn(states)
 				return fmt.Errorf("stage %d off: %w", i+1, err)
 			}
+			states[i] = stageOff
 		}
 	}
 
 	for i := range level {
-		if !states[i] {
+		if states[i] == stageOff {
 			if err := c.stages[i].enable(true); err != nil {
+				c.level = countOn(states)
 				return fmt.Errorf("stage %d on: %w", i+1, err)
 			}
+			states[i] = stageOn
 		}
 	}
 
-	if level != on || level != c.level {
-		c.log.DEBUG.Printf("stages: %d of %d", level, len(c.stages))
+	// an unknown stage in the way keeps the target out of reach, the next
+	// attempt waits for the delay
+	reached := countOn(states)
+	if reached != on || reached != c.level || reached < level {
+		c.log.DEBUG.Printf("stages: %d of %d", reached, len(c.stages))
 		c.changed = c.clock.Now()
 	}
-	c.level = level
+	c.level = reached
 
 	return nil
 }
 
-// StageStates returns each stage's switch, lowest first, for the config page
+// StageStates returns each stage's switch, lowest first, for the config page.
+// A stage that cannot be read is an error there.
 func (c *SwitchStages) StageStates() ([]bool, error) {
-	return c.states()
+	states, errs := c.readStates()
+
+	res := make([]bool, len(states))
+	for i, s := range states {
+		if errs[i] != nil {
+			return nil, errs[i]
+		}
+		res[i] = s == stageOn
+	}
+
+	return res, nil
 }
 
 // PowerEstimated reports that without a power sensor the power is the stages
@@ -280,6 +414,26 @@ func (c *SwitchStages) PowerEstimated() bool {
 // Stages returns the number of stages, core shows the heater as switched by it
 func (c *SwitchStages) Stages() int {
 	return len(c.stages)
+}
+
+// StagePhaseCurrent returns the current one stage draws on its phase, if the
+// heater has one stage per phase. The loadpoint's phases must match the wiring.
+func (c *SwitchStages) StagePhaseCurrent() (float64, bool) {
+	if len(c.stages) != c.phases() {
+		return 0, false
+	}
+
+	return c.stagePower / voltage, true
+}
+
+// RunningCurrent returns the current the stages switched on by the last write
+// stand for on the given phases, without reading the switches. Core holds the
+// heater on them while the pv surplus falls short, see core/loadpoint_stages.go.
+func (c *SwitchStages) RunningCurrent(phases int) float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return float64(c.level) * c.stagePower / (voltage * float64(phases))
 }
 
 // Status implements the api.Charger interface
@@ -314,7 +468,11 @@ func (c *SwitchStages) Status() (api.ChargeStatus, error) {
 // Enabled implements the api.Charger interface
 func (c *SwitchStages) Enabled() (bool, error) {
 	states, err := c.states()
-	return countOn(states) > 0, err
+	if err != nil {
+		return false, err
+	}
+
+	return countOn(states) > 0, nil
 }
 
 // Enable implements the api.Charger interface
@@ -324,8 +482,20 @@ func (c *SwitchStages) Enable(enable bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// a failed switch leaves the setting as it was, else the catch-up would
+	// carry it out later without evcc asking. The stages still on show as
+	// enabled, so evcc retries a failed switch off; meanwhile no step up.
+	prev := c.enabled
 	c.enabled = enable
-	return c.apply(phases)
+	if err := c.apply(phases); err != nil {
+		c.enabled = prev
+		c.lowering = c.lowering || !enable
+		return err
+	}
+
+	c.lowering = false
+
+	return nil
 }
 
 // MaxCurrent implements the api.Charger interface
@@ -337,7 +507,9 @@ var _ api.ChargerEx = (*SwitchStages)(nil)
 
 // MaxCurrentMillis implements the api.ChargerEx interface. While off it only
 // stores the current, Enable switches on. A heater found running, e.g. after a
-// restart, is taken as enabled.
+// restart, is taken as enabled and, before evcc sets a current, as running at
+// the current of its stages: evcc's first request is the minimum, which would
+// drop it to one stage, and a smaller request later would never be written.
 func (c *SwitchStages) MaxCurrentMillis(current float64) error {
 	if current < 0 || math.IsNaN(current) || math.IsInf(current, 0) {
 		return fmt.Errorf("invalid current: %g", current)
@@ -348,8 +520,49 @@ func (c *SwitchStages) MaxCurrentMillis(current float64) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	prev := c.current
+	if prev == 0 && !c.enabled {
+		if adopted, err := c.adopt(phases); adopted || err != nil {
+			return err
+		}
+	}
+
+	// a failed switch does not take the request over: evcc reads the current
+	// back and, still seeing the old one, sets the new one again
 	c.current = current
 
+	if err := c.update(phases); err != nil {
+		c.current = prev
+		c.lowering = c.lowering || current < prev
+		return err
+	}
+
+	c.lowering = false
+
+	return nil
+}
+
+// adopt takes over the stages found running with the current they stand for,
+// without switching. Called with the mutex held.
+func (c *SwitchStages) adopt(phases int) (bool, error) {
+	states, err := c.states()
+	if err != nil {
+		return false, err
+	}
+
+	n := countOn(states)
+	if n == 0 {
+		return false, nil
+	}
+
+	c.enabled, c.level = true, n
+	c.current = float64(n) * c.stagePower / (voltage * float64(phases))
+
+	return true, nil
+}
+
+// update switches the stages to the current. Called with the mutex held.
+func (c *SwitchStages) update(phases int) error {
 	if !c.enabled {
 		states, err := c.states()
 		if err != nil {
@@ -398,7 +611,42 @@ func (c *SwitchStages) CurrentPower() (float64, error) {
 	}
 
 	states, err := c.states()
-	return float64(countOn(states)) * c.stagePower, err
+	if err != nil {
+		return 0, err
+	}
+
+	return float64(countRunning(states)) * c.stagePower, nil
+}
+
+var _ api.PhaseCurrents = (*SwitchStages)(nil)
+
+// Currents implements the api.PhaseCurrents interface. A stage draws its whole
+// current on one phase, not a third of it on each. With one stage per phase the
+// heater so carries the current of one stage as soon as one is on, and evcc
+// takes the maximum over the phases for its circuits. The current is reported on
+// every phase, not only on the phases of the stages that are on: evcc would take
+// the phases with a current for the active phases and then convert the power of
+// the stages with a single phase. Not available otherwise.
+func (c *SwitchStages) Currents() (float64, float64, float64, error) {
+	current, ok := c.StagePhaseCurrent()
+	if !ok {
+		return 0, 0, 0, api.ErrNotAvailable
+	}
+
+	states, err := c.states()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	if countRunning(states) == 0 {
+		return 0, 0, 0, nil
+	}
+
+	if len(c.stages) == 1 {
+		return current, 0, 0, nil
+	}
+
+	return current, current, current, nil
 }
 
 var _ loadpoint.Controller = (*SwitchStages)(nil)

@@ -1,14 +1,19 @@
 package charger
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/benbjohnson/clock"
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/loadpoint"
+	"github.com/evcc-io/evcc/util"
+	jww "github.com/spf13/jwalterweatherman"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -19,14 +24,22 @@ type fakeSwitches struct {
 	on     []bool
 	writes []string
 	fail   int // stage that fails to switch, 0 = none
+	tries  int // switch attempts, failed ones too
+	lost   int // stage whose switch cannot be read, 0 = none
 }
 
 func (f *fakeSwitches) stages() []switchStage {
 	res := make([]switchStage, len(f.on))
 	for i := range f.on {
 		res[i] = switchStage{
-			enabled: func() (bool, error) { return f.on[i], nil },
+			enabled: func() (bool, error) {
+				if f.lost == i+1 {
+					return false, api.ErrNotAvailable
+				}
+				return f.on[i], nil
+			},
 			enable: func(on bool) error {
+				f.tries++
 				if f.fail == i+1 {
 					return errors.New("unavailable")
 				}
@@ -40,7 +53,13 @@ func (f *fakeSwitches) stages() []switchStage {
 }
 
 func (f *fakeSwitches) count() int {
-	return countOn(f.on)
+	var n int
+	for _, on := range f.on {
+		if on {
+			n++
+		}
+	}
+	return n
 }
 
 // stagesCharger returns a three stage 3kW heater on a 3-phase loadpoint
@@ -169,8 +188,9 @@ func TestSwitchStagesDelay(t *testing.T) {
 }
 
 func TestSwitchStagesRunningAtStart(t *testing.T) {
-	// switches found on, e.g. after a restart, count as enabled: the current
-	// evcc sends applies without a new Enable
+	// switches found on, e.g. after a restart, count as enabled and as running at
+	// the current of their stages: the first request, the minimum, keeps them,
+	// the current evcc sends next applies without a new Enable
 	c, f, _ := stagesCharger(t, 0)
 	f.on = []bool{true, true, true}
 
@@ -182,7 +202,37 @@ func TestSwitchStagesRunningAtStart(t *testing.T) {
 	assert.True(t, ok)
 
 	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, []bool{true, true, true}, f.on, "the first request is taken as the running current")
+	assert.Empty(t, f.writes)
+
+	cur, err := c.GetMaxCurrent()
+	require.NoError(t, err)
+	assert.InDelta(t, amps(9000), cur, 1e-9)
+
+	// so evcc writes the minimum it wants instead of finding it already set
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
 	assert.Equal(t, []bool{true, false, false}, f.on)
+}
+
+func TestSwitchStagesRunningAtStartPartly(t *testing.T) {
+	c, f, _ := stagesCharger(t, 0)
+	f.on = []bool{true, true, false}
+
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, []bool{true, true, false}, f.on)
+
+	cur, err := c.GetMaxCurrent()
+	require.NoError(t, err)
+	assert.InDelta(t, amps(6000), cur, 1e-9)
+
+	// nothing running: the request is stored as before
+	c, f, _ = stagesCharger(t, 0)
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, 0, f.count())
+
+	cur, err = c.GetMaxCurrent()
+	require.NoError(t, err)
+	assert.InDelta(t, amps(3000), cur, 1e-9)
 }
 
 func TestSwitchStagesStatusAndPower(t *testing.T) {
@@ -273,9 +323,339 @@ func TestSwitchStagesFailure(t *testing.T) {
 	require.Error(t, c.MaxCurrentMillis(amps(3000)))
 	assert.Equal(t, []bool{true, true, false}, f.on)
 
+	// the failed request is not taken over, evcc reads back the old current and
+	// so sets the new one again; the level is what is really on
+	cur, err := c.GetMaxCurrent()
+	require.NoError(t, err)
+	assert.InDelta(t, amps(9000), cur, 1e-9)
+	assert.Equal(t, 2, c.level)
+
 	f.fail = 0
 	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
 	assert.Equal(t, []bool{true, false, false}, f.on)
+}
+
+func TestSwitchStagesFailureStepUp(t *testing.T) {
+	c, f, _ := stagesCharger(t, 0)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	require.NoError(t, c.Enable(true))
+
+	// the second stage comes on, the third fails
+	f.fail = 3
+	require.Error(t, c.MaxCurrentMillis(amps(9000)))
+	assert.Equal(t, []bool{true, true, false}, f.on)
+	assert.Equal(t, 2, c.level)
+
+	cur, err := c.GetMaxCurrent()
+	require.NoError(t, err)
+	assert.InDelta(t, amps(3000), cur, 1e-9, "the request is still the old one")
+
+	f.fail = 0
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	assert.Equal(t, []bool{true, true, true}, f.on)
+}
+
+func TestSwitchStagesCatchUpAfterFailedEnable(t *testing.T) {
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+
+	// the first switch fails: evcc sees the error and the heater stays disabled
+	f.fail = 1
+	require.Error(t, c.Enable(true))
+
+	// the catch-up does not carry the failed Enable out once the switch is back
+	f.fail = 0
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, 0, f.count())
+
+	// partly switched on: nothing is caught up either, evcc retries the Enable
+	f.fail = 2
+	require.Error(t, c.Enable(true))
+	assert.Equal(t, []bool{true, false, false}, f.on)
+
+	f.fail = 0
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, 1, f.count())
+
+	require.NoError(t, c.Enable(true))
+	assert.Equal(t, 3, f.count())
+}
+
+func TestSwitchStagesCatchUpAfterFailedStepDown(t *testing.T) {
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	require.NoError(t, c.Enable(true))
+	assert.Equal(t, 3, f.count())
+
+	// down to one stage: the third goes, the second fails
+	f.fail = 2
+	clk.Add(time.Minute)
+	require.Error(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, []bool{true, true, false}, f.on)
+
+	// the switch is back, but evcc did not ask for more: the catch-up must not
+	// bring the third stage up again, it leaves the retry to evcc
+	f.fail = 0
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, []bool{true, true, false}, f.on)
+
+	// evcc reads back the old current and sets the lower one again
+	cur, err := c.GetMaxCurrent()
+	require.NoError(t, err)
+	assert.InDelta(t, amps(9000), cur, 1e-9)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, []bool{true, false, false}, f.on)
+
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, []bool{true, false, false}, f.on)
+}
+
+func TestSwitchStagesCatchUpAfterFailedStepDownExpires(t *testing.T) {
+	// evcc wants the old current again after the failed step down and writes
+	// nothing: the catch-up must not stay blocked
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	require.NoError(t, c.Enable(true))
+
+	f.fail = 2
+	clk.Add(time.Minute)
+	require.Error(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, []bool{true, true, false}, f.on)
+
+	// evcc retries, the retry fails as well: the time restarts
+	clk.Add(90 * time.Second)
+	require.Error(t, c.MaxCurrentMillis(amps(3000)))
+
+	f.fail = 0
+	clk.Add(2 * time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, []bool{true, true, false}, f.on, "twice the delay, not more")
+
+	clk.Add(time.Second)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, []bool{true, true, true}, f.on, "evcc stopped trying: caught up")
+}
+
+func TestSwitchStagesCatchUpAfterFailedDisable(t *testing.T) {
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	require.NoError(t, c.Enable(true))
+
+	// off: the third stage goes, the second fails
+	f.fail = 2
+	clk.Add(time.Minute)
+	require.Error(t, c.Enable(false))
+	assert.Equal(t, []bool{true, true, false}, f.on)
+
+	// not caught up to three stages, a heater evcc wants off stays off
+	f.fail = 0
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, []bool{true, true, false}, f.on)
+
+	enabled, err := c.Enabled()
+	require.NoError(t, err)
+	assert.True(t, enabled, "evcc sees stages on and disables again")
+
+	require.NoError(t, c.Enable(false))
+	assert.Equal(t, 0, f.count())
+
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, 0, f.count())
+}
+
+func TestSwitchStagesCatchUpAfterFailedStepDownThenUp(t *testing.T) {
+	// evcc asks for more after a failed step down: the catch-up works again
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(6000)))
+	require.NoError(t, c.Enable(true))
+	assert.Equal(t, 2, f.count())
+
+	f.fail = 2
+	clk.Add(time.Minute)
+	require.Error(t, c.MaxCurrentMillis(amps(3000)))
+
+	f.fail = 0
+	clk.Add(time.Minute)
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	assert.Equal(t, 3, f.count())
+
+	// held back by the delay after a step down, then caught up
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, 1, f.count())
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	assert.Equal(t, 1, f.count(), "held back")
+
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, 3, f.count())
+}
+
+func TestSwitchStagesCatchUpOnlyRunning(t *testing.T) {
+	// from no stage apply never holds a step back, so the catch-up leaves it to evcc
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	c.enabled, c.current = true, amps(9000)
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, 0, f.count())
+}
+
+func TestSwitchStagesCatchUpRetry(t *testing.T) {
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	require.NoError(t, c.Enable(true))
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	assert.Equal(t, 1, f.count(), "held back")
+
+	// a stage keeps failing: one attempt per delay, not one per tick
+	f.fail = 2
+	f.tries = 0
+	clk.Add(time.Minute)
+
+	for i := range 12 {
+		if i > 0 {
+			clk.Add(5 * time.Second)
+		}
+		_ = c.catchUp()
+		assert.Equal(t, 1, f.tries, "tick %d", i)
+	}
+
+	clk.Add(5 * time.Second)
+	require.Error(t, c.catchUp())
+	assert.Equal(t, 2, f.tries)
+
+	// back again: caught up after the next delay
+	f.fail = 0
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, 3, f.count())
+}
+
+func TestSwitchStagesCatchUpLogOnce(t *testing.T) {
+	c, _, _ := stagesCharger(t, time.Minute)
+
+	var buf bytes.Buffer
+	c.log = &util.Logger{Notepad: jww.NewNotepad(jww.LevelTrace, jww.LevelTrace, &buf, io.Discard, "", 0)}
+
+	c.logCatchUp(errors.New("stage 2 on: unavailable"))
+	c.logCatchUp(errors.New("stage 2 on: unavailable"))
+	assert.Equal(t, 1, strings.Count(buf.String(), "ERROR"), "same cause once")
+	assert.Equal(t, 1, strings.Count(buf.String(), "DEBUG"))
+
+	c.logCatchUp(errors.New("stage 3 on: unavailable"))
+	assert.Equal(t, 2, strings.Count(buf.String(), "ERROR"), "new cause")
+}
+
+func TestSwitchStagesUnreadableStage(t *testing.T) {
+	c, f, _ := stagesCharger(t, 0)
+
+	var buf bytes.Buffer
+	c.log = &util.Logger{Notepad: jww.NewNotepad(jww.LevelTrace, jww.LevelTrace, &buf, io.Discard, "", 0)}
+
+	f.on = []bool{true, true, true}
+	f.lost = 3
+
+	// the readable stages decide, no error
+	s, err := c.Status()
+	require.NoError(t, err)
+	assert.Equal(t, api.StatusC, s)
+
+	ok, err := c.Enabled()
+	require.NoError(t, err)
+	assert.True(t, ok)
+
+	// the unreadable stage counts as on
+	p, err := c.CurrentPower()
+	require.NoError(t, err)
+	assert.Equal(t, 9000.0, p)
+
+	// switching off reaches the readable stages and writes nothing blind to the other
+	require.NoError(t, c.Enable(false))
+	assert.Equal(t, []string{"off2", "off1"}, f.writes)
+
+	s, err = c.Status()
+	require.NoError(t, err)
+	assert.Equal(t, api.StatusB, s)
+
+	ok, err = c.Enabled()
+	require.NoError(t, err)
+	assert.False(t, ok)
+
+	p, err = c.CurrentPower()
+	require.NoError(t, err)
+	assert.Equal(t, 3000.0, p, "the unreadable stage may still run")
+
+	assert.Equal(t, 1, strings.Count(buf.String(), "WARN"), "once per outage, not per read")
+
+	// the config page reports it
+	_, err = c.StageStates()
+	assert.ErrorIs(t, err, api.ErrNotAvailable)
+
+	// readable again, reported once
+	f.lost = 0
+	_, err = c.Status()
+	require.NoError(t, err)
+	_, err = c.Status()
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(buf.String(), "readable again"))
+
+	states, err := c.StageStates()
+	require.NoError(t, err)
+	assert.Equal(t, []bool{false, false, true}, states)
+}
+
+func TestSwitchStagesUnreadableStageStepUp(t *testing.T) {
+	// an unreadable stage in the way keeps the target out of reach: the readable
+	// ones are switched, nothing is written to it and the attempts keep the delay
+	c, f, clk := stagesCharger(t, time.Minute)
+	f.lost = 2
+
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	require.NoError(t, c.Enable(true))
+	assert.Equal(t, []bool{true, false, true}, f.on)
+	assert.Equal(t, []string{"on1", "on3"}, f.writes)
+
+	f.writes = nil
+	for range 12 {
+		clk.Add(5 * time.Second)
+		require.NoError(t, c.catchUp())
+	}
+	assert.Empty(t, f.writes)
+}
+
+func TestSwitchStagesNoStageReadable(t *testing.T) {
+	c, f, _ := stagesCharger(t, 0)
+	f.on = []bool{true, true, true}
+
+	for i := range c.stages {
+		c.stages[i].enabled = func() (bool, error) { return false, api.ErrNotAvailable }
+	}
+
+	_, err := c.Status()
+	assert.ErrorIs(t, err, api.ErrNotAvailable)
+
+	_, err = c.Enabled()
+	assert.ErrorIs(t, err, api.ErrNotAvailable)
+
+	_, err = c.CurrentPower()
+	assert.ErrorIs(t, err, api.ErrNotAvailable)
+
+	assert.ErrorIs(t, c.Enable(false), api.ErrNotAvailable)
+	assert.Empty(t, f.writes, "nothing written blind")
 }
 
 func TestSwitchStagesSinglePhaseLoadpoint(t *testing.T) {
@@ -319,4 +699,84 @@ func TestSwitchStagesConfig(t *testing.T) {
 
 	_, err = NewSwitchStagesFromConfig(t.Context(), map[string]any{"stagepower": 3000})
 	assert.Error(t, err, "stages required")
+}
+
+func TestSwitchStagesRunningCurrent(t *testing.T) {
+	// the current of the stages switched on, for core's pv hold
+	c, _, _ := stagesCharger(t, 0)
+	assert.Equal(t, 0.0, c.RunningCurrent(3))
+
+	require.NoError(t, c.MaxCurrentMillis(amps(6000)))
+	require.NoError(t, c.Enable(true))
+	assert.InDelta(t, amps(6000), c.RunningCurrent(3), 1e-9)
+	assert.InDelta(t, 6000/voltage, c.RunningCurrent(1), 1e-9)
+}
+
+func TestSwitchStagesPhaseCurrents(t *testing.T) {
+	// one stage per phase: a stage that is on carries its whole current on its
+	// phase, not a third of it, however many are on
+	c, f, _ := stagesCharger(t, 0)
+
+	stage, ok := c.StagePhaseCurrent()
+	require.True(t, ok)
+	assert.InDelta(t, 3000/voltage, stage, 1e-9)
+
+	i1, i2, i3, err := c.Currents()
+	require.NoError(t, err)
+	assert.Equal(t, []float64{0, 0, 0}, []float64{i1, i2, i3}, "off")
+
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	require.NoError(t, c.Enable(true))
+	assert.Equal(t, 1, f.count())
+
+	// every phase, else evcc takes the stages that are on for the active phases
+	i1, i2, i3, err = c.Currents()
+	require.NoError(t, err)
+	for _, i := range []float64{i1, i2, i3} {
+		assert.InDelta(t, 13.04, i, 0.01, "one stage")
+	}
+
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	assert.Equal(t, 3, f.count())
+
+	i1, i2, i3, err = c.Currents()
+	require.NoError(t, err)
+	for _, i := range []float64{i1, i2, i3} {
+		assert.InDelta(t, 13.04, i, 0.01, "three stages: 13A on each phase")
+	}
+
+	// an unreadable stage may run
+	require.NoError(t, c.Enable(false))
+	f.lost = 2
+	i1, _, _, err = c.Currents()
+	require.NoError(t, err)
+	assert.InDelta(t, 13.04, i1, 0.01)
+}
+
+func TestSwitchStagesPhaseCurrentsMismatch(t *testing.T) {
+	// the stages do not match the phases: no phase currents, evcc keeps the offered current
+	f := &fakeSwitches{on: make([]bool, 2)}
+	c := NewSwitchStages(&embed{}, f.stages(), 3000, 0, nil)
+	lp := loadpoint.NewMockAPI(gomock.NewController(t))
+	lp.EXPECT().ActivePhases().Return(3).AnyTimes()
+	c.LoadpointControl(lp)
+
+	_, _, _, err := c.Currents()
+	assert.ErrorIs(t, err, api.ErrNotAvailable)
+
+	_, ok := c.StagePhaseCurrent()
+	assert.False(t, ok)
+
+	// one stage on one phase
+	f = &fakeSwitches{on: []bool{true}}
+	c = NewSwitchStages(&embed{}, f.stages(), 3000, 0, nil)
+	lp = loadpoint.NewMockAPI(gomock.NewController(t))
+	lp.EXPECT().ActivePhases().Return(1).AnyTimes()
+	c.LoadpointControl(lp)
+
+	i1, i2, i3, err := c.Currents()
+	require.NoError(t, err)
+	assert.InDelta(t, 13.04, i1, 0.01)
+	assert.Equal(t, 0.0, i2)
+	assert.Equal(t, 0.0, i3)
 }

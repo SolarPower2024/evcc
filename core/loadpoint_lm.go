@@ -22,6 +22,8 @@ type loadpointCustom struct {
 
 	switchMu    sync.Mutex
 	switchPower float64 // switch power last measured while on
+
+	stageTimer time.Time // since when a heater in stages is short of its running stages, see core/loadpoint_stages.go
 }
 
 // lmm returns the load management of the loadpoint's site. A loadpoint
@@ -55,6 +57,9 @@ type lmCircuit struct {
 
 	guarded, switchDevice bool
 
+	// the current one stage of a heater with one stage per phase draws on its phase
+	stageCurrent float64
+
 	// what was asked and allowed, for the overview
 	requested, allowedPower, allowedCurrent float64
 }
@@ -66,6 +71,7 @@ func (lp *Loadpoint) lmCircuit() *lmCircuit {
 		lp:           lp,
 		now:          lp.clock.Now(),
 		switchDevice: lp.chargerHasFeature(api.SwitchDevice),
+		stageCurrent: lp.stagePhaseCurrent(),
 	}
 
 	if lp.lmm().Guarded(lp, c.now) > 0 {
@@ -117,6 +123,9 @@ func (c *lmCircuit) ValidateCurrent(old, new float64) float64 {
 	case c.guarded:
 		return 0
 
+	case c.stageCurrent > 0:
+		return c.validateStageCurrent(old, new)
+
 	case !c.switchDevice:
 		c.allowedCurrent = c.lp.lmm().RequestCurrent(c.lp, c.Circuit, old, new, c.demand(new, old, c.lp.effectiveMinCurrent(), c.unusedOffer(old)))
 		return c.allowedCurrent
@@ -139,6 +148,30 @@ func (c *lmCircuit) ValidateCurrent(old, new float64) float64 {
 		return 0
 	}
 
+	return new
+}
+
+// validateStageCurrent checks the current of a heater with one stage per phase. A
+// stage draws its whole current on its own phase, however many are on, while the
+// offered current is the mean over the phases: a single stage would be checked
+// with a third of what it draws. The circuit is asked for the current of one
+// stage, which fits or lets nothing be switched on; the power limit decides how
+// many stages fit.
+func (c *lmCircuit) validateStageCurrent(old, new float64) float64 {
+	if new <= 0 {
+		// staying off asks for nothing, which also clears an earlier demand
+		c.lp.lmm().ValidateCurrent(c.lp, c.Circuit, old, 0)
+		return new
+	}
+
+	if allowed := c.lp.lmm().ValidateCurrent(c.lp, c.Circuit, old, c.stageCurrent); allowed < c.stageCurrent {
+		if c.lp.enabled {
+			c.lp.log.DEBUG.Printf("circuit allows %.3gA on a phase, a stage needs %.3gA: off", allowed, c.stageCurrent)
+		}
+		return 0
+	}
+
+	c.allowedCurrent = new
 	return new
 }
 

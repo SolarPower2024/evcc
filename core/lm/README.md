@@ -143,9 +143,19 @@ switches, power per stage, optional power sensor, delay before a higher
 stage). The charger (`charger/switchstages.go`) reports one stage as minimum
 and all as maximum power and switches on as many whole stages as fit. It is no
 switch device, so load management steps it down stage by stage instead of
-shedding it whole. Down is immediate, a higher stage waits until the last
-change is the delay old (default 1 min), switching on from off follows the
-loadpoint's enable delay. The loadpoint's phases must match the wiring. A
+shedding it whole. Down is immediate for load management and circuit limits; in
+pv mode a stage goes only once the grid import has stayed at the loadpoint's
+disable threshold for its disable delay, so a surplus hovering around a stage
+boundary does not toggle the relays (`holdStage`, `TestStagesPvHysteresis`,
+`TestStagesPvHysteresisThreshold`; imports below the threshold are tolerated).
+The same holds when the surplus falls below the first stage: the running stages
+stay for the disable delay and go back to one stage, not to off at once. From
+there evcc's own disable timer decides with the grid import it measures at one
+stage, so with a solar share below 1 or a disable threshold of its own the heater
+may run on at one stage instead of going off (`TestStagesPvDisableHold`,
+`TestStagesPvDisableHoldThreshold`, `TestStagesPvDisableHoldPartialSolar`).
+A higher stage waits until the last change is the delay old (default 1 min),
+switching on from off follows the loadpoint's enable delay. The loadpoint's phases must match the wiring. A
 thermostat that cut out (draw up to the standby power, default 15 W) reports
 ready and counts as 0 W. Without a power sensor the power is assumed (stages
 on × stage power): control, circuits and load management use it, but the home
@@ -156,6 +166,48 @@ loadpoint card shows the assumption as "≈ 6 kW" (whole kW, fits a phone) (`cha
 `core/loadpoint_stages.go`). Its session energy stays 0, so a kWh charge limit does
 not apply there. `TestStagesCircuitStepsDown`,
 `TestStagesGiveWayToHigherPriority`, `TestStagesEstimatedPower`.
+
+Current per phase: a stage draws its whole current on its own phase, not a third
+of it on each. With one stage per phase (the loadpoint's phases = the number of
+stages) the charger reports the current of one stage (power / 230 V) as phase
+current on every phase as soon as a stage is on (`api.PhaseCurrents`), so
+circuits and load management count the real highest phase current. It is
+reported on every phase, not only on the phases of the stages that are on, else
+evcc would take the phases with a current for the active phases and convert the
+power of the heater with one. The circuit check (`validateStageCurrent`,
+`core/loadpoint_lm.go`) asks the circuit for the current of one stage instead of
+the mean over the phases: a stage that does not fit on its phase is not
+switched on, and a running heater goes off when the circuit has no room left,
+as fewer stages would not draw less on a phase. The power limit still decides
+how many stages fit. With another number of stages than phases, evcc keeps the
+offered current (`TestSwitchStagesPhaseCurrents`,
+`TestSwitchStagesPhaseCurrentsMismatch`, `TestStagesPhaseCurrent`,
+`TestStagesPhaseCurrentKeepsPhases`).
+
+Failing switches: a failed switch leaves the setting as it was, so a failed
+enable never turns the heater on later by itself, and a failed current stays
+unset (evcc reads the old one back and sets the new one again; the level is
+what is really on after a partial switch, `TestSwitchStagesFailure`,
+`TestSwitchStagesFailureStepUp`). The catch-up of a held back step up only runs
+on a heater that is on and tries again after the delay at the earliest; a
+repeated cause is logged once (`TestSwitchStagesCatchUpAfterFailedEnable`,
+`TestSwitchStagesCatchUpRetry`). After a failed step down or switch off the
+catch-up does not step up again, evcc asked for less and retries until a write
+succeeds (`TestSwitchStagesCatchUpAfterFailedStepDown`,
+`TestSwitchStagesCatchUpAfterFailedDisable`,
+`TestSwitchStagesCatchUpAfterFailedStepDownThenUp`). If evcc wants the old
+current again and so writes nothing, this ends once no failed try has happened
+for twice the stage delay and the catch-up steps up
+(`TestSwitchStagesCatchUpAfterFailedStepDownExpires`).
+A switch that cannot be read (unavailable, deleted) makes its stage unknown, not
+the whole heater: status, enabled and switching go by the readable stages
+(an error only if none can be read), nothing is written to the unknown one, its
+power counts as on for circuits, and the outage is one WARN. The config page
+shows it as an error (`TestSwitchStagesUnreadableStage`,
+`TestSwitchStagesUnreadableStageStepUp`).
+A heater found running at start (restart of evcc) is taken over with the current
+of its stages, so evcc's first request, the minimum, does not drop it to one
+stage, and a smaller request later is written (`TestSwitchStagesRunningAtStart`).
 
 ## 5. Shed guard
 
@@ -909,7 +961,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerResult` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
 | `core/site/api.go` | embeds `CustomAPI` |
-| `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`; two `lp.lmm().Peek*` probes; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), the phase timers take `phaseScaleDelay`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |
+| `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`; two `lp.lmm().Peek*` probes; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` (in front of the disable branch, behind the always-charge/battery return) keeps a heater in stages on its running stages until the disable delay has passed, the phase timers take `phaseScaleDelay`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split per phase count (as in evcc PR 32505), min/max power use it |
 | `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
