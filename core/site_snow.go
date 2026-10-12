@@ -115,7 +115,7 @@ func (site *Site) setSnowCover(val, byAuto bool) {
 	site.publish(keys.SnowCover, val)
 	site.publish(keys.SnowCoverAuto, val && byAuto)
 
-	go site.optimizerUpdateAsync(0)
+	go site.optimizerUpdateAsync(true)
 }
 
 // snowClearStep rates a completed slot: the new count of free slots in a row

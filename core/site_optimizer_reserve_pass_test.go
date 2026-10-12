@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/evcc-io/evcc/util"
 	optimizer "github.com/evcc-io/optimizer/client"
@@ -183,10 +182,10 @@ func TestLmOptimizeAgain(t *testing.T) {
 	// a run is in progress
 	site.optimizerMu.Lock()
 
-	site.lmOptimizeLater(time.Minute)
+	site.lmOptimizeLater(false)
 	assert.False(t, site.lms().optimizeAgain.Load(), "a periodic run waits for the next slot")
 
-	site.lmOptimizeLater(0)
+	site.lmOptimizeLater(true)
 	assert.True(t, site.lms().optimizeAgain.Load())
 
 	site.optimizerMu.Unlock()
@@ -194,7 +193,7 @@ func TestLmOptimizeAgain(t *testing.T) {
 	assert.False(t, site.lms().optimizeAgain.Load(), "run once")
 
 	// the running one finished before the request was remembered: it is not lost
-	site.lmOptimizeLater(0)
+	site.lmOptimizeLater(true)
 	assert.False(t, site.lms().optimizeAgain.Load(), "started right away")
 }
 
@@ -311,4 +310,17 @@ func TestLmGridChargeBlockedPeak(t *testing.T) {
 	setPeakShaving(site, 2000, 35)
 	site.peak().demand = 5000
 	assert.False(t, site.lmGridChargeBlocked())
+}
+
+// The grid goals follow the hosted optimizer's hourly slots beyond 48 hours.
+func TestLmPlanCoarse(t *testing.T) {
+	plan := lmPlan{grid: []lmGridGoal{{slot: 2, level: 1000}, {slot: 6, level: 2000}}}
+
+	// quarter hours after a partial first slot: unchanged
+	fine := []int{600, 900, 900, 900, 900, 900, 900, 900}
+	assert.Equal(t, plan.grid, plan.coarse(fine).grid)
+
+	// slots 3-6 merged into one hour: the goal of slot 6 ends in it
+	coarse := []int{600, 900, 900, 3600, 900}
+	assert.Equal(t, []lmGridGoal{{slot: 2, level: 1000}, {slot: 3, level: 2000}}, plan.coarse(coarse).grid)
 }

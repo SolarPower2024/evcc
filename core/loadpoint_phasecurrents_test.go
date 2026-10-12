@@ -280,6 +280,10 @@ func TestPhaseScaleDelay(t *testing.T) {
 	lp.phaseScale3pDelay, lp.phaseScale1pDelay = 5*time.Minute, 4*time.Minute
 	assert.Equal(t, 5*time.Minute, lp.phaseScaleDelay(3))
 	assert.Equal(t, 4*time.Minute, lp.phaseScaleDelay(1))
+
+	// 1p not sustainable: evcc disables instead of switching, after the disable delay
+	assert.Equal(t, 4*time.Minute, lp.phaseScaleDelay1p(false))
+	assert.Equal(t, 3*time.Minute, lp.phaseScaleDelay1p(true))
 }
 
 func TestPvScalePhasesDelays(t *testing.T) {
