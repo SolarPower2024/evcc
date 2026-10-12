@@ -385,6 +385,97 @@ func TestSwitchStagesCatchUpAfterFailedEnable(t *testing.T) {
 	assert.Equal(t, 3, f.count())
 }
 
+func TestSwitchStagesCatchUpAfterFailedStepDown(t *testing.T) {
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	require.NoError(t, c.Enable(true))
+	assert.Equal(t, 3, f.count())
+
+	// down to one stage: the third goes, the second fails
+	f.fail = 2
+	clk.Add(time.Minute)
+	require.Error(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, []bool{true, true, false}, f.on)
+
+	// the switch is back, but evcc did not ask for more: the catch-up must not
+	// bring the third stage up again, it leaves the retry to evcc
+	f.fail = 0
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, []bool{true, true, false}, f.on)
+
+	// evcc reads back the old current and sets the lower one again
+	cur, err := c.GetMaxCurrent()
+	require.NoError(t, err)
+	assert.InDelta(t, amps(9000), cur, 1e-9)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, []bool{true, false, false}, f.on)
+
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, []bool{true, false, false}, f.on)
+}
+
+func TestSwitchStagesCatchUpAfterFailedDisable(t *testing.T) {
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	require.NoError(t, c.Enable(true))
+
+	// off: the third stage goes, the second fails
+	f.fail = 2
+	clk.Add(time.Minute)
+	require.Error(t, c.Enable(false))
+	assert.Equal(t, []bool{true, true, false}, f.on)
+
+	// not caught up to three stages, a heater evcc wants off stays off
+	f.fail = 0
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, []bool{true, true, false}, f.on)
+
+	enabled, err := c.Enabled()
+	require.NoError(t, err)
+	assert.True(t, enabled, "evcc sees stages on and disables again")
+
+	require.NoError(t, c.Enable(false))
+	assert.Equal(t, 0, f.count())
+
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, 0, f.count())
+}
+
+func TestSwitchStagesCatchUpAfterFailedStepDownThenUp(t *testing.T) {
+	// evcc asks for more after a failed step down: the catch-up works again
+	c, f, clk := stagesCharger(t, time.Minute)
+
+	require.NoError(t, c.MaxCurrentMillis(amps(6000)))
+	require.NoError(t, c.Enable(true))
+	assert.Equal(t, 2, f.count())
+
+	f.fail = 2
+	clk.Add(time.Minute)
+	require.Error(t, c.MaxCurrentMillis(amps(3000)))
+
+	f.fail = 0
+	clk.Add(time.Minute)
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	assert.Equal(t, 3, f.count())
+
+	// held back by the delay after a step down, then caught up
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	assert.Equal(t, 1, f.count())
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	assert.Equal(t, 1, f.count(), "held back")
+
+	clk.Add(time.Minute)
+	require.NoError(t, c.catchUp())
+	assert.Equal(t, 3, f.count())
+}
+
 func TestSwitchStagesCatchUpOnlyRunning(t *testing.T) {
 	// from no stage apply never holds a step back, so the catch-up leaves it to evcc
 	c, f, clk := stagesCharger(t, time.Minute)

@@ -166,7 +166,11 @@ what is really on after a partial switch, `TestSwitchStagesFailure`,
 `TestSwitchStagesFailureStepUp`). The catch-up of a held back step up only runs
 on a heater that is on and tries again after the delay at the earliest; a
 repeated cause is logged once (`TestSwitchStagesCatchUpAfterFailedEnable`,
-`TestSwitchStagesCatchUpRetry`).
+`TestSwitchStagesCatchUpRetry`). After a failed step down or switch off the
+catch-up does not step up again, evcc asked for less and retries until a write
+succeeds (`TestSwitchStagesCatchUpAfterFailedStepDown`,
+`TestSwitchStagesCatchUpAfterFailedDisable`,
+`TestSwitchStagesCatchUpAfterFailedStepDownThenUp`).
 A switch that cannot be read (unavailable, deleted) makes its stage unknown, not
 the whole heater: status, enabled and switching go by the readable stages
 (an error only if none can be read), nothing is written to the unknown one, its

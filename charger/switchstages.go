@@ -72,6 +72,11 @@ type SwitchStages struct {
 	level   int       // stages switched on by the last write
 	changed time.Time // last change of the level or failed attempt
 	lastErr string    // cause of the last failed catch-up, logged once
+
+	// a step down failed and is left to evcc's retry: the request is not taken
+	// over, so the catch-up must not step up to the old one. Until evcc writes
+	// again successfully.
+	lowering bool
 }
 
 // NewSwitchStagesFromConfig creates a stepped switch charger from generic config
@@ -191,14 +196,16 @@ func (c *SwitchStages) logCatchUp(err error) {
 
 // catchUp applies a step up that was held back by the delay. Only a running
 // heater has one: from no stage apply never holds back, so a heater that is
-// off, or whose switch-on failed, is left to evcc.
+// off, or whose switch-on failed, is left to evcc. So is one whose step down
+// failed: the old current is still the request, but evcc asked for less and
+// retries, stepping up meanwhile would add load against its limit.
 func (c *SwitchStages) catchUp() error {
 	phases := c.phases()
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if !c.enabled || c.level == 0 || c.level >= c.target(phases) || c.clock.Since(c.changed) < c.delay {
+	if !c.enabled || c.lowering || c.level == 0 || c.level >= c.target(phases) || c.clock.Since(c.changed) < c.delay {
 		return nil
 	}
 
@@ -469,13 +476,17 @@ func (c *SwitchStages) Enable(enable bool) error {
 	defer c.mu.Unlock()
 
 	// a failed switch leaves the setting as it was, else the catch-up would
-	// carry it out later without evcc asking
+	// carry it out later without evcc asking. The stages still on show as
+	// enabled, so evcc retries a failed switch off; meanwhile no step up.
 	prev := c.enabled
 	c.enabled = enable
 	if err := c.apply(phases); err != nil {
 		c.enabled = prev
+		c.lowering = c.lowering || !enable
 		return err
 	}
+
+	c.lowering = false
 
 	return nil
 }
@@ -515,8 +526,11 @@ func (c *SwitchStages) MaxCurrentMillis(current float64) error {
 
 	if err := c.update(phases); err != nil {
 		c.current = prev
+		c.lowering = c.lowering || current < prev
 		return err
 	}
+
+	c.lowering = false
 
 	return nil
 }
