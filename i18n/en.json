@@ -82,7 +82,6 @@
       "suggestion": "Suggestion"
     },
     "peakShaving": {
-      "alsoCircuit": "Also applies to circuit {name}",
       "description": "Below {reserve}, the battery only covers what would lift the 15 minute average above {limit}. Above it, normal self-consumption.",
       "enable": "Hold the lower battery range back for demand peaks.",
       "noEntity": "No target entity set (Configuration → Load management details → Peak Shaving).",

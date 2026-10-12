@@ -82,7 +82,6 @@
       "suggestion": "Vorschlag"
     },
     "peakShaving": {
-      "alsoCircuit": "Gilt auch für Stromkreis {name}",
       "description": "Unter {reserve} deckt die Batterie nur, was das 15-Minuten-Mittel über {limit} heben würde. Darüber normaler Eigenverbrauch.",
       "enable": "Untere Batteriereserve für Lastspitzen zurückhalten.",
       "noEntity": "Keine Zielentität hinterlegt (Konfiguration → Lastmanagement-Details → Peak Shaving).",
