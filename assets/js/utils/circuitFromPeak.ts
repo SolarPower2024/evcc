@@ -18,4 +18,3 @@ export function circuitPeakHintLimit(
   if (!state.lmAdvanced?.circuitFromPeak) return undefined;
   return state.peakShavingLimit || 0;
 }
-
