@@ -717,8 +717,20 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   forced run arriving during a run follows right after it.
 
 Without circuits, peak shaving, soc or one-time grid charging and snow on pv the
-request is unchanged. The optimizer's automatic mode (evcc PR 32881) needs a gate at
-execution, prepared separately on top of these inputs.
+request is unchanged.
+
+In the optimizer's automatic mode (evcc PR 32881) it also sets the battery mode
+and gates the loadpoints. The fork keeps its safety limits at execution, see
+`core/site_optimizer_gate.go`: a charge request passes the same checks as the
+fork's own grid charging (running peak, circuit headroom, charge power
+setpoint) and becomes hold when refused; hold gives way to normal while a peak
+has to be covered, and peak shaving then only covers the peak instead of
+writing the free value. Below the reserve the battery stays in normal mode as
+before. With a missing or stale optimizer result the fork's grid charging
+applies as without the optimizer, which otherwise does not switch the battery
+itself while the optimizer is in control. Profiles skip discharge control,
+which the optimizer decides. The overview marks what the optimizer controls.
+Without automatic mode the battery follows upstream.
 
 ### Export forecast
 
@@ -977,6 +989,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | File | Change |
 | --- | --- |
 | `core/site.go` | `custom` field; `meteredPower` in `updateLoadpoints` (an assumed heater power stays in the home consumption); `restoreCustom` deferred at the start of `restoreSettings` (after the guard for tests, so it also runs when an evcc restore step returns an error); `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter` (with `powerRead`: whether the grid power was read, evcc keeps the old value for a meter that is not available); `setPeakMeterRead` in `collectMeters` (the result of each power read: evcc leaves a failed read at 0 W without a mark); `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
+| `core/site_battery.go` | `lmGateBatteryMode` in `updateBatteryMode` after evcc decided the mode (optimizer automatic mode) |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerResult` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
@@ -1024,7 +1037,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
 | log file | `util/logstash/file_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
-| optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
+| optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
 | ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `PowerIcon`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
 | build | `.github/workflows/custom-image.yml` |

@@ -47,6 +47,7 @@
 						:active="socGridChargeEnabled && !!state.batteryGridChargeActive"
 						:start-soc="state.batterySocGridChargeStart ?? 20"
 						:stop-soc="state.batterySocGridChargeStop ?? 80"
+						:optimizer="optimizerAutomatic"
 					/>
 
 					<BatteryPeakShavingCard
