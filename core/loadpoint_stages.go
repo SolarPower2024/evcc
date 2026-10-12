@@ -108,3 +108,19 @@ func (lp *Loadpoint) holdStage(target, sitePower, threshold float64) float64 {
 
 	return target
 }
+
+// stagePhaser is implemented by charger.SwitchStages
+type stagePhaser interface {
+	StagePhaseCurrent() (float64, bool)
+}
+
+// stagePhaseCurrent returns the current one stage of a heater draws on its phase,
+// 0 unless the heater has one stage per phase
+func (lp *Loadpoint) stagePhaseCurrent() float64 {
+	if c, ok := lp.charger.(stagePhaser); ok {
+		if current, ok := c.StagePhaseCurrent(); ok {
+			return current
+		}
+	}
+	return 0
+}

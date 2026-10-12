@@ -276,6 +276,18 @@ func countOn(states []stageState) int {
 	return n
 }
 
+// countRunning returns the stages that are on or may be: an unreadable stage is
+// counted on, the safe side for circuits
+func countRunning(states []stageState) int {
+	var n int
+	for _, s := range states {
+		if s != stageOff {
+			n++
+		}
+	}
+	return n
+}
+
 // phases returns the phases the loadpoint converts power and current with.
 // Not called with the mutex held, the loadpoint takes its own lock.
 func (c *SwitchStages) phases() int {
@@ -388,6 +400,16 @@ func (c *SwitchStages) PowerEstimated() bool {
 // Stages returns the number of stages, core shows the heater as switched by it
 func (c *SwitchStages) Stages() int {
 	return len(c.stages)
+}
+
+// StagePhaseCurrent returns the current one stage draws on its phase, if the
+// heater has one stage per phase. The loadpoint's phases must match the wiring.
+func (c *SwitchStages) StagePhaseCurrent() (float64, bool) {
+	if len(c.stages) != c.phases() {
+		return 0, false
+	}
+
+	return c.stagePower / voltage, true
 }
 
 // RunningCurrent returns the current the stages switched on by the last write
@@ -572,15 +594,38 @@ func (c *SwitchStages) CurrentPower() (float64, error) {
 		return 0, err
 	}
 
-	// an unreadable stage may be running: counted on, the safe side for circuits
-	var n int
-	for _, s := range states {
-		if s != stageOff {
-			n++
-		}
+	return float64(countRunning(states)) * c.stagePower, nil
+}
+
+var _ api.PhaseCurrents = (*SwitchStages)(nil)
+
+// Currents implements the api.PhaseCurrents interface. A stage draws its whole
+// current on one phase, not a third of it on each. With one stage per phase the
+// heater so carries the current of one stage as soon as one is on, and evcc
+// takes the maximum over the phases for its circuits. The current is reported on
+// every phase, not only on the phases of the stages that are on: evcc would take
+// the phases with a current for the active phases and then convert the power of
+// the stages with a single phase. Not available otherwise.
+func (c *SwitchStages) Currents() (float64, float64, float64, error) {
+	current, ok := c.StagePhaseCurrent()
+	if !ok {
+		return 0, 0, 0, api.ErrNotAvailable
 	}
 
-	return float64(n) * c.stagePower, nil
+	states, err := c.states()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	if countRunning(states) == 0 {
+		return 0, 0, 0, nil
+	}
+
+	if len(c.stages) == 1 {
+		return current, 0, 0, nil
+	}
+
+	return current, current, current, nil
 }
 
 var _ loadpoint.Controller = (*SwitchStages)(nil)

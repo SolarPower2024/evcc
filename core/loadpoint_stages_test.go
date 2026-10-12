@@ -334,3 +334,99 @@ func TestStagesPvHysteresisOtherChargers(t *testing.T) {
 
 	assert.Equal(t, 5.0, lp.holdStage(5, 1000, 0))
 }
+
+// stagesLoad stands in for a load on the circuit
+type stagesLoad struct {
+	circuit        api.Circuit
+	power, current float64
+}
+
+func (l *stagesLoad) GetChargePower() float64     { return l.power }
+func (l *stagesLoad) GetMaxPhaseCurrent() float64 { return l.current }
+func (l *stagesLoad) GetCircuit() api.Circuit     { return l.circuit }
+
+// TestStagesPhaseCurrent pins what a heater with one stage per phase draws on a
+// phase: its stage current in full, not the mean over the phases. A stage then
+// is not switched on into a circuit that has no room for it on a phase.
+func TestStagesPhaseCurrent(t *testing.T) {
+	lp, c, _ := newStagesLoadpoint(t, "stagesphasecurrent")
+
+	ci, err := circuit.New(util.NewLogger("test"), "heating", 16, 0, nil, 0)
+	require.NoError(t, err)
+	lp.circuit = ci
+	lp.chargeMeter = newChargeMeter(c)
+
+	foreign := &stagesLoad{circuit: ci, power: 2300, current: 10}
+
+	// the heater reports what it draws as the charge currents
+	update := func() {
+		t.Helper()
+
+		i1, i2, i3, err := c.(api.PhaseCurrents).Currents()
+		require.NoError(t, err)
+		lp.chargeCurrents = []float64{i1, i2, i3}
+
+		p, err := c.(api.Meter).CurrentPower()
+		require.NoError(t, err)
+		lp.chargePower = p
+
+		require.NoError(t, ci.Update([]api.CircuitLoad{foreign, lp}))
+	}
+
+	// 10A elsewhere on 16A: a stage draws 13A on a phase and does not fit,
+	// the mean current of 4.3A offered for one stage would have
+	update()
+	require.NoError(t, lp.setLimit(lp.effectiveMaxCurrent()))
+	p, err := c.(api.Meter).CurrentPower()
+	require.NoError(t, err)
+	assert.Equal(t, 0.0, p, "no stage")
+	assert.False(t, lp.enabled)
+
+	// 2A elsewhere: room for a stage on a phase, all three run
+	foreign.current = 2
+	update()
+	require.NoError(t, lp.setLimit(lp.effectiveMaxCurrent()))
+	update()
+
+	p, err = c.(api.Meter).CurrentPower()
+	require.NoError(t, err)
+	assert.Equal(t, 9000.0, p)
+	assert.True(t, lp.enabled)
+	assert.InDelta(t, 13.04, lp.GetMaxPhaseCurrent(), 0.01, "three stages: 13A on each phase")
+	assert.InDelta(t, 15.04, ci.GetMaxPhaseCurrent(), 0.01)
+
+	// the running stages are counted on the phase: 5A more elsewhere leaves
+	// no room, and fewer stages would not draw less on a phase
+	foreign.current = 7
+	update()
+	require.NoError(t, lp.setLimit(lp.effectiveMaxCurrent()))
+	p, err = c.(api.Meter).CurrentPower()
+	require.NoError(t, err)
+	assert.Equal(t, 0.0, p, "off")
+}
+
+// TestStagesPhaseCurrentKeepsPhases pins that the phase currents do not make the
+// loadpoint take the stages that are on for its active phases: the conversion of
+// power and current of the whole heater would be on one phase
+func TestStagesPhaseCurrentKeepsPhases(t *testing.T) {
+	lp, c, _ := newStagesLoadpoint(t, "stagesphasecurrentphases")
+	lp.circuit = nil
+	lp.chargeMeter = newChargeMeter(c)
+
+	require.NoError(t, lp.setLimit(lp.effectiveMinCurrent()))
+	require.NoError(t, c.Enable(true))
+	lp.enabled = true
+	lp.status = api.StatusC
+
+	i1, i2, i3, err := c.(api.PhaseCurrents).Currents()
+	require.NoError(t, err)
+	lp.chargeCurrents = []float64{i1, i2, i3}
+	lp.phasesFromChargeCurrents()
+
+	p, err := c.(api.Meter).CurrentPower()
+	require.NoError(t, err)
+	assert.Equal(t, 3000.0, p, "one stage")
+	assert.Equal(t, 3, lp.ActivePhases())
+	assert.InDelta(t, 3000.0/690, lp.effectiveMinCurrent(), 1e-9)
+	assert.InDelta(t, 9000.0/690, lp.effectiveMaxCurrent(), 1e-9)
+}

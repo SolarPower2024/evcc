@@ -142,6 +142,23 @@ loadpoint card shows the assumption as "≈ 6 kW" (whole kW, fits a phone) (`cha
 not apply there. `TestStagesCircuitStepsDown`,
 `TestStagesGiveWayToHigherPriority`, `TestStagesEstimatedPower`.
 
+Current per phase: a stage draws its whole current on its own phase, not a third
+of it on each. With one stage per phase (the loadpoint's phases = the number of
+stages) the charger reports the current of one stage (power / 230 V) as phase
+current on every phase as soon as a stage is on (`api.PhaseCurrents`), so
+circuits and load management count the real highest phase current. It is
+reported on every phase, not only on the phases of the stages that are on, else
+evcc would take the phases with a current for the active phases and convert the
+power of the heater with one. The circuit check (`validateStageCurrent`,
+`core/loadpoint_lm.go`) asks the circuit for the current of one stage instead of
+the mean over the phases: a stage that does not fit on its phase is not
+switched on, and a running heater goes off when the circuit has no room left,
+as fewer stages would not draw less on a phase. The power limit still decides
+how many stages fit. With another number of stages than phases, evcc keeps the
+offered current (`TestSwitchStagesPhaseCurrents`,
+`TestSwitchStagesPhaseCurrentsMismatch`, `TestStagesPhaseCurrent`,
+`TestStagesPhaseCurrentKeepsPhases`).
+
 Failing switches: a failed switch leaves the setting as it was, so a failed
 enable never turns the heater on later by itself, and a failed current stays
 unset (evcc reads the old one back and sets the new one again; the level is

@@ -593,3 +593,72 @@ func TestSwitchStagesRunningCurrent(t *testing.T) {
 	assert.InDelta(t, amps(6000), c.RunningCurrent(3), 1e-9)
 	assert.InDelta(t, 6000/voltage, c.RunningCurrent(1), 1e-9)
 }
+
+func TestSwitchStagesPhaseCurrents(t *testing.T) {
+	// one stage per phase: a stage that is on carries its whole current on its
+	// phase, not a third of it, however many are on
+	c, f, _ := stagesCharger(t, 0)
+
+	stage, ok := c.StagePhaseCurrent()
+	require.True(t, ok)
+	assert.InDelta(t, 3000/voltage, stage, 1e-9)
+
+	i1, i2, i3, err := c.Currents()
+	require.NoError(t, err)
+	assert.Equal(t, []float64{0, 0, 0}, []float64{i1, i2, i3}, "off")
+
+	require.NoError(t, c.MaxCurrentMillis(amps(3000)))
+	require.NoError(t, c.Enable(true))
+	assert.Equal(t, 1, f.count())
+
+	// every phase, else evcc takes the stages that are on for the active phases
+	i1, i2, i3, err = c.Currents()
+	require.NoError(t, err)
+	for _, i := range []float64{i1, i2, i3} {
+		assert.InDelta(t, 13.04, i, 0.01, "one stage")
+	}
+
+	require.NoError(t, c.MaxCurrentMillis(amps(9000)))
+	assert.Equal(t, 3, f.count())
+
+	i1, i2, i3, err = c.Currents()
+	require.NoError(t, err)
+	for _, i := range []float64{i1, i2, i3} {
+		assert.InDelta(t, 13.04, i, 0.01, "three stages: 13A on each phase")
+	}
+
+	// an unreadable stage may run
+	require.NoError(t, c.Enable(false))
+	f.lost = 2
+	i1, _, _, err = c.Currents()
+	require.NoError(t, err)
+	assert.InDelta(t, 13.04, i1, 0.01)
+}
+
+func TestSwitchStagesPhaseCurrentsMismatch(t *testing.T) {
+	// the stages do not match the phases: no phase currents, evcc keeps the offered current
+	f := &fakeSwitches{on: make([]bool, 2)}
+	c := NewSwitchStages(&embed{}, f.stages(), 3000, 0, nil)
+	lp := loadpoint.NewMockAPI(gomock.NewController(t))
+	lp.EXPECT().ActivePhases().Return(3).AnyTimes()
+	c.LoadpointControl(lp)
+
+	_, _, _, err := c.Currents()
+	assert.ErrorIs(t, err, api.ErrNotAvailable)
+
+	_, ok := c.StagePhaseCurrent()
+	assert.False(t, ok)
+
+	// one stage on one phase
+	f = &fakeSwitches{on: []bool{true}}
+	c = NewSwitchStages(&embed{}, f.stages(), 3000, 0, nil)
+	lp = loadpoint.NewMockAPI(gomock.NewController(t))
+	lp.EXPECT().ActivePhases().Return(1).AnyTimes()
+	c.LoadpointControl(lp)
+
+	i1, i2, i3, err := c.Currents()
+	require.NoError(t, err)
+	assert.InDelta(t, 13.04, i1, 0.01)
+	assert.Equal(t, 0.0, i2)
+	assert.Equal(t, 0.0, i3)
+}

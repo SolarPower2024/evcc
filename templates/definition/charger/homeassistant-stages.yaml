@@ -12,9 +12,11 @@ requirements:
     de: |
       Ein Heizstab mit einem Schalter je Stufe, z. B. je Phase. evcc schaltet so viele ganze Stufen ein, wie in die freigegebene Leistung passen, und regelt alle Stufen in einem Ladepunkt.
       Im Ladepunkt die Phasen so einstellen, wie die Stufen angeschlossen sind: eine Stufe je Phase = 3 Phasen. Min.- und Max.-Strom ergeben sich aus den Stufen, ein kleinerer Max.-Strom begrenzt die Stufenzahl.
+      Stromkreise rechnen mit dem vollen Strom einer Stufe (Leistung ÷ 230 V) auf ihrer Phase. Passt er nicht, bleibt der Heizstab aus.
     en: |
       A heater with one switch per stage, e.g. per phase. evcc switches on as many whole stages as fit into the released power and controls all stages in one loadpoint.
       Set the loadpoint's phases to match how the stages are wired: one stage per phase = 3 phases. Min and max current follow from the stages, a lower max current limits the number of stages.
+      Circuits count the full current of a stage (power ÷ 230 V) on its phase. If it does not fit, the heater stays off.
 auth:
   type: homeassistant
   params: [uri, insecure]
