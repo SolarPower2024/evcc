@@ -102,6 +102,9 @@ type siteCustom struct {
 func (site *Site) restoreCustom() {
 	site.restoreLmSettings()
 	site.restorePeakSettings()
+	// the circuit may take the peak limit: restoreLmSettings ran before the peak
+	// settings were back, so the limit applies here, not with the first cycle
+	site.applyCircuitLimits()
 	site.restoreFeedInEeg()
 	site.restoreLogFile()
 	site.restoreSnowCover()

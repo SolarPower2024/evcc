@@ -174,8 +174,9 @@ restart (`lmOff`). See `core/site_lm_switch.go`.
 nothing changes unconfigured): the chosen circuit's power limit is the peak
 limit from the battery tab while peak shaving is on, with follow the peak and
 also below the configured value. A change of the peak limit (setter, profile,
-follow, peak shaving on or off) is taken at once, otherwise with the next cycle.
-The configured value is not overwritten: it applies again with the switch or
+follow, peak shaving on or off) is taken at once, otherwise with the next cycle;
+after a restart it applies once the peak settings are back, before the first
+cycle. The configured value is not overwritten: it applies again with the switch or
 peak shaving off, and *Lastmanagement* off still lifts the limit. Without a
 circuit chosen the switch has no effect (not on all circuits); a circuit
 without a power limit or with one from a plugin is left alone. Fuse current

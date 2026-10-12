@@ -322,22 +322,31 @@ func TestLmCircuitFromPeakPlugin(t *testing.T) {
 	assert.False(t, site.lms().offFromPeak)
 }
 
-// The switch survives a restart and takes effect with the next cycle.
+// The switch survives a restart and takes effect at once: restoreCustom brings
+// the load management settings back before the peak settings, so the circuit
+// takes the peak limit only after both, not with the first cycle.
 func TestLmCircuitFromPeakRestart(t *testing.T) {
-	a, _, _ := lmSwitchCircuits(t, 3500)
+	a, main, _ := lmSwitchCircuits(t, 3500)
 	require.NoError(t, a.SetLmCircuit("main"))
 	require.NoError(t, a.SetLmAdvanced("circuitFromPeak", 1))
+	require.Equal(t, 3500.0, main.GetMaxPower())
 
-	b := &Site{log: a.log}
-	setPeakShaving(b, 4000, 20)
-	b.restoreLmAdvanced()
-	b.restoreLmSwitch()
+	// peak shaving on with 4000 W as stored by the api
+	settings.SetBool(keys.PeakShaving, true)
+	settings.SetFloat(keys.PeakShavingLimit, 4000)
+
+	// a restart: the circuit starts with its configured limit again
+	main.SetMaxPower(10000)
+	useLogFileDir(t)
+
+	b := &Site{log: a.log, batteryMeters: a.batteryMeters}
+	b.restoreCustom()
 	assert.True(t, b.advanced().CircuitFromPeak)
 	assert.Equal(t, "main", b.GetLmCircuit())
 
-	dev, err := config.Circuits().ByName("main")
-	require.NoError(t, err)
-	assert.Equal(t, 4000.0, dev.Instance().GetMaxPower())
+	assert.Equal(t, 4000.0, main.GetMaxPower(), "the peak limit applies after the restore, not with the first cycle")
+	assert.True(t, b.lms().offFromPeak)
+	assert.Equal(t, 10000.0, b.lms().offLimits["main"], "the configured value is kept")
 
 	// not stored when off, so a default changed later applies
 	require.NoError(t, a.SetLmAdvanced("circuitFromPeak", 0))
