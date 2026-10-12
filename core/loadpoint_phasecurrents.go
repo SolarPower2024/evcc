@@ -179,6 +179,15 @@ func (lp *Loadpoint) projectPhaseSwitch1p(sitePower, minCurrent float64) (float6
 	return sitePower, phases, minCurrent
 }
 
+// phaseScaleDelay1p is the delay before scaling down to 1p. When 1p is not
+// sustainable evcc disables instead of switching: then the disable delay applies.
+func (lp *Loadpoint) phaseScaleDelay1p(disable bool) time.Duration {
+	if disable {
+		return lp.GetDisableDelay()
+	}
+	return lp.phaseScaleDelay(1)
+}
+
 // phaseScaleDelay returns the delay before switching to the given phases: the
 // phase delay if set, else the enable delay for 3p and the disable delay for 1p
 func (lp *Loadpoint) phaseScaleDelay(phases int) time.Duration {

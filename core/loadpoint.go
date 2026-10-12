@@ -1626,7 +1626,8 @@ func (lp *Loadpoint) pvScalePhases(sitePower, minCurrent, maxCurrent float64, ma
 	// scale down phases. The phase timer keeps running while 3p min is not covered,
 	// whether 1p would be sustainable or not, so passing clouds cannot restart it (#34746)
 	if scalable {
-		if lp.phaseTimerElapsed(lp.phaseScaleDelay(1), phaseScale1p) { // custom: phase delay
+		// custom: phase delay, see core/loadpoint_phasecurrents.go; no switch when disabling
+		if lp.phaseTimerElapsed(lp.phaseScaleDelay1p(disable), phaseScale1p) {
 			if disable {
 				lp.elapsePVTimer()
 				return 0
@@ -1792,7 +1793,7 @@ func (lp *Loadpoint) batterySupported(sitePower, batteryPower float64, batteryBu
 	minCurrent := lp.effectiveMinCurrent()
 
 	// grid import while the battery discharges, net of residual power and controller tolerance
-	demand, phases := lp.projectPhaseSwitch(sitePower-batteryPower-lp.site.GetResidualPower()-lp.batteryTolerance(), minCurrent)
+	demand, phases, minCurrent := lp.projectPhaseSwitch1p(sitePower-batteryPower-lp.site.GetResidualPower()-lp.batteryTolerance(), minCurrent) // custom: 1p minimum, see core/loadpoint_phasecurrents.go
 	if demand > lp.pvDisableThreshold(minCurrent, phases) {
 		lp.log.DEBUG.Printf("battery support: %.0fW grid import", demand)
 		return false
