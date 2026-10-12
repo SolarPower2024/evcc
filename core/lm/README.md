@@ -290,13 +290,22 @@ earlier allows more and a short spike is only covered when the window would end
 above the limit. It is at most `cap × limit` (default 2), stops growing from the
 freeze minute (default 12) as a meter clock off by seconds could move a late
 draw into the next window, and the last cycle borrows the next window's
-budget. What evcc did not see, after a start or a gap, counts at the limit.
+budget. What evcc did not see, after a start or a gap, counts at the limit; so
+does a gap of over 2 minutes inside a window that the grid power or a changed
+source has to fill in (a counter of the same source before and after covers it),
+and such a window stays out of the statistics (`TestMeterUnmetered`).
 
 The energy drawn comes from the grid meter's import counter, else a Home
-Assistant energy sensor (kWh or Wh), else the grid power. A failed or backward
-reading is replaced by the grid power for that interval; a counter standing
-still while the grid power says more than 20 Wh in 2 minutes is replaced for
-the rest of the window (`peakShavingSource`).
+Assistant energy sensor (kWh or Wh), else the grid power. A failed reading, a 0
+of the sensor (as evcc takes it for the grid meter) and a reading below the last
+are replaced by the grid power for that interval. The lower reading only becomes
+the new base once the next one confirms it (a real reset); back at the old level
+it was a glitch, and the counter's step leaves out what the grid power already
+counted (`TestMeterCounterGlitch`). A step beyond what a grid connection draws
+(100 kW) is no measurement either. A counter standing still while the grid power
+says more than 20 Wh in 2 minutes is replaced for the rest of the window
+(`peakShavingSource`). A failing sensor is logged once, then at debug level
+until it works again (`TestPeakEnergyReadLoggedOnce`).
 
 Below the reserve the battery is kept in normal mode, as hold would block the
 discharge controller; a battery mode set from outside through the api stays.
@@ -322,7 +331,9 @@ starts there again. The load management circuit rises along. See
 **Statistics** (*Mehr → Peak Shaving*): per month the highest quarter hour with
 and without the battery and how often it covered a peak; only quarter hours
 metered from their start count, kept for 24 months (`peakMonths`,
-`core/site_peak_stats.go`). Each month also keeps its baseline, the highest
+`core/site_peak_stats.go`). "Without the battery" adds back only what the
+battery gave to the house, not what it fed into the grid (`TestMeterCompleted`;
+with a counter an approximation, as the import counter knows no export). Each month also keeps its baseline, the highest
 limit set by hand in it (the base while following the peak); months from before
 get the current one at the start. The dialog shows the current month in two
 tiles (highest quarter hour with and without the battery next to each other

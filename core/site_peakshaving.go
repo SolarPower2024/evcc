@@ -76,6 +76,7 @@ type peakState struct {
 	// Persisted, so a restart in the middle of a control still hands back.
 	owned    bool
 	writeErr map[string]string // the last error logged per output, see writeOutput
+	readErr  string            // the last error logged reading the energy sensor, see logEnergyRead
 
 	// battery type Marstek (Omnibattery), see site_peak_omni.go: evcc drives
 	// Omnibattery's own peak shaving and switches the battery to manual control
@@ -816,7 +817,8 @@ func writeErrorText(err error) string {
 
 // peakEnergy returns the grid import counter in kWh and where it came from: the
 // grid meter, else the Home Assistant sensor. Without either, the source is the
-// grid power.
+// grid power. A 0 of the sensor is no reading, like evcc takes it for the grid
+// meter.
 func (site *Site) peakEnergy() (float64, string) {
 	s := site.peak()
 
@@ -830,14 +832,42 @@ func (site *Site) peakEnergy() (float64, string) {
 	}
 
 	if get != nil {
-		v, err := get()
+		v, err := nonZeroEnergy(get())
+		site.logEnergyRead(entity, err)
+
 		if err == nil {
 			return v, peak.SourceEntity
 		}
-		site.log.WARN.Printf("peak shaving: energy %s: %v, using the grid power", entity, err)
 	}
 
 	return 0, peak.SourcePower
+}
+
+// logEnergyRead reports the result of reading the energy sensor, every cycle. A
+// failure is logged once as a warning and then at debug level until the read
+// works again (once at info), like a failed write.
+func (site *Site) logEnergyRead(entity string, err error) {
+	s := site.peak()
+
+	var text string
+	if err != nil {
+		text = err.Error()
+	}
+
+	s.mu.Lock()
+	last := s.readErr
+	s.readErr = text
+	s.mu.Unlock()
+
+	switch {
+	case err == nil && last != "":
+		site.log.INFO.Printf("peak shaving: energy %s: ok again", entity)
+	case err == nil:
+	case text == last:
+		site.log.DEBUG.Printf("peak shaving: energy %s: %s", entity, text)
+	default:
+		site.log.WARN.Printf("peak shaving: energy %s: %s, using the grid power", entity, text)
+	}
 }
 
 // setPeakGridEnergy takes the grid meter's import counter of this cycle, nil if
@@ -870,6 +900,10 @@ func (site *Site) updatePeakWindow(gridPower, batteryPower float64) {
 
 	if w.StaleNow {
 		site.log.WARN.Printf("peak shaving: the %s energy counter stopped updating, using the grid power until the window ends", source)
+	}
+
+	if w.GlitchNow {
+		site.log.WARN.Printf("peak shaving: the %s energy counter jumped to %.3f kWh, using the grid power for now", source, energy)
 	}
 
 	site.publish(keys.PeakShavingWindowAvg, w.Avg)
