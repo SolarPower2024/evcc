@@ -19,10 +19,3 @@ export function circuitPeakHintLimit(
   return state.peakShavingLimit || 0;
 }
 
-// The circuit the peak shaving card names: the one whose limit is the peak limit
-// right now, empty otherwise.
-export function peakShavingCircuitTitle(state: CircuitFromPeakState | undefined): string {
-  const name = state?.lmOff?.circuit;
-  if (!name || !state?.lmOff?.fromPeak || !state.peakShaving) return "";
-  return state.circuits?.[name]?.title || name;
-}

@@ -44,15 +44,6 @@
 			</i18n-t>
 		</div>
 
-		<!-- custom: the load management circuit takes the peak limit, see core/site_lm_switch.go -->
-		<p
-			v-if="alsoCircuit"
-			class="small evcc-gray mt-3 mb-0"
-			data-testid="battery-peak-shaving-circuit"
-		>
-			{{ $t("battery.peakShaving.alsoCircuit", { name: alsoCircuit }) }}
-		</p>
-
 		<div v-if="error" class="alert alert-danger mt-3 mb-0 py-2 small">{{ error }}</div>
 
 		<div
@@ -80,7 +71,6 @@ import api from "@/api";
 import store from "@/store";
 import { socSteps, MARSTEK_MIN_RESERVE } from "@/utils/socSteps";
 import { peakShavingSetUp } from "@/utils/peakShaving";
-import { peakShavingCircuitTitle } from "@/utils/circuitFromPeak";
 import Card from "../Helper/Card.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
 
@@ -131,10 +121,6 @@ export default defineComponent({
 		// a Marstek has no discharge entity, Omnibattery's peak shaving takes its place
 		entityMissing(): boolean {
 			return !peakShavingSetUp({ ...store.state, peakShavingEntity: this.entity });
-		},
-		// the circuit whose power limit is this limit right now, empty = none
-		alsoCircuit(): string {
-			return peakShavingCircuitTitle(store.state);
 		},
 		followOn(): boolean {
 			return !!this.follow?.enabled;
