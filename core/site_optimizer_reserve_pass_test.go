@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/evcc-io/evcc/util"
 	optimizer "github.com/evcc-io/optimizer/client"
@@ -183,10 +182,10 @@ func TestLmOptimizeAgain(t *testing.T) {
 	// a run is in progress
 	site.optimizerMu.Lock()
 
-	site.lmOptimizeLater(time.Minute)
+	site.lmOptimizeLater(false)
 	assert.False(t, site.lms().optimizeAgain.Load(), "a periodic run waits for the next slot")
 
-	site.lmOptimizeLater(0)
+	site.lmOptimizeLater(true)
 	assert.True(t, site.lms().optimizeAgain.Load())
 
 	site.optimizerMu.Unlock()
@@ -194,7 +193,7 @@ func TestLmOptimizeAgain(t *testing.T) {
 	assert.False(t, site.lms().optimizeAgain.Load(), "run once")
 
 	// the running one finished before the request was remembered: it is not lost
-	site.lmOptimizeLater(0)
+	site.lmOptimizeLater(true)
 	assert.False(t, site.lms().optimizeAgain.Load(), "started right away")
 }
 
