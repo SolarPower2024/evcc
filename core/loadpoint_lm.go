@@ -77,6 +77,38 @@ func (lp *Loadpoint) lmCircuit() *lmCircuit {
 	return c
 }
 
+// lmOfferSlack is how far below its offered current a charging loadpoint may
+// draw before it counts as not using its offer
+const lmOfferSlack = 1.0 // A
+
+// unusedOffer reports whether a charging loadpoint draws clearly less than it is
+// offered, like a car in its taper or at the limit of its on-board charger. More
+// headroom would not make it draw more. The draw is given in A.
+func (c *lmCircuit) unusedOffer(draw float64) bool {
+	return c.lp.charging() && draw < c.lp.offeredCurrent-lmOfferSlack
+}
+
+// demand qualifies a loadpoint's request, see lm.Demand. The amounts are the
+// request, what the loadpoint draws now and its minimum (lowest), all in one
+// unit; unused tells that it draws clearly less than it is offered.
+//
+// A loadpoint runs on any power from its minimum up, so it gets going on that
+// much of its demand. One that does not use its offer takes none of the headroom
+// freed for it: it needs the whole increase like a heater, or nothing is
+// reserved for a part of it. One that is enabled but draws nothing, its car full
+// or at its own limit, asks for its maximum every cycle without taking any of
+// it. It stands for the minimum it needs to start, whatever the circuit allows
+// of the maximum.
+func (c *lmCircuit) demand(request, draw, lowest float64, unused bool) lm.Demand {
+	d := lm.Demand{Regulated: !unused, Min: max(0, lowest-draw)}
+
+	if c.lp.enabled && !c.lp.charging() && lowest > 0 && request >= lowest {
+		d.Standing = lowest
+	}
+
+	return d
+}
+
 // ValidateCurrent caps the current with the priorities on top. A switch device
 // cannot be limited: it asks for the current its power draws on its phases and
 // gets all or nothing, as for the power below.
@@ -86,7 +118,7 @@ func (c *lmCircuit) ValidateCurrent(old, new float64) float64 {
 		return 0
 
 	case !c.switchDevice:
-		c.allowedCurrent = c.lp.lmm().ValidateCurrent(c.lp, c.Circuit, old, new)
+		c.allowedCurrent = c.lp.lmm().RequestCurrent(c.lp, c.Circuit, old, new, c.demand(new, old, c.lp.effectiveMinCurrent(), c.unusedOffer(old)))
 		return c.allowedCurrent
 
 	case new <= 0:
@@ -121,7 +153,8 @@ func (c *lmCircuit) ValidatePower(old, new float64) float64 {
 
 	case !c.switchDevice:
 		c.requested = new
-		c.allowedPower = c.lp.lmm().ValidatePower(c.lp, c.Circuit, old, new)
+		phases := c.lp.ActivePhases()
+		c.allowedPower = c.lp.lmm().RequestPower(c.lp, c.Circuit, old, new, c.demand(new, old, currentToPower(c.lp.effectiveMinCurrent(), phases), c.unusedOffer(powerToCurrent(old, phases))))
 		return c.allowedPower
 
 	case new <= 0:

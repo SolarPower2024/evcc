@@ -437,3 +437,236 @@ func TestLoadpointUsesSiteLoadManagement(t *testing.T) {
 	assert.Same(t, alone.lmm(), alone.lmm())
 	assert.NotSame(t, site.lmm(), alone.lmm())
 }
+
+// lmIdleSetup is two regulated loadpoints on a circuit metered at the grid:
+// "high" is enabled but draws nothing, its car is full, and asks for its maximum
+// every cycle; "low" charges. They are visited in turn, one per cycle.
+type lmIdleSetup struct {
+	t         *testing.T
+	meter     *lmMeter
+	circuit   api.Circuit
+	base      float64
+	high, low *Loadpoint
+	highDraws bool // the high one takes what it is allowed instead of staying idle
+}
+
+func newIdleSetup(t *testing.T, limit, base float64) *lmIdleSetup {
+	t.Helper()
+	Voltage = 230
+
+	m := &lmMeter{}
+	c, err := circuit.New(util.NewLogger("test"), "main", 0, limit, m, 0)
+	require.NoError(t, err)
+
+	site := &Site{log: util.NewLogger("test")}
+
+	mk := func(prio int, status api.ChargeStatus) *Loadpoint {
+		return &Loadpoint{
+			log:        util.NewLogger("lp"),
+			clock:      clock.NewMock(),
+			site:       site,
+			circuit:    c,
+			charger:    &fakeCharger{},
+			priority:   prio,
+			status:     status,
+			enabled:    true,
+			phases:     3,
+			minCurrent: 6,
+			maxCurrent: 16,
+		}
+	}
+
+	s := &lmIdleSetup{t: t, meter: m, circuit: c, base: base, high: mk(5, api.StatusB), low: mk(1, api.StatusC)}
+
+	// the low one charges with its maximum
+	s.low.offeredCurrent = 16
+	s.low.chargePower = currentToPower(16, 3)
+
+	return s
+}
+
+// visit runs the limit check of one loadpoint. The charging one takes what it is
+// allowed down to its minimum, the idle one only offers it.
+func (s *lmIdleSetup) visit(lp *Loadpoint) float64 {
+	s.t.Helper()
+
+	s.meter.power = s.base + s.low.chargePower + s.high.chargePower
+	require.NoError(s.t, s.circuit.Update(nil))
+
+	limited := lp.lmLimit(16)
+	if limited < 6 {
+		limited = 0
+	}
+
+	lp.offeredCurrent = limited
+	lp.enabled = limited > 0
+
+	if lp == s.low || s.highDraws {
+		lp.chargePower = currentToPower(limited, 3)
+	}
+
+	if lp == s.high && s.highDraws {
+		lp.status = api.StatusB
+		if limited > 0 {
+			lp.status = api.StatusC
+		}
+	}
+
+	return limited
+}
+
+// run visits high and low alternately and returns what the low one was allowed
+func (s *lmIdleSetup) run(rounds int) []float64 {
+	s.t.Helper()
+
+	var res []float64
+	for range rounds {
+		s.visit(s.high)
+		res = append(res, s.visit(s.low))
+		if !s.highDraws {
+			s.high.enabled = true // the car's own limit, not the circuit, keeps it idle
+		}
+	}
+	return res
+}
+
+// TestIdleLoadpointDoesNotMakeLowerOneOscillate: a loadpoint of high priority is
+// enabled without drawing anything and asks for its maximum every cycle. The
+// circuit caps that request, the load below gives way, the request fits in the
+// next cycle, the load below takes the power back, and so on. The idle
+// loadpoint stands for its minimum instead, so the load below settles. The free
+// power may be above or below that minimum.
+func TestIdleLoadpointDoesNotMakeLowerOneOscillate(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		limit float64 // circuit power
+		want  float64 // current of the low one once settled
+	}{
+		// 22 kW - 2 kW base - 11.04 kW low leave 8.96 kW, above the minimum of 4.14 kW
+		{"free power above the minimum", 22000, 16},
+		// 14 kW leave 0.96 kW, so the low one gives way until 4.14 kW are free
+		{"free power below the minimum", 14000, 11},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newIdleSetup(t, tc.limit, 2000)
+
+			res := s.run(16)
+			for i, got := range res[4:] {
+				assert.Equal(t, tc.want, got, "round %d: %v", i+4, res)
+			}
+		})
+	}
+}
+
+// TestIdleLoadpointDemandEnds: the demand only stands while the loadpoint is on
+// and idle, a charging one is served like any other
+func TestIdleLoadpointDemandEnds(t *testing.T) {
+	s := newIdleSetup(t, 14000, 2000)
+	require.Equal(t, 11.0, s.run(16)[15], "settled below the idle loadpoint")
+
+	// the car charges: the high one draws what it is offered and takes its share
+	s.high.status = api.StatusC
+	s.high.chargePower = currentToPower(s.high.offeredCurrent, 3)
+
+	s.visit(s.high)
+	assert.Equal(t, 0.0, s.visit(s.low), "the low one gives way to a charging load")
+}
+
+// TestHigherLoadpointStartsOnWhatCanBeFreed: the circuit has 11 kW, 2 kW are
+// base load and the low loadpoint draws 8.97 kW. The one of higher priority
+// wants 11.04 kW, which cannot be freed in full. It gets going on the minimum of
+// 4.14 kW anyway, and the low one gives way for it.
+func TestHigherLoadpointStartsOnWhatCanBeFreed(t *testing.T) {
+	s := newIdleSetup(t, 11000, 2000)
+	s.highDraws = true
+
+	s.low.offeredCurrent = 13
+	s.low.chargePower = currentToPower(13, 3)
+	s.high.enabled = false
+
+	s.run(8)
+
+	assert.GreaterOrEqual(t, s.high.chargePower, currentToPower(6, 3), "the high one runs")
+	assert.Zero(t, s.low.chargePower, "the low one gives way, its minimum does not fit next to it")
+}
+
+// TestLoadpointDemand: a loadpoint runs on any power from its minimum up, so
+// load management only needs that much of its demand to let it start; one that
+// is on and idle stands for it, one that charges does not. One that does not use
+// what it is offered is not regulated, more headroom does not make it draw more.
+func TestLoadpointDemand(t *testing.T) {
+	s := newIdleSetup(t, 22000, 2000)
+	min := currentToPower(6, 3)
+
+	d := s.high.lmCircuit().demand(11040, 0, min, false)
+	assert.Equal(t, lm.Demand{Regulated: true, Min: min, Standing: min}, d, "idle")
+
+	// asking for less than the minimum is not asking for anything to stand
+	d = s.high.lmCircuit().demand(min-1, 0, min, false)
+	assert.Zero(t, d.Standing)
+
+	d = s.low.lmCircuit().demand(11040, 2000, min, false)
+	assert.Equal(t, lm.Demand{Regulated: true, Min: min - 2000}, d, "charging, the minimum less what it draws")
+
+	d = s.low.lmCircuit().demand(11040, 5000, min, false)
+	assert.Equal(t, lm.Demand{Regulated: true}, d, "charging above its minimum")
+
+	d = s.low.lmCircuit().demand(11040, 2000, min, true)
+	assert.Equal(t, lm.Demand{Min: min - 2000}, d, "charging, but not using what it is offered")
+}
+
+// TestUnusedOffer: only a charging loadpoint that draws more than the slack
+// less than it is offered does not use its offer
+func TestUnusedOffer(t *testing.T) {
+	s := newIdleSetup(t, 22000, 2000)
+
+	// offered 16 A
+	assert.False(t, s.low.lmCircuit().unusedOffer(16), "draws its offer")
+	assert.False(t, s.low.lmCircuit().unusedOffer(15), "within the slack")
+	assert.True(t, s.low.lmCircuit().unusedOffer(14.9), "clearly below its offer")
+	assert.True(t, s.low.lmCircuit().unusedOffer(0))
+
+	s.low.offeredCurrent = 0
+	assert.False(t, s.low.lmCircuit().unusedOffer(0), "nothing offered")
+
+	s.high.offeredCurrent = 16
+	assert.False(t, s.high.lmCircuit().unusedOffer(0), "not charging, in state B")
+}
+
+// TestLoadpointBelowItsOfferDoesNotShedLowerLoad: the circuit has 11 kW with
+// 2 kW base load and a 3 kW heater of low priority. The loadpoint of higher
+// priority asks for 16 A. If it takes what it is offered, the heater gives way
+// for it. A car in its taper takes less than it is offered, 5 A of 16 A: freeing
+// the heater would not make it draw more, and the heater would stay off until the
+// car is full.
+func TestLoadpointBelowItsOfferDoesNotShedLowerLoad(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		offered float64 // A
+		drawn   float64 // A
+		heater  bool    // runs on
+	}{
+		{"draws what it is offered", 6, 6, false},
+		{"draws less than it is offered", 16, 5, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newIdleSetup(t, 11000, 2000)
+
+			s.high.status = api.StatusC
+			s.high.offeredCurrent = tc.offered
+			s.high.chargePower = currentToPower(tc.drawn, 3)
+
+			s.low.charger = &lmSwitch{rated: 3000}
+			s.low.chargePower = 3000
+
+			for i := range 4 {
+				s.meter.power = s.base + s.low.chargePower + s.high.chargePower
+				require.NoError(t, s.circuit.Update(nil))
+				s.high.lmLimit(16)
+
+				limited := s.low.lmLimit(16)
+				assert.Equal(t, tc.heater, limited > 0, "round %d: heater limit %.3gA", i, limited)
+			}
+		})
+	}
+}

@@ -283,3 +283,87 @@ func TestValidateAsksCircuitOnce(t *testing.T) {
 	assert.Equal(t, 8.0, m.ValidateCurrent(load, c, 0, 8))
 	assert.Equal(t, 1, c.current)
 }
+
+// TestStandingDemand: a load that is on but draws nothing stands for a fixed
+// demand, whatever the circuit denied of its request
+func TestStandingDemand(t *testing.T) {
+	m := lm.New()
+
+	low := &testLoad{title: "low", prio: 1, power: 10500}
+	c := newCircuit(t, 11000, low)
+	high := &testLoad{title: "high", prio: 5, circuit: c}
+
+	// 500W are free, of 2000W asked: the standing 1000W count, not the denied 1500W
+	assert.Equal(t, 500.0, m.RequestPower(high, c, 0, 2000, lm.Demand{Standing: 1000}))
+	assert.Equal(t, 10000.0, m.ValidatePower(low, c, 10500, 10500))
+
+	// the low one gave way, 1000W are free and the request for them fits: the
+	// standing demand stays
+	low.power = 10000
+	require.NoError(t, c.Update([]api.CircuitLoad{low, high}))
+	assert.Equal(t, 1000.0, m.RequestPower(high, c, 0, 1000, lm.Demand{Standing: 1000}))
+	assert.Equal(t, 10000.0, m.ValidatePower(low, c, 10000, 10500), "the low one is not allowed back to 10500")
+
+	// the plain request that fits demands nothing, the low one takes the power
+	assert.Equal(t, 1000.0, m.ValidatePower(high, c, 0, 1000))
+	assert.Equal(t, 10500.0, m.ValidatePower(low, c, 10000, 10500))
+}
+
+// TestRegulatedLoadGetsItsMinimum: a wallbox of high priority that cannot get its
+// whole demand freed is not left with nothing. The circuit has 11kW, 2kW of
+// them are base load, the low priority load draws 9kW and the wallbox asks for
+// 11.04kW with a minimum of 4.14kW. The low load gives way and the wallbox gets
+// what is left, which is above its minimum.
+func TestRegulatedLoadGetsItsMinimum(t *testing.T) {
+	var base *testLoad
+
+	setup := func() (*lm.Manager, api.Circuit, *testLoad, *testLoad) {
+		low := &testLoad{title: "low", prio: 1, power: 9000}
+		base = &testLoad{title: "base", prio: 0, power: 2000}
+		c := newCircuit(t, 11000, low, base)
+
+		return lm.New(), c, low, &testLoad{title: "high", prio: 5, circuit: c}
+	}
+
+	t.Run("regulated", func(t *testing.T) {
+		m, c, low, high := setup()
+		d := lm.Demand{Regulated: true, Min: 4140}
+
+		assert.Equal(t, 0.0, m.RequestPower(high, c, 0, 11040, d), "nothing free yet")
+
+		// the low load leaves what it can ...
+		assert.Equal(t, 0.0, m.ValidatePower(low, c, 9000, 9000))
+		low.power = 0
+		require.NoError(t, c.Update([]api.CircuitLoad{low, high, base}))
+
+		// ... so that the wallbox starts
+		assert.Equal(t, 9000.0, m.RequestPower(high, c, 0, 11040, d))
+
+		// it keeps going with those 9kW, and the low load does not take them back
+		high.power = 9000
+		require.NoError(t, c.Update([]api.CircuitLoad{low, high, base}))
+		assert.Equal(t, 9000.0, m.RequestPower(high, c, 9000, 11040, lm.Demand{Regulated: true}))
+		assert.Equal(t, 0.0, m.ValidatePower(low, c, 0, 9000))
+	})
+
+	t.Run("all or nothing", func(t *testing.T) {
+		m, c, low, high := setup()
+
+		// the whole 11.04kW cannot be freed, so the low load keeps what it has
+		assert.Equal(t, 0.0, m.ValidatePower(high, c, 0, 11040))
+		assert.Equal(t, 9000.0, m.ValidatePower(low, c, 9000, 9000))
+	})
+
+	t.Run("not even the minimum", func(t *testing.T) {
+		m, c, low, high := setup()
+
+		// 2kW are free and the low load draws 1kW: shedding it does not reach the
+		// minimum of 4.14kW, so it is not shed for nothing
+		low.power = 1000
+		other := &testLoad{title: "other", power: 8000, circuit: c}
+		require.NoError(t, c.Update([]api.CircuitLoad{low, high, other}))
+
+		assert.Equal(t, 2000.0, m.RequestPower(high, c, 0, 11040, lm.Demand{Regulated: true, Min: 4140}))
+		assert.Equal(t, 1000.0, m.ValidatePower(low, c, 1000, 1000))
+	})
+}

@@ -399,6 +399,8 @@ func (site *Site) batteryCircuitBudget(c api.Circuit, want float64) float64 {
 	bat := site.lmBattery()
 	phases := site.lmBatteryPhases()
 
+	// a plain request: the battery needs its whole power, a partial budget gets it
+	// nothing, see lm.Demand
 	allowed := site.lmm().ValidatePower(bat, c, bat.GetChargePower(), want)
 
 	// converted back only when capped, the round trip would otherwise shave off

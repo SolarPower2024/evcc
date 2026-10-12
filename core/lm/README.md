@@ -64,12 +64,30 @@ load never exceeds the circuit limit, it only claims power that was freed. As
 evcc updates one loadpoint per cycle, a full shed takes up to
 `interval × number of loadpoints`. In an overload a load keeps what it draws
 while the loads below it draw enough to cover the excess, so shedding starts at
-the bottom.
+the bottom. Only loads that draw through the overloaded circuit count: a lower
+priority load in a sibling circuit does not relieve it (`TestOverloadNotRelievedBySibling`).
 
 Recovery uses the same reserve: freed power stays withheld from lower loads
 while a higher one records unmet demand, so it goes up the ladder first, one
 rung per cycle (`TestRecoveryFavoursHigherPriority`). A load that is off and not
 asking holds no claim until its first request.
+
+A loadpoint that is on but draws nothing, its car full or at its own limit,
+asks for its maximum in every cycle. For as long as it stays on, its demand is
+its minimum power, whether the request fits or not. Following the denied amount
+would hold the loads below back for one cycle and let them take the power back
+in the next, over and over (`TestIdleLoadpointDoesNotMakeLowerOneOscillate`).
+
+A reservation counts when the headroom plus what the loads below draw covers
+the demand. For a loadpoint it is enough to cover its minimum power less what
+it draws: the lower loads then leave all there is, and the loadpoint starts on
+that. Only a load that runs in full or not at all, a heater or the battery,
+needs its whole demand (`TestRegulatedLoadGetsItsMinimum`,
+`TestHigherLoadpointStartsOnWhatCanBeFreed`). So does a loadpoint that draws
+more than 1 A less than it is offered, like a car in its taper: part of the
+increase would not make it draw more, so the loads below are only shed for it
+when its whole demand can be freed
+(`TestLoadpointBelowItsOfferDoesNotShedLowerLoad`).
 
 All state lives in one `lm.Manager` per site (`site.lmm()`); loadpoints reach it
 through their site (`lp.lmm()`). The check runs inside evcc's `setLimit` through
