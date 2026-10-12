@@ -55,9 +55,13 @@ jobs:
       - name: Race detector
         run: |
           set -o pipefail
-          # charger: only the fork's tests, evcc's TestTemplates has an intermittent race of its own
+          # charger: only the fork's tests, evcc's TestTemplates has an intermittent race of its own.
+          # core: evcc's enableAutomatic (optimizer_automatic_test.go) writes sponsor.Subject while an
+          # optimizer run started by an earlier evcc test still reads it; evcc runs no race detector
+          evccRace='^(TestAutomaticLevels|TestOptimizerGate|TestOptimizerSurplusRegime|TestOptimizerStopFollowsSurplus|TestOptimizerFlexibility|TestOptimizerGateInactive|TestOptimizerGateStale|TestSmartCostLimitUnavailable|TestBatteryModeAutomatic|TestBatteryGridChargeLimitUnavailable)$'
           {
-            go test -race -count=1 ./core/lm/... ./core/peak/ ./core/ ./server/ &&
+            go test -race -count=1 ./core/lm/... ./core/peak/ ./server/ &&
+              go test -race -count=1 -skip "$evccRace" ./core/ &&
               go test -race -count=1 -run 'TestSwitchStages|TestSwitchSocketRatedPower' ./charger/
           } 2>&1 | tee /tmp/race.log || {
             grep -E "^(--- FAIL|FAIL|panic:)" /tmp/race.log | head -20 | sed "s/^/::error::/"
