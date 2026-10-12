@@ -44,6 +44,26 @@
 						</select>
 					</FormRow>
 
+					<!-- custom: the circuit's limit is the peak limit, see core/site_lm_switch.go -->
+					<FormRow
+						v-if="g === 'lm'"
+						id="lmAdvanced-circuitFromPeak"
+						:label="$t('config.lmadvanced.circuitFromPeakLabel')"
+						:help="$t('config.lmadvanced.circuitFromPeakHelp')"
+					>
+						<div class="form-check form-switch mb-0">
+							<input
+								id="lmAdvanced-circuitFromPeak"
+								v-model="circuitFromPeak"
+								class="form-check-input"
+								type="checkbox"
+								role="switch"
+								:disabled="!circuit"
+								data-testid="lmadvanced-circuitFromPeak"
+							/>
+						</div>
+					</FormRow>
+
 					<FormRow
 						v-for="field in fieldsOf(g)"
 						:id="`lmAdvanced-${field.name}`"
@@ -217,6 +237,7 @@
 						saving ||
 						(!changed.length &&
 							!circuitChanged &&
+							!circuitFromPeakChanged &&
 							!percentileChanged &&
 							!exportForecastChanged)
 					"
@@ -305,6 +326,8 @@ export default {
 			initial: {},
 			circuit: "",
 			initialCircuit: "",
+			circuitFromPeak: false,
+			initialCircuitFromPeak: false,
 			percentile: 0,
 			initialPercentile: 0,
 			exportForecast: "",
@@ -353,6 +376,9 @@ export default {
 		circuitChanged() {
 			return this.circuit !== this.initialCircuit;
 		},
+		circuitFromPeakChanged() {
+			return this.circuitFromPeak !== this.initialCircuitFromPeak;
+		},
 		// circuits with a power limit, configured or changed at runtime
 		circuitOptions() {
 			const configured = store.state?.lmOff?.limits || {};
@@ -386,6 +412,8 @@ export default {
 			this.initial = { ...values };
 			this.circuit = store.state?.lmOff?.circuit || "";
 			this.initialCircuit = this.circuit;
+			this.circuitFromPeak = !!state.circuitFromPeak;
+			this.initialCircuitFromPeak = this.circuitFromPeak;
 			this.percentile = store.state?.profilePercentile ?? 0;
 			this.initialPercentile = this.percentile;
 			this.exportForecast = state.exportForecastEntity || "";
@@ -462,6 +490,9 @@ export default {
 						await api.delete("lmcircuit");
 					}
 				}
+				if (this.circuitFromPeakChanged) {
+					await api.post(`lmadvanced/circuitFromPeak/${this.circuitFromPeak ? 1 : 0}`);
+				}
 				if (this.percentileChanged) {
 					if (this.percentile) {
 						await api.post(`profilepercentile/${this.percentile}`);
@@ -481,6 +512,7 @@ export default {
 			// the others are saved: only the export field is left to save
 			this.initial = { ...this.values };
 			this.initialCircuit = this.circuit;
+			this.initialCircuitFromPeak = this.circuitFromPeak;
 			this.initialPercentile = this.percentile;
 			this.$emit("changed");
 

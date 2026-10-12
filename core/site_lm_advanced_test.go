@@ -70,6 +70,8 @@ func TestLmAdvancedSettings(t *testing.T) {
 		{"peakCap", 11},
 		{"writeTolerance", 1001},
 		{"writeTolerance", 2.5},
+		{"circuitFromPeak", 2},
+		{"circuitFromPeak", 0.5},
 		{"unknown", 1},
 	} {
 		assert.Error(t, site.SetLmAdvanced(tc.name, tc.value), "%s = %g", tc.name, tc.value)

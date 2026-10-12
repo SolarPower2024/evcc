@@ -81,6 +81,7 @@
       "suggestion": "Vorschlag"
     },
     "peakShaving": {
+      "alsoCircuit": "Gilt auch für Stromkreis {name}",
       "description": "Unter {reserve} deckt die Batterie nur, was das 15-Minuten-Mittel über {limit} heben würde. Darüber normaler Eigenverbrauch.",
       "enable": "Untere Batteriereserve für Lastspitzen zurückhalten.",
       "noEntity": "Keine Zielentität hinterlegt (Konfiguration → Lastmanagement-Details → Peak Shaving).",
@@ -213,6 +214,7 @@
       "titleLabel": "Titel",
       "template": "Stromkreis",
       "custom": "Benutzerdefinierter Stromkreis",
+      "fromPeakHint": "Wird durch die Peak-Shaving-Grenze ersetzt (derzeit {limit}). Gilt nur ohne Peak Shaving.",
       "meterHelp": "Zähler, der den Gesamtverbrauch dieses Stromkreises misst.",
       "meterLabelAdd": "Stromkreiszähler hinzufügen",
       "meterLabelEdit": "Stromkreiszähler bearbeiten",
@@ -580,6 +582,8 @@
       "gridChargeWindowHelp": "Nur mit Optimizer: Beim Batterie-Netzladen nach Ladestand plant er den Stopp-Ladestand nach der Ladedauer mit der Netzladeleistung: ohne Lastspitzenkappung höchstens nach dieser Zeit, mit ihr so lange, wie der Platz unter dem Limit braucht.",
       "circuitLabel": "Stromkreis Lastmanagement (Peak)",
       "circuitHelp": "Der Stromkreis mit deiner Peak-Grenze, nicht der Absicherung. Nur er erscheint unter Mehr → Lastmanagement (Peak), wird dort mit dem Schalter aufgehoben und steigt bei Follow the Peak mit. Keiner: alle Stromkreise, keiner steigt mit.",
+      "circuitFromPeakHelp": "Der Kreis begrenzt steuerbare Lasten auf die Peak-Grenze aus dem Batterie-Reiter (mit Follow the Peak). Sein eingestellter Wert gilt nur ohne Peak Shaving.",
+      "circuitFromPeakLabel": "Grenze = Peak-Shaving-Grenze",
       "circuitAll": "Keiner",
       "homeForecastLabel": "Verbrauchsprognose",
       "homeForecastHelp": "Für den Optimizer. evcc: Durchschnitt der letzten 28 Tage. Nach Wochentag: derselbe Wochentag der letzten 8 Wochen. Manuell: dein Lastprofil, gemischt mit den letzten 8 Wochen. Jüngere Tage zählen mehr, weicht das Profil in Verlauf oder Höhe ab, zählen sie stärker. Eine starke Abweichung der letzten 3 Stunden wirkt in die nächsten Stunden nach.",
@@ -1759,6 +1763,7 @@
   "lmoverview": {
     "battery": "Batterie (Netzladen)",
     "circuitFollows": "folgt der Monatsspitze, eingestellt {limit}",
+    "circuitFromPeak": "aus Peak Shaving, eingestellt {limit}",
     "circuitLifted": "Grenze {limit} aufgehoben",
     "disabledHelp": "Aus: Die Leistungsgrenzen der Stromkreise gelten nicht, nichts wird dafür gedrosselt. Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv.",
     "enabled": "Lastmanagement",

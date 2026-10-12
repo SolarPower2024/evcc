@@ -1,6 +1,6 @@
 package core
 
-// Custom extension: runtime changes to the circuits' power limits, from two
+// Custom extension: runtime changes to the circuits' power limits, from three
 // sources, without touching the configuration:
 //
 //   - load management off (Mehr → Lastmanagement (Peak)): the power limit of
@@ -10,13 +10,18 @@ package core
 //   - follow the peak: the load management (peak) circuit's limit rises with
 //     the raised peak limit, never below its configured value, see
 //     site_peak_follow.go
+//   - the peak limit as the circuit's limit (Erweitert → Grenze =
+//     Peak-Shaving-Grenze): while peak shaving is on, the load management (peak)
+//     circuit's limit is the peak limit, with follow the peak and also below the
+//     configured value. Needs the circuit chosen; the configured value applies
+//     again once peak shaving is off.
 //
 // The load management (peak) circuit is chosen under Lastmanagement-Details →
 // Erweitert, so a circuit for the fuse can sit beside it untouched.
 //
 // The current limits (fuses) and a HEMS consumption limit (§14a) always apply.
 // The configured value is kept when a circuit is first changed and put back
-// once neither source needs a change. Circuits whose limit comes from a plugin
+// once no source needs a change. Circuits whose limit comes from a plugin
 // are left alone. Battery peak shaving is separate and keeps running.
 
 import (
@@ -34,6 +39,8 @@ type lmSwitchState struct {
 	Limits  map[string]float64 `json:"limits"`  // W, the configured power limits of the changed circuits
 	Dynamic []string           `json:"dynamic"` // circuits whose limit comes from a plugin and stays
 	Circuit string             `json:"circuit"` // the load management (peak) circuit, empty = all
+	// FromPeak: the circuit's limit is the peak limit right now, see circuitFromPeak
+	FromPeak bool `json:"fromPeak"`
 }
 
 // restoreLmSwitch continues switched off load management across a restart
@@ -60,13 +67,16 @@ func (site *Site) restoreLmSwitch() {
 }
 
 // circuitLimitWanted returns the power limit a circuit should have for its
-// configured value, 0 = unlimited
-func circuitLimitWanted(configured float64, off, follow bool, followLimit float64) float64 {
+// configured value, 0 = unlimited. The peak limit already includes follow the
+// peak.
+func circuitLimitWanted(configured float64, off, fromPeak, follow bool, peakLimit float64) float64 {
 	switch {
 	case off:
 		return 0
+	case fromPeak:
+		return peakLimit
 	case follow:
-		return max(configured, followLimit)
+		return max(configured, peakLimit)
 	default:
 		return configured
 	}
@@ -78,7 +88,8 @@ func (site *Site) applyCircuitLimits() {
 	p := site.peak()
 	p.mu.Lock()
 	following := p.follow && p.limit > p.followBase
-	followLimit := p.limit
+	peakLimit := p.limit
+	fromPeak := site.advanced().CircuitFromPeak && p.enabled && p.limit > 0
 	p.mu.Unlock()
 
 	s := site.lms()
@@ -92,10 +103,14 @@ func (site *Site) applyCircuitLimits() {
 			lmCircuit = ""
 		}
 	}
-	followCircuit := ""
+	followCircuit, peakCircuit := "", ""
 	if following {
 		followCircuit = lmCircuit
 	}
+	if fromPeak {
+		peakCircuit = lmCircuit
+	}
+	var peakConfigured float64
 	if s.offLimits == nil {
 		s.offLimits = make(map[string]float64)
 	}
@@ -111,7 +126,10 @@ func (site *Site) applyCircuitLimits() {
 		}
 
 		lift := off && (lmCircuit == "" || name == lmCircuit)
-		wanted := circuitLimitWanted(configured, lift, name == followCircuit, followLimit)
+		wanted := circuitLimitWanted(configured, lift, name == peakCircuit, name == followCircuit, peakLimit)
+		if name == peakCircuit {
+			peakConfigured = configured
+		}
 
 		if !touched {
 			if wanted == configured || configured <= 0 || s.offDynamic[name] {
@@ -151,12 +169,19 @@ func (site *Site) applyCircuitLimits() {
 		changed = true
 	}
 
-	if !off && followCircuit == "" && len(s.offDynamic) > 0 {
+	if !off && followCircuit == "" && peakCircuit == "" && len(s.offDynamic) > 0 {
 		s.offDynamic = nil
 		changed = true
 	}
 
-	res := lmSwitchState{Enabled: !off, Limits: make(map[string]float64, len(s.offLimits)), Dynamic: make([]string, 0), Circuit: s.circuit}
+	// a circuit without a power limit is left alone, one with a plugin limit stays
+	fromPeakNow := peakCircuit != "" && !off && peakConfigured > 0 && !s.offDynamic[peakCircuit]
+	if fromPeakNow != s.offFromPeak {
+		s.offFromPeak = fromPeakNow
+		changed = true
+	}
+
+	res := lmSwitchState{Enabled: !off, Limits: make(map[string]float64, len(s.offLimits)), Dynamic: make([]string, 0), Circuit: s.circuit, FromPeak: fromPeakNow}
 	for name, v := range s.offLimits {
 		res.Limits[name] = v
 	}

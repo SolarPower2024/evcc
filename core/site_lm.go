@@ -56,6 +56,7 @@ type lmState struct {
 	offLimits    map[string]float64 // lifted power limits by circuit name
 	offDynamic   map[string]bool    // circuits with a plugin limit that stays
 	offPublished bool
+	offFromPeak  bool   // the circuit's limit is the peak limit, as published
 	circuit      string // the load management (peak) circuit, empty = all
 
 	guardMinutes int             // shed guard, see site_lm_guard.go
@@ -105,6 +106,9 @@ type siteCustom struct {
 func (site *Site) restoreCustom() {
 	site.restoreLmSettings()
 	site.restorePeakSettings()
+	// the circuit may take the peak limit: restoreLmSettings ran before the peak
+	// settings were back, so the limit applies here, not with the first cycle
+	site.applyCircuitLimits()
 	site.restoreFeedInEeg()
 	site.restoreLogFile()
 	site.restoreSnowCover()

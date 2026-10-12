@@ -51,6 +51,8 @@ export interface LmAdvanced {
   gridChargeWindow: number;
   /** Home Assistant entity the optimizer's planned grid export is written to, empty = off. */
   exportForecastEntity?: string;
+  /** The load management (peak) circuit's power limit is the peak limit while peak shaving is on. */
+  circuitFromPeak?: boolean;
 }
 
 // a battery profile, see core/lm/profile. Values left out are not changed.
@@ -229,6 +231,8 @@ export interface LmState {
     limits: Record<string, number>;
     dynamic: string[];
     circuit: string;
+    /** The circuit's limit is the peak limit right now. */
+    fromPeak?: boolean;
   };
   /** Capacity tariff with each month's cost with and without the battery, a zero price is off. */
   peakTariff?: PeakTariff;

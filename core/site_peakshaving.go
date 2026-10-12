@@ -1178,6 +1178,8 @@ func (site *Site) SetPeakShaving(val bool) error {
 		settings.SetBool(keys.PeakShaving, val)
 		site.publish(keys.PeakShaving, val)
 		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
+		// the circuit may take the peak limit, see site_lm_switch.go
+		site.applyCircuitLimits()
 
 		// hand control back when switching off
 		if !val {
@@ -1493,6 +1495,8 @@ func (site *Site) SetPeakShavingLimit(limit float64) error {
 
 	// following the peak: the limit set by hand is the base
 	if site.peakFollowSetBase(limit) {
+		// the circuit may take the peak limit, see site_lm_switch.go
+		site.applyCircuitLimits()
 		return nil
 	}
 
@@ -1508,6 +1512,8 @@ func (site *Site) SetPeakShavingLimit(limit float64) error {
 		settings.SetFloat(keys.PeakShavingLimit, limit)
 		site.publish(keys.PeakShavingLimit, limit)
 		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
+		// the circuit may take the peak limit, see site_lm_switch.go
+		site.applyCircuitLimits()
 	}
 
 	return nil
