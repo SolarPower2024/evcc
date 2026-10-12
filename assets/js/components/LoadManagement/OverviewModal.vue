@@ -175,6 +175,11 @@ export default {
 					let note = "";
 					if (lifted) {
 						note = this.$t("lmoverview.circuitLifted", { limit: this.fmtW(limit) });
+					} else if (this.state?.lmOff?.fromPeak && name === this.lmCircuit) {
+						// custom: the limit is the peak limit, see core/site_lm_switch.go
+						note = this.$t("lmoverview.circuitFromPeak", {
+							limit: this.fmtW(configured[name] > 0 ? configured[name] : c.maxPower),
+						});
 					} else if (configured[name] > 0 && configured[name] !== c.maxPower) {
 						note = this.$t("lmoverview.circuitFollows", {
 							limit: this.fmtW(configured[name]),

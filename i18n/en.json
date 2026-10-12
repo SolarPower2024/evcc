@@ -81,6 +81,7 @@
       "suggestion": "Suggestion"
     },
     "peakShaving": {
+      "alsoCircuit": "Also applies to circuit {name}",
       "description": "Below {reserve}, the battery only covers what would lift the 15 minute average above {limit}. Above it, normal self-consumption.",
       "enable": "Hold the lower battery range back for demand peaks.",
       "noEntity": "No target entity set (Configuration → Load management details → Peak Shaving).",
@@ -213,6 +214,7 @@
       "titleLabel": "Title",
       "template": "Circuit",
       "custom": "User-defined circuit",
+      "fromPeakHint": "Replaced by the peak shaving limit (now {limit}). Only applies without peak shaving.",
       "meterHelp": "Meter measuring the total consumption of this circuit.",
       "meterLabelAdd": "Add Circuit Meter",
       "meterLabelEdit": "Edit Circuit Meter",
@@ -580,6 +582,8 @@
       "gridChargeWindowHelp": "Optimizer only: for soc-based battery grid charging it plans the stop soc after the charging time at the grid charge power: without peak shaving at most after this time, with it as long as the room below the limit takes.",
       "circuitLabel": "Load management (peak) circuit",
       "circuitHelp": "The circuit holding your peak limit, not the fuse. Only it shows under More → Load management (peak), is lifted by the switch there and rises with follow the peak. None: all circuits, none rises along.",
+      "circuitFromPeakHelp": "The circuit limits controllable loads to the peak limit from the battery tab (with follow the peak). Its configured value only applies without peak shaving.",
+      "circuitFromPeakLabel": "Limit = peak shaving limit",
       "circuitAll": "None",
       "homeForecastLabel": "Consumption forecast",
       "homeForecastHelp": "For the optimizer. evcc: average of the last 28 days. By weekday: the same weekday of the last 8 weeks. Manual: your load profile, mixed with the last 8 weeks. Recent days count more, and the more the profile differs in shape or level, the more they count. A strong deviation of the last 3 hours carries over into the next hours.",
@@ -1759,6 +1763,7 @@
   "lmoverview": {
     "battery": "Battery (grid charging)",
     "circuitFollows": "follows the month's peak, set {limit}",
+    "circuitFromPeak": "from peak shaving, configured {limit}",
     "circuitLifted": "limit {limit} lifted",
     "disabledHelp": "Off: the circuits' power limits do not apply, nothing is throttled for them. Fuses (current limits), §14a and battery peak shaving stay active.",
     "enabled": "Load management",

@@ -180,7 +180,11 @@ peak shaving off, and *Lastmanagement* off still lifts the limit. Without a
 circuit chosen the switch has no effect (not on all circuits); a circuit
 without a power limit or with one from a plugin is left alone. Fuse current
 limits and §14a apply as always. `lmOff.fromPeak` tells the ui whether the
-limit is the peak limit right now. With the 3.5 kW of a small peak limit the
+limit is the peak limit right now. The ui shows where it comes from: the
+overview (*from peak shaving, configured …*), the circuit dialog (hint under the
+power limit, `CircuitPeakHint.vue`, the field stays editable) and the peak
+shaving card of the battery tab (*Also applies to circuit …*); the configured
+value stays stored. With the 3.5 kW of a small peak limit the
 minimum of a 3-phase wallbox (6 A × 3 = 4.1 kW) no longer fits under the circuit:
 it charges 1-phase or with the battery's help until the reserve is reached.
 
@@ -660,7 +664,7 @@ Also there: the load management circuit ([7](#7-load-management-circuit-and-swit
 and evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
 
 The dialog shows the settings in four closed groups, so it stays short on a
-phone: *Lastmanagement* (circuit, `timeout`, `followCycles`), *Peak Shaving*
+phone: *Lastmanagement* (circuit, `circuitFromPeak`, `timeout`, `followCycles`), *Peak Shaving*
 (`hysteresis`, `freeValue`, `peakFreeze`, `peakCap`), *Batterie-Netzladen*
 (`holdOff`, `gridChargeWindow`, `phases`) and *Optimizer* (`homeForecast`, load
 profile, `profilePercentile`, `exportForecastEntity`). A rejected value opens its group.
@@ -836,6 +840,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/views/Forecast.vue` | evcc's *adjust* switch in the solar card header gets `d-none`; `Forecast/SnowCoverSwitch.vue` under the chart shows it with the snow switches in one row, getting label, state and `changeAdjusted` from Forecast.vue |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
+| `assets/js/components/Config/CircuitModal.vue` | mounts `CircuitPeakHint.vue` at the start of `before-actions`: the hint under the power limit while the circuit takes the peak limit |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown; default mode labels Aus/Smart/Ein for a heater in stages (`chargerIsStages`) |
 | `assets/js/components/Loadpoints/Loadpoint.vue`, `Mode.vue` | `chargerStages` prop, mode labels Aus/Smart/Ein for a heater in stages; `chargePowerEstimate` shown as "≈ 6 kW" (whole kW, fits a phone) |
 | `assets/js/components/Site/Site.vue` | energy flow gets `measuredLoadpoints(…)` (`utils/lmEnergyflow.ts`): a loadpoint with `chargePowerEstimated` is left out |
@@ -863,7 +868,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
-| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `PowerIcon`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `FeedInEegSummary`, `PhaseSwitchFields`) |
+| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `PowerIcon`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
 | build | `.github/workflows/custom-image.yml` |
 | start page | `.github/README.md` (GitHub shows it instead of the evcc `README.md`; its feature list follows part 1) |
 

@@ -45,6 +45,8 @@
 			</FormRow>
 		</template>
 		<template #before-actions="{ values }">
+			<!-- custom: the circuit's limit is the peak limit, see core/site_lm_switch.go -->
+			<CircuitPeakHint :id="id" :circuits="circuits" />
 			<div :class="{ 'mt-4': values.type === ConfigType.Custom }">
 				<FormRow
 					v-if="!hasParentCircuit"
@@ -115,6 +117,7 @@ import { meterTitle } from "@/utils/circuits.ts";
 import FormRow from "./FormRow.vue";
 import PropertyField from "./PropertyField.vue";
 import DeviceRefBox from "./DeviceRefBox.vue";
+import CircuitPeakHint from "./CircuitPeakHint.vue"; // custom
 
 enum MeterSelection {
 	NONE = "none",
@@ -129,6 +132,7 @@ export default defineComponent({
 		FormRow,
 		PropertyField,
 		DeviceRefBox,
+		CircuitPeakHint, // custom
 	},
 	emits: ["changed"],
 	props: {

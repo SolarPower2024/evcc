@@ -67,6 +67,7 @@ var forkUiHooks = []struct {
 	{"assets/js/views/Config.vue", []string{"<PeakShavingConfig", "<LmConfigModals", "feedInEegTariff"}},
 	{"assets/js/views/Battery.vue", []string{"<BatterySocGridChargeCard", "<BatteryPeakShavingCard", "<BatteryProfileCard"}},
 	{"assets/js/components/BottomTabs/MoreMenu.vue", []string{"<LmMoreMenuItems"}},
+	{"assets/js/components/Config/CircuitModal.vue", []string{"<CircuitPeakHint", "CircuitPeakHint,"}},
 	{"assets/js/components/Config/LoadpointModal.vue", []string{"<PhaseSwitchFields", "emptyUnsetPhaseSwitch", "chargerIsStages"}},
 	{"assets/js/components/Loadpoints/Loadpoint.vue", []string{"chargerStages: Boolean", "chargePowerEstimate"}},
 	{"assets/js/components/Site/Site.vue", []string{"loadpoints: measuredLoadpoints(this.enabledLoadpoints)"}},
