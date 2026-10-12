@@ -180,8 +180,6 @@ func TestSetCurrents1p(t *testing.T) {
 
 	assert.Error(t, lp.SetCurrents1p(-1, 20), "negative")
 	assert.Error(t, lp.SetCurrents1p(21, 20), "min above max")
-	assert.Error(t, lp.SetCurrents1p(18, 0), "min above the regular max it falls back to")
-	assert.Error(t, lp.SetCurrents1p(0, 7), "max below the regular min it falls back to")
 
 	// restored from the settings into a fresh loadpoint
 	restored := NewLoadpoint(util.NewLogger("bar"), store)
@@ -189,6 +187,11 @@ func TestSetCurrents1p(t *testing.T) {
 	minCurrent, maxCurrent = restored.GetCurrents1p()
 	assert.Equal(t, 6.0, minCurrent, "restored")
 	assert.Equal(t, 20.0, maxCurrent, "restored")
+
+	// only the 1p pair is checked: a value against the regular limit it falls back to is
+	// accepted, the runtime resolves it (TestCurrents1pMinAboveMax)
+	assert.NoError(t, lp.SetCurrents1p(18, 0), "min above the regular max it falls back to")
+	assert.NoError(t, lp.SetCurrents1p(0, 7), "max below the regular min it falls back to")
 
 	require.NoError(t, lp.SetCurrents1p(0, 0), "unset")
 	minCurrent, maxCurrent = lp.GetCurrents1p()
@@ -212,6 +215,45 @@ func TestCurrents1pConfig(t *testing.T) {
 
 	assert.Equal(t, 8.0, lp.GetMinCurrent())
 	assert.Equal(t, loadpoint.PhaseSwitchConfig{MinCurrent1p: 6, MaxCurrent1p: 20}, loadpoint.PhaseSwitchConfigOf(lp))
+}
+
+// TestCurrents1pApplyAtStart pins that a regular min or max current changed after the
+// 1p values were set does not stop the start (Apply failed with a DeviceError, evcc
+// restarted without control): the 1p values are only checked against each other
+func TestCurrents1pApplyAtStart(t *testing.T) {
+	for _, tc := range []struct {
+		desc                   string
+		min, max, min1p, max1p float64
+		wantErr                bool
+	}{
+		{"only 1p min above the regular max", 8, 10, 12, 0, false},
+		{"only 1p max below the regular min", 8, 16, 0, 6, false},
+		{"both 1p values, 1p min above the regular max", 8, 10, 12, 18, false},
+		{"1p min above 1p max", 8, 16, 12, 10, true},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			lp := phaseCurrentsLoadpoint(t, 3, 0, 0)
+			lp.settings = settings.NewMemorySettings()
+
+			dynamic, _, err := loadpoint.SplitConfig(map[string]any{
+				"title": "Wallbox", "defaultMode": "pv", "minCurrent": tc.min, "maxCurrent": tc.max,
+				"minCurrent1p": tc.min1p, "maxCurrent1p": tc.max1p,
+			})
+			require.NoError(t, err)
+
+			if tc.wantErr {
+				assert.Error(t, dynamic.Apply(lp))
+				return
+			}
+
+			require.NoError(t, dynamic.Apply(lp))
+			assert.Equal(t, tc.min, lp.GetMinCurrent())
+			assert.Equal(t, tc.max, lp.GetMaxCurrent())
+			min1p, max1p := lp.GetCurrents1p()
+			assert.Equal(t, tc.min1p, min1p)
+			assert.Equal(t, tc.max1p, max1p)
+		})
+	}
 }
 
 // TestCurrents1pInertWhenUnused pins that without 1p values the regular limits
