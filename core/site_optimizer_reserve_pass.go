@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/evcc-io/evcc/tariff"
 	"github.com/evcc-io/evcc/util/sponsor"
 	optimizer "github.com/evcc-io/optimizer/client"
 )
@@ -459,6 +460,36 @@ func (site *Site) lmOptimizerPasses(client *optimizer.ClientWithResponses, req *
 		return
 	}
 
-	floor := site.lmReservePass(client, req, home, *plan, res)
-	site.lmSocChargePass(client, req, home, *plan, floor, res)
+	p := plan.coarse(req.TimeSeries.Dt)
+	floor := site.lmReservePass(client, req, home, p, res)
+	site.lmSocChargePass(client, req, home, p, floor, res)
+}
+
+// coarse maps the grid goals onto the slots of the request: the plan is made on
+// quarter hours (after a partial first slot), the hosted optimizer gets clock
+// hours beyond 48 hours (coarsenHorizon). A goal goes to the slot its quarter
+// hour ends in.
+func (p lmPlan) coarse(dt []int) lmPlan {
+	if len(dt) == 0 || len(p.grid) == 0 {
+		return p
+	}
+
+	quarter := int(tariff.SlotDuration.Seconds())
+	ends := make([]int, len(dt))
+	for i, d := range dt {
+		ends[i] = d
+		if i > 0 {
+			ends[i] += ends[i-1]
+		}
+	}
+
+	grid := make([]lmGridGoal, 0, len(p.grid))
+	for _, g := range p.grid {
+		end := dt[0] + g.slot*quarter
+		j, _ := slices.BinarySearch(ends, end)
+		grid = append(grid, lmGridGoal{slot: min(j, len(dt)-1), level: g.level})
+	}
+	p.grid = grid
+
+	return p
 }

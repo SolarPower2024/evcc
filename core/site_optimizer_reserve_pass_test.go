@@ -311,3 +311,16 @@ func TestLmGridChargeBlockedPeak(t *testing.T) {
 	site.peak().demand = 5000
 	assert.False(t, site.lmGridChargeBlocked())
 }
+
+// The grid goals follow the hosted optimizer's hourly slots beyond 48 hours.
+func TestLmPlanCoarse(t *testing.T) {
+	plan := lmPlan{grid: []lmGridGoal{{slot: 2, level: 1000}, {slot: 6, level: 2000}}}
+
+	// quarter hours after a partial first slot: unchanged
+	fine := []int{600, 900, 900, 900, 900, 900, 900, 900}
+	assert.Equal(t, plan.grid, plan.coarse(fine).grid)
+
+	// slots 3-6 merged into one hour: the goal of slot 6 ends in it
+	coarse := []int{600, 900, 900, 3600, 900}
+	assert.Equal(t, []lmGridGoal{{slot: 2, level: 1000}, {slot: 3, level: 2000}}, plan.coarse(coarse).grid)
+}
