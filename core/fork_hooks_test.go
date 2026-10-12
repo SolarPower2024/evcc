@@ -58,6 +58,16 @@ var forkHooks = []struct {
 	{"cmd/root.go", "runRoot", []string{"CloseFile"}},
 }
 
+// forkDeferHooks lists the hooks that have to run on every way out of an evcc
+// function: a deferred call in the function body, before any return of evcc's
+// own. A call at the end would be skipped by the first return added above it.
+var forkDeferHooks = []struct {
+	file, fn string
+	name     string
+}{
+	{"core/site.go", "Site.restoreSettings", "restoreCustom"},
+}
+
 // forkUiHooks lists the fork's mounts in evcc's ui files
 var forkUiHooks = []struct {
 	file string
@@ -86,6 +96,21 @@ var forkUiHooks = []struct {
 func referenced(t *testing.T, file, fn string) map[string]bool {
 	t.Helper()
 
+	res := make(map[string]bool)
+	ast.Inspect(funcBody(t, file, fn), func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok {
+			res[id.Name] = true
+		}
+		return true
+	})
+
+	return res
+}
+
+// funcBody returns the body of a function
+func funcBody(t *testing.T, file, fn string) *ast.BlockStmt {
+	t.Helper()
+
 	path := filepath.Join("..", filepath.FromSlash(file))
 	f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 	require.NoError(t, err)
@@ -108,14 +133,7 @@ func referenced(t *testing.T, file, fn string) map[string]bool {
 			continue
 		}
 
-		res := make(map[string]bool)
-		ast.Inspect(fd.Body, func(n ast.Node) bool {
-			if id, ok := n.(*ast.Ident); ok {
-				res[id.Name] = true
-			}
-			return true
-		})
-		return res
+		return fd.Body
 	}
 
 	require.Failf(t, "function not found", "%s in %s", fn, file)
@@ -131,6 +149,74 @@ func recvName(e ast.Expr) string {
 		return t.Name
 	}
 	return ""
+}
+
+// returns reports whether a statement contains a return of its function
+func returns(st ast.Stmt) bool {
+	found := false
+
+	ast.Inspect(st, func(n ast.Node) bool {
+		switch n.(type) {
+		case *ast.FuncLit:
+			return false // returns from its own function
+		case *ast.ReturnStmt:
+			found = true
+		}
+		return !found
+	})
+
+	return found
+}
+
+// isTestingGuard reports whether a statement is "if testing.Testing() {...}"
+func isTestingGuard(st ast.Stmt) bool {
+	ifs, ok := st.(*ast.IfStmt)
+	if !ok {
+		return false
+	}
+
+	found := false
+	ast.Inspect(ifs.Cond, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && id.Name == "Testing" {
+			found = true
+		}
+		return !found
+	})
+
+	return found
+}
+
+// TestForkDeferHooks fails when a hook that has to run on every way out of an evcc
+// function is no deferred call of the function body any more, or an evcc return
+// stands before it: restoreSettings returns on the first failing restore step of
+// evcc, and nothing of the fork would be loaded (peak shaving off, no circuit, the
+// battery held by evcc never handed back).
+func TestForkDeferHooks(t *testing.T) {
+	for _, h := range forkDeferHooks {
+		t.Run(h.file+" "+h.fn, func(t *testing.T) {
+			body := funcBody(t, h.file, h.fn)
+
+			at := -1
+			for i, st := range body.List {
+				d, ok := st.(*ast.DeferStmt)
+				if !ok {
+					continue
+				}
+				if sel, ok := d.Call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == h.name {
+					at = i
+					break
+				}
+			}
+			require.GreaterOrEqual(t, at, 0, "%s: %s is no deferred call of the function body", h.fn, h.name)
+
+			// only the guard for tests may return before it
+			for _, st := range body.List[:at] {
+				if !isTestingGuard(st) {
+					assert.False(t, returns(st), "%s: a return of evcc stands before the deferred %s", h.fn, h.name)
+				}
+			}
+		})
+	}
 }
 
 // TestForkHooksInPlace fails when an evcc update or a merge conflict dropped a

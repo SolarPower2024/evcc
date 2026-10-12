@@ -78,6 +78,11 @@ type peakState struct {
 	writeErr map[string]string // the last error logged per output, see writeOutput
 	readErr  string            // the last error logged reading the energy sensor, see logEnergyRead
 
+	// evcc is stopping: the cycle writes nothing any more while the shutdown
+	// function hands back, see site_peak_shutdown.go
+	stopped      bool
+	shutdownOnce sync.Once
+
 	// battery type Marstek (Omnibattery), see site_peak_omni.go: evcc drives
 	// Omnibattery's own peak shaving and switches the battery to manual control
 	// while grid charging
@@ -253,6 +258,8 @@ func (site *Site) restorePeakSettings() {
 	site.restorePeakTariff()
 	site.publishPeakSettings()
 	site.publishLmPriorities()
+
+	site.registerPeakShutdown() // hands the battery back on stopping, see site_peak_shutdown.go
 }
 
 // peakURI returns the Home Assistant endpoint. Running as an add-on, the
@@ -360,10 +367,14 @@ func (site *Site) haConnection() (*homeassistant.Connection, error) {
 		return nil, err
 	}
 
-	conn, err = homeassistant.NewConnection(util.NewLogger("peakshaving"), uri, "", false)
+	log := util.NewLogger("peakshaving")
+
+	conn, err = homeassistant.NewConnection(log, uri, "", false)
 	if err != nil {
 		return nil, err
 	}
+
+	guardHA(conn, log) // one timeout per cycle at most, see site_ha_guard.go
 
 	s.mu.Lock()
 	s.conn = conn
@@ -380,7 +391,9 @@ func (site *Site) haConnection() (*homeassistant.Connection, error) {
 // peak.Range.Unchanged: a device may store every write. As the comparison is
 // against the entity, a value changed by hand is still corrected. tolerance
 // returns the smallest change written; nil for an entity that is not a power, the
-// write tolerance is in W.
+// write tolerance is in W. An entity that cannot be read is not written: its
+// range is unknown, and a write to an entity Home Assistant has not loaded (yet)
+// is answered with success and does nothing.
 func (site *Site) numberSetter(entity string, up bool, tolerance func() float64) (func(float64) error, error) {
 	conn, err := site.haConnection()
 	if err != nil {
@@ -390,7 +403,7 @@ func (site *Site) numberSetter(entity string, up bool, tolerance func() float64)
 	return func(val float64) error {
 		r, current, err := numberState(conn, entity)
 		if err != nil {
-			return conn.CallNumberService(entity, val)
+			return fmt.Errorf("read %s: %w", entity, err)
 		}
 
 		var tol float64
@@ -412,7 +425,7 @@ func (site *Site) numberSetter(entity string, up bool, tolerance func() float64)
 func numberWrite(r peak.Range, current string, val float64, up bool, tolerance float64) (float64, bool) {
 	val = r.Fit(val, up)
 
-	// an unavailable entity has no current value and gets the write
+	// a state that is no number has no current value and gets the write
 	v, err := strconv.ParseFloat(current, 64)
 
 	return val, err != nil || !r.Unchanged(v, val, tolerance)
@@ -426,8 +439,14 @@ func (site *Site) peakWriteTolerance() float64 {
 	return 0
 }
 
+// notAvailable reports whether the state is that of an entity without a value
+func notAvailable(state string) bool {
+	return state == "unknown" || state == "unavailable"
+}
+
 // numberState reads the min, max and step attributes and the state of a number
-// entity
+// entity. An entity that is unknown or not available is reported as
+// api.ErrNotAvailable, as GetState does.
 func numberState(conn *homeassistant.Connection, entity string) (peak.Range, string, error) {
 	var res struct {
 		State      string `json:"state"`
@@ -440,6 +459,9 @@ func numberState(conn *homeassistant.Connection, entity string) (peak.Range, str
 
 	uri := fmt.Sprintf("%s/api/states/%s", conn.URI(), url.PathEscape(entity))
 	err := conn.GetJSON(uri, &res)
+	if err == nil && notAvailable(res.State) {
+		err = api.ErrNotAvailable
+	}
 
 	return peak.Range(res.Attributes), res.State, err
 }
@@ -635,6 +657,10 @@ func (site *Site) writePeakValue(value float64) bool {
 	s.out.Lock()
 	defer s.out.Unlock()
 
+	if site.peakStopped() {
+		return false
+	}
+
 	s.mu.Lock()
 	set := s.set
 	s.mu.Unlock()
@@ -660,7 +686,17 @@ func (site *Site) setPeakOwned(owned bool) {
 
 	if changed {
 		settings.SetBool(keys.PeakShavingOwned, owned)
+		site.persistHeld()
 	}
+}
+
+// persistHeld stores the mark of what evcc holds at once. SetBool only keeps it
+// in memory until the next flush (every minute and when evcc stops); a crash in
+// between would lose the mark, and nothing would hand the battery back after the
+// start. Called with s.out held and only on a change, blocks up to the busy
+// timeout of the database at worst. A failing save is logged once per cause.
+func (site *Site) persistHeld() {
+	site.logWrite("peak shaving mark", "save", settings.Persist())
 }
 
 // peakOwned reports whether evcc holds the battery back, see peakState.owned
@@ -704,6 +740,10 @@ func (site *Site) writeChargeValue(value float64) {
 
 	s.out.Lock()
 	defer s.out.Unlock()
+
+	if site.peakStopped() {
+		return
+	}
 
 	s.mu.Lock()
 	set := s.chargeSet
@@ -754,8 +794,21 @@ func (site *Site) writeOutput(name string, set func(float64) error, value float6
 // logWrite reports the result of a write to an output and returns whether it
 // landed. The same error is logged once as an error and then at debug level until
 // a write succeeds again, so a rejected write does not fill the log with one line
-// per cycle.
+// per cycle. A call refused by the guard, see haGuard, is not logged.
 func (site *Site) logWrite(name, what string, err error) bool {
+	// stopping, e.g. with the host: Home Assistant may refuse the call, expected;
+	// also a call the guard refused, the hand back would otherwise fail unnoticed
+	if err != nil && site.peakStopped() {
+		site.log.INFO.Printf("%s: %s: %s (stopping)", name, what, writeErrorText(err))
+		return false
+	}
+
+	// refused after a call timed out in this cycle, that call logged the cause
+	if errors.Is(err, errHAHung) {
+		site.log.TRACE.Printf("%s: %s: %v", name, what, err)
+		return false
+	}
+
 	s := site.peak()
 
 	s.mu.Lock()
@@ -833,7 +886,10 @@ func (site *Site) peakEnergy() (float64, string) {
 
 	if get != nil {
 		v, err := nonZeroEnergy(get())
-		site.logEnergyRead(entity, err)
+		// a hung Home Assistant is logged once where it is detected
+		if !errors.Is(err, errHAHung) {
+			site.logEnergyRead(entity, err)
+		}
 
 		if err == nil {
 			return v, peak.SourceEntity
@@ -1013,7 +1069,10 @@ func (site *Site) peakChargeHeadroom() (headroom float64, ok bool) {
 // running peak (see batteryGridChargeRequested), and a mode set from outside
 // through the api stays the caller's decision.
 func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rate api.Rate) {
-	// the last hook of the cycle: everything the overview shows is decided now
+	// the last hook of the cycle: the calls to Home Assistant are done
+	defer site.haCycleEnd()
+
+	// everything the overview shows is decided now
 	defer site.publishLmStatus(gridCharge)
 	defer site.publishLmWallboxes()
 	defer site.checkLmFollowing()
@@ -1138,7 +1197,7 @@ func (site *Site) SetPeakShavingEntity(entity string) error {
 	case err != nil || omni || !site.peakOwned():
 	default:
 		// the previous target would otherwise keep the last setpoint
-		if site.writeOutput("peak shaving", previousSet, site.peakFreeValue()) {
+		if site.releaseOutput("peak shaving", previousSet, site.peakFreeValue()) {
 			site.setPeakOwned(false)
 		}
 	}

@@ -16,6 +16,7 @@ package core
 // tariff. Without a counter nothing here runs and evcc behaves as upstream.
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -37,6 +38,7 @@ type feedInEegState struct {
 	collector *metrics.Collector      // records the counter per slot
 	priceSlot time.Time               // last slot whose price was persisted
 	failing   bool                    // a failing read was logged
+	retryAt   time.Time               // no read before, after a timeout
 	clock     clock.Clock             // for tests, nil = real time
 }
 
@@ -163,24 +165,41 @@ func (site *Site) applyFeedInEegEntity(entity string, changed bool) error {
 	return nil
 }
 
+// eegRetry is how long the counter is not read after a read timed out, Home
+// Assistant does not answer then, see haGuard
+const eegRetry = time.Minute
+
 // updateFeedInEeg records the EEG counter and the EEG price of the slot. Called
 // every cycle, does nothing without a counter.
 func (site *Site) updateFeedInEeg() {
 	s := site.eeg()
 
+	now := time.Now()
+	if s.clock != nil {
+		now = s.clock.Now()
+	}
+
 	s.mu.Lock()
-	entity, get, c := s.entity, s.get, s.collector
+	entity, get, c, wait := s.entity, s.get, s.collector, now.Before(s.retryAt)
 	s.mu.Unlock()
 
-	if get == nil || c == nil {
+	if get == nil || c == nil || wait {
 		return
 	}
 
 	v, err := get()
 
+	// refused after a call timed out in this cycle, that call logged the cause
+	if errors.Is(err, errHAHung) {
+		return
+	}
+
 	s.mu.Lock()
 	warn, recovered := err != nil && !s.failing, err == nil && s.failing
 	s.failing = err != nil
+	if err != nil && isTimeout(err) {
+		s.retryAt = now.Add(eegRetry)
+	}
 	s.mu.Unlock()
 
 	switch {

@@ -96,8 +96,10 @@ type siteCustom struct {
 	export exportForecastState // planned grid export as forecast in Home Assistant, see site_lm_export_forecast.go
 }
 
-// restoreCustom restores the fork's settings, called at the end of upstream's
-// restoreSettings
+// restoreCustom restores the fork's settings, deferred at the start of upstream's
+// restoreSettings: evcc's own restore returns on the first step failing, which
+// must not leave the fork without its settings (peak shaving off, the battery held
+// by evcc never handed back)
 func (site *Site) restoreCustom() {
 	site.restoreLmSettings()
 	site.restorePeakSettings()

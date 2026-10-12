@@ -35,7 +35,9 @@ const (
 
 // fakeHA is a Home Assistant answering state reads and service calls, and
 // recording the calls as "service entity [value]". A failing service answers
-// with the status in fail, e.g. "switch/turn_on".
+// with the status in fail, e.g. "switch/turn_on". A call to an entity that is
+// unavailable, unknown or missing is answered with success and does nothing, as
+// Home Assistant does.
 type fakeHA struct {
 	mu     sync.Mutex
 	states map[string]*haEntity
@@ -145,7 +147,10 @@ func (f *fakeHA) RoundTrip(req *http.Request) (*http.Response, error) {
 		return reply(code, "500 Internal Server Error\n\nServer got itself in trouble")
 	}
 
-	e := f.states[id]
+	e, ok := f.states[id]
+	if !ok || e.state == "unavailable" || e.state == "unknown" {
+		return reply(http.StatusOK, "[]")
+	}
 
 	switch name {
 	case "turn_on":
@@ -182,6 +187,7 @@ func newOmni(t *testing.T) (*scenario, *fakeHA) {
 	conn, err := homeassistant.NewConnection(util.NewLogger("test"), homeassistant.SupervisorURI, "", false)
 	require.NoError(t, err)
 	conn.Client.Transport = ha
+	guardHA(conn, util.NewLogger("test"))
 
 	s := sc.site.peak()
 	s.clock = clock.NewMock()
@@ -1292,4 +1298,239 @@ func TestOmniNoHysteresis(t *testing.T) {
 		assert.False(t, sc.site.peakShavingActive())
 		assert.Equal(t, peak.DefaultHysteresis, sc.site.peakHysteresis())
 	})
+}
+
+// TestOmniNotAvailableKeepsHold verifies that nothing is written to an entity that
+// is not available or unknown and that what evcc holds stays held: Home Assistant
+// answers such a call with success and does nothing, the battery would stay in
+// manual control with nothing left to release it.
+func TestOmniNotAvailableKeepsHold(t *testing.T) {
+	for _, state := range []string{"unavailable", "unknown"} {
+		t.Run("manual control "+state, func(t *testing.T) {
+			sc, ha := charging(t)
+			ha.set(haSwitch, state)
+
+			// the charge ends: the power to zero lands, the switch cannot be read
+			assert.False(t, sc.cycle(90, 1000, 0))
+			assert.Equal(t, []string{"set_value " + haChargeNum + " 0"}, ha.take())
+
+			for range 2 {
+				assert.False(t, sc.cycle(90, 1000, 0))
+				assert.Empty(t, ha.take(), "no call to the switch")
+				assert.True(t, sc.site.peakOwned(), "still held")
+			}
+
+			// back: released
+			ha.set(haSwitch, "on")
+			assert.False(t, sc.cycle(90, 1000, 0))
+			assert.Equal(t, []string{"turn_off " + haSwitch}, ha.take())
+			assert.False(t, sc.site.peakOwned())
+		})
+
+		t.Run("peak shaving switch "+state, func(t *testing.T) {
+			sc, ha := protecting(t)
+			ha.set(haProtSwitch, state)
+
+			require.NoError(t, sc.site.SetPeakShaving(false))
+			assert.Empty(t, ha.take(), "no call to the switch")
+			assert.True(t, sc.site.peak().protOwned, "still held")
+
+			ha.set(haProtSwitch, "on")
+			sc.cycle(25, 8000, 0)
+			assertProtReleased(t, sc, ha)
+		})
+
+		t.Run("limit "+state, func(t *testing.T) {
+			sc, ha := newOmni(t)
+			ha.set(haProtLimit, state)
+
+			sc.cycle(25, 8000, 0)
+			assert.Equal(t, []string{"set_value " + haProtSoc + " 30"}, ha.take(), "the threshold only, no limit and no switch")
+			assert.False(t, sc.site.peak().protOwned)
+
+			ha.set(haProtLimit, "20000")
+			sc.cycle(25, 8000, 0)
+			assert.Equal(t, []string{"set_value " + haProtLimit + " 5000", "turn_on " + haProtSwitch}, ha.take())
+			assert.True(t, sc.site.peak().protOwned)
+		})
+
+		t.Run("number "+state, func(t *testing.T) {
+			sc, ha := newOmni(t)
+			ha.set(haDischargeNum, state)
+
+			set, err := sc.site.numberSetter(haDischargeNum, true, nil)
+			require.NoError(t, err)
+
+			assert.ErrorIs(t, set(1000), api.ErrNotAvailable)
+			assert.Empty(t, ha.take(), "nothing written")
+		})
+	}
+}
+
+// TestOmniEntityNotLoaded verifies the start of Home Assistant, whose entities
+// are not available yet: a release writes nothing and keeps what evcc holds until
+// they are back.
+func TestOmniEntityNotLoaded(t *testing.T) {
+	sc, ha := charging(t)
+	ha.set(haChargeNum, "unavailable")
+
+	for range 2 {
+		assert.False(t, sc.cycle(90, 1000, 0))
+		assert.Empty(t, ha.take())
+		assert.True(t, sc.site.peakOwned(), "still held")
+		assert.Equal(t, "on", ha.get(haSwitch))
+	}
+
+	ha.set(haChargeNum, "4000")
+
+	assert.False(t, sc.cycle(90, 1000, 0))
+	assert.Equal(t, []string{"set_value " + haChargeNum + " 0", "turn_off " + haSwitch}, ha.take())
+	assert.False(t, sc.site.peakOwned())
+}
+
+// TestOmniSwitchGone verifies that a switch Home Assistant does not know any more
+// (deleted, renamed) counts as released: nothing is left to switch off, and the
+// release would otherwise never land and block every change of the entities.
+func TestOmniSwitchGone(t *testing.T) {
+	sc, ha := charging(t)
+
+	ha.mu.Lock()
+	delete(ha.states, haSwitch)
+	ha.mu.Unlock()
+
+	require.NoError(t, sc.site.SetPeakShavingManualEntity(""))
+	assert.Equal(t, []string{"set_value " + haChargeNum + " 0"}, ha.take())
+	assert.False(t, sc.site.peakOwned())
+	assert.True(t, sc.site.peak().protOwned, "the peak shaving of Omnibattery is not part of it")
+}
+
+// forget drops the entities from Home Assistant: it answers a read with 404
+func (f *fakeHA) forget(entities ...string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for _, e := range entities {
+		delete(f.states, e)
+	}
+}
+
+// bydHolding returns a scenario of the battery type BYD that holds the battery
+// back through the discharge setpoint
+func bydHolding(t *testing.T) (*scenario, *fakeHA) {
+	t.Helper()
+
+	sc, ha := newOmni(t)
+	sc.site.lms().socChargeEnabled = true
+
+	s := sc.site.peak()
+	s.batteryType = batteryTypeBYD
+	require.NoError(t, sc.site.rebuildPeakSetter())
+	require.NoError(t, sc.site.rebuildChargeSetter())
+
+	require.True(t, sc.cycle(20, 1000, 0))
+	require.True(t, sc.site.peakOwned())
+	ha.take()
+
+	return sc, ha
+}
+
+// TestOmniReleaseEntityGone verifies that a number entity Home Assistant does not
+// know any more (deleted, renamed) counts as handed back, like a switch does: the
+// read answered with 404, nothing is left to write. The manual control would
+// otherwise stay on in the mode Charge, charging from the grid, in every cycle, on
+// stopping and on every change of the entities.
+func TestOmniReleaseEntityGone(t *testing.T) {
+	t.Run("charge power, grid charging ends", func(t *testing.T) {
+		sc, ha := charging(t)
+		ha.forget(haChargeNum)
+
+		sc.cycle(90, 1000, 0)
+		assert.Equal(t, []string{"turn_off " + haSwitch}, ha.take(), "no write to the entity, the manual control off")
+		assert.Equal(t, "off", ha.get(haSwitch))
+		assert.False(t, sc.site.peakOwned())
+	})
+
+	t.Run("charge power, stopping", func(t *testing.T) {
+		sc, ha := charging(t)
+		ha.forget(haChargeNum)
+
+		sc.site.releasePeakOnShutdown()
+		assert.Equal(t, []string{"turn_off " + haSwitch}, ha.take())
+		assert.Equal(t, "off", ha.get(haSwitch))
+		assert.False(t, sc.site.peakOwned())
+	})
+
+	t.Run("charge power, battery type changed", func(t *testing.T) {
+		sc, ha := charging(t)
+		ha.forget(haChargeNum)
+
+		require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeBYD))
+		assert.Contains(t, ha.take(), "turn_off "+haSwitch)
+		assert.Equal(t, "off", ha.get(haSwitch))
+		assert.False(t, sc.site.peakOwned())
+		assert.False(t, sc.site.peak().protOwned)
+	})
+
+	t.Run("charge power, manual control removed", func(t *testing.T) {
+		sc, ha := charging(t)
+		ha.forget(haChargeNum)
+
+		require.NoError(t, sc.site.SetPeakShavingManualEntity(""))
+		assert.Equal(t, []string{"turn_off " + haSwitch}, ha.take())
+		assert.False(t, sc.site.peakOwned())
+	})
+
+	t.Run("discharge setpoint, stopping", func(t *testing.T) {
+		sc, ha := bydHolding(t)
+		ha.forget(haDischargeNum)
+
+		sc.site.releasePeakOnShutdown()
+		assert.Equal(t, []string{"set_value " + haChargeNum + " 0"}, ha.take())
+		assert.False(t, sc.site.peakOwned())
+	})
+
+	t.Run("discharge setpoint, battery type changed", func(t *testing.T) {
+		sc, ha := bydHolding(t)
+		ha.forget(haDischargeNum)
+
+		require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek))
+		assert.Equal(t, batteryTypeMarstek, sc.site.GetPeakShavingBatteryType())
+		assert.False(t, sc.site.peakOwned())
+	})
+
+	t.Run("discharge setpoint, entity removed", func(t *testing.T) {
+		sc, ha := bydHolding(t)
+		ha.forget(haDischargeNum)
+
+		require.NoError(t, sc.site.SetPeakShavingEntity(""))
+		assert.False(t, sc.site.peakOwned())
+	})
+}
+
+// TestOmniWindowEnded verifies that the allowed power is that of the running
+// window only: a meter failing at the end of a window leaves the window of the
+// last cycle behind, and its allowed power, up to twice the limit, must not go on
+// into the next one before the meters count as lost.
+func TestOmniWindowEnded(t *testing.T) {
+	sc, ha := newOmni(t)
+	clk := mockClock(sc)
+
+	// the last cycle of a window with little drawn: it allows more than the limit
+	clk.Add(peak.Window - 30*time.Second)
+	sc.cycle(25, 1000, 0)
+	ha.take()
+
+	s := sc.site.peak()
+	s.mu.Lock()
+	s.window.Allowed = 7000
+	s.mu.Unlock()
+
+	sc.site.updateBatteryModePeakAware(false, false, sc.rate)
+	assert.Equal(t, []string{"set_value " + haProtLimit + " 7000"}, ha.take(), "the running window")
+
+	// the next window, the meters failed: the peak limit, not the old window
+	clk.Add(40 * time.Second)
+	sc.site.updateBatteryModePeakAware(false, false, sc.rate)
+	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000"}, ha.take())
+	assert.Equal(t, "5000", ha.get(haProtLimit))
 }

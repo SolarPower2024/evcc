@@ -25,14 +25,18 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/core/peak"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/homeassistant"
+	"github.com/evcc-io/evcc/util/request"
 )
 
 const (
@@ -158,6 +162,10 @@ func (site *Site) applyOmni() {
 	s.out.Lock()
 	defer s.out.Unlock()
 
+	if site.peakStopped() {
+		return
+	}
+
 	site.applyOmniCharge()
 	site.applyOmniProtection()
 }
@@ -237,9 +245,12 @@ func (site *Site) applyOmniProtection() {
 	owned, sw, limitEntity, socSet := s.protOwned, s.protSwitch, s.protLimit, s.protSocSet
 	threshold := s.effectiveReserve()
 
-	// the window is there once a cycle metered it
+	// the window of the allowed power is the running one: it is renewed by a cycle
+	// with meter values only, and past its end (a meter failing at the end of the
+	// window, up to metersLost) it would go on with the allowed power frozen in
+	// the old window, up to twice the limit
 	limit, basis := s.limit, omniLimitBasis(false, s.limit)
-	if !s.metersLost && !s.window.Start.IsZero() {
+	if !s.metersLost && s.window.Start.Equal(s.clock.Now().Truncate(peak.Window)) {
 		limit, basis = s.window.Allowed, omniLimitBasis(true, s.limit)
 	}
 	s.mu.Unlock()
@@ -350,6 +361,7 @@ func (site *Site) setProtOwned(owned bool) {
 
 	if changed {
 		settings.SetBool(keys.PeakShavingProtOwned, owned)
+		site.persistHeld()
 	}
 }
 
@@ -379,7 +391,8 @@ func (site *Site) releaseProt() bool {
 // if evcc switched it on, and reports whether it is released. The charge power
 // would otherwise stay on its last value; the zero is only written where the
 // entity shows another value, see numberSetter. A zero that fails keeps the
-// switch on, the next cycle tries again. The mode stays: Omnibattery overwrites
+// switch on, the next cycle tries again; an entity Home Assistant does not know
+// counts as written, see releaseOutput. The mode stays: Omnibattery overwrites
 // it in automatic operation anyway. Called with s.out held.
 func (site *Site) releaseOmni() bool {
 	if !site.omniOwned() {
@@ -393,7 +406,7 @@ func (site *Site) releaseOmni() bool {
 	manual, chargeSet := s.manualEntity, s.chargeSet
 	s.mu.Unlock()
 
-	if chargeSet != nil && !site.writeOutput("grid charge power", chargeSet, 0) {
+	if chargeSet != nil && !site.releaseOutput("grid charge power", chargeSet, 0) {
 		return false
 	}
 
@@ -408,18 +421,56 @@ func (site *Site) releaseOmni() bool {
 }
 
 // omniSwitchOff switches the entity off unless it is already, and reports
-// whether it is. An entity not readable is written to anyway.
+// whether it is. An entity not readable (not available, timeout, error) is not
+// written to: Home Assistant answers a call to such an entity with success and does
+// nothing, so the release would count as done while the switch stays on. What evcc
+// holds stays held and the next cycle tries again. Only an entity Home Assistant
+// does not know (404) counts as off: nothing is left to switch off, and the release
+// would otherwise never land and block every change of the entities.
 func (site *Site) omniSwitchOff(name, entity string) bool {
 	conn, err := site.haConnection()
 	if !site.logWrite("marstek connect", "connect", err) {
 		return false
 	}
 
-	if state, _, err := omniRead(conn, entity); err == nil && strings.EqualFold(state, "off") {
+	state, _, err := omniRead(conn, entity)
+	if notFound(err) {
+		site.log.WARN.Printf("%s: %s not found, nothing to switch off", name, entity)
+		return true
+	}
+
+	if !site.logWrite(name+" read", "read "+entity, err) {
+		return false
+	}
+
+	if strings.EqualFold(state, "off") {
 		return true
 	}
 
 	return site.logWrite(name, "switch off", conn.CallSwitchService(entity, false))
+}
+
+// releaseOutput writes the value that hands an output back, like writeOutput, and
+// reports whether it is handed back. Home Assistant not knowing the entity (404
+// when reading it, deleted or renamed) counts as handed back: nothing is left to
+// hand back, and the release would otherwise never land and keep the manual
+// control of a Marstek on, or block every change of the entities. Any other
+// failure leaves it held, the next cycle tries again.
+func (site *Site) releaseOutput(name string, set func(float64) error, value float64) bool {
+	if set == nil {
+		return false
+	}
+
+	return site.writeOutput(name, func(v float64) error {
+		err := set(v)
+
+		if notFound(err) {
+			site.log.WARN.Printf("%s: %v, nothing to hand back", name, err)
+			return nil
+		}
+
+		return err
+	}, value)
 }
 
 // omniShow publishes the forced mode evcc holds, empty = not controlling
@@ -437,7 +488,16 @@ func (site *Site) omniShow(mode string) {
 	}
 }
 
-// omniRead reads the state and the options of a switch or select entity
+// notFound reports whether Home Assistant does not know the entity
+func notFound(err error) bool {
+	var se *request.StatusError
+
+	return errors.As(err, &se) && se.StatusCode() == http.StatusNotFound
+}
+
+// omniRead reads the state and the options of a switch or select entity. As
+// GetState does, it reports an entity that is unknown or not available as
+// api.ErrNotAvailable: a call to it is answered with success and does nothing.
 func omniRead(conn *homeassistant.Connection, entity string) (string, []string, error) {
 	var res struct {
 		State      string `json:"state"`
@@ -447,6 +507,9 @@ func omniRead(conn *homeassistant.Connection, entity string) (string, []string, 
 	}
 
 	err := conn.GetJSON(fmt.Sprintf("%s/api/states/%s", conn.URI(), url.PathEscape(entity)), &res)
+	if err == nil && notAvailable(res.State) {
+		err = api.ErrNotAvailable
+	}
 
 	return res.State, res.Attributes.Options, err
 }
@@ -536,7 +599,7 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 		released = omni && prot
 
 	case site.peakOwned():
-		if released = site.writeOutput("peak shaving", set, site.peakFreeValue()); released {
+		if released = site.releaseOutput("peak shaving", set, site.peakFreeValue()); released {
 			site.setPeakOwned(false)
 		}
 	}

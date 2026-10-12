@@ -274,15 +274,52 @@ gets the free value, a charge power entity 0 W
 flapping across the reserve (BYD only: the battery type Marstek uses none, see 11).
 
 evcc only hands back what it held. It remembers that it wrote a value other than
-the free value (`peakShavingOwned`, stored, so a restart in the middle of a
-control still hands back) and writes the free value on switching off, a lost
-meter or a removed or replaced entity only while the mark is set, then clears
-it. A start with peak shaving off writes nothing (`TestPeakNoHandBackWithoutOwned`,
-`TestPeakHandBackAfterRestartWhenOwned`). A write that fails is logged as an
-error once; the same error then only at debug level until a write lands again
-(once at info), with the first 200 characters of the answer on one line, and for
-a general 500 of Home Assistant the hint to look into its log
-(`TestPeakWriteErrorLoggedOnce`, `TestPeakWriteErrorBody`).
+the free value (`peakShavingOwned`, stored at once on every change, not with
+the minute flush of the settings, so a restart or a crash in the middle of a
+control still hands back, `TestPeakHeldMarksStoredAtOnce`; a power cut of the
+host within seconds after the change is not covered) and writes the free value
+on switching off, a lost meter or a removed or replaced entity only while the
+mark is set, then clears it. A start with peak shaving off writes nothing
+(`TestPeakNoHandBackWithoutOwned`, `TestPeakHandBackAfterRestartWhenOwned`). A
+write that fails is logged as an error once; the same error then only at debug
+level until a write lands again (once at info), with the first 200 characters of
+the answer on one line, and for a general 500 of Home Assistant the hint to look
+into its log (`TestPeakWriteErrorLoggedOnce`, `TestPeakWriteErrorBody`).
+
+Stopping evcc hands back as well, not only evcc's battery mode
+(`TestPeakReleasedOnShutdown`): a Marstek gets the charge power 0 and the manual
+control off, Omnibattery's peak shaving stays on with the peak limit instead of
+the allowed power of the window; a BYD gets the charge power 0 and the free
+value. The cycle writes nothing any more from then on. It is best effort and
+never holds the stop up (`TestPeakShutdownDoesNotBlock`): stop budget add-on 30 s
+(`timeout` in its manifest), evcc waits `max(interval, 5 s)` for the shutdown
+functions, the hand back takes 8 s at most. The shutdown function runs beside the
+cycle; the guard below refuses nothing from then on, so a call that timed out
+earlier in the running cycle does not have the hand back refused
+(`TestPeakReleasedAfterTimeout`). When the host shuts down, the
+supervisor refuses the calls (400 or 503 "not ready", logged at info), and
+Omnibattery keeps its last value until evcc runs again. A crash or a kill is not
+covered either; there the stored mark hands back with the first cycle after the
+next start.
+
+The calls to Home Assistant run inside the cycle, each limited by the client
+timeout (10 s). One that does not answer would cost a timeout per call and
+stretch the cycle by 40 s and more, so after the first timeout the other calls
+of the cycle are refused and the next cycle asks again: a cycle costs one
+timeout (`TestHAGuardOneTimeoutPerCycle`, `TestHAGuardOneTimeoutPerCycleBYD`).
+The EEG counter is not read for a minute after a timeout of its own
+(`TestHAGuardEegCounter`). An entity that cannot be read (timeout, 404, 5xx) or
+is `unavailable` or `unknown` is not written to: Home Assistant answers a call
+to such an entity with success and does nothing (`TestNumberSetterReadFailure`,
+`TestOmniNotAvailableKeepsHold`). A release that meets one keeps what evcc holds
+(`peakShavingOwned`, `peakShavingProtOwned`) and tries again in the next cycle,
+also while Home Assistant starts and does not know the entities yet
+(`TestOmniReleaseHangs`, `TestOmniEntityNotLoaded`). Only an entity that Home
+Assistant does not know at all (deleted, renamed; 404 when reading it) counts as
+handed back in a release, with a warning in the log: a switch as off, the charge
+power and the setpoint as written. The release would otherwise never land, keep
+the manual control of a Marstek on in the mode Charge and block every change of
+the entities (`TestOmniSwitchGone`, `TestOmniReleaseEntityGone`).
 
 The limit applies to the clock-aligned 15 minute window: `allowed` =
 `(limit × 15 min − energy drawn so far) / time left`, so energy left unused
@@ -388,7 +425,12 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
   (`TestOmniProtectionLimitFollowsWindow`). Below the entity's minimum (500 W)
   the minimum is written, Omnibattery takes no lower limit
   (`TestOmniProtectionLimitMinimum`). Omnibattery has no window of its own,
-  this is how evcc passes the 15 minutes on.
+  this is how evcc passes the 15 minutes on. The allowed power counts for the
+  running window only: a meter failing at the end of a window leaves the window
+  of the last cycle behind, and its frozen value (up to twice the limit) would go
+  on into the next one for the 2 minutes until the meters count as lost; from
+  the first cycle in the new window the peak limit applies
+  (`TestOmniWindowEnded`).
 - **Soc threshold:** the reserve, at least 20 % (the lowest value of the entity),
   rounded up to the step (`TestOmniProtectionThreshold`), every change written:
   the write tolerance is in W and does not apply
@@ -423,7 +465,8 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
   (`TestOmniGridChargeWithoutManualWarns`). The manual switch is released only if evcc held it (`peakShavingOwned`):
   the charge power to 0 first, written only where the entity shows another value,
   then the switch off; if the 0 fails the switch stays on and the next cycle
-  tries again (`TestOmniGridChargeEndZeroFails`, `TestOmniGridCharge`). A switch
+  tries again (`TestOmniGridChargeEndZeroFails`, `TestOmniGridCharge`); a charge
+  power entity Home Assistant does not know counts as written. A switch
   turned on by hand stays while evcc does not control
   (`TestOmniLeavesManualAloneWhenNotOwned`).
 - **Changes:** removing or replacing a switch, removing the limit or the
@@ -830,7 +873,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 | File | Change |
 | --- | --- |
-| `core/site.go` | `custom` field; `meteredPower` in `updateLoadpoints` (an assumed heater power stays in the home consumption); `restoreCustom` in `restoreSettings`; `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter`; `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
+| `core/site.go` | `custom` field; `meteredPower` in `updateLoadpoints` (an assumed heater power stays in the home consumption); `restoreCustom` deferred at the start of `restoreSettings` (after the guard for tests, so it also runs when an evcc restore step returns an error); `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter`; `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerResult` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
@@ -870,7 +913,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |
-| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_omni.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_omni.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
@@ -915,6 +958,11 @@ unused:
   hook from the table above is still there (Go: in the right function; ui: the
   mount). A hook lost in a merge fails here, while all other tests would stay
   green. A new hook gets a line in its table.
+- `TestForkDeferHooks`: the hook in `restoreSettings` is a deferred call of the
+  function body, with no return of evcc before it. A call at the end would be
+  skipped by the first failing restore step, and the fork would start without its
+  settings (`restoreSettings` does nothing in tests, so only the syntax tree can
+  tell).
 - `TestForkInertWhenUnused`, `TestEqualPrioritiesAreUpstream`,
   `TestCurrents1pInertWhenUnused`, `TestLmSMaxFromUpstream`: without
   configuration the fork changes nothing.
