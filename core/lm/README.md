@@ -176,7 +176,10 @@ repeated cause is logged once (`TestSwitchStagesCatchUpAfterFailedEnable`,
 catch-up does not step up again, evcc asked for less and retries until a write
 succeeds (`TestSwitchStagesCatchUpAfterFailedStepDown`,
 `TestSwitchStagesCatchUpAfterFailedDisable`,
-`TestSwitchStagesCatchUpAfterFailedStepDownThenUp`).
+`TestSwitchStagesCatchUpAfterFailedStepDownThenUp`). If evcc wants the old
+current again and so writes nothing, this ends once no failed try has happened
+for twice the stage delay and the catch-up steps up
+(`TestSwitchStagesCatchUpAfterFailedStepDownExpires`).
 A switch that cannot be read (unavailable, deleted) makes its stage unknown, not
 the whole heater: status, enabled and switching go by the readable stages
 (an error only if none can be read), nothing is written to the unknown one, its

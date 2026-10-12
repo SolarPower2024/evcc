@@ -75,7 +75,8 @@ type SwitchStages struct {
 
 	// a step down failed and is left to evcc's retry: the request is not taken
 	// over, so the catch-up must not step up to the old one. Until evcc writes
-	// again successfully.
+	// again successfully, or has not tried for twice the delay: then evcc wants
+	// the old current again and writes nothing, the catch-up takes over.
 	lowering bool
 }
 
@@ -198,12 +199,18 @@ func (c *SwitchStages) logCatchUp(err error) {
 // heater has one: from no stage apply never holds back, so a heater that is
 // off, or whose switch-on failed, is left to evcc. So is one whose step down
 // failed: the old current is still the request, but evcc asked for less and
-// retries, stepping up meanwhile would add load against its limit.
+// retries, stepping up meanwhile would add load against its limit. That ends
+// once evcc has not tried again for twice the delay (each failed try restarts
+// it): evcc then offers the old current again and, seeing it set, writes nothing.
 func (c *SwitchStages) catchUp() error {
 	phases := c.phases()
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.lowering && c.clock.Since(c.changed) > 2*c.delay {
+		c.lowering = false
+	}
 
 	if !c.enabled || c.lowering || c.level == 0 || c.level >= c.target(phases) || c.clock.Since(c.changed) < c.delay {
 		return nil
