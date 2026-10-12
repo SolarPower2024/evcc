@@ -75,15 +75,19 @@ type stageRunner interface {
 // at once, so a surplus hovering around a stage boundary would toggle the
 // relays: the stage goes only once the grid import has stayed at the disable
 // threshold for the disable delay. Imports below the threshold are tolerated.
-// The circuit limit in setLimit applies afterwards, at once.
-func (lp *Loadpoint) holdStage(target, sitePower, threshold float64) float64 {
+// The hold covers a surplus below the first stage as well, as the call stands
+// before evcc's disable branch: the stages go back to one after the delay, and
+// from there evcc's disable timer decides whether the heater goes off, with the
+// grid import it measures at one stage. A single stage is not held: that is the
+// disable timer's. The circuit limit in setLimit applies afterwards, at once.
+func (lp *Loadpoint) holdStage(target, sitePower, threshold, minCurrent float64) float64 {
 	c, ok := lp.charger.(stageRunner)
 	if !ok {
 		return target
 	}
 
 	running := c.RunningCurrent(lp.ActivePhases())
-	if !lp.enabled || target+1e-6 >= running {
+	if !lp.enabled || target+1e-6 >= running || running <= minCurrent+1e-6 {
 		lp.stageTimer = time.Time{}
 		return target
 	}
@@ -107,24 +111,6 @@ func (lp *Loadpoint) holdStage(target, sitePower, threshold float64) float64 {
 	lp.stageTimer = time.Time{}
 
 	return target
-}
-
-// holdRunningStages keeps a heater in stages on the stages it runs while the pv
-// surplus falls short of its first stage and the loadpoint's disable timer runs.
-// evcc would return the minimum, one stage, and drop the heater at once; the
-// timer decides, and when it has elapsed evcc switches the heater off. An import
-// below the disable threshold resets that timer and is tolerated, as in
-// holdStage. The circuit limit in setLimit applies afterwards, at once.
-func (lp *Loadpoint) holdRunningStages(minCurrent, maxCurrent float64) float64 {
-	c, ok := lp.charger.(stageRunner)
-	if !ok {
-		return minCurrent
-	}
-
-	// the disable timer takes over from the stage timer
-	lp.stageTimer = time.Time{}
-
-	return max(minCurrent, min(c.RunningCurrent(lp.ActivePhases()), maxCurrent))
 }
 
 // stagePhaser is implemented by charger.SwitchStages

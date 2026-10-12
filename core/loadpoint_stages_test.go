@@ -325,10 +325,11 @@ func TestStagesPvHysteresisThreshold(t *testing.T) {
 	assert.Equal(t, 6000.0, cycle(700))
 }
 
-// TestStagesPvDisableHold pins the hook in the disable branch of pvMaxCurrent: a
-// surplus hovering between three stages and below the first one does not drop the
-// heater to one stage, it goes off once the grid import has stayed at the disable
-// threshold for the disable delay
+// TestStagesPvDisableHold pins the hook in front of the disable branch of
+// pvMaxCurrent: a surplus hovering between three stages and below the first one
+// does not drop the heater to one stage, it goes there once the grid import has
+// stayed at the disable threshold for the disable delay, and off after evcc's
+// disable timer on top, which decides with the import at one stage
 func TestStagesPvDisableHold(t *testing.T) {
 	lp, c, _ := newStagesLoadpoint(t, "stagesdisablehold")
 	lp.circuit = nil
@@ -363,14 +364,74 @@ func TestStagesPvDisableHold(t *testing.T) {
 		clk.Add(30 * time.Second)
 	}
 
-	// the cloud stays: all stages run through the disable delay, then it is off
+	// the cloud stays: all stages run through the disable delay, then one stage
 	for range 5 {
 		assert.Equal(t, 9000.0, cycle(7000))
 		clk.Add(30 * time.Second)
 	}
 	assert.Equal(t, 9000.0, cycle(7000), "2.5 min")
 	clk.Add(30 * time.Second)
-	assert.Equal(t, 0.0, cycle(7000), "3 min: off")
+	assert.Equal(t, 3000.0, cycle(7000), "3 min: one stage")
+	assert.True(t, lp.enabled)
+
+	// the import stays at one stage: off after evcc's disable delay, not held again
+	for range 5 {
+		clk.Add(30 * time.Second)
+		assert.Equal(t, 3000.0, cycle(7000))
+	}
+	clk.Add(30 * time.Second)
+	assert.Equal(t, 0.0, cycle(7000), "3 min later: off")
+	assert.False(t, lp.enabled)
+}
+
+// TestStagesPvDisableHoldPartialSolar pins that evcc decides with the grid import
+// at one stage: with a solar share below 1 or a disable threshold of its own, an
+// import that one stage may cause does not switch the heater off
+func TestStagesPvDisableHoldPartialSolar(t *testing.T) {
+	lp, c, _ := newStagesLoadpoint(t, "stagesdisableholdpartial")
+	lp.circuit = nil
+	lp.Disable.Delay = 3 * time.Minute
+	lp.solarShare = 0.5 // up to 1.5 kW import at one stage
+	clk := lp.clock.(*clock.Mock)
+
+	require.NoError(t, lp.setLimit(lp.effectiveMaxCurrent()))
+	require.NoError(t, c.Enable(true))
+	lp.enabled = true
+
+	cycle := func(site float64) float64 {
+		p, err := c.(api.Meter).CurrentPower()
+		require.NoError(t, err)
+		lp.chargePower = p
+
+		require.NoError(t, lp.setLimit(lp.pvMaxCurrent(site, 0, false, false)))
+
+		p, err = c.(api.Meter).CurrentPower()
+		require.NoError(t, err)
+		return p
+	}
+	require.Equal(t, 9000.0, cycle(-1000))
+
+	// 2 kW surplus: seven kW import at three stages, one kW at one stage
+	for range 6 {
+		assert.Equal(t, 9000.0, cycle(7000))
+		clk.Add(30 * time.Second)
+	}
+	assert.Equal(t, 3000.0, cycle(7000), "3 min: one stage")
+
+	// one kW import is within the 1.5 kW the solar share allows: it runs on
+	for range 40 {
+		clk.Add(30 * time.Second)
+		assert.Equal(t, 3000.0, cycle(1000))
+	}
+	assert.True(t, lp.enabled)
+
+	// more import than that: off after the disable delay
+	for range 6 {
+		clk.Add(30 * time.Second)
+		assert.Equal(t, 3000.0, cycle(2000))
+	}
+	clk.Add(30 * time.Second)
+	assert.Equal(t, 0.0, cycle(2000), "3 min: off")
 	assert.False(t, lp.enabled)
 }
 
@@ -405,7 +466,9 @@ func TestStagesPvDisableHoldThreshold(t *testing.T) {
 
 	assert.Equal(t, 9000.0, cycle(8100), "at the threshold: the delay starts")
 	clk.Add(time.Minute)
-	assert.Equal(t, 0.0, cycle(8100))
+	assert.Equal(t, 3000.0, cycle(8100), "after the delay: one stage")
+	clk.Add(time.Minute)
+	assert.Equal(t, 0.0, cycle(8100), "after the delay again: off")
 }
 
 func TestStagesPvHysteresisOtherChargers(t *testing.T) {
@@ -415,8 +478,7 @@ func TestStagesPvHysteresisOtherChargers(t *testing.T) {
 	lp.enabled = true
 	lp.charger = &fakeCharger{}
 
-	assert.Equal(t, 5.0, lp.holdStage(5, 1000, 0))
-	assert.Equal(t, 6.0, lp.holdRunningStages(6, 16))
+	assert.Equal(t, 5.0, lp.holdStage(5, 1000, 0, 6))
 }
 
 // stagesLoad stands in for a load on the circuit

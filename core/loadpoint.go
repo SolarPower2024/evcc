@@ -1875,6 +1875,8 @@ func (lp *Loadpoint) pvMaxCurrent(sitePower, batteryPower float64, batteryBuffer
 
 	lp.log.DEBUG.Printf("pv charge current: %.3gA = %.3gA + %.3gA (%.0fW @ %dp)", targetCurrent, effectiveCurrent, deltaCurrent, sitePower, activePhases)
 
+	targetCurrent = lp.holdStage(targetCurrent, sitePower, lp.pvDisableThreshold(minCurrent, activePhases), minCurrent) // custom: a heater in stages steps down after the disable delay, see core/loadpoint_stages.go
+
 	if !alwaysCharge && lp.enabled && targetCurrent < minCurrent {
 		projectedSitePower, projectedPhases, projectedMinCurrent := lp.projectPhaseSwitch1p(sitePower, minCurrent) // custom: 1p minimum, see core/loadpoint_phasecurrents.go
 		// a continuous device consuming less than its min power demand keeps the
@@ -1919,7 +1921,7 @@ func (lp *Loadpoint) pvMaxCurrent(sitePower, batteryPower float64, batteryBuffer
 		}
 
 		// lp.log.DEBUG.Println("pv disable timer: keep enabled")
-		return lp.holdRunningStages(minCurrent, maxCurrent) // custom: a heater in stages keeps its stages while the disable timer runs, see core/loadpoint_stages.go
+		return minCurrent
 	}
 
 	if !alwaysCharge && !lp.enabled {
@@ -1961,8 +1963,6 @@ func (lp *Loadpoint) pvMaxCurrent(sitePower, batteryPower float64, batteryBuffer
 
 	// reset timer to disabled state
 	lp.resetPVTimer()
-
-	targetCurrent = lp.holdStage(targetCurrent, sitePower, lp.pvDisableThreshold(minCurrent, activePhases)) // custom: a heater in stages steps down after the disable delay, see core/loadpoint_stages.go
 
 	// cap at maximum current
 	targetCurrent = min(targetCurrent, maxCurrent)
