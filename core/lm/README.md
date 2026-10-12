@@ -129,6 +129,10 @@ pv mode a stage goes only once the grid import has stayed at the loadpoint's
 disable threshold for its disable delay, so a surplus hovering around a stage
 boundary does not toggle the relays (`holdStage`, `TestStagesPvHysteresis`,
 `TestStagesPvHysteresisThreshold`; imports below the threshold are tolerated).
+The same holds when the surplus falls below the first stage: the running stages
+stay until evcc's disable timer has elapsed and switches the heater off, they do
+not drop to one stage meanwhile (`holdRunningStages`, `TestStagesPvDisableHold`,
+`TestStagesPvDisableHoldThreshold`).
 A higher stage waits until the last change is the delay old (default 1 min),
 switching on from off follows the loadpoint's enable delay. The loadpoint's phases must match the wiring. A
 thermostat that cut out (draw up to the standby power, default 15 W) reports
@@ -847,7 +851,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerResult` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
 | `core/site/api.go` | embeds `CustomAPI` |
-| `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`; two `lp.lmm().Peek*` probes; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` keeps a heater in stages on its running stages until the disable delay has passed, the phase timers take `phaseScaleDelay`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |
+| `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`; two `lp.lmm().Peek*` probes; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` keeps a heater in stages on its running stages until the disable delay has passed, `holdRunningStages` does the same in the disable branch (surplus below the first stage, until the disable timer elapses), the phase timers take `phaseScaleDelay`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split per phase count (as in evcc PR 32505), min/max power use it |
 | `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |

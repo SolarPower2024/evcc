@@ -1919,7 +1919,7 @@ func (lp *Loadpoint) pvMaxCurrent(sitePower, batteryPower float64, batteryBuffer
 		}
 
 		// lp.log.DEBUG.Println("pv disable timer: keep enabled")
-		return minCurrent
+		return lp.holdRunningStages(minCurrent, maxCurrent) // custom: a heater in stages keeps its stages while the disable timer runs, see core/loadpoint_stages.go
 	}
 
 	if !alwaysCharge && !lp.enabled {

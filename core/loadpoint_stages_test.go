@@ -325,6 +325,89 @@ func TestStagesPvHysteresisThreshold(t *testing.T) {
 	assert.Equal(t, 6000.0, cycle(700))
 }
 
+// TestStagesPvDisableHold pins the hook in the disable branch of pvMaxCurrent: a
+// surplus hovering between three stages and below the first one does not drop the
+// heater to one stage, it goes off once the grid import has stayed at the disable
+// threshold for the disable delay
+func TestStagesPvDisableHold(t *testing.T) {
+	lp, c, _ := newStagesLoadpoint(t, "stagesdisablehold")
+	lp.circuit = nil
+	lp.Disable.Delay = 3 * time.Minute
+	clk := lp.clock.(*clock.Mock)
+
+	require.NoError(t, lp.setLimit(lp.effectiveMaxCurrent()))
+	require.NoError(t, c.Enable(true))
+	lp.enabled = true
+
+	cycle := func(site float64) float64 {
+		p, err := c.(api.Meter).CurrentPower()
+		require.NoError(t, err)
+		lp.chargePower = p
+
+		require.NoError(t, lp.setLimit(lp.pvMaxCurrent(site, 0, false, false)))
+
+		p, err = c.(api.Meter).CurrentPower()
+		require.NoError(t, err)
+		return p
+	}
+	require.Equal(t, 9000.0, cycle(-1000))
+
+	// 20 minutes: 1 kW export, then a cloud with 7 kW import, the heater runs on
+	// all three stages instead of falling to one and climbing back
+	for i := range 40 {
+		site := -1000.0
+		if i%2 == 0 {
+			site = 7000
+		}
+		assert.Equal(t, 9000.0, cycle(site), "cycle %d", i)
+		clk.Add(30 * time.Second)
+	}
+
+	// the cloud stays: all stages run through the disable delay, then it is off
+	for range 5 {
+		assert.Equal(t, 9000.0, cycle(7000))
+		clk.Add(30 * time.Second)
+	}
+	assert.Equal(t, 9000.0, cycle(7000), "2.5 min")
+	clk.Add(30 * time.Second)
+	assert.Equal(t, 0.0, cycle(7000), "3 min: off")
+	assert.False(t, lp.enabled)
+}
+
+func TestStagesPvDisableHoldThreshold(t *testing.T) {
+	// a grid import below the disable threshold is tolerated, the stages stay
+	lp, c, _ := newStagesLoadpoint(t, "stagesdisableholdthreshold")
+	lp.circuit = nil
+	lp.Disable.Delay = time.Minute
+	lp.Disable.Threshold = 8000
+	clk := lp.clock.(*clock.Mock)
+
+	require.NoError(t, lp.setLimit(lp.effectiveMaxCurrent()))
+	require.NoError(t, c.Enable(true))
+	lp.enabled = true
+
+	cycle := func(site float64) float64 {
+		p, err := c.(api.Meter).CurrentPower()
+		require.NoError(t, err)
+		lp.chargePower = p
+
+		require.NoError(t, lp.setLimit(lp.pvMaxCurrent(site, 0, false, false)))
+
+		p, err = c.(api.Meter).CurrentPower()
+		require.NoError(t, err)
+		return p
+	}
+
+	for range 10 {
+		assert.Equal(t, 9000.0, cycle(7000), "tolerated")
+		clk.Add(30 * time.Second)
+	}
+
+	assert.Equal(t, 9000.0, cycle(8100), "at the threshold: the delay starts")
+	clk.Add(time.Minute)
+	assert.Equal(t, 0.0, cycle(8100))
+}
+
 func TestStagesPvHysteresisOtherChargers(t *testing.T) {
 	// only a heater in stages is held
 	lp := NewLoadpoint(util.NewLogger("lp"), nil)
@@ -333,6 +416,7 @@ func TestStagesPvHysteresisOtherChargers(t *testing.T) {
 	lp.charger = &fakeCharger{}
 
 	assert.Equal(t, 5.0, lp.holdStage(5, 1000, 0))
+	assert.Equal(t, 6.0, lp.holdRunningStages(6, 16))
 }
 
 // stagesLoad stands in for a load on the circuit

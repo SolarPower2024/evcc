@@ -109,6 +109,24 @@ func (lp *Loadpoint) holdStage(target, sitePower, threshold float64) float64 {
 	return target
 }
 
+// holdRunningStages keeps a heater in stages on the stages it runs while the pv
+// surplus falls short of its first stage and the loadpoint's disable timer runs.
+// evcc would return the minimum, one stage, and drop the heater at once; the
+// timer decides, and when it has elapsed evcc switches the heater off. An import
+// below the disable threshold resets that timer and is tolerated, as in
+// holdStage. The circuit limit in setLimit applies afterwards, at once.
+func (lp *Loadpoint) holdRunningStages(minCurrent, maxCurrent float64) float64 {
+	c, ok := lp.charger.(stageRunner)
+	if !ok {
+		return minCurrent
+	}
+
+	// the disable timer takes over from the stage timer
+	lp.stageTimer = time.Time{}
+
+	return max(minCurrent, min(c.RunningCurrent(lp.ActivePhases()), maxCurrent))
+}
+
 // stagePhaser is implemented by charger.SwitchStages
 type stagePhaser interface {
 	StagePhaseCurrent() (float64, bool)
