@@ -466,7 +466,7 @@ func (site *Site) lmOptimizerPasses(client *optimizer.ClientWithResponses, req *
 }
 
 // coarse maps the grid goals onto the slots of the request: the plan is made on
-// quarter hours (after a partial first slot), the hosted optimizer gets clock
+// quarter hours (after a partial first slot), the optimizer gets clock
 // hours beyond 48 hours (coarsenHorizon). A goal goes to the slot its quarter
 // hour ends in.
 func (p lmPlan) coarse(dt []int) lmPlan {
