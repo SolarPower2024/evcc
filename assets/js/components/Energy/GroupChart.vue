@@ -306,10 +306,12 @@ export default defineComponent({
 			}));
 			if (!this.stackEntities) return rows.map((r) => r.idx);
 			const below = rows.filter((r) => !r.up);
-			return [
+			const order = [
 				...rows.filter((r) => r.up).reverse(),
 				...(this.stackThrough ? below.reverse() : below),
 			].map((r) => r.idx);
+			// one row per entity, series may share an index
+			return [...new Set(order)];
 		},
 		// another view of the same data: stack order or the price overlay toggled
 		viewKey(): string {
@@ -603,7 +605,7 @@ export default defineComponent({
 					return { value: v, itemStyle: { borderRadius: [0, 0, radius, radius] } };
 				});
 				result.push({
-					id: `entity-${stableIdx}-energy`,
+					id: `entity-${stableIdx}-${i}-energy`,
 					name: energyName,
 					type: "bar",
 					stack: stackName,
@@ -614,7 +616,7 @@ export default defineComponent({
 					...barEmphasis,
 				});
 				(this.stackThrough ? returnSeries : result).push({
-					id: `entity-${stableIdx}-returnEnergy`,
+					id: `entity-${stableIdx}-${i}-returnEnergy`,
 					name: returnEnergyName,
 					type: "bar",
 					stack: stackName,
@@ -753,13 +755,15 @@ export default defineComponent({
 						// Collect energy/returnEnergy values per entity from this slot's params.
 						const totals = new Map<number, { energy: number; returnEnergy: number }>();
 						for (const p of params) {
-							const m = /^entity-(\d+)-(energy|returnEnergy)$/.exec(p.seriesId || "");
+							const m = /^entity-(\d+)-\d+-(energy|returnEnergy)$/.exec(
+								p.seriesId || ""
+							);
 							if (!m) continue;
 							const i = parseInt(m[1] || "", 10);
 							const t = totals.get(i) ?? { energy: 0, returnEnergy: 0 };
 							const v = Math.abs(p.value ?? 0);
-							if (m[2] === "energy") t.energy = v;
-							else t.returnEnergy = v;
+							if (m[2] === "energy") t.energy += v;
+							else t.returnEnergy += v;
 							totals.set(i, t);
 						}
 						// Always list every visible entity, even when its values for
@@ -952,7 +956,11 @@ export default defineComponent({
 				series: [
 					...this.echartsSeries,
 					...(weekMarkers
-						? [boundarySeries(weekBoundaries(this.from, cats.length))]
+						? [
+								boundarySeries(
+									weekBoundaries(this.from, cats.length, store.state?.country)
+								),
+							]
 						: []),
 				],
 			};
