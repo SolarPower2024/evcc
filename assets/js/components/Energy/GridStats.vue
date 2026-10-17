@@ -48,7 +48,7 @@ export default defineComponent({
 						cost.export,
 						cost.exportEnergy
 					),
-					accent: "text-accent1",
+					accent: "text-export",
 				},
 			];
 		},
