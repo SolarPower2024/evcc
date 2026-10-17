@@ -61,7 +61,8 @@ jobs:
           # The skip list is built from the sources (every test calling enableAutomatic), so new evcc
           # tests of this kind need no change here.
           evccRace="^($(awk '/^func Test/{n=$2; sub(/\(.*/,"",n)} /enableAutomatic\(t\)/{print n}' core/*_test.go | sort -u | paste -sd'|'))\$"
-          echo "skipped for race (evcc enableAutomatic): $evccRace"          {
+          echo "skipped for race (evcc enableAutomatic): $evccRace"
+          {
             go test -race -count=1 ./core/lm/... ./core/peak/ ./server/ &&
               go test -race -count=1 -skip "$evccRace" ./core/ &&
               go test -race -count=1 -run 'TestSwitchStages|TestSwitchSocketRatedPower' ./charger/
