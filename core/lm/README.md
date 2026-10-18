@@ -472,7 +472,7 @@ metered from their start count, kept for 24 months (`peakMonths`,
 battery gave to the house, not what it fed into the grid (`TestMeterCompleted`;
 with a counter an approximation, as the import counter knows no export). Each month also keeps its baseline, the highest
 limit set by hand in it (the base while following the peak); months from before
-get the current one at the start. The dialog shows the current month in two
+get the current one at the start. A month is looked up, never assumed to be the first entry; one entered late (a window of the month before) is put in its place with no baseline, and a list with a month twice is merged at start. The dialog shows the current month in two
 tiles (highest quarter hour with and without the battery next to each other
 and the limit; the month's saving, the total since the first month and the
 interventions), below one row per month.

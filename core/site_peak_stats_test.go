@@ -165,7 +165,8 @@ func TestPeakBaselineFollow(t *testing.T) {
 
 	// a new month while the limit is raised
 	clk.Set(time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC))
-	assert.Equal(t, 5000.0, s.peakMonthOf(clk.Now()).Baseline)
+	m, _ := s.peakMonthOf(clk.Now())
+	assert.Equal(t, 5000.0, m.Baseline)
 
 	// set by hand: the base
 	require.NoError(t, site.SetPeakShavingLimit(6000))
@@ -208,4 +209,78 @@ func TestPeakFillBaselines(t *testing.T) {
 	s.limit = 0
 	site.fillPeakBaselines()
 	assert.Zero(t, s.months[0].Baseline)
+}
+
+// TestPeakMonthsDuplicatesMerged: a list with months twice, as an earlier version
+// wrote it, becomes one entry per month with the values joined
+func TestPeakMonthsDuplicatesMerged(t *testing.T) {
+	noSettingsDB(t)
+	keepSettings(t)
+	site, _ := peakWindowSite(t, 0)
+	s := site.peak()
+
+	feb, jan := time.Date(2026, 2, 3, 10, 0, 0, 0, time.UTC), time.Date(2026, 1, 3, 10, 0, 0, 0, time.UTC)
+	require.NoError(t, settings.SetJson(keys.PeakMonths, []peakMonth{
+		{Month: "2026-02", Peak: 4000, PeakAt: feb, Demand: 5000, Interventions: 1, Baseline: 3000},
+		{Month: "2026-01", Peak: 6000, PeakAt: jan, Interventions: 2},
+		{Month: "2026-02", Peak: 7000, PeakAt: feb.Add(time.Hour), Demand: 4000, Interventions: 3, Baseline: 5000},
+		{Month: "2026-01", Peak: 1000, Interventions: 1},
+	}))
+
+	site.restorePeakMonths()
+
+	require.Len(t, s.months, 2)
+	assert.Equal(t, "2026-02", s.months[0].Month)
+	assert.Equal(t, 7000.0, s.months[0].Peak)
+	assert.Equal(t, feb.Add(time.Hour), s.months[0].PeakAt)
+	assert.Equal(t, 5000.0, s.months[0].Demand)
+	assert.Equal(t, 4, s.months[0].Interventions)
+	assert.Equal(t, 5000.0, s.months[0].Baseline)
+	assert.Equal(t, "2026-01", s.months[1].Month)
+	assert.Equal(t, 6000.0, s.months[1].Peak)
+	assert.Equal(t, 3, s.months[1].Interventions)
+
+	var saved []peakMonth
+	require.NoError(t, settings.Json(keys.PeakMonths, &saved))
+	assert.Equal(t, s.months, saved, "saved merged")
+}
+
+// TestPeakMonthsNoDuplicateAtMonthChange: two windows and a limit set right after
+// the month changed make one entry
+func TestPeakMonthsNoDuplicateAtMonthChange(t *testing.T) {
+	noSettingsDB(t)
+	keepSettings(t)
+	site, clk := peakWindowSite(t, 0)
+	s := site.peak()
+	s.months = []peakMonth{{Month: "2026-09", Peak: 3000, Baseline: 5000}}
+
+	clk.Set(time.Date(2026, 10, 1, 0, 0, 0, 0, time.Local))
+	s.mu.Lock()
+	s.recordPeakWindow(clk.Now().Add(-15*time.Minute), 1000, 1000) // 23:45 of September
+	s.recordPeakWindow(clk.Now(), 1000, 1000)
+	s.recordPeakWindow(clk.Now().Add(15*time.Minute), 1000, 1000)
+	s.mu.Unlock()
+	require.NoError(t, site.SetPeakShavingLimit(6000))
+
+	require.Len(t, s.months, 2)
+	assert.Equal(t, "2026-10", s.months[0].Month)
+	assert.Equal(t, "2026-09", s.months[1].Month)
+}
+
+// TestPeakMonthsLateWindow: a window of an earlier month is put in its place and
+// has no baseline of its own from the limit now
+func TestPeakMonthsLateWindow(t *testing.T) {
+	site, _ := peakWindowSite(t, 0)
+	s := site.peak()
+	s.limit = 7000
+	s.months = []peakMonth{{Month: "2026-09", Baseline: 7000}, {Month: "2026-07", Baseline: 4000}}
+
+	s.mu.Lock()
+	s.recordPeakWindow(time.Date(2026, 8, 31, 23, 45, 0, 0, time.Local), 3600*4000, 3600*4000)
+	s.mu.Unlock()
+
+	require.Len(t, s.months, 3)
+	assert.Equal(t, []string{"2026-09", "2026-08", "2026-07"}, []string{s.months[0].Month, s.months[1].Month, s.months[2].Month})
+	assert.Zero(t, s.months[1].Baseline)
+	assert.Equal(t, 7000.0, s.months[0].Baseline)
 }
