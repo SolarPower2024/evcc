@@ -36,9 +36,8 @@ import (
 )
 
 const (
-	exportForecastTimeout   = 10 * time.Second
-	exportForecastRefresh   = 10 * time.Minute // an unchanged list is written again after this time
-	exportForecastWarnEvery = 15 * time.Minute // at most one warning in this time
+	exportForecastTimeout = 10 * time.Second
+	exportForecastRefresh = 10 * time.Minute // an unchanged list is written again after this time
 )
 
 var exportForecastEntityRe = regexp.MustCompile(`^sensor\.[a-z0-9_]+$`)
@@ -71,7 +70,7 @@ type exportForecastState struct {
 	inflight  *exportWrite // list being written
 	pending   *exportWrite // newest list that came in while writing
 	writing   bool
-	lastWarn  time.Time
+	cause     util.CauseLog             // a failed write is logged once per cause
 	conn      *homeassistant.Connection // kept until a write fails or the entity changes
 	wg        sync.WaitGroup            // writer running, for tests
 
@@ -235,7 +234,8 @@ func (site *Site) exportForecastWriter() {
 
 		// the entity was changed or turned off meanwhile
 		var err error
-		if w.entity == site.exportForecastEntity() {
+		current := w.entity == site.exportForecastEntity()
+		if current {
 			err = site.writeExportForecast(w)
 		}
 
@@ -246,8 +246,8 @@ func (site *Site) exportForecastWriter() {
 		}
 		s.mu.Unlock()
 
-		if err != nil {
-			site.exportForecastWarn(err)
+		if current {
+			s.cause.Report(site.log, "export forecast", err)
 		}
 	}
 }
@@ -308,22 +308,6 @@ func (site *Site) exportForecastConnection() (*homeassistant.Connection, error) 
 	}
 
 	return homeassistant.NewConnection(util.NewLogger("exportforecast"), uri, "", false)
-}
-
-// exportForecastWarn logs a failed write, at most once in exportForecastWarnEvery
-func (site *Site) exportForecastWarn(err error) {
-	s := site.exportFc()
-
-	s.mu.Lock()
-	warn := time.Since(s.lastWarn) >= exportForecastWarnEvery
-	if warn {
-		s.lastWarn = time.Now()
-	}
-	s.mu.Unlock()
-
-	if warn {
-		site.log.WARN.Printf("export forecast: %v", err)
-	}
 }
 
 // writeHAState sets the state of an entity, creating it if needed. It returns

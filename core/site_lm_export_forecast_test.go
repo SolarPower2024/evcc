@@ -1,10 +1,12 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -443,14 +445,40 @@ func TestPublishExportForecast(t *testing.T) {
 	})
 
 	t.Run("no connection is logged, not fatal", func(t *testing.T) {
-		site := &Site{log: util.NewLogger("test")}
+		var buf bytes.Buffer
+		site := &Site{log: testLogger(&buf)}
 		site.lms().adv.ExportForecastEntity = "sensor.evcc_einspeiseprognose"
 		t.Setenv(homeassistant.SupervisorToken, "")
 
 		site.publishExportForecast(details, req, res)
 		site.exportFc().wg.Wait()
 		assert.Nil(t, site.exportFc().last)
-		assert.False(t, site.exportFc().lastWarn.IsZero(), "warned")
+		assert.Equal(t, 1, strings.Count(buf.String(), "WARN"), "warned")
+	})
+
+	t.Run("the same cause over several runs is one warning", func(t *testing.T) {
+		ha := &haRecorder{status: http.StatusInternalServerError}
+		site := exportSite(t, ha, "sensor.evcc_einspeiseprognose")
+		var buf bytes.Buffer
+		site.log = testLogger(&buf)
+
+		for range 3 {
+			site.publishExportForecast(details, req, res)
+			site.exportFc().wg.Wait()
+		}
+		assert.Equal(t, 3, ha.count())
+		assert.Equal(t, 1, strings.Count(buf.String(), "WARN"))
+		assert.Equal(t, 2, strings.Count(buf.String(), "DEBUG"))
+
+		ha.mu.Lock()
+		ha.status = 0
+		ha.mu.Unlock()
+
+		for range 2 {
+			site.publishExportForecast(details, req, res)
+			site.exportFc().wg.Wait()
+		}
+		assert.Equal(t, 1, strings.Count(buf.String(), "ok again"))
 	})
 }
 

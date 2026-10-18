@@ -767,8 +767,9 @@ elsewhere saving the field fails.
   kept until a write fails or the entity changes. An unchanged list for the same
   entity is not written again, but at the latest after 10 minutes, so `updated`
   stays current for the reader. While a write runs, the newest list waits and is
-  written when it ends (older ones are dropped). A failed write is logged as a
-  warning (at most every 15 minutes) and tried again with the next run. The size
+  written when it ends (older ones are dropped). A failed write is logged once per cause as a
+  warning (`util.CauseLog`: the same cause again at debug level, "ok again" once
+  with the first success) and tried again with the next run. The size
   of the attribute is logged at debug level; there is no limit.
 - The entity is gone after a restart of Home Assistant until the next optimizer
   run (about 15 minutes at most). Exclude it from the recorder, which keeps no
