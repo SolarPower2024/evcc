@@ -94,6 +94,9 @@ func (site *Site) restoreLmAdvanced() {
 	s := site.lms()
 
 	if adv, ok := restoreLmAdvancedValue(site.log); ok {
+		if dropInvalidLmAdvanced(site.log, &adv) {
+			_ = settings.SetJson(keys.LmAdvanced, adv)
+		}
 		s.advMu.Lock()
 		s.adv = adv
 		s.advMu.Unlock()
@@ -155,8 +158,8 @@ func (site *Site) lmTimeout() time.Duration {
 	return lm.DefaultTimeout
 }
 
-// SetLmAdvanced sets one of the advanced settings
-func (site *Site) SetLmAdvanced(name string, value float64) error {
+// validLmAdvanced checks the value of one advanced setting
+func validLmAdvanced(name string, value float64) error {
 	limit, ok := lmAdvancedLimits[name]
 	if !ok {
 		return fmt.Errorf("unknown setting: %s", name)
@@ -166,6 +169,14 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 	}
 	if name == "phases" && value == 2 {
 		return fmt.Errorf("phases must be 1 or 3")
+	}
+	return nil
+}
+
+// SetLmAdvanced sets one of the advanced settings
+func (site *Site) SetLmAdvanced(name string, value float64) error {
+	if err := validLmAdvanced(name, value); err != nil {
+		return err
 	}
 
 	s := site.lms()

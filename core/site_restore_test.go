@@ -17,6 +17,10 @@ func restoreTestSite(t *testing.T) (*Site, *bytes.Buffer) {
 	t.Helper()
 	noSettingsDB(t)
 	site := newScenario(t).site
+	// other tests leave follow the peak on, which would move the limit
+	for _, key := range []string{keys.PeakFollow, keys.PeakFollowBase, keys.PeakFollowBuffer} {
+		_ = settings.Delete(key)
+	}
 	buf := new(bytes.Buffer)
 	site.log = testLogger(buf)
 	return site, buf
@@ -124,4 +128,108 @@ func TestSaveLmProfileUnreadableList(t *testing.T) {
 
 	raw, _ := settings.String(keys.LmProfiles)
 	assert.Equal(t, `[{"id":`, raw)
+}
+
+// TestRestoreOutOfRange: a stored value its setter would refuse is ignored, the
+// default applies and the key is deleted
+func TestRestoreOutOfRange(t *testing.T) {
+	for _, tc := range []struct {
+		name, key, val string
+		restore        func(*Site)
+		get            func(*Site) float64
+	}{
+		{"limit 0", keys.PeakShavingLimit, "0", (*Site).restorePeakSettings, (*Site).GetPeakShavingLimit},
+		{"limit 25000", keys.PeakShavingLimit, "25000", (*Site).restorePeakSettings, (*Site).GetPeakShavingLimit},
+		{"reserve 0", keys.PeakShavingReserve, "0", (*Site).restorePeakSettings, (*Site).GetPeakShavingReserve},
+		{"reserve 100", keys.PeakShavingReserve, "100", (*Site).restorePeakSettings, (*Site).GetPeakShavingReserve},
+		{"charge power", keys.PeakShavingChargePower, "-5", (*Site).restorePeakSettings, (*Site).GetPeakShavingChargePower},
+		{"guard 600", keys.LmShedGuard, "600", (*Site).restoreLmGuard, func(s *Site) float64 { return float64(s.GetLmShedGuard()) }},
+		{"freeValue 0", keys.LmAdvanced, `{"freeValue":0}`, (*Site).restoreLmAdvanced, (*Site).peakFreeValue},
+		{"phases 2", keys.LmAdvanced, `{"phases":2}`, (*Site).restoreLmAdvanced, func(s *Site) float64 { return float64(s.lmBatteryPhases()) }},
+		{"follow buffer -100", keys.PeakFollowBuffer, "-100", (*Site).restorePeakFollow, (*Site).GetPeakFollowBuffer},
+		{"soc start >= stop", keys.BatterySocGridChargeStart, "90", (*Site).restoreLmSettings, (*Site).GetBatterySocGridChargeStart},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			site, buf := restoreTestSite(t)
+			before := tc.get(site)
+			if tc.key == keys.PeakFollowBuffer {
+				before = defaultPeakFollowBuffer // restore sets it, the state starts at 0
+			}
+
+			if tc.key == keys.BatterySocGridChargeStart {
+				settings.SetString(keys.BatterySocGridChargeStop, "50")
+			}
+			settings.SetString(tc.key, tc.val)
+
+			tc.restore(site)
+
+			assert.Equal(t, before, tc.get(site), "default applies")
+			assert.Contains(t, buf.String(), "WARN", buf.String())
+			assert.NotContains(t, buf.String(), "ERROR")
+			if tc.key != keys.LmAdvanced {
+				_, err := settings.String(tc.key)
+				assert.ErrorIs(t, err, settings.ErrNotFound, "key deleted")
+			} else {
+				var adv lmAdvanced
+				require.NoError(t, settings.Json(tc.key, &adv))
+				assert.Equal(t, lmAdvanced{}, adv, "field left out")
+			}
+		})
+	}
+
+	t.Run("once target 150", func(t *testing.T) {
+		site, buf := restoreTestSite(t)
+		settings.SetString(keys.BatteryGridChargeOnce, `{"target":150}`)
+
+		site.restoreGridChargeOnce()
+
+		assert.Zero(t, site.gridChargeOnce().Target)
+		assert.Contains(t, buf.String(), "WARN")
+		_, err := settings.String(keys.BatteryGridChargeOnce)
+		assert.ErrorIs(t, err, settings.ErrNotFound)
+	})
+}
+
+// TestRestoreFollowLimitKept: follow the peak stores its limit in steps of 100 W,
+// which is no multiple of the 500 W step of the setter
+func TestRestoreFollowLimitKept(t *testing.T) {
+	site, buf := restoreTestSite(t)
+	settings.SetString(keys.PeakShavingLimit, "11300")
+
+	site.restorePeakSettings()
+
+	assert.Equal(t, 11300.0, site.GetPeakShavingLimit())
+	assert.NotContains(t, buf.String(), "WARN")
+}
+
+// TestRestoreLiveValuesUnchanged: the values of the live system run through as they are
+func TestRestoreLiveValuesUnchanged(t *testing.T) {
+	site, buf := restoreTestSite(t)
+
+	settings.SetString(keys.PeakShavingLimit, "3500")
+	settings.SetString(keys.PeakShavingReserve, "20")
+	settings.SetString(keys.PeakShavingChargePower, "1800")
+	settings.SetString(keys.BatterySocGridChargeStart, "15")
+	settings.SetString(keys.BatterySocGridChargeStop, "20")
+	settings.SetString(keys.LmAdvanced, `{"freeValue":1800,"phases":1,"writeTolerance":50}`)
+	settings.SetString(keys.BatteryGridChargeOnce, `{"target":0}`)
+
+	site.restoreLmSettings()
+	site.restorePeakSettings()
+	site.restoreGridChargeOnce()
+
+	assert.Equal(t, 3500.0, site.GetPeakShavingLimit())
+	assert.Equal(t, 20.0, site.GetPeakShavingReserve())
+	assert.Equal(t, 1800.0, site.GetPeakShavingChargePower())
+	assert.Equal(t, 15.0, site.GetBatterySocGridChargeStart())
+	assert.Equal(t, 20.0, site.GetBatterySocGridChargeStop())
+	assert.Equal(t, 1800.0, site.peakFreeValue())
+	assert.Equal(t, 1, site.lmBatteryPhases())
+	assert.Equal(t, 50.0, site.peakWriteTolerance())
+
+	assert.Empty(t, buf.String(), "nothing warned or logged")
+	for _, key := range []string{keys.PeakShavingLimit, keys.PeakShavingReserve, keys.LmAdvanced, keys.BatteryGridChargeOnce} {
+		_, err := settings.String(key)
+		assert.NoError(t, err, key)
+	}
 }

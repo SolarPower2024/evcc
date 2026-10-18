@@ -78,3 +78,109 @@ func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
 }
+
+// restoreFloat reads a number stored under key. Missing is no error; a value that
+// does not read or fails valid is logged once as a warning, deleted and left out, so
+// the default applies. Setters and restore share the checks, see valid….
+func restoreFloat(log *util.Logger, key string, valid func(float64) error) (float64, bool) {
+	v, err := settings.Float(key)
+	if err == nil {
+		err = valid(v)
+	}
+	if err != nil {
+		if !errors.Is(err, settings.ErrNotFound) {
+			dropInvalid(log, key, err)
+		}
+		return 0, false
+	}
+	return v, true
+}
+
+// restoreInt is restoreFloat for a whole number
+func restoreInt(log *util.Logger, key string, valid func(int) error) (int, bool) {
+	v, err := settings.Int(key)
+	if err == nil {
+		err = valid(int(v))
+	}
+	if err != nil {
+		if !errors.Is(err, settings.ErrNotFound) {
+			dropInvalid(log, key, err)
+		}
+		return 0, false
+	}
+	return int(v), true
+}
+
+// dropInvalid warns about a stored value that is not valid and deletes it
+func dropInvalid(log *util.Logger, key string, err error) {
+	raw, _ := settings.String(key)
+	log.WARN.Printf("restore %s: ignoring stored value %q: %v", key, raw, err)
+	if err := settings.Delete(key); err != nil {
+		log.ERROR.Printf("restore %s: delete: %v", key, err)
+	}
+}
+
+// restoreSocPair reads the grid charge thresholds. Each one has to be in range, and
+// start below stop; otherwise both stay at start and stop given.
+func restoreSocPair(log *util.Logger, start, stop float64) (float64, float64) {
+	s, sok := restoreFloat(log, keys.BatterySocGridChargeStart, validSocStart)
+	e, eok := restoreFloat(log, keys.BatterySocGridChargeStop, validSocStop)
+
+	ns, ne := start, stop
+	if sok {
+		ns = s
+	}
+	if eok {
+		ne = e
+	}
+
+	if err := validSocPair(ns, ne); err != nil {
+		if sok || eok {
+			log.WARN.Printf("restore grid charge soc: %v, using %.0f/%.0f", err, start, stop)
+			_ = settings.Delete(keys.BatterySocGridChargeStart)
+			_ = settings.Delete(keys.BatterySocGridChargeStop)
+		}
+		return start, stop
+	}
+
+	return ns, ne
+}
+
+// dropInvalidLmAdvanced leaves out the fields of adv whose value the setter would
+// refuse, and reports whether it did
+func dropInvalidLmAdvanced(log *util.Logger, adv *lmAdvanced) bool {
+	fields := map[string]**float64{
+		"hysteresis": &adv.Hysteresis, "freeValue": &adv.FreeValue, "holdOff": &adv.HoldOff,
+		"timeout": &adv.Timeout, "phases": &adv.Phases, "peakFreeze": &adv.PeakFreeze,
+		"peakCap": &adv.PeakCap, "writeTolerance": &adv.WriteTolerance,
+		"followCycles": &adv.FollowCycles, "gridChargeWindow": &adv.GridChargeWindow,
+		"homeWeekday": &adv.HomeWeekday, "homeForecast": &adv.HomeForecast,
+	}
+
+	dropped := false
+	for name, p := range fields {
+		if *p == nil {
+			continue
+		}
+		if err := validLmAdvanced(name, **p); err != nil {
+			log.WARN.Printf("restore %s: ignoring stored %s %g: %v", keys.LmAdvanced, name, **p, err)
+			*p = nil
+			dropped = true
+		}
+	}
+
+	return dropped
+}
+
+// onceTargetValid checks the stored one-time grid charge: target 0 is no order, else
+// 1 to 100. Anything else is warned about and deleted.
+func (site *Site) onceTargetValid(o gridChargeOnce) bool {
+	if o.Target == 0 {
+		return true
+	}
+	if err := validOnceTarget(o.Target); err != nil {
+		dropInvalid(site.log, keys.BatteryGridChargeOnce, err)
+		return false
+	}
+	return true
+}

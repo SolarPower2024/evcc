@@ -23,9 +23,9 @@ const lmMaxGuardMinutes = 120
 func (site *Site) restoreLmGuard() {
 	s := site.lms()
 
-	if v, err := settings.Int(keys.LmShedGuard); err == nil {
+	if v, ok := restoreInt(site.log, keys.LmShedGuard, validGuardMinutes); ok {
 		s.mu.Lock()
-		s.guardMinutes = int(v)
+		s.guardMinutes = v
 		s.mu.Unlock()
 	}
 
@@ -91,11 +91,19 @@ func (site *Site) GetLmShedGuard() int {
 	return s.guardMinutes
 }
 
+// validGuardMinutes checks how long a shed protected load stays off
+func validGuardMinutes(minutes int) error {
+	if minutes < 0 || minutes > lmMaxGuardMinutes {
+		return fmt.Errorf("guard must be between 0 and %d minutes", lmMaxGuardMinutes)
+	}
+	return nil
+}
+
 // SetLmShedGuard sets how many minutes a protected loadpoint stays off after it
 // was shed, 0 turns the guard off
 func (site *Site) SetLmShedGuard(minutes int) error {
-	if minutes < 0 || minutes > lmMaxGuardMinutes {
-		return fmt.Errorf("guard must be between 0 and %d minutes", lmMaxGuardMinutes)
+	if err := validGuardMinutes(minutes); err != nil {
+		return err
 	}
 
 	s := site.lms()

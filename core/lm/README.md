@@ -977,6 +977,11 @@ Every fork feature follows these, so taking in a new evcc version stays cheap:
    replaced by a later invalid value, never deleted). `lmAdvanced` is read field
    by field, so one wrong field does not lose the others. Profiles are not saved
    or deleted while the stored list is unreadable.
+   A stored value its setter would refuse (out of range, start soc not below
+   stop soc, a phase count of 2) is warned about once, deleted and the default
+   applies; the setters and the restore share the checks (`valid…` functions).
+   The peak limit is only checked for its range: follow the peak stores it in
+   steps of 100 W.
 
 ## Upstream touch points
 
