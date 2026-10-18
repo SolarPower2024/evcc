@@ -407,10 +407,15 @@ func TestSocPass(t *testing.T) {
 	res.GridExport = []float32{4, 0, 0, 0, 0, 0}
 	res.ObjectiveValue = -100
 	res2.ObjectiveValue = -30
-	socPassJoin(res, res2, req.TimeSeries, k)
+	// battery value (soc after slot k minus start, times price) and overshoot in the head
+	req.Batteries[0].PA = 0.0002 // (2500-9000)*0.0002 = -1.3
+	req.Batteries[1].PA = 0.0001 // (23000-20000)*0.0001 = 0.3
+	req.Grid.PMaxImp = 5000
+	res.GridImportOvershoot = []float32{0, 0, 5, 0, 0, 0} // 0.3*5 = 1.5
+	socPassJoin(res, res2, *req, k)
 	assert.Equal(t, []float32{7000, 5000, 2500, 4000, 3500, 3000}, res.Batteries[0].StateOfCharge)
 	assert.Equal(t, []float32{10, 0, 20, 2000, 1, 1}, res.GridImport)
-	assert.InDelta(t, -8.6-30, res.ObjectiveValue, 1e-4)
+	assert.InDelta(t, -8.6-1.5-1.3+0.3-30, res.ObjectiveValue, 1e-3)
 	assert.Len(t, res.Batteries[1].ChargingPower, 6)
 
 	// not reached, running, switched off, reserve above the start soc
