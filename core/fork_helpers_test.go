@@ -24,6 +24,25 @@ func setBatterySoc(site *Site, soc float64) {
 	site.battery.Devices = []types.Measurement{{Soc: &soc}}
 }
 
+// freshSettings empties the settings store for a test that restores everything
+// (restoreCustom), so keys other tests left behind cannot change its result in
+// a shuffled run; the previous store comes back afterwards
+func freshSettings(t *testing.T) {
+	t.Helper()
+	before := settings.All()
+	for _, s := range before {
+		_ = settings.Delete(s.Key)
+	}
+	t.Cleanup(func() {
+		for _, s := range settings.All() {
+			_ = settings.Delete(s.Key)
+		}
+		for _, s := range before {
+			settings.SetString(s.Key, s.Value)
+		}
+	})
+}
+
 // keepSettings restores the settings store after the test: keys it added are
 // removed, values it changed are set back
 func keepSettings(t *testing.T) {
