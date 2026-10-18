@@ -4,12 +4,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/evcc-io/evcc/core"
 	"github.com/evcc-io/evcc/core/lm/profile"
 	"github.com/evcc-io/evcc/core/site"
+	"github.com/evcc-io/evcc/util/auth"
 	"github.com/evcc-io/evcc/util/logstash"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
@@ -49,13 +51,14 @@ func TestMergeRoutesKeepsUpstream(t *testing.T) {
 	}
 
 	left := mergeRoutes(routes, map[string]route{
-		"limit":     {"POST", "/other/{value:[0-9]+}", nil}, // same name
-		"mystate":   {"GET", "/state", nil},                 // same method and path
-		"poststate": {"POST", "/state", nil},                // other method: fine
-		"new":       {"POST", "/new/{value:[0-9]+}", nil},   // fine
+		"limit":     {"POST", "/other/{value:[0-9]+}", nil},  // same name
+		"mystate":   {"GET", "/state", nil},                  // same method and path
+		"poststate": {"POST", "/state", nil},                 // other method: fine
+		"new":       {"POST", "/new/{value:[0-9]+}", nil},    // fine
+		"otherre":   {"POST", "/limit/{value:[0-9.]+}", nil}, // same path, other expression
 	})
 
-	assert.Equal(t, []string{"limit", "mystate"}, left)
+	assert.Equal(t, []string{"limit", "mystate", "otherre"}, left)
 	assert.Equal(t, "/limit/{value:[0-9]+}", routes["limit"].Pattern)
 	assert.NotNil(t, routes["limit"].HandlerFunc)
 	assert.NotContains(t, routes, "mystate")
@@ -297,4 +300,107 @@ func TestLogFileRoutes(t *testing.T) {
 	} {
 		assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, body).Code, body)
 	}
+}
+
+// TestCustomRoutesAuth: the configuration routes need authentication, the
+// operating routes do not, and without authentication set nothing of the first
+// passes
+func TestCustomRoutesAuth(t *testing.T) {
+	const key = "evcc_token"
+	site := core.NewSite()
+
+	// every route is in exactly one list
+	for name := range customSiteRoutes(site) {
+		inConfig, inOperate := slices.Contains(customConfigRoutes, name), slices.Contains(customOperateRoutes, name)
+		assert.True(t, inConfig != inOperate, "route %s must be in exactly one of customConfigRoutes and customOperateRoutes", name)
+	}
+	for _, name := range append(slices.Clone(customConfigRoutes), customOperateRoutes...) {
+		assert.Contains(t, customSiteRoutes(site), name, "listed route does not exist")
+	}
+
+	code := func(a auth.Auth, name, bearer string) int {
+		if a == nil {
+			customAuth.Store(nil)
+		} else {
+			setCustomAuth(a)
+		}
+
+		routes := make(map[string]route)
+		addCustomSiteRoutes(routes, site)
+
+		rt := routes[name]
+		r := mux.NewRouter()
+		r.Methods(rt.Method).Path(rt.Pattern).Handler(rt.HandlerFunc)
+
+		req := httptest.NewRequest(rt.Method, customRouteSamples[name], nil)
+		if bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+bearer)
+		}
+
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w.Code
+	}
+	t.Cleanup(func() { customAuth.Store(nil) })
+
+	enabled := fakeAuth{mode: auth.Enabled, apiKey: key}
+
+	for _, name := range customConfigRoutes {
+		assert.Equal(t, http.StatusUnauthorized, code(enabled, name, ""), "%s without login", name)
+		assert.Equal(t, http.StatusUnauthorized, code(enabled, name, "wrong"), "%s with wrong key", name)
+		assert.NotEqual(t, http.StatusUnauthorized, code(enabled, name, key), "%s with api key", name)
+		assert.NotEqual(t, http.StatusUnauthorized, code(fakeAuth{mode: auth.Disabled}, name, ""), "%s with authentication disabled", name)
+		assert.Equal(t, http.StatusUnauthorized, code(fakeAuth{mode: auth.Locked}, name, key), "%s locked", name)
+		assert.Equal(t, http.StatusUnauthorized, code(nil, name, key), "%s without authentication set", name)
+	}
+
+	for _, name := range customOperateRoutes {
+		assert.NotEqual(t, http.StatusUnauthorized, code(enabled, name, ""), "%s without login", name)
+		assert.NotEqual(t, http.StatusUnauthorized, code(nil, name, ""), "%s without authentication set", name)
+	}
+}
+
+// TestCustomRoutesAgainstEvccRouter: in evcc's real route table, each custom
+// route is matched by itself and by no other route. No match means evcc has a
+// route of the same name and the custom one was left out, a second match an
+// overlap, for example after an evcc update.
+func TestCustomRoutesAgainstEvccRouter(t *testing.T) {
+	site := core.NewSite()
+
+	httpd := NewHTTPd("127.0.0.1:0", nil, Customization{})
+	httpd.RegisterSiteHandlers(site)
+
+	router := httpd.Server.Handler.(*mux.Router)
+
+	for name, rt := range customSiteRoutes(site) {
+		sample, ok := customRouteSamples[name]
+		if !assert.True(t, ok, "no sample for route %s", name) {
+			continue
+		}
+
+		var hits []string
+		assert.NoError(t, router.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
+			if route.GetHandler() == nil {
+				return nil
+			}
+
+			var m mux.RouteMatch
+			if route.Match(httptest.NewRequest(rt.Method, "/api"+sample, nil), &m) {
+				tpl, _ := route.GetPathTemplate()
+				hits = append(hits, tpl)
+			}
+			return nil
+		}))
+
+		assert.Equal(t, []string{"/api" + rt.Pattern}, hits, "route %s: %s %s", name, rt.Method, sample)
+	}
+}
+
+// TestPatternShape: the expressions of the variables are dropped, also with
+// braces inside
+func TestPatternShape(t *testing.T) {
+	assert.Equal(t, "/limit/{value}", patternShape("/limit/{value:[0-9]+}"))
+	assert.Equal(t, "/batterygridchargeonce/{soc}/{until}", patternShape("/batterygridchargeonce/{soc:[0-9]+}/{until:[0-9]{2}:[0-9]{2}}"))
+	assert.Equal(t, "/state", patternShape("/state"))
+	assert.Equal(t, "/a/{b}", patternShape("/a/{b}"))
 }

@@ -287,6 +287,8 @@ func (s *HTTPd) RegisterSiteHandlers(site site.API) {
 func (s *HTTPd) RegisterSystemHandler(site *core.Site, pub publisher, cache *util.ParamCache, auth auth.Auth, shutdown func(), configFile string, remoteAccess *remote.Remote) {
 	router := s.Server.Handler.(*mux.Router)
 
+	setCustomAuth(auth) // custom: authentication of the fork's configuration routes, see server/http_custom.go
+
 	// api
 	api := router.PathPrefix("/api").Subrouter()
 	api.Use(jsonHandler)
