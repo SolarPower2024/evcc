@@ -4,12 +4,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/evcc-io/evcc/core"
 	"github.com/evcc-io/evcc/core/lm/profile"
 	"github.com/evcc-io/evcc/core/site"
+	"github.com/evcc-io/evcc/util/auth"
 	"github.com/evcc-io/evcc/util/logstash"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
@@ -296,5 +298,63 @@ func TestLogFileRoutes(t *testing.T) {
 		`not json`,
 	} {
 		assert.Equal(t, http.StatusBadRequest, do(http.MethodPost, body).Code, body)
+	}
+}
+
+// TestCustomRoutesAuth: the configuration routes need authentication, the
+// operating routes do not, and without authentication set nothing of the first
+// passes
+func TestCustomRoutesAuth(t *testing.T) {
+	const key = "evcc_token"
+	site := core.NewSite()
+
+	// every route is in exactly one list
+	for name := range customSiteRoutes(site) {
+		inConfig, inOperate := slices.Contains(customConfigRoutes, name), slices.Contains(customOperateRoutes, name)
+		assert.True(t, inConfig != inOperate, "route %s must be in exactly one of customConfigRoutes and customOperateRoutes", name)
+	}
+	for _, name := range append(slices.Clone(customConfigRoutes), customOperateRoutes...) {
+		assert.Contains(t, customSiteRoutes(site), name, "listed route does not exist")
+	}
+
+	code := func(a auth.Auth, name, bearer string) int {
+		if a == nil {
+			customAuth.Store(nil)
+		} else {
+			setCustomAuth(a)
+		}
+
+		routes := make(map[string]route)
+		addCustomSiteRoutes(routes, site)
+
+		rt := routes[name]
+		r := mux.NewRouter()
+		r.Methods(rt.Method).Path(rt.Pattern).Handler(rt.HandlerFunc)
+
+		req := httptest.NewRequest(rt.Method, customRouteSamples[name], nil)
+		if bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+bearer)
+		}
+
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w.Code
+	}
+	t.Cleanup(func() { customAuth.Store(nil) })
+
+	enabled := fakeAuth{mode: auth.Enabled, apiKey: key}
+
+	for _, name := range customConfigRoutes {
+		assert.Equal(t, http.StatusUnauthorized, code(enabled, name, ""), "%s without login", name)
+		assert.Equal(t, http.StatusUnauthorized, code(enabled, name, "wrong"), "%s with wrong key", name)
+		assert.NotEqual(t, http.StatusUnauthorized, code(enabled, name, key), "%s with api key", name)
+		assert.NotEqual(t, http.StatusUnauthorized, code(fakeAuth{mode: auth.Disabled}, name, ""), "%s with authentication disabled", name)
+		assert.Equal(t, http.StatusUnauthorized, code(fakeAuth{mode: auth.Locked}, name, key), "%s locked", name)
+		assert.Equal(t, http.StatusUnauthorized, code(nil, name, key), "%s without authentication set", name)
+	}
+
+	for _, name := range customOperateRoutes {
+		assert.NotEqual(t, http.StatusUnauthorized, code(enabled, name, ""), "%s without login", name)
+		assert.NotEqual(t, http.StatusUnauthorized, code(nil, name, ""), "%s without authentication set", name)
 	}
 }

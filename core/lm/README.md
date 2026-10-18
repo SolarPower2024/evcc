@@ -971,6 +971,19 @@ Every fork feature follows these, so taking in a new evcc version stays cheap:
    on, and that the fork is inert while unused; `TestForkHooksInPlace` checks
    that every hook is still in place, see [Tests](#tests).
 
+### Authentication of the api routes
+
+The fork's site routes (`server/http_custom.go`) are split in two lists, and a
+route in neither fails `TestCustomRoutesAuth`. The routes of `customConfigRoutes`
+need a login or the api key of evcc, like evcc's own configuration; with
+`--disable-auth` they are open, and without authentication set (cannot happen
+in a running evcc) they answer 401. The ui opens the login on a 401 by itself.
+
+| List | Routes |
+|---|---|
+| `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmenabled`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakfollow`, `peakshavingreserve`, `feedinsplit` |
+| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `lmcircuit(delete)`, `batteryidentuse`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peakfollowbuffer`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
+
 ## Upstream touch points
 
 Every change in an evcc file. Check these when merging a new evcc version.
@@ -992,7 +1005,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `server/http_config_helper.go` | `customTestResults` in `testInstance`: the config page shows the switch of each stage of a heater in stages (`server/http_config_custom.go`) |
-| `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged |
+| `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)) |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
@@ -1096,6 +1109,10 @@ unused:
   local server answers.
 - `TestCustomRoutesMatch`: every api route reaches its handler; a new route
   needs a sample request there.
+- `TestCustomRoutesAuth`: every api route is in exactly one of the two lists;
+  configuration routes answer 401 without login, with a wrong key, locked and
+  without authentication set, and pass with the api key or `--disable-auth`;
+  operating routes are never refused.
 
 **Feature tests** live next to the code in `core`, `core/lm`, `core/peak`,
 `core/lm/profile`, `core/circuit`, `core/metrics`, `core/loadpoint`, `charger`

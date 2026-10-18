@@ -12,12 +12,14 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/evcc-io/evcc/core/lm/profile"
 	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/site"
 	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/auth"
 	"github.com/evcc-io/evcc/util/logstash"
 	"github.com/gorilla/mux"
 )
@@ -26,13 +28,79 @@ import (
 // the colon of device names like db:3.
 const namePattern = "[a-zA-Z0-9_.:-]+"
 
+// customConfigRoutes are the routes that change power limits, entities,
+// circuits, tariffs, profiles, files or priorities, or read them back: they
+// need a login or the api key, like evcc's own configuration. Without
+// authentication (--disable-auth) they are open.
+var customConfigRoutes = []string{
+	"lmpriority", "lmshedguard", "lmshedprotect", "lmcircuit", "lmcircuitdelete",
+	"batteryidentuse", "lmadvanced", "lmexportforecast", "lmexportforecastdelete",
+	"lmhomeprofile", "lmhomeprofiledelete", "lmhomeprofilecsv",
+	"lmprofile", "lmprofiledelete",
+	"feedineegentity", "feedineegentitydelete", "logfile", "logfileset",
+	"peakshavinglimit", "peakfollowbuffer", "peaktariff",
+	"peakshavingentity", "peakshavingentitydelete",
+	"peakshavingbatterytype",
+	"peakshavingmanualentity", "peakshavingmanualentitydelete",
+	"peakshavingmodeentity", "peakshavingmodeentitydelete",
+	"peakshavingprotswitch", "peakshavingprotswitchdelete",
+	"peakshavingprotlimit", "peakshavingprotlimitdelete",
+	"peakshavingprotsoc", "peakshavingprotsocdelete",
+	"peakshavingchargeentity", "peakshavingchargeentitydelete",
+	"peakshavingenergyentity", "peakshavingenergyentitydelete",
+	"peakshavingchargepower",
+	"peakshavingcircuit", "peakshavingcircuitdelete",
+}
+
+// customOperateRoutes are switches, actions and soc thresholds of the main and
+// the battery page. They stay open, like evcc's battery settings.
+var customOperateRoutes = []string{
+	"batterysocgridcharge", "batterysocgridchargestart", "batterysocgridchargestop",
+	"batterygridchargeonce", "batterygridchargeonceuntil", "batterygridchargeoncecancel",
+	"lmenabled", "lmprofileapply", "snowcover", "snowauto",
+	"peakshaving", "peakfollow", "peakshavingreserve", "feedinsplit",
+}
+
+// customAuth is the authentication of the http server, set by
+// RegisterSystemHandler after the site routes are registered
+var customAuth atomic.Pointer[auth.Auth]
+
+// setCustomAuth hands the authentication to the routes of customConfigRoutes
+func setCustomAuth(a auth.Auth) {
+	customAuth.Store(&a)
+}
+
+// customConfigAuth lets a request through to next if evcc's authentication does,
+// see EnsureAuthHandler. Without authentication set, nothing passes.
+func customConfigAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		a := customAuth.Load()
+		if a == nil || *a == nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		EnsureAuthHandler(*a)(next).ServeHTTP(w, r)
+	}
+}
+
 // addCustomSiteRoutes adds the fork's site routes to upstream's route table. A
 // route upstream already has, by name or by method and path, stays upstream's:
 // after an evcc update that added the same route, ours must not replace it
-// unnoticed.
+// unnoticed. The routes of customConfigRoutes require authentication.
 func addCustomSiteRoutes(routes map[string]route, site site.API) {
-	for _, name := range mergeRoutes(routes, customSiteRoutes(site)) {
+	add := customSiteRoutes(site)
+	left := mergeRoutes(routes, add)
+
+	for _, name := range left {
 		util.NewLogger("httpd").ERROR.Printf("custom route %s collides with an evcc route, left out", name)
+	}
+
+	for _, name := range customConfigRoutes {
+		if _, ok := add[name]; ok && !slices.Contains(left, name) {
+			r := routes[name]
+			r.HandlerFunc = customConfigAuth(r.HandlerFunc)
+			routes[name] = r
+		}
 	}
 }
 
