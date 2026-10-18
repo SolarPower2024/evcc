@@ -233,3 +233,30 @@ func TestRestoreLiveValuesUnchanged(t *testing.T) {
 		assert.NoError(t, err, key)
 	}
 }
+
+// TestRestoreHomeWeekdayMoved: homeWeekday from an old backup becomes homeForecast
+// once and is gone from the stored value
+func TestRestoreHomeWeekdayMoved(t *testing.T) {
+	site, _ := restoreTestSite(t)
+	settings.SetString(keys.LmAdvanced, `{"homeWeekday":1,"holdOff":15}`)
+
+	site.restoreLmAdvanced()
+
+	assert.Equal(t, homeForecastWeekday, site.homeForecast())
+
+	var adv lmAdvanced
+	require.NoError(t, settings.Json(keys.LmAdvanced, &adv))
+	assert.Nil(t, adv.HomeWeekday)
+	require.NotNil(t, adv.HomeForecast)
+	assert.Equal(t, 1.0, *adv.HomeForecast)
+	require.NotNil(t, adv.HoldOff)
+
+	raw, _ := settings.String(keys.LmAdvanced)
+	assert.NotContains(t, raw, "homeWeekday")
+
+	// an explicit homeForecast wins
+	settings.SetString(keys.LmAdvanced, `{"homeWeekday":1,"homeForecast":2}`)
+	site.lms().adv = lmAdvanced{}
+	site.restoreLmAdvanced()
+	assert.Equal(t, homeForecastManual, site.homeForecast())
+}

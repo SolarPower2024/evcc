@@ -29,7 +29,8 @@ type lmAdvanced struct {
 	// hours the optimizer may take to reach the stop soc of soc-based grid charging
 	GridChargeWindow *float64 `json:"gridChargeWindow,omitempty"`
 	// home consumption forecast per weekday, 1 = on, see site_load_weekday.go.
-	// Replaced by HomeForecast, still read from settings stored before it.
+	// Replaced by HomeForecast: only read from old backups, restoreLmAdvanced moves it
+	// to HomeForecast at start. The name homeWeekday is still accepted by SetLmAdvanced.
 	HomeWeekday *float64 `json:"homeWeekday,omitempty"`
 	// home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load
 	// profile, see site_load_manual.go
@@ -61,7 +62,6 @@ type lmAdvancedState struct {
 	WriteTolerance       float64 `json:"writeTolerance"`
 	FollowCycles         int     `json:"followCycles"`
 	GridChargeWindow     float64 `json:"gridChargeWindow"`
-	HomeWeekday          bool    `json:"homeWeekday"`
 	HomeForecast         int     `json:"homeForecast"`
 	ExportForecastEntity string  `json:"exportForecastEntity"`
 	CircuitFromPeak      bool    `json:"circuitFromPeak"`
@@ -94,7 +94,9 @@ func (site *Site) restoreLmAdvanced() {
 	s := site.lms()
 
 	if adv, ok := restoreLmAdvancedValue(site.log); ok {
-		if dropInvalidLmAdvanced(site.log, &adv) {
+		dropped := dropInvalidLmAdvanced(site.log, &adv)
+		moved := moveHomeWeekday(&adv)
+		if dropped || moved {
 			_ = settings.SetJson(keys.LmAdvanced, adv)
 		}
 		s.advMu.Lock()
@@ -131,7 +133,6 @@ func (site *Site) publishLmAdvanced() {
 		WriteTolerance:       site.peakWriteTolerance(),
 		FollowCycles:         site.lmFollowCycles(),
 		GridChargeWindow:     site.gridChargeWindow().Hours(),
-		HomeWeekday:          site.homeWeekday(),
 		HomeForecast:         site.homeForecast(),
 		ExportForecastEntity: site.exportForecastEntity(),
 		CircuitFromPeak:      site.advanced().CircuitFromPeak,
@@ -143,9 +144,6 @@ func (site *Site) homeForecast() int {
 	adv := site.advanced()
 	if v := adv.HomeForecast; v != nil {
 		return int(*v)
-	}
-	if v := adv.HomeWeekday; v != nil && *v == 1 {
-		return homeForecastWeekday
 	}
 	return homeForecastEvcc
 }

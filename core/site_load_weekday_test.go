@@ -108,12 +108,12 @@ func TestHomeProfileByWeekdayFallback(t *testing.T) {
 
 func TestHomeWeekdaySetting(t *testing.T) {
 	site := &Site{log: util.NewLogger("test")}
-	assert.False(t, site.homeWeekday(), "off by default")
+	assert.Equal(t, homeForecastEvcc, site.homeForecast(), "off by default")
 
 	require.NoError(t, site.SetLmAdvanced("homeWeekday", 1))
-	assert.True(t, site.homeWeekday())
+	assert.Equal(t, homeForecastWeekday, site.homeForecast())
 
 	require.Error(t, site.SetLmAdvanced("homeWeekday", 2))
 	require.NoError(t, site.SetLmAdvanced("homeWeekday", 0))
-	assert.False(t, site.homeWeekday())
+	assert.Equal(t, homeForecastEvcc, site.homeForecast())
 }

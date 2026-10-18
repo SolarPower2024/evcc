@@ -36,11 +36,6 @@ func (site *Site) homeProfileCustom(col *metrics.Collector, minLen int) ([]float
 	return nil, false, nil
 }
 
-// homeWeekday reports whether the home forecast is taken per weekday
-func (site *Site) homeWeekday() bool {
-	return site.homeForecast() == homeForecastWeekday
-}
-
 // homeProfileByWeekday returns the home base load in Wh for minLen 15min slots
 // starting now, each day from the profile of its weekday
 func (site *Site) homeProfileByWeekday(col *metrics.Collector, minLen int) ([]float64, error) {

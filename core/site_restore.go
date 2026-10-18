@@ -184,3 +184,31 @@ func (site *Site) onceTargetValid(o gridChargeOnce) bool {
 	}
 	return true
 }
+
+// moveHomeWeekday takes a stored homeWeekday over into homeForecast once, unless
+// that is set, and clears it; reports whether adv changed
+func moveHomeWeekday(adv *lmAdvanced) bool {
+	if adv.HomeWeekday == nil {
+		return false
+	}
+	if adv.HomeForecast == nil {
+		adv.HomeForecast = adv.HomeWeekday
+	}
+	adv.HomeWeekday = nil
+	return true
+}
+
+// dropPeakFollowCircuit removes the key lm3/lm4 stored the circuit under, once
+// lmCircuit holds it. Persisted first: a crash in between must not lose the circuit.
+func (site *Site) dropPeakFollowCircuit() {
+	if _, err := settings.String(keys.PeakFollowCircuit); err != nil {
+		return
+	}
+	if err := settings.Persist(); err != nil {
+		site.log.ERROR.Printf("restore %s: %v", keys.LmCircuit, err)
+		return
+	}
+	if err := settings.Delete(keys.PeakFollowCircuit); err != nil {
+		site.log.ERROR.Printf("restore %s: delete: %v", keys.PeakFollowCircuit, err)
+	}
+}

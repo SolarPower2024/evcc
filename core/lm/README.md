@@ -815,7 +815,7 @@ values are not stored, so a changed default applies.
 | `peakCap` | allowed grid power at most × limit | 2 | 1-10 |
 | `followCycles` | cycles until a load not following is ignored | 3 | 0-20, 0 = off |
 | `gridChargeWindow` | hours to reach the stop soc in the plan | 3 | 1-24 |
-| `homeForecast` | home forecast: evcc, per weekday, manual | 0 | 0-2 |
+| `homeForecast` | home forecast: evcc, per weekday, manual. The old name `homeWeekday` (0/1) is still accepted; a stored `homeWeekday` moves into `homeForecast` at start | 0 | 0-2 |
 | `exportForecastEntity` | text, not a number: entity for the export forecast, see [16](#export-forecast) | empty = off | `sensor.<name>` |
 | `circuitFromPeak` | the load management circuit's limit is the peak limit, see [7](#7-load-management-circuit-and-switch) | 0 (off) | 0-1 |
 
