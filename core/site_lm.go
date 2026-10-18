@@ -104,6 +104,7 @@ type siteCustom struct {
 // must not leave the fork without its settings (peak shaving off, the battery held
 // by evcc never handed back)
 func (site *Site) restoreCustom() {
+	site.dropStoredLoadpointKeys()
 	site.restoreLmSettings()
 	site.restorePeakSettings()
 	// the circuit may take the peak limit: restoreLmSettings ran before the peak

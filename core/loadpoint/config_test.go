@@ -40,3 +40,15 @@ func TestSplitConfigAlwaysCharge(t *testing.T) {
 	assert.Equal(t, "on", dynamic.AlwaysCharge)
 	assert.NotContains(t, other, "alwaysCharge")
 }
+
+func TestSplitConfigDropsStoredKeys(t *testing.T) {
+	for _, key := range DroppedKeys() {
+		payload := map[string]any{"title": "lp", key: 3}
+
+		dynamic, other, err := SplitConfig(payload)
+		require.NoError(t, err, key)
+		assert.Equal(t, "lp", dynamic.Title)
+		assert.NotContains(t, other, key)
+		assert.Contains(t, payload, key, "input must stay unchanged")
+	}
+}

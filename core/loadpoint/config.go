@@ -53,6 +53,8 @@ type UIConfig struct {
 }
 
 func SplitConfig(payload map[string]any) (DynamicConfig, map[string]any, error) {
+	payload = withoutDroppedKeys(payload) // custom: keys the fork no longer reads, see config_custom.go
+
 	// split static and dynamic config via mapstructure
 	var cc struct {
 		DynamicConfig `mapstructure:",squash"`

@@ -984,7 +984,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site/api.go` | embeds `CustomAPI` |
 | `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`; two `lp.lmm().Peek*` probes; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` (in front of the disable branch, behind the always-charge/battery return) keeps a heater in stages on its running stages until the disable delay has passed, the phase timers take `phaseScaleDelay` (scaling down: `phaseScaleDelay1p`, the disable delay when 1p is not sustainable and evcc disables instead), `batterySupported` projects a pending 1p switch with `projectPhaseSwitch1p`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split per phase count (as in evcc PR 32505), min/max power use it |
-| `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui |
+| `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui; `withoutDroppedKeys` in `SplitConfig` (start, save and show ignore the keys of `droppedKeys`) |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
 | `charger/switchsocket.go` | `RatedPower` config field |
 | `util/log.go` | `newLogger` writes to `logstash.Output` instead of `logstash.DefaultHandler`, which passes every line on to it and to the log file |
@@ -1053,6 +1053,10 @@ then be resolved on it and it is merged with a merge commit.
 4. Push: the fork tests run on GitHub; then the live checks.
 5. Never press GitHub's "Sync fork" on `load-peak-features`: on conflicts it
    offers "Discard commits".
+
+A fork key that goes away is entered in `droppedKeys` (`core/loadpoint/config_custom.go`)
+and stays there: it is ignored by `SplitConfig` and removed from the stored
+loadpoint config at start (`core/site_lm_dropped.go`; yaml loadpoints are left alone).
 
 ## Tests
 
