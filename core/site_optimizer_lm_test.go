@@ -481,3 +481,56 @@ func TestLmOptimizerGoalNotInStepZero(t *testing.T) {
 		assert.Empty(t, batteries[0].cfg.SGoal)
 	})
 }
+
+// A circuit's current limit counts like a power limit, with the phases the
+// loadpoint charges on; below the minimum power the loadpoint plans no charging.
+func TestLmOptimizerInputsCircuitCurrent(t *testing.T) {
+	config.Reset()
+	t.Cleanup(config.Reset)
+
+	prev := Voltage
+	Voltage = 230
+	t.Cleanup(func() { Voltage = prev })
+
+	log := util.NewLogger("test")
+	root, err := circuit.New(log, "main", 16, 0, nil, 0)
+	require.NoError(t, err)
+	require.NoError(t, config.Circuits().Add(config.NewStaticDevice(config.Named{Name: "main"}, api.Circuit(root))))
+	subPower, err := circuit.NewConfigurableFromConfig(context.TODO(), map[string]any{"title": "garage", "maxPower": 7000, "parent": "main"})
+	require.NoError(t, err)
+	subCurrent, err := circuit.New(log, "carport", 16, 0, nil, 0)
+	require.NoError(t, err)
+	subLow, err := circuit.New(log, "low", 0, 1000, nil, 0)
+	require.NoError(t, err)
+	none, err := circuit.New(log, "none", 0, 0, nil, 0)
+	require.NoError(t, err)
+
+	cmax := func(c api.Circuit) (float32, float32) {
+		lp := &Loadpoint{log: log, circuit: c, phases: 3}
+		site := &Site{log: log, loadpoints: []*Loadpoint{lp}}
+		id := 0
+		batteries := []optimizerBattery{{
+			cfg:    optimizer.BatteryConfig{CMin: 1400, CMax: 22000},
+			detail: batteryDetail{Type: batteryTypeLoadpoint, loadpoint: &id},
+		}}
+		req := optimizer.OptimizationInput{TimeSeries: optimizer.TimeSeries{Dt: quarterHours(4)}}
+		site.applyLmOptimizerInputs(&req, batteries)
+		return batteries[0].cfg.CMin, batteries[0].cfg.CMax
+	}
+
+	_, got := cmax(subCurrent)
+	assert.Equal(t, float32(11040), got, "16 A on 3 phases")
+
+	_, got = cmax(subPower)
+	assert.Equal(t, float32(7000), got, "sub circuit power below the parent's 16 A")
+
+	cmin, got := cmax(subLow)
+	assert.Zero(t, cmin, "below the minimum power")
+	assert.Zero(t, got)
+
+	_, got = cmax(none)
+	assert.Equal(t, float32(22000), got, "no limit unchanged")
+
+	assert.Equal(t, 11040.0, circuitPower(subCurrent, 3))
+	assert.Zero(t, circuitPower(subCurrent, 0), "unknown phases: current not counted")
+}

@@ -15,8 +15,8 @@ package core
 //     room below the limit; where it starts later see site_optimizer_soc_pass.go
 //   - grid charging the load management currently refuses is not offered
 //     (charge_from_grid off)
-//   - load management: a loadpoint plans with at most its circuits' power, and
-//     the priorities rank the batteries (c_priority)
+//   - load management: a loadpoint plans with at most its circuits' power and
+//     current, and the priorities rank the batteries (c_priority)
 //   - snow on pv: no solar yield, see site_snow.go
 //   - a price tariff set as planner tariff is the grid price the optimizer
 //     plans with, statistics keep the grid tariff
@@ -122,8 +122,13 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 				continue
 			}
 
-			if power := circuitPower(lp.GetCircuit()); power > 0 && float32(power) < b.cfg.CMax && float32(power) >= b.cfg.CMin {
-				b.cfg.CMax = float32(power)
+			if power := circuitPower(lp.GetCircuit(), lp.MaxActivePhases()); power > 0 && float32(power) < b.cfg.CMax {
+				// below the minimum the circuit cannot charge it at all
+				if float32(power) < b.cfg.CMin {
+					b.cfg.CMin, b.cfg.CMax = 0, 0
+				} else {
+					b.cfg.CMax = float32(power)
+				}
 			}
 
 			b.cfg.CPriority = optimizerPriority(site.lmm().Priority(lp))
@@ -132,11 +137,17 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 }
 
 // circuitPower returns the lowest power limit of a circuit and its parents, 0
-// without any
-func circuitPower(c api.Circuit) float64 {
+// without any. A current limit counts with the phases the loadpoint charges on.
+func circuitPower(c api.Circuit, phases int) float64 {
 	var res float64
 	for ; c != nil; c = c.GetParent() {
-		if p := c.GetMaxPower(); p > 0 && (res == 0 || p < res) {
+		p := c.GetMaxPower()
+		if i := c.GetMaxCurrent(); i > 0 && phases > 0 && Voltage > 0 {
+			if pi := currentToPower(i, phases); p <= 0 || pi < p {
+				p = pi
+			}
+		}
+		if p > 0 && (res == 0 || p < res) {
 			res = p
 		}
 	}

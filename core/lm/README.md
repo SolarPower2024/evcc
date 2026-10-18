@@ -723,7 +723,7 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   pinned by `TestLmOptimizerScenarios/goal_soc_binds_from_step_1`.
 - grid charging refused right now (shed hold-off, unknown charge power on a
   circuit) is not offered (`charge_from_grid`).
-- load management: a loadpoint plans with at most its circuits' power,
+- load management: a loadpoint plans with at most its circuits' power and current,
   priorities 0-3/4-6/7-10 become `c_priority` 0/1/2.
 - snow on pv: the solar series is 0 while the switch is on, see [19](#19-snow-on-pv).
 - a price tariff set as planner tariff is the grid price the optimizer plans
