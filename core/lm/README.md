@@ -787,7 +787,8 @@ is older than an hour (without that attribute, e.g. from another source, the
 forecast counts as current) and data older than twice the interval give no rates
 and no error, so the instance's own forecast goes on alone. Each case is logged as a
 warning, at most every 15 minutes. The tariff is also created while the entity does
-not exist yet (the first read may stay empty); only a missing entity name or
+not exist yet; the constructor waits up to 10 s for the first read and then
+starts without rates (`TestHAForecastConstructorWait`), the data follow with the next cycle. Only a missing entity name or
 instance is a configuration error. If Home Assistant itself does not answer, the
 last data stays until it is outdated. Only entries from a day ago to a week ahead
 are taken, a longer entry only as far as that.

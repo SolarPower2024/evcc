@@ -47,6 +47,9 @@ const (
 	haForecastWarnEvery = 15 * time.Minute
 )
 
+// how long the constructor waits for the first read, a variable for the tests
+var haForecastWait = 10 * time.Second
+
 // errNoForecast marks a state of the entity that gives no forecast, as opposed to
 // a failed request
 var errNoForecast = errors.New("no forecast")
@@ -115,21 +118,21 @@ func NewHAForecastFromConfig(other map[string]any) (api.Tariff, error) {
 	}
 
 	// the first read may stay empty: the entity may not exist yet, the instance
-	// that writes it may start later. Wait for it a short time only.
-	done := make(chan struct{})
-	go t.run(cc.Interval, done)
+	// that writes it may start later. Wait for it haForecastWait at most, then
+	// start empty (Rates would block until the first Set otherwise); the loop sets
+	// the real data when it has them.
+	go t.run(cc.Interval)
 
 	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
+	case <-t.data.Done():
+	case <-time.After(haForecastWait):
+		t.data.Set(nil)
 	}
 
 	return t, nil
 }
 
-func (t *HAForecast) run(interval time.Duration, done chan struct{}) {
-	var once sync.Once
-
+func (t *HAForecast) run(interval time.Duration) {
 	for ; true; <-time.Tick(interval) {
 		var data api.Rates
 
@@ -159,8 +162,6 @@ func (t *HAForecast) run(interval time.Duration, done chan struct{}) {
 				t.data.Set(nil)
 			}
 		}
-
-		once.Do(func() { close(done) })
 	}
 }
 

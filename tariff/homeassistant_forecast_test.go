@@ -412,3 +412,33 @@ func TestHAForecastZones(t *testing.T) {
 		assert.Equal(t, float64(1000+100+i/4), r.Value, "slot %d at %v", i, r.Start)
 	}
 }
+
+// The constructor waits for the first read a limited time: with Home Assistant not
+// reachable it returns with no rates and no error, the loop fills in the data later.
+func TestHAForecastConstructorWait(t *testing.T) {
+	prevWait := haForecastWait
+	haForecastWait = 200 * time.Millisecond
+	t.Cleanup(func() { haForecastWait = prevWait })
+
+	body := fmt.Sprintf(`{"state":"1","attributes":{"forecast":[{"start":%q,"end":%q,"value":5}]}}`,
+		at(10, 0).Format(time.RFC3339), at(10, 15).Format(time.RFC3339))
+
+	h := haForecastServer(t, body)
+	h.set(``, http.StatusInternalServerError)
+
+	start := time.Now()
+	tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"interval": "100ms"}))
+	require.NoError(t, err)
+	assert.Less(t, time.Since(start), 2*time.Second)
+
+	rates, err := tr.Rates()
+	require.NoError(t, err)
+	assert.Empty(t, rates)
+
+	h.set(body, http.StatusOK)
+
+	assert.Eventually(t, func() bool {
+		rates, err := tr.Rates()
+		return err == nil && len(rates) == 1
+	}, 5*time.Second, 20*time.Millisecond)
+}
