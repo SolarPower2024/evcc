@@ -15,7 +15,6 @@ package core
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"slices"
 
@@ -284,7 +283,7 @@ func lmSolve(client *optimizer.ClientWithResponses, req optimizer.OptimizationIn
 		return nil, err
 	}
 	if resp.StatusCode() != http.StatusOK || resp.JSON200 == nil {
-		return nil, errors.New(resp.Status())
+		return nil, apiError(resp)
 	}
 	return resp.JSON200, nil
 }
@@ -292,7 +291,7 @@ func lmSolve(client *optimizer.ClientWithResponses, req optimizer.OptimizationIn
 // lmPlanValid reports whether a pass's plan is usable: solved, complete, and
 // the home battery within its bounds
 func lmPlanValid(req optimizer.OptimizationInput, home int, res *optimizer.OptimizationResult) bool {
-	if res == nil || (res.Status != optimizer.Optimal && res.Status != optimizer.Feasible) || len(res.Batteries) != len(req.Batteries) {
+	if !usableResult(res) || len(res.Batteries) != len(req.Batteries) {
 		return false
 	}
 	n := len(req.TimeSeries.Dt)

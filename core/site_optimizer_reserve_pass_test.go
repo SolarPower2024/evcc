@@ -460,3 +460,23 @@ func captureLog() (*util.Logger, *bytes.Buffer) {
 		Redactor: new(util.Redactor),
 	}, &out
 }
+
+// A failed further solve reports what the optimizer says about it.
+func TestLmSolveError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(optimizer.Error{Message: "invalid input", Details: map[string]string{"batteries.0.s_max": "too small"}})
+	}))
+	t.Cleanup(srv.Close)
+
+	client, err := optimizer.NewClientWithResponses(srv.URL)
+	require.NoError(t, err)
+
+	req, _, _ := floorCase()
+	res, err := lmSolve(client, *req)
+	assert.Nil(t, res)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid input")
+	assert.Contains(t, err.Error(), "batteries.0.s_max: too small")
+}
