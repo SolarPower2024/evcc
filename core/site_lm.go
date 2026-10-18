@@ -588,7 +588,7 @@ func (site *Site) GetBatterySocGridCharge() bool {
 
 // SetBatterySocGridCharge sets the soc-based grid charging switch
 func (site *Site) SetBatterySocGridCharge(val bool) error {
-	if !site.hasBatteryControl() {
+	if val && !site.hasBatteryControl() {
 		return ErrBatteryControlNotAvailable
 	}
 

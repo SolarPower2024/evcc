@@ -712,3 +712,36 @@ func TestChargeSetpointWindowStale(t *testing.T) {
 	assert.Equal(t, 3000.0, headroom)
 	assert.True(t, site.peakPausesGridCharge())
 }
+
+// TestPeakShavingOffWithoutBattery: turning off needs no battery, so clearing an
+// entity after the battery went away is no error; turning on still is
+func TestPeakShavingOffWithoutBattery(t *testing.T) {
+	noSettingsDB(t)
+	keepSettings(t)
+
+	site := &Site{log: util.NewLogger("test")}
+	s := site.peak()
+	s.enabled = true
+
+	require.NoError(t, site.SetPeakShaving(false))
+	assert.False(t, site.GetPeakShaving())
+	require.NoError(t, site.SetBatterySocGridCharge(false))
+
+	assert.ErrorIs(t, site.SetPeakShaving(true), ErrBatteryNotConfigured)
+	assert.ErrorIs(t, site.SetBatterySocGridCharge(true), ErrBatteryControlNotAvailable)
+
+	// clearing the entities ends up in SetPeakShaving(false)
+	s.entity = "number.target"
+	require.NoError(t, site.SetPeakShavingEntity(""))
+
+	s.batteryType = batteryTypeMarstek
+	s.protSwitch, s.protSoc = "switch.prot", "number.soc"
+	require.NoError(t, site.SetPeakShavingProtSwitch(""))
+	s.protSoc = "number.soc"
+	require.NoError(t, site.setProtNumber("", keys.PeakShavingProtSoc, &s.protSoc, &s.protSocSet))
+
+	assert.NotPanics(t, func() {
+		site.handBackPeak()
+		site.applyOmni()
+	})
+}

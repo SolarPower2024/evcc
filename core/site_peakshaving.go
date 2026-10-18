@@ -1149,7 +1149,8 @@ func (site *Site) GetPeakShaving() bool {
 }
 
 func (site *Site) SetPeakShaving(val bool) error {
-	if !site.batteryConfigured() {
+	// turning off needs no battery: clearing an entity ends up here without one
+	if val && !site.batteryConfigured() {
 		return ErrBatteryNotConfigured
 	}
 
