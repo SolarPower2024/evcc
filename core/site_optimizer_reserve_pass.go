@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/evcc-io/evcc/tariff"
 	"github.com/evcc-io/evcc/util/sponsor"
@@ -272,8 +273,8 @@ func (p lmPlan) floor(req *optimizer.OptimizationInput, home int, res *optimizer
 }
 
 // lmSolve runs a further pass
-func lmSolve(client *optimizer.ClientWithResponses, req optimizer.OptimizationInput) (*optimizer.OptimizationResult, error) {
-	resp, err := client.PostOptimizeChargeScheduleWithResponse(context.TODO(), req, func(_ context.Context, r *http.Request) error {
+func lmSolve(ctx context.Context, client *optimizer.ClientWithResponses, req optimizer.OptimizationInput) (*optimizer.OptimizationResult, error) {
+	resp, err := client.PostOptimizeChargeScheduleWithResponse(ctx, req, func(_ context.Context, r *http.Request) error {
 		if sponsor.IsAuthorizedForApi() {
 			r.Header.Set("Authorization", "Bearer "+sponsor.Token)
 		}
@@ -365,7 +366,7 @@ func withFloor(req optimizer.OptimizationInput, home int, plan lmPlan, floor, go
 
 // lmReservePass solves the plan again with the floor as the fork holds it,
 // see above. It returns the floor used, nil if the first plan stays.
-func (site *Site) lmReservePass(client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, home int, plan lmPlan, res *optimizer.OptimizationResult) []float32 {
+func (site *Site) lmReservePass(ctx context.Context, client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, home int, plan lmPlan, res *optimizer.OptimizationResult) []float32 {
 	if plan.target <= plan.devMin+1 {
 		return nil
 	}
@@ -375,9 +376,13 @@ func (site *Site) lmReservePass(client *optimizer.ClientWithResponses, req *opti
 		return nil
 	}
 
+	if site.lmBudgetUsed(ctx) {
+		return nil
+	}
+
 	goals := slices.Clone(req.Batteries[home].SGoal)
 	req2 := withFloor(*req, home, plan, floor, goals)
-	res2, err := lmSolve(client, req2)
+	res2, err := lmSolve(ctx, client, req2)
 	if err != nil || !lmPlanValid(req2, home, res2) {
 		site.log.DEBUG.Printf("optimizer: reserve pass: %v", passErr(err, res2))
 		return nil
@@ -394,9 +399,9 @@ func (site *Site) lmReservePass(client *optimizer.ClientWithResponses, req *opti
 	// one, once more with the floor it implies
 	if floor2 := plan.floor(&req2, home, res2); floor2 != nil {
 		s2 := res2.Batteries[home].StateOfCharge
-		if drifted(floor2, s2) {
+		if drifted(floor2, s2) && !site.lmBudgetUsed(ctx) {
 			req3 := withFloor(*req, home, plan, floor2, goals)
-			if res3, err := lmSolve(client, req3); err == nil && lmPlanValid(req3, home, res3) && sumOf(res3.GridImportOvershoot) <= over2+1 {
+			if res3, err := lmSolve(ctx, client, req3); err == nil && lmPlanValid(req3, home, res3) && sumOf(res3.GridImportOvershoot) <= over2+1 {
 				req2, res2, floor = req3, res3, floor2
 			} else {
 				site.log.DEBUG.Printf("optimizer: reserve pass recheck: %v", passErr(err, res3))
@@ -468,6 +473,19 @@ func usableResult(res *optimizer.OptimizationResult) bool {
 	return res != nil && (res.Status == optimizer.Optimal || res.Status == optimizer.Feasible)
 }
 
+// lmPassesTimeout is the time all passes together may take, each further solve
+// would otherwise wait up to the client timeout while the optimizer is locked
+var lmPassesTimeout = 2 * time.Minute
+
+// lmBudgetUsed reports whether the time for the passes is used up
+func (site *Site) lmBudgetUsed(ctx context.Context) bool {
+	if ctx.Err() == nil {
+		return false
+	}
+	site.log.DEBUG.Println("optimizer: pass skipped, time budget used")
+	return true
+}
+
 // lmOptimizerPasses runs the passes after the first solve: the reserve as
 // the fork holds it, then soc-based grid charging
 func (site *Site) lmOptimizerPasses(client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, details requestDetails, res *optimizer.OptimizationResult) {
@@ -492,8 +510,11 @@ func (site *Site) lmOptimizerPasses(client *optimizer.ClientWithResponses, req *
 	}
 
 	p := plan.coarse(req.TimeSeries.Dt)
-	floor := site.lmReservePass(client, req, home, p, res)
-	site.lmSocChargePass(client, req, home, p, floor, res)
+	ctx, cancel := context.WithTimeout(context.Background(), lmPassesTimeout)
+	defer cancel()
+
+	floor := site.lmReservePass(ctx, client, req, home, p, res)
+	site.lmSocChargePass(ctx, client, req, home, p, floor, res)
 }
 
 // coarse maps the grid goals onto the slots of the request: the plan is made on

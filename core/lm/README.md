@@ -737,6 +737,7 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   skipped, DEBUG line in the log).
 - every further solve is checked (solved, complete, battery within its bounds,
   not more over the limit), otherwise the plan before stays.
+  All passes together have 2 minutes, then no further solve starts.
 - the plan is solved again when soc-based grid charging starts or stops, and a
   forced run arriving during a run follows right after it.
 

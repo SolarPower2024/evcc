@@ -2,12 +2,14 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/util"
@@ -474,9 +476,49 @@ func TestLmSolveError(t *testing.T) {
 	require.NoError(t, err)
 
 	req, _, _ := floorCase()
-	res, err := lmSolve(client, *req)
+	res, err := lmSolve(context.Background(), client, *req)
 	assert.Nil(t, res)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid input")
 	assert.Contains(t, err.Error(), "batteries.0.s_max: too small")
+}
+
+// The passes share one time budget: a solve that takes longer ends them, the
+// plan before stays and no further solve starts.
+func TestLmOptimizerPassesTimeBudget(t *testing.T) {
+	prev := lmPassesTimeout
+	lmPassesTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { lmPassesTimeout = prev })
+
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	client, err := optimizer.NewClientWithResponses(srv.URL)
+	require.NoError(t, err)
+
+	req, res, plan := floorCase()
+	site := &Site{log: util.NewLogger("test")}
+	site.lms().plan = &plan
+	site.lms().socChargeEnabled, site.lms().socChargeStart, site.lms().socChargeStop = true, 20, 80
+
+	start := time.Now()
+	site.lmOptimizerPasses(client, req, requestDetails{BatteryDetails: []batteryDetail{{Type: batteryTypeBattery}}}, res)
+
+	assert.Less(t, time.Since(start), 2*time.Second, "returns within the budget")
+	assert.EqualValues(t, 1, calls.Load(), "the soc pass does not solve any more")
+	want, wantRes, _ := floorCase()
+	assert.Equal(t, want.Batteries[0], req.Batteries[0], "request unchanged")
+	assert.Equal(t, wantRes.Batteries[0], res.Batteries[0], "plan unchanged")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	assert.True(t, site.lmBudgetUsed(ctx))
+	assert.False(t, site.lmBudgetUsed(context.Background()))
 }

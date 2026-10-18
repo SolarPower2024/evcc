@@ -17,6 +17,8 @@ package core
 // is up to the optimizer. Only the plan changes, nothing is switched.
 
 import (
+	"context"
+
 	optimizer "github.com/evcc-io/optimizer/client"
 )
 
@@ -157,9 +159,9 @@ func socPassGoals(goals []float32, k, g int, stop float32, levels, floor []float
 // reaches the start soc of soc-based grid charging and joins both plans. The
 // goals are added to the request, so the published request shows them. On any
 // error the plan before stays.
-func (site *Site) lmSocChargePass(client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, home int, plan lmPlan, floor []float32, res *optimizer.OptimizationResult) {
+func (site *Site) lmSocChargePass(ctx context.Context, client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, home int, plan lmPlan, floor []float32, res *optimizer.OptimizationResult) {
 	k, stop := site.socPassStart(req, home, res)
-	if k < 0 {
+	if k < 0 || site.lmBudgetUsed(ctx) {
 		return
 	}
 
@@ -182,7 +184,7 @@ func (site *Site) lmSocChargePass(client *optimizer.ClientWithResponses, req *op
 	}
 	b.SGoal = socPassGoals(b.SGoal, k, g, stop, levels, floor, plan.target)
 
-	res2, err := lmSolve(client, req2)
+	res2, err := lmSolve(ctx, client, req2)
 	if err != nil || !lmPlanValid(req2, home, res2) {
 		site.log.DEBUG.Printf("optimizer: soc grid charge pass: %v", passErr(err, res2))
 		return
