@@ -1123,6 +1123,9 @@ repository):
   the ui checks (format, lint, types, i18n, vitest, build) and a shuffled run
   that reports but does not block.
 - `custom-image.yml` builds an add-on image from a tag only after these passed.
+  All three fork workflows use actions at pinned commits (same versions as
+  evcc's own workflows, comment with the tag); the image build checks out without
+  stored credentials.
 - `upstream-check.yml` daily at noon (10:00 UTC): fetches evcc's release tags
   read only and runs the review `.github/upstream-check/review.mjs` into the
   issue *evcc-Update-Check* for the newest release: a) the commits by area and
