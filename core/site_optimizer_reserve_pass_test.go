@@ -296,6 +296,19 @@ func TestLmOptimizerPasses(t *testing.T) {
 		first(t, req, res)
 	})
 
+	t.Run("short result", func(t *testing.T) {
+		client, calls := fakeOptimizer(t, http.StatusOK, covered)
+		req, res, plan := floorCase()
+		res.Batteries[0].StateOfCharge = res.Batteries[0].StateOfCharge[:3]
+		res.Batteries[0].ChargingPower = res.Batteries[0].ChargingPower[:3]
+		site := &Site{log: util.NewLogger("test")}
+		site.lms().plan = &plan
+		require.NotPanics(t, func() { site.lmOptimizerPasses(client, req, details, res) })
+		assert.Zero(t, calls.Load())
+		want, _, _ := floorCase()
+		assert.Equal(t, want.Batteries[0], req.Batteries[0], "request unchanged")
+	})
+
 	t.Run("two home batteries", func(t *testing.T) {
 		client, calls := fakeOptimizer(t, http.StatusOK, covered)
 		two := requestDetails{BatteryDetails: []batteryDetail{{Type: batteryTypeBattery}, {Type: batteryTypeBattery}}}

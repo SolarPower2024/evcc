@@ -486,6 +486,12 @@ func (site *Site) lmOptimizerPasses(client *optimizer.ClientWithResponses, req *
 		return
 	}
 
+	// the passes index the result by step: a short or odd first result ends them
+	if !lmPlanValid(*req, home, res) {
+		site.log.DEBUG.Println("optimizer: passes skipped, first result is not a usable plan")
+		return
+	}
+
 	p := plan.coarse(req.TimeSeries.Dt)
 	floor := site.lmReservePass(client, req, home, p, res)
 	site.lmSocChargePass(client, req, home, p, floor, res)
