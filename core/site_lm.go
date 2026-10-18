@@ -166,7 +166,7 @@ func (site *Site) restoreLmSettings() {
 	}
 
 	var prios map[string]int
-	if err := settings.Json(keys.LmPriorities, &prios); err == nil {
+	if restoreJson(site.log, keys.LmPriorities, &prios) {
 		s.mu.Lock()
 		s.prios = prios
 		s.mu.Unlock()

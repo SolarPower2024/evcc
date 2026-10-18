@@ -104,7 +104,7 @@ func (t peakTariff) months(months []peakMonth) []peakTariffMonth {
 // restorePeakTariff loads the capacity tariff, after the peak statistics
 func (site *Site) restorePeakTariff() {
 	var t peakTariff
-	if err := settings.Json(keys.PeakTariff, &t); err == nil {
+	if restoreJson(site.log, keys.PeakTariff, &t) {
 		s := site.peak()
 		s.mu.Lock()
 		s.tariff = t

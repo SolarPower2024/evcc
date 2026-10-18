@@ -80,7 +80,9 @@ func TestApplyLmProfile(t *testing.T) {
 	require.NoError(t, site.DeleteLmProfile(summer.ID))
 	active, _ = settings.String(keys.LmProfileActive)
 	assert.Empty(t, active)
-	assert.Len(t, lmProfiles(), 2)
+	profiles, err := lmProfilesLoad()
+	require.NoError(t, err)
+	assert.Len(t, profiles, 2)
 
 	assert.Error(t, site.ApplyLmProfile("unknown"))
 	_, err = site.SaveLmProfile(profile.Profile{Name: "Wallbox", SolarShare: map[string]float64{"db:99": 50}})

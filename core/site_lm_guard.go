@@ -30,7 +30,7 @@ func (site *Site) restoreLmGuard() {
 	}
 
 	var names []string
-	if err := settings.Json(keys.LmShedProtected, &names); err == nil {
+	if restoreJson(site.log, keys.LmShedProtected, &names) {
 		s.mu.Lock()
 		s.guarded = make(map[string]bool, len(names))
 		for _, name := range names {

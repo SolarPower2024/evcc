@@ -971,6 +971,13 @@ Every fork feature follows these, so taking in a new evcc version stays cheap:
    on, and that the fork is inert while unused; `TestForkHooksInPlace` checks
    that every hook is still in place, see [Tests](#tests).
 
+5. **Unreadable stored values are kept.** A json setting that cannot be read at
+   start (`core/site_restore.go`) falls back to its default, is logged once as
+   error and its raw value is saved under `<key>Invalid` (one copy per key, only
+   replaced by a later invalid value, never deleted). `lmAdvanced` is read field
+   by field, so one wrong field does not lose the others. Profiles are not saved
+   or deleted while the stored list is unreadable.
+
 ## Upstream touch points
 
 Every change in an evcc file. Check these when merging a new evcc version.
@@ -1014,7 +1021,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 | Area | Files |
 | --- | --- |
-| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_switch.go`, `core/site_lm_advanced.go`, `core/circuit/circuit_custom.go` |
+| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_switch.go`, `core/site_lm_advanced.go`, `core/site_restore.go`, `core/site_lm_dropped.go`, `core/circuit/circuit_custom.go` |
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |

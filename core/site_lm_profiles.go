@@ -24,15 +24,22 @@ import (
 // lmMaxProfiles keeps the battery page's selection manageable
 const lmMaxProfiles = 10
 
-// lmProfiles returns the stored profiles
-func lmProfiles() []profile.Profile {
+// lmProfilesLoad returns the stored profiles. A value that cannot be read is an
+// error: saving on top of it would replace the unreadable list with one entry.
+func lmProfilesLoad() ([]profile.Profile, error) {
 	var res []profile.Profile
-	_ = settings.Json(keys.LmProfiles, &res)
-	return res
+	if err := settings.Json(keys.LmProfiles, &res); err != nil && !errors.Is(err, settings.ErrNotFound) {
+		return nil, fmt.Errorf("stored profiles unreadable (kept as %s%s): %w", keys.LmProfiles, invalidSuffix, err)
+	}
+	return res, nil
 }
 
 func (site *Site) publishLmProfiles() {
-	profiles := lmProfiles()
+	profiles, err := lmProfilesLoad()
+	if err != nil {
+		site.log.ERROR.Printf("profiles: %v", err)
+		keepInvalid(keys.LmProfiles)
+	}
 	if profiles == nil {
 		profiles = []profile.Profile{}
 	}
@@ -57,7 +64,10 @@ func (site *Site) SaveLmProfile(p profile.Profile) (profile.Profile, error) {
 		}
 	}
 
-	profiles := lmProfiles()
+	profiles, err := lmProfilesLoad()
+	if err != nil {
+		return p, err
+	}
 
 	if p.ID == "" {
 		if len(profiles) >= lmMaxProfiles {
@@ -85,7 +95,10 @@ func (site *Site) SaveLmProfile(p profile.Profile) (profile.Profile, error) {
 
 // DeleteLmProfile deletes a profile
 func (site *Site) DeleteLmProfile(id string) error {
-	profiles := lmProfiles()
+	profiles, err := lmProfilesLoad()
+	if err != nil {
+		return err
+	}
 
 	i := slices.IndexFunc(profiles, func(e profile.Profile) bool { return e.ID == id })
 	if i < 0 {
@@ -111,7 +124,10 @@ func (site *Site) DeleteLmProfile(id string) error {
 // fails and reports all failures; the profile only counts as active when every
 // value was applied.
 func (site *Site) ApplyLmProfile(id string) error {
-	profiles := lmProfiles()
+	profiles, err := lmProfilesLoad()
+	if err != nil {
+		return err
+	}
 
 	i := slices.IndexFunc(profiles, func(e profile.Profile) bool { return e.ID == id })
 	if i < 0 {

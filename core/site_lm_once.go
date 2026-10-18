@@ -93,7 +93,7 @@ func (site *Site) setGridChargeOnce(o gridChargeOnce) {
 // restoreGridChargeOnce continues a one-time grid charge across a restart
 func (site *Site) restoreGridChargeOnce() {
 	var o gridChargeOnce
-	if err := settings.Json(keys.BatteryGridChargeOnce, &o); err == nil {
+	if restoreJson(site.log, keys.BatteryGridChargeOnce, &o) {
 		s := site.lms()
 		s.mu.Lock()
 		s.gridOnce = o

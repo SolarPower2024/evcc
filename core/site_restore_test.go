@@ -1,117 +1,127 @@
 package core
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
-	"github.com/evcc-io/evcc/api"
-	"github.com/evcc-io/evcc/core/circuit"
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/core/lm/profile"
 	"github.com/evcc-io/evcc/db/settings"
-	"github.com/evcc-io/evcc/util"
-	"github.com/evcc-io/evcc/util/config"
-	"github.com/evcc-io/evcc/util/logstash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestRestoreCustomAfterRestart: every fork setting set through the api is
-// back after a restart, read by restoreCustom as evcc's restoreSettings calls
-// it. The Home Assistant entities are stored as such; without a Home Assistant
-// connection in the test their outputs stay unresolved, the names are kept.
-func TestRestoreCustomAfterRestart(t *testing.T) {
+// restoreTestSite returns a site with a log that is read back
+func restoreTestSite(t *testing.T) (*Site, *bytes.Buffer) {
+	t.Helper()
 	noSettingsDB(t)
-	keepSettings(t)
-	config.Reset()
-	t.Cleanup(config.Reset)
+	site := newScenario(t).site
+	buf := new(bytes.Buffer)
+	site.log = testLogger(buf)
+	return site, buf
+}
 
-	useLogFileDir(t)
+// TestRestoreUnreadableJson: every json setting that cannot be read falls back to
+// its default, is logged once and kept as <key>Invalid
+func TestRestoreUnreadableJson(t *testing.T) {
+	const raw = `{"broken`
 
-	main, err := circuit.New(util.NewLogger("test"), "main", 0, 10000, nil, 0)
-	require.NoError(t, err)
-	require.NoError(t, config.Circuits().Add(config.NewStaticDevice(config.Named{Name: "main"}, api.Circuit(main))))
-
-	newSite := func() *Site {
-		return &Site{
-			log:           util.NewLogger("test"),
-			batteryMeters: []config.Device[api.Meter]{config.NewStaticDevice(config.Named{Name: "bat"}, api.Meter(&scenarioBattery{}))},
-		}
+	restores := map[string]func(*Site){
+		keys.LmAdvanced:            (*Site).restoreLmAdvanced,
+		keys.LmProfiles:            (*Site).publishLmProfiles,
+		keys.PeakMonths:            (*Site).restorePeakMonths,
+		keys.PeakTariff:            (*Site).restorePeakTariff,
+		keys.LmShedProtected:       (*Site).restoreLmGuard,
+		keys.LmPriorities:          (*Site).restoreLmSettings,
+		keys.BatteryGridChargeOnce: (*Site).restoreGridChargeOnce,
 	}
 
-	a := newSite()
-	require.NoError(t, a.SetBatterySocGridCharge(true))
-	require.NoError(t, a.SetBatterySocGridChargeStart(25))
-	require.NoError(t, a.SetBatterySocGridChargeStop(85))
-	require.NoError(t, a.SetLmShedGuard(10))
-	require.NoError(t, a.SetLmCircuit("main"))
-	require.NoError(t, a.SetLmEnabled(false))
-	require.NoError(t, a.SetBatteryIdentUse(true))
-	require.NoError(t, a.SetLmAdvanced("hysteresis", 3))
-	require.NoError(t, a.SetLmAdvanced("circuitFromPeak", 1))
-	require.NoError(t, a.SetPeakShavingLimit(7000))
-	require.NoError(t, a.SetPeakShavingReserve(40))
-	require.NoError(t, a.SetPeakShavingChargePower(4000))
-	require.NoError(t, a.SetPeakShavingCircuit("main"))
-	require.NoError(t, a.SetPeakFollowBuffer(1000))
-	require.NoError(t, a.SetPeakFollow(true))
-	require.NoError(t, a.SetPeakTariff("price", 40))
-	require.NoError(t, a.SetLogFile(logstash.FileConfig{Enabled: true, Level: "info", Days: 30}))
-	require.NoError(t, a.SetSnowCover(true))
-	require.NoError(t, a.SetSnowAuto(true))
+	for key, restore := range restores {
+		t.Run(key, func(t *testing.T) {
+			site, buf := restoreTestSite(t)
+			settings.SetString(key, raw)
 
-	// set through Home Assistant in the ui, stored as names
-	settings.SetString(keys.PeakShavingEntity, "input_number.peak")
-	settings.SetString(keys.PeakShavingChargeEntity, "input_number.charge")
-	settings.SetString(keys.PeakShavingEnergyEntity, "sensor.grid_import")
-	settings.SetString(keys.FeedInEegEntity, "sensor.eeg_export")
-	settings.SetBool(keys.PeakShaving, true)
-	settings.SetBool(keys.PeakShavingOwned, true)
-	settings.SetString(keys.PeakShavingBatteryType, "marstek")
-	settings.SetString(keys.PeakShavingManualEntity, "switch.marstek_manual")
-	settings.SetString(keys.PeakShavingModeEntity, "select.marstek_mode")
-	settings.SetString(keys.PeakShavingProtSwitch, "switch.marstek_prot")
-	settings.SetString(keys.PeakShavingProtLimit, "number.marstek_prot_limit")
-	settings.SetString(keys.PeakShavingProtSoc, "number.marstek_prot_soc")
-	settings.SetBool(keys.PeakShavingProtOwned, true)
+			restore(site)
 
-	b := newSite()
-	b.restoreCustom()
+			assert.Equal(t, 1, strings.Count(buf.String(), "ERROR"), buf.String())
+			kept, err := settings.String(key + "Invalid")
+			require.NoError(t, err)
+			assert.Equal(t, raw, kept)
 
-	// a meter outage is counted from the start, see peakCheckMeters
-	assert.False(t, b.peak().updated.IsZero())
+			// the value stays as it was, only a new valid value replaces the key;
+			// the priorities are rewritten at start (unifyLmPriorities), the copy keeps the raw value
+			if key != keys.LmPriorities {
+				stored, _ := settings.String(key)
+				assert.Equal(t, raw, stored)
+			}
+		})
+	}
+}
 
-	assert.True(t, b.GetBatterySocGridCharge())
-	assert.Equal(t, 25.0, b.GetBatterySocGridChargeStart())
-	assert.Equal(t, 85.0, b.GetBatterySocGridChargeStop())
-	assert.Equal(t, 10, b.GetLmShedGuard())
-	assert.Equal(t, "main", b.GetLmCircuit())
-	assert.False(t, b.GetLmEnabled())
-	assert.True(t, b.GetBatteryIdentUse())
-	assert.Equal(t, 3.0, b.peakHysteresisSetting())
-	assert.True(t, b.advanced().CircuitFromPeak)
-	assert.Equal(t, 0.0, b.peakHysteresis(), "none for Marstek")
-	assert.Equal(t, 7000.0, b.GetPeakShavingLimit(), "the base, not a followed limit")
-	assert.Equal(t, 40.0, b.GetPeakShavingReserve())
-	assert.Equal(t, 4000.0, b.GetPeakShavingChargePower())
-	assert.Equal(t, "main", b.GetPeakShavingCircuit())
-	assert.True(t, b.GetPeakFollow())
-	assert.Equal(t, 1000.0, b.GetPeakFollowBuffer())
-	assert.Equal(t, 40.0, b.peak().tariff.Price)
-	assert.True(t, b.GetPeakShaving())
-	assert.True(t, b.peakOwned())
-	assert.Equal(t, "marstek", b.GetPeakShavingBatteryType())
-	assert.Equal(t, "switch.marstek_manual", b.GetPeakShavingManualEntity())
-	assert.Equal(t, "select.marstek_mode", b.GetPeakShavingModeEntity())
-	assert.Equal(t, "switch.marstek_prot", b.GetPeakShavingProtSwitch())
-	assert.Equal(t, "number.marstek_prot_limit", b.GetPeakShavingProtLimit())
-	assert.Equal(t, "number.marstek_prot_soc", b.GetPeakShavingProtSoc())
-	assert.True(t, b.peak().protOwned)
-	assert.Equal(t, "input_number.peak", b.GetPeakShavingEntity())
-	assert.Equal(t, "input_number.charge", b.GetPeakShavingChargeEntity())
-	assert.Equal(t, "sensor.grid_import", b.GetPeakShavingEnergyEntity())
-	assert.Equal(t, "sensor.eeg_export", b.GetFeedInEegEntity())
-	assert.True(t, b.LogFile().Enabled)
-	assert.Equal(t, "info", b.LogFile().Level)
-	assert.Equal(t, 30, b.LogFile().Days)
-	assert.True(t, b.GetSnowCover())
-	assert.True(t, b.GetSnowAuto())
+// TestRestoreFreshDatabase: nothing stored, nothing logged, nothing kept
+func TestRestoreFreshDatabase(t *testing.T) {
+	site, buf := restoreTestSite(t)
+
+	site.restoreLmSettings()
+	site.restorePeakMonths()
+	site.restorePeakTariff()
+	site.publishLmProfiles()
+
+	assert.NotContains(t, buf.String(), "ERROR")
+	for _, s := range settings.All() {
+		assert.False(t, strings.HasSuffix(s.Key, invalidSuffix), s.Key)
+	}
+}
+
+// TestRestoreLaterSaveKeepsInvalidCopy: a value saved after an unreadable one
+// replaces the key and leaves the copy
+func TestRestoreLaterSaveKeepsInvalidCopy(t *testing.T) {
+	site, _ := restoreTestSite(t)
+	settings.SetString(keys.PeakTariff, "nope")
+
+	site.restorePeakTariff()
+	require.NoError(t, settings.SetJson(keys.PeakTariff, peakTariff{Price: 5}))
+
+	kept, _ := settings.String(keys.PeakTariff + invalidSuffix)
+	assert.Equal(t, "nope", kept)
+
+	var t2 peakTariff
+	require.NoError(t, settings.Json(keys.PeakTariff, &t2))
+	assert.Equal(t, 5.0, t2.Price)
+}
+
+// TestRestoreLmAdvancedKeepsGoodFields: a field of the wrong type does not take the others along
+func TestRestoreLmAdvancedKeepsGoodFields(t *testing.T) {
+	site, buf := restoreTestSite(t)
+	settings.SetString(keys.LmAdvanced, `{"holdOff":15,"timeout":"x","peakCap":3}`)
+
+	site.restoreLmAdvanced()
+
+	adv := site.advanced()
+	require.NotNil(t, adv.HoldOff)
+	assert.Equal(t, 15.0, *adv.HoldOff)
+	require.NotNil(t, adv.PeakCap)
+	assert.Equal(t, 3.0, *adv.PeakCap)
+	assert.Nil(t, adv.Timeout)
+
+	assert.Equal(t, 1, strings.Count(buf.String(), "ERROR"), buf.String())
+	kept, err := settings.String(keys.LmAdvanced + invalidSuffix)
+	require.NoError(t, err)
+	assert.Contains(t, kept, `"timeout":"x"`)
+}
+
+// TestSaveLmProfileUnreadableList: saving or deleting on top of an unreadable list
+// fails and leaves the raw value
+func TestSaveLmProfileUnreadableList(t *testing.T) {
+	site, _ := restoreTestSite(t)
+	settings.SetString(keys.LmProfiles, `[{"id":`)
+
+	_, err := site.SaveLmProfile(profile.Profile{Name: "Neu", Icon: "sun", GridCharge: bp(false)})
+	assert.Error(t, err)
+	assert.Error(t, site.DeleteLmProfile("x"))
+	assert.Error(t, site.ApplyLmProfile("x"))
+
+	raw, _ := settings.String(keys.LmProfiles)
+	assert.Equal(t, `[{"id":`, raw)
 }

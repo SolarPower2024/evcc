@@ -31,7 +31,7 @@ func (site *Site) restorePeakMonths() {
 	s := site.peak()
 
 	var months []peakMonth
-	if err := settings.Json(keys.PeakMonths, &months); err == nil {
+	if restoreJson(site.log, keys.PeakMonths, &months) {
 		s.mu.Lock()
 		s.months = months
 		s.mu.Unlock()

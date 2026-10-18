@@ -93,8 +93,7 @@ var lmAdvancedLimits = map[string]lmAdvancedLimit{
 func (site *Site) restoreLmAdvanced() {
 	s := site.lms()
 
-	var adv lmAdvanced
-	if err := settings.Json(keys.LmAdvanced, &adv); err == nil {
+	if adv, ok := restoreLmAdvancedValue(site.log); ok {
 		s.advMu.Lock()
 		s.adv = adv
 		s.advMu.Unlock()
