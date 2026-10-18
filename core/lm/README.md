@@ -305,8 +305,9 @@ applies. Survives a restart halfway.
 off, right away or by a time at the cheapest slots before it (evcc's planner on
 the planner tariff; right away once the time passed or the duration is
 unknown, but an order more than 2 h past its time is ended, also after a
-restart). Cancelled when the battery is removed. A round power button starts it
-(outlined) and stops it (filled while running). See `core/site_lm_once.go`.
+restart). Cancelled when the battery is removed. A switch in front of the
+sentence starts and stops it; the last chosen soc is stored and preset for the
+next start. See `core/site_lm_once.go`.
 
 Both pass the same gate as price-based grid charging: the circuit
 ([2](#2-battery-in-load-management)) and a running peak
