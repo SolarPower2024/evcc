@@ -93,7 +93,7 @@ func (site *Site) setGridChargeOnce(o gridChargeOnce) {
 // restoreGridChargeOnce continues a one-time grid charge across a restart
 func (site *Site) restoreGridChargeOnce() {
 	var o gridChargeOnce
-	if err := settings.Json(keys.BatteryGridChargeOnce, &o); err == nil {
+	if restoreJson(site.log, keys.BatteryGridChargeOnce, &o) && site.onceTargetValid(o) {
 		s := site.lms()
 		s.mu.Lock()
 		s.gridOnce = o
@@ -114,14 +114,23 @@ func (site *Site) endExpiredGridChargeOnce() {
 	site.setGridChargeOnce(gridChargeOnce{})
 }
 
+// validOnceTarget checks the target soc of an order. Stored, 0 stands for no
+// order and is fine as well, see restoreGridChargeOnce.
+func validOnceTarget(target float64) error {
+	if target < 1 || target > 100 {
+		return errors.New("target soc must be between 1 and 100")
+	}
+	return nil
+}
+
 // SetBatteryGridChargeOnce starts one-time grid charging up to target soc, right
 // away with a zero until, else at the cheapest slots before until
 func (site *Site) SetBatteryGridChargeOnce(target float64, until time.Time) error {
 	if !site.batteryConfigured() {
 		return errors.New("battery not configured")
 	}
-	if target < 1 || target > 100 {
-		return errors.New("target soc must be between 1 and 100")
+	if err := validOnceTarget(target); err != nil {
+		return err
 	}
 	if soc := site.GetBatterySoc(); target <= soc {
 		return fmt.Errorf("battery is already at %.0f%%", soc)

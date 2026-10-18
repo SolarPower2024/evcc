@@ -17,6 +17,7 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm/profile"
+	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/config"
 )
@@ -24,15 +25,27 @@ import (
 // lmMaxProfiles keeps the battery page's selection manageable
 const lmMaxProfiles = 10
 
-// lmProfiles returns the stored profiles
-func lmProfiles() []profile.Profile {
+// lmProfilesLoad returns the stored profiles. A value that cannot be read is an
+// error: saving on top of it would replace the unreadable list with one entry.
+func lmProfilesLoad() ([]profile.Profile, error) {
 	var res []profile.Profile
-	_ = settings.Json(keys.LmProfiles, &res)
-	return res
+	if err := settings.Json(keys.LmProfiles, &res); err != nil && !errors.Is(err, settings.ErrNotFound) {
+		return nil, fmt.Errorf("stored profiles unreadable (kept as %s%s): %w", keys.LmProfiles, invalidSuffix, err)
+	}
+	return res, nil
 }
 
+// restoreLmProfiles checks the stored profiles at start: an unreadable list is
+// logged once and kept as lmProfilesInvalid, then published as empty
+func (site *Site) restoreLmProfiles() {
+	var profiles []profile.Profile
+	restoreJson(site.log, keys.LmProfiles, &profiles)
+	site.publishLmProfiles()
+}
+
+// publishLmProfiles publishes the stored profiles, empty if the list is unreadable
 func (site *Site) publishLmProfiles() {
-	profiles := lmProfiles()
+	profiles, _ := lmProfilesLoad()
 	if profiles == nil {
 		profiles = []profile.Profile{}
 	}
@@ -57,7 +70,17 @@ func (site *Site) SaveLmProfile(p profile.Profile) (profile.Profile, error) {
 		}
 	}
 
-	profiles := lmProfiles()
+	// a new profile is the way out of an unreadable list: the raw value is kept
+	// as lmProfilesInvalid, the list starts over with this profile
+	profiles, err := lmProfilesLoad()
+	if err != nil {
+		if p.ID != "" {
+			return p, err
+		}
+		keepInvalid(keys.LmProfiles)
+		site.log.WARN.Printf("profiles: replacing unreadable list: %v", err)
+		profiles = nil
+	}
 
 	if p.ID == "" {
 		if len(profiles) >= lmMaxProfiles {
@@ -85,7 +108,10 @@ func (site *Site) SaveLmProfile(p profile.Profile) (profile.Profile, error) {
 
 // DeleteLmProfile deletes a profile
 func (site *Site) DeleteLmProfile(id string) error {
-	profiles := lmProfiles()
+	profiles, err := lmProfilesLoad()
+	if err != nil {
+		return err
+	}
 
 	i := slices.IndexFunc(profiles, func(e profile.Profile) bool { return e.ID == id })
 	if i < 0 {
@@ -111,7 +137,10 @@ func (site *Site) DeleteLmProfile(id string) error {
 // fails and reports all failures; the profile only counts as active when every
 // value was applied.
 func (site *Site) ApplyLmProfile(id string) error {
-	profiles := lmProfiles()
+	profiles, err := lmProfilesLoad()
+	if err != nil {
+		return err
+	}
 
 	i := slices.IndexFunc(profiles, func(e profile.Profile) bool { return e.ID == id })
 	if i < 0 {
@@ -222,28 +251,40 @@ func (site *Site) applyProfileBatteryUsage(p profile.Profile, add func(string, e
 	}
 }
 
-// lmCheckWallbox checks that a loadpoint exists and is not a heating device
-func lmCheckWallbox(name string) error {
+// lmRunningWallbox returns the loadpoint if it exists, is running and is not a heating
+// device. A disabled loadpoint has no instance.
+func lmRunningWallbox(name string) (loadpoint.API, error) {
 	dev, err := config.Loadpoints().ByName(name)
 	if err != nil {
-		return fmt.Errorf("unknown loadpoint: %s", name)
+		return nil, fmt.Errorf("unknown loadpoint: %s", name)
 	}
 
-	if lp, ok := dev.Instance().(*Loadpoint); ok && lp.chargerHasFeature(api.Heating) {
-		return fmt.Errorf("%s is a heating device", name)
+	lp := dev.Instance()
+	if lp == nil {
+		return nil, fmt.Errorf("loadpoint %s is disabled", name)
 	}
 
-	return nil
+	if lp, ok := lp.(*Loadpoint); ok && lp.chargerHasFeature(api.Heating) {
+		return nil, fmt.Errorf("%s is a heating device", name)
+	}
+
+	return lp, nil
+}
+
+// lmCheckWallbox checks that a loadpoint exists, is running and is not a heating device
+func lmCheckWallbox(name string) error {
+	_, err := lmRunningWallbox(name)
+	return err
 }
 
 // lmSetSolarShare sets a wallbox's solar share, given in %
 func lmSetSolarShare(name string, percent float64) error {
-	if err := lmCheckWallbox(name); err != nil {
+	lp, err := lmRunningWallbox(name)
+	if err != nil {
 		return err
 	}
 
-	dev, _ := config.Loadpoints().ByName(name)
-	dev.Instance().SetSolarShare(percent / 100)
+	lp.SetSolarShare(percent / 100)
 
 	return nil
 }

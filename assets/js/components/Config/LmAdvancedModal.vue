@@ -404,7 +404,7 @@ export default {
 			const values = {};
 			FIELDS.forEach((f) => (values[f.name] = state[f.name] ?? f.default));
 			values.phases = state.phases ?? 3;
-			values.homeForecast = state.homeForecast ?? (state.homeWeekday ? 1 : 0);
+			values.homeForecast = state.homeForecast ?? 0;
 
 			this.saving = false;
 			this.error = "";

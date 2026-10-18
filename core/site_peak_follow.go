@@ -34,14 +34,14 @@ func (site *Site) restorePeakFollow() {
 
 	s.mu.Lock()
 	s.followBuffer = defaultPeakFollowBuffer
-	if v, err := settings.Float(keys.PeakFollowBuffer); err == nil {
+	if v, ok := restoreFloat(site.log, keys.PeakFollowBuffer, validFollowBuffer); ok {
 		s.followBuffer = v
 	}
 	if v, err := settings.Bool(keys.PeakFollow); err == nil {
 		s.follow = v
 	}
 	s.followBase = s.limit
-	if v, err := settings.Float(keys.PeakFollowBase); err == nil && v > 0 {
+	if v, ok := restoreFloat(site.log, keys.PeakFollowBase, validPeakLimit); ok {
 		s.followBase = v
 	}
 	s.mu.Unlock()
@@ -185,10 +185,18 @@ func (site *Site) GetPeakFollowBuffer() float64 {
 	return s.followBuffer
 }
 
-// SetPeakFollowBuffer sets how far below the month's peak the limit stays
-func (site *Site) SetPeakFollowBuffer(buffer float64) error {
+// validFollowBuffer checks how far below the month's peak the limit stays
+func validFollowBuffer(buffer float64) error {
 	if buffer < 0 || buffer > maxPeakFollowBuffer || math.Mod(buffer, peakFollowStep) != 0 {
 		return fmt.Errorf("buffer must be between 0 and %.0f W in steps of %.0f W", maxPeakFollowBuffer, peakFollowStep)
+	}
+	return nil
+}
+
+// SetPeakFollowBuffer sets how far below the month's peak the limit stays
+func (site *Site) SetPeakFollowBuffer(buffer float64) error {
+	if err := validFollowBuffer(buffer); err != nil {
+		return err
 	}
 
 	s := site.peak()

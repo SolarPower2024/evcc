@@ -472,7 +472,7 @@ metered from their start count, kept for 24 months (`peakMonths`,
 battery gave to the house, not what it fed into the grid (`TestMeterCompleted`;
 with a counter an approximation, as the import counter knows no export). Each month also keeps its baseline, the highest
 limit set by hand in it (the base while following the peak); months from before
-get the current one at the start. The dialog shows the current month in two
+get the current one at the start. A month is looked up, never assumed to be the first entry; one entered late (a window of the month before) is put in its place with no baseline, and a list with a month twice is merged at start. The dialog shows the current month in two
 tiles (highest quarter hour with and without the battery next to each other
 and the limit; the month's saving, the total since the first month and the
 interventions), below one row per month.
@@ -611,7 +611,7 @@ battery usage (priority, buffer and buffer start soc, discharge lock), peak
 shaving (on/off, reserve, limit) and each wallbox's solar share; values not
 ticked are left alone. Applied through the regular setters; priority, buffer
 and buffer start soc are checked together and set bottom up, as evcc checks
-each against the other two. Type in `core/lm/profile`, the rest in
+each against the other two. A disabled loadpoint has no instance: its solar share is refused with an error, the other values still apply. Type in `core/lm/profile`, the rest in
 `core/site_lm_profiles.go`.
 
 ```
@@ -815,7 +815,7 @@ values are not stored, so a changed default applies.
 | `peakCap` | allowed grid power at most × limit | 2 | 1-10 |
 | `followCycles` | cycles until a load not following is ignored | 3 | 0-20, 0 = off |
 | `gridChargeWindow` | hours to reach the stop soc in the plan | 3 | 1-24 |
-| `homeForecast` | home forecast: evcc, per weekday, manual | 0 | 0-2 |
+| `homeForecast` | home forecast: evcc, per weekday, manual. The old name `homeWeekday` (0/1) is still accepted; a stored `homeWeekday` moves into `homeForecast` at start | 0 | 0-2 |
 | `exportForecastEntity` | text, not a number: entity for the export forecast, see [16](#export-forecast) | empty = off | `sensor.<name>` |
 | `circuitFromPeak` | the load management circuit's limit is the peak limit, see [7](#7-load-management-circuit-and-switch) | 0 (off) | 0-1 |
 
@@ -971,6 +971,20 @@ Every fork feature follows these, so taking in a new evcc version stays cheap:
    on, and that the fork is inert while unused; `TestForkHooksInPlace` checks
    that every hook is still in place, see [Tests](#tests).
 
+5. **Unreadable stored values are kept.** A json setting that cannot be read at
+   start (`core/site_restore.go`) falls back to its default, is logged once as
+   error and its raw value is saved under `<key>Invalid` (one copy per key, only
+   replaced by a later invalid value, never deleted). `lmAdvanced` is read field
+   by field, so one wrong field does not lose the others. Profiles are checked at
+   start the same way. While the stored list is unreadable, existing profiles
+   cannot be changed, deleted or applied; saving a new profile replaces the list
+   (the raw value stays in `lmProfilesInvalid`).
+   A stored value its setter would refuse (out of range, start soc not below
+   stop soc, a phase count of 2) is warned about once, deleted and the default
+   applies; the setters and the restore share the checks (`valid…` functions).
+   The peak limit is only checked for its range: follow the peak stores it in
+   steps of 100 W.
+
 ### Authentication of the api routes
 
 The fork's site routes (`server/http_custom.go`) are split in two lists, and a
@@ -997,7 +1011,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site/api.go` | embeds `CustomAPI` |
 | `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`; two `lp.lmm().Peek*` probes; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` (in front of the disable branch, behind the always-charge/battery return) keeps a heater in stages on its running stages until the disable delay has passed, the phase timers take `phaseScaleDelay` (scaling down: `phaseScaleDelay1p`, the disable delay when 1p is not sustainable and evcc disables instead), `batterySupported` projects a pending 1p switch with `projectPhaseSwitch1p`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split per phase count (as in evcc PR 32505), min/max power use it |
-| `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui |
+| `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui; `withoutDroppedKeys` in `SplitConfig` (start, save and show ignore the keys of `droppedKeys`) |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
 | `charger/switchsocket.go` | `RatedPower` config field |
 | `util/log.go` | `newLogger` writes to `logstash.Output` instead of `logstash.DefaultHandler`, which passes every line on to it and to the log file |
@@ -1027,7 +1041,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 | Area | Files |
 | --- | --- |
-| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_switch.go`, `core/site_lm_advanced.go`, `core/circuit/circuit_custom.go` |
+| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_switch.go`, `core/site_lm_advanced.go`, `core/site_restore.go`, `core/site_lm_dropped.go`, `core/circuit/circuit_custom.go` |
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |
@@ -1065,6 +1079,10 @@ task `evcc-update-release`, which opens it as a PR); the workflow opens no PR.
 4. Push: the fork tests run on GitHub; then the live checks.
 5. Never press GitHub's "Sync fork" on `load-peak-features`: on conflicts it
    offers "Discard commits".
+
+A fork key that goes away is entered in `droppedKeys` (`core/loadpoint/config_custom.go`)
+and stays there: it is ignored by `SplitConfig` and removed from the stored
+loadpoint config at start (`core/site_lm_dropped.go`; yaml loadpoints are left alone).
 
 ## Tests
 

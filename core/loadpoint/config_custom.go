@@ -3,7 +3,10 @@ package loadpoint
 // Custom extension: phase switching settings, see core/loadpoint_phasecurrents.go.
 // The 1p currents' json fields are named as in evcc PR 32505.
 
-import "time"
+import (
+	"maps"
+	"time"
+)
 
 // PhaseSwitchConfig holds the phase switching settings of the loadpoint config
 type PhaseSwitchConfig struct {
@@ -46,4 +49,37 @@ func (payload DynamicConfig) applyPhaseSwitch(lp API) error {
 		return err
 	}
 	return c.SetPhaseDelays(time.Duration(payload.PhaseScale3pDelay), time.Duration(payload.PhaseScale1pDelay))
+}
+
+// droppedKeys lists config keys the fork once stored in a loadpoint's config and
+// no longer reads. The strict decode in SplitConfig would reject them, so they are
+// ignored there and removed from the database at start (core/site_lm_dropped.go).
+// A key that goes away is added here and stays.
+var droppedKeys = []string{"lmpriority"}
+
+// DroppedKeys returns the config keys that are ignored and removed from storage
+func DroppedKeys() []string {
+	return droppedKeys
+}
+
+// withoutDroppedKeys returns payload without the dropped keys. It is a copy once
+// one of them occurs, the input stays as it is: the cleanup of the stored config
+// has to see the key.
+func withoutDroppedKeys(payload map[string]any) map[string]any {
+	found := false
+	for _, k := range droppedKeys {
+		if _, ok := payload[k]; ok {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return payload
+	}
+
+	res := maps.Clone(payload)
+	for _, k := range droppedKeys {
+		delete(res, k)
+	}
+	return res
 }

@@ -5,6 +5,8 @@ package core
 // Shaving.
 
 import (
+	"cmp"
+	"slices"
 	"time"
 
 	"github.com/evcc-io/evcc/core/keys"
@@ -31,13 +33,55 @@ func (site *Site) restorePeakMonths() {
 	s := site.peak()
 
 	var months []peakMonth
-	if err := settings.Json(keys.PeakMonths, &months); err == nil {
+	if restoreJson(site.log, keys.PeakMonths, &months) {
+		var changed bool
+		months, changed = mergePeakMonths(months)
+
 		s.mu.Lock()
 		s.months = months
+		s.monthsDirty = changed
 		s.mu.Unlock()
+
+		if changed {
+			site.log.WARN.Printf("peak statistics: merged duplicate months")
+			site.savePeakMonths()
+			return
+		}
 	}
 
 	site.publish(keys.PeakMonths, months)
+}
+
+// mergePeakMonths joins entries of the same month (highest peak and demand with
+// their time, the interventions added up, the highest baseline), newest first, and
+// reports whether it changed anything
+func mergePeakMonths(in []peakMonth) ([]peakMonth, bool) {
+	out := make([]peakMonth, 0, len(in))
+
+	for _, m := range in {
+		i := slices.IndexFunc(out, func(e peakMonth) bool { return e.Month == m.Month })
+		if i < 0 {
+			out = append(out, m)
+			continue
+		}
+
+		e := &out[i]
+		if m.Peak > e.Peak {
+			e.Peak, e.PeakAt = m.Peak, m.PeakAt
+		}
+		if m.Demand > e.Demand {
+			e.Demand, e.DemandAt = m.Demand, m.DemandAt
+		}
+		e.Interventions += m.Interventions
+		e.Baseline = max(e.Baseline, m.Baseline)
+	}
+
+	slices.SortStableFunc(out, func(a, b peakMonth) int { return cmp.Compare(b.Month, a.Month) })
+	if len(out) > peakMonthsKept {
+		out = out[:peakMonthsKept]
+	}
+
+	return out, !slices.Equal(in, out)
 }
 
 // manualPeakLimit returns the limit set by hand: while following the peak that is
@@ -49,26 +93,48 @@ func (s *peakState) manualPeakLimit() float64 {
 	return s.limit
 }
 
-// peakMonthOf returns the entry of the month t lies in, adding it if missing.
-// Must be called with the lock held.
-func (s *peakState) peakMonthOf(t time.Time) *peakMonth {
+// peakMonthOf returns the entry of the month t lies in, adding it in its place
+// (newest first) if missing, and whether it did. The running month starts with the
+// limit set by hand, an earlier one that is entered late has no baseline. A month
+// older than the statistics reach is not kept: the entry returned is then a scratch
+// one. Must be called with the lock held.
+func (s *peakState) peakMonthOf(t time.Time) (*peakMonth, bool) {
 	month := t.Local().Format("2006-01")
 
-	if len(s.months) == 0 || s.months[0].Month != month {
-		s.months = append([]peakMonth{{Month: month, Baseline: s.manualPeakLimit()}}, s.months...)
-		if len(s.months) > peakMonthsKept {
-			s.months = s.months[:peakMonthsKept]
+	if i := slices.IndexFunc(s.months, func(m peakMonth) bool { return m.Month == month }); i >= 0 {
+		return &s.months[i], false
+	}
+
+	m := peakMonth{Month: month}
+	now := time.Now()
+	if s.clock != nil {
+		now = s.clock.Now()
+	}
+	if month == now.Local().Format("2006-01") {
+		m.Baseline = s.manualPeakLimit()
+	}
+
+	i := slices.IndexFunc(s.months, func(e peakMonth) bool { return e.Month < month })
+	if i < 0 {
+		i = len(s.months)
+	}
+	s.months = slices.Insert(s.months, i, m)
+
+	if len(s.months) > peakMonthsKept {
+		s.months = s.months[:peakMonthsKept]
+		if i >= peakMonthsKept {
+			return &peakMonth{Month: month}, true
 		}
 	}
 
-	return &s.months[0]
+	return &s.months[i], true
 }
 
 // recordPeakWindow takes a completed quarter hour into its month. Must be called
 // with the lock held.
 func (s *peakState) recordPeakWindow(start time.Time, drawnWs, demandWs float64) {
 	window := peak.Window.Seconds()
-	m := s.peakMonthOf(start)
+	m, _ := s.peakMonthOf(start)
 
 	if avg := drawnWs / window; avg > m.Peak {
 		m.Peak, m.PeakAt = avg, start
@@ -83,7 +149,8 @@ func (s *peakState) recordPeakWindow(start time.Time, drawnWs, demandWs float64)
 // recordPeakIntervention counts a peak the battery started covering. Must be
 // called with the lock held.
 func (s *peakState) recordPeakIntervention(t time.Time) {
-	s.peakMonthOf(t).Interventions++
+	m, _ := s.peakMonthOf(t)
+	m.Interventions++
 	s.monthsDirty = true
 }
 
@@ -94,8 +161,7 @@ func (site *Site) raisePeakBaseline(limit float64) {
 
 	s.mu.Lock()
 	now := s.clock.Now()
-	added := len(s.months) == 0 || s.months[0].Month != now.Local().Format("2006-01")
-	m := s.peakMonthOf(now)
+	m, added := s.peakMonthOf(now)
 	if added {
 		m.Baseline = limit // the month starts with this limit, not the one it replaces
 	}

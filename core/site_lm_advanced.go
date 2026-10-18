@@ -29,7 +29,8 @@ type lmAdvanced struct {
 	// hours the optimizer may take to reach the stop soc of soc-based grid charging
 	GridChargeWindow *float64 `json:"gridChargeWindow,omitempty"`
 	// home consumption forecast per weekday, 1 = on, see site_load_weekday.go.
-	// Replaced by HomeForecast, still read from settings stored before it.
+	// Replaced by HomeForecast: only read from old backups, restoreLmAdvanced moves it
+	// to HomeForecast at start. The name homeWeekday is still accepted by SetLmAdvanced.
 	HomeWeekday *float64 `json:"homeWeekday,omitempty"`
 	// home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load
 	// profile, see site_load_manual.go
@@ -61,7 +62,6 @@ type lmAdvancedState struct {
 	WriteTolerance       float64 `json:"writeTolerance"`
 	FollowCycles         int     `json:"followCycles"`
 	GridChargeWindow     float64 `json:"gridChargeWindow"`
-	HomeWeekday          bool    `json:"homeWeekday"`
 	HomeForecast         int     `json:"homeForecast"`
 	ExportForecastEntity string  `json:"exportForecastEntity"`
 	CircuitFromPeak      bool    `json:"circuitFromPeak"`
@@ -93,8 +93,12 @@ var lmAdvancedLimits = map[string]lmAdvancedLimit{
 func (site *Site) restoreLmAdvanced() {
 	s := site.lms()
 
-	var adv lmAdvanced
-	if err := settings.Json(keys.LmAdvanced, &adv); err == nil {
+	if adv, ok := restoreLmAdvancedValue(site.log); ok {
+		dropped := dropInvalidLmAdvanced(site.log, &adv)
+		moved := moveHomeWeekday(&adv)
+		if dropped || moved {
+			_ = settings.SetJson(keys.LmAdvanced, adv)
+		}
 		s.advMu.Lock()
 		s.adv = adv
 		s.advMu.Unlock()
@@ -129,7 +133,6 @@ func (site *Site) publishLmAdvanced() {
 		WriteTolerance:       site.peakWriteTolerance(),
 		FollowCycles:         site.lmFollowCycles(),
 		GridChargeWindow:     site.gridChargeWindow().Hours(),
-		HomeWeekday:          site.homeWeekday(),
 		HomeForecast:         site.homeForecast(),
 		ExportForecastEntity: site.exportForecastEntity(),
 		CircuitFromPeak:      site.advanced().CircuitFromPeak,
@@ -142,9 +145,6 @@ func (site *Site) homeForecast() int {
 	if v := adv.HomeForecast; v != nil {
 		return int(*v)
 	}
-	if v := adv.HomeWeekday; v != nil && *v == 1 {
-		return homeForecastWeekday
-	}
 	return homeForecastEvcc
 }
 
@@ -156,8 +156,8 @@ func (site *Site) lmTimeout() time.Duration {
 	return lm.DefaultTimeout
 }
 
-// SetLmAdvanced sets one of the advanced settings
-func (site *Site) SetLmAdvanced(name string, value float64) error {
+// validLmAdvanced checks the value of one advanced setting
+func validLmAdvanced(name string, value float64) error {
 	limit, ok := lmAdvancedLimits[name]
 	if !ok {
 		return fmt.Errorf("unknown setting: %s", name)
@@ -167,6 +167,14 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 	}
 	if name == "phases" && value == 2 {
 		return fmt.Errorf("phases must be 1 or 3")
+	}
+	return nil
+}
+
+// SetLmAdvanced sets one of the advanced settings
+func (site *Site) SetLmAdvanced(name string, value float64) error {
+	if err := validLmAdvanced(name, value); err != nil {
+		return err
 	}
 
 	s := site.lms()

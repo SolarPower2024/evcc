@@ -8,7 +8,10 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/core/settings"
+	"github.com/evcc-io/evcc/db"
 	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/config"
+	"github.com/evcc-io/evcc/util/templates"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -109,4 +112,43 @@ func TestPersistedSettingsAreValidConfig(t *testing.T) {
 	_, static, err := loadpoint.SplitConfig(maps.Clone(store.blob))
 	require.NoError(t, err)
 	require.NoError(t, util.DecodeOther(static, new(Loadpoint)), "persisted setting is not valid loadpoint config")
+}
+
+// TestDroppedKeyLoadsAndIsCleaned asserts that a stored key the fork dropped neither
+// fails the strict decode at start nor stays in the database
+func TestDroppedKeyLoadsAndIsCleaned(t *testing.T) {
+	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	config.Reset()
+	t.Cleanup(config.Reset)
+
+	var charger api.Charger = api.NewMockCharger(gomock.NewController(t))
+	require.NoError(t, config.Chargers().Add(config.NewStaticDevice(config.Named{Name: "wallbox"}, charger)))
+
+	key := loadpoint.DroppedKeys()[0]
+	conf, err := config.AddConfig(templates.Loadpoint, map[string]any{"title": "lp", "charger": "wallbox", key: 2})
+	require.NoError(t, err)
+
+	dev := config.NewConfigurableDevice(&conf, loadpoint.API(nil))
+	require.NoError(t, config.Loadpoints().Add(dev))
+
+	// start: split and decode strictly
+	_, static, err := loadpoint.SplitConfig(dev.Config().Other)
+	require.NoError(t, err)
+	_, err = NewLoadpointFromConfig(util.NewLogger("foo"), settings.NewMemorySettings(), nil, static)
+	require.NoError(t, err)
+
+	site := &Site{log: util.NewLogger("foo")}
+	site.dropStoredLoadpointKeys()
+
+	require.NotContains(t, dev.Config().Other, key)
+	require.Equal(t, "lp", dev.Config().Other["title"])
+
+	// stored: a reload from the database has no key either
+	var stored config.Config
+	require.NoError(t, db.Instance.First(&stored, conf.ID).Error)
+	require.NotContains(t, stored.Data, key)
+
+	// second run changes nothing
+	site.dropStoredLoadpointKeys()
+	require.Equal(t, "lp", dev.Config().Other["title"])
 }

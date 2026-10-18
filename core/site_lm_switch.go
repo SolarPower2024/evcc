@@ -53,8 +53,8 @@ func (site *Site) restoreLmSwitch() {
 		if circuit, err = settings.String(keys.PeakFollowCircuit); err == nil && circuit != "" {
 			settings.SetString(keys.LmCircuit, circuit)
 		}
-		_ = settings.Delete(keys.PeakFollowCircuit)
 	}
+	site.dropPeakFollowCircuit()
 
 	s.mu.Lock()
 	s.circuit = circuit

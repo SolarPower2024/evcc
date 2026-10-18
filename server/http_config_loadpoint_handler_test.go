@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/evcc-io/evcc/core/loadpoint"
@@ -68,4 +69,14 @@ func TestDeleteLoadpointDisabledNilInstance(t *testing.T) {
 		deleteLoadpointHandler()(rec, req)
 	})
 	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+// TestLoadpointSplitConfigDroppedKey ensures a config key the fork dropped does not fail saving or showing
+func TestLoadpointSplitConfigDroppedKey(t *testing.T) {
+	for _, key := range loadpoint.DroppedKeys() {
+		body := `{"title":"lp","` + key + `":3}`
+		_, static, _, _, err := loadpointSplitConfig(strings.NewReader(body))
+		require.NoError(t, err, key)
+		assert.NotContains(t, static, key)
+	}
 }

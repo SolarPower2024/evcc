@@ -42,8 +42,6 @@ export interface LmAdvanced {
   peakCap: number;
   /** Smallest change in W written to a peak shaving entity. */
   writeTolerance: number;
-  /** Home consumption forecast per weekday. */
-  homeWeekday?: boolean;
   /** Home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load profile. */
   homeForecast?: number;
   /** Cycles after which a load ignoring its limit is no longer counted on, 0 = off. */

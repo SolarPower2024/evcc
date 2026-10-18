@@ -151,12 +151,12 @@ func (site *Site) peak() *peakState {
 func (site *Site) restorePeakSettings() {
 	s := site.peak()
 
-	if v, err := settings.Float(keys.PeakShavingLimit); err == nil {
+	if v, ok := restoreFloat(site.log, keys.PeakShavingLimit, validPeakLimit); ok {
 		s.mu.Lock()
 		s.limit = v
 		s.mu.Unlock()
 	}
-	if v, err := settings.Float(keys.PeakShavingReserve); err == nil {
+	if v, ok := restoreFloat(site.log, keys.PeakShavingReserve, validPeakReserve); ok {
 		s.mu.Lock()
 		s.reserve = v
 		s.mu.Unlock()
@@ -172,7 +172,7 @@ func (site *Site) restorePeakSettings() {
 		s.entity = v
 		s.mu.Unlock()
 	}
-	if v, err := settings.Float(keys.PeakShavingChargePower); err == nil {
+	if v, ok := restoreFloat(site.log, keys.PeakShavingChargePower, validPeakChargePower); ok {
 		s.mu.Lock()
 		s.chargePower = v
 		s.mu.Unlock()
@@ -1149,7 +1149,8 @@ func (site *Site) GetPeakShaving() bool {
 }
 
 func (site *Site) SetPeakShaving(val bool) error {
-	if !site.batteryConfigured() {
+	// turning off needs no battery: clearing an entity ends up here without one
+	if val && !site.batteryConfigured() {
 		return ErrBatteryNotConfigured
 	}
 
@@ -1414,8 +1415,8 @@ func (site *Site) GetPeakShavingChargePower() float64 {
 // SetPeakShavingChargePower sets the assumed grid charge power in W. Zero falls
 // back to the battery meters' maxchargepower.
 func (site *Site) SetPeakShavingChargePower(power float64) error {
-	if power < 0 || power > maxPeakLimit {
-		return fmt.Errorf("charge power must be between 0 and %.0fW", maxPeakLimit)
+	if err := validPeakChargePower(power); err != nil {
+		return err
 	}
 
 	s := site.peak()
@@ -1483,9 +1484,34 @@ func (site *Site) GetPeakShavingLimit() float64 {
 	return s.limit
 }
 
-func (site *Site) SetPeakShavingLimit(limit float64) error {
+// validPeakLimit checks the range of the peak limit, not its step: follow the peak
+// stores the raised limit in steps of peakFollowStep
+func validPeakLimit(limit float64) error {
 	if limit < minPeakLimit || limit > maxPeakLimit {
 		return fmt.Errorf("peak limit must be between %.0fW and %.0fW", minPeakLimit, maxPeakLimit)
+	}
+	return nil
+}
+
+// validPeakReserve checks the reserve soc
+func validPeakReserve(soc float64) error {
+	if soc <= 0 || soc >= 100 {
+		return fmt.Errorf("invalid reserve soc: %.0f", soc)
+	}
+	return nil
+}
+
+// validPeakChargePower checks the assumed grid charge power
+func validPeakChargePower(power float64) error {
+	if power < 0 || power > maxPeakLimit {
+		return fmt.Errorf("charge power must be between 0 and %.0fW", maxPeakLimit)
+	}
+	return nil
+}
+
+func (site *Site) SetPeakShavingLimit(limit float64) error {
+	if err := validPeakLimit(limit); err != nil {
+		return err
 	}
 	if math.Mod(limit, peakLimitStep) != 0 {
 		return fmt.Errorf("peak limit must be a multiple of %.0fW", peakLimitStep)
@@ -1531,8 +1557,8 @@ func (site *Site) GetPeakShavingReserve() float64 {
 }
 
 func (site *Site) SetPeakShavingReserve(soc float64) error {
-	if soc <= 0 || soc >= 100 {
-		return fmt.Errorf("invalid reserve soc: %.0f", soc)
+	if err := validPeakReserve(soc); err != nil {
+		return err
 	}
 
 	s := site.peak()

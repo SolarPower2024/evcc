@@ -104,6 +104,7 @@ type siteCustom struct {
 // must not leave the fork without its settings (peak shaving off, the battery held
 // by evcc never handed back)
 func (site *Site) restoreCustom() {
+	site.dropStoredLoadpointKeys()
 	site.restoreLmSettings()
 	site.restorePeakSettings()
 	// the circuit may take the peak limit: restoreLmSettings ran before the peak
@@ -143,16 +144,13 @@ func (site *Site) lmm() *lm.Manager {
 func (site *Site) restoreLmSettings() {
 	s := site.lms()
 
-	if v, err := settings.Float(keys.BatterySocGridChargeStart); err == nil {
-		s.mu.Lock()
-		s.socChargeStart = v
-		s.mu.Unlock()
-	}
-	if v, err := settings.Float(keys.BatterySocGridChargeStop); err == nil {
-		s.mu.Lock()
-		s.socChargeStop = v
-		s.mu.Unlock()
-	}
+	s.mu.Lock()
+	start, stop := s.socChargeStart, s.socChargeStop
+	s.mu.Unlock()
+	start, stop = restoreSocPair(site.log, start, stop)
+	s.mu.Lock()
+	s.socChargeStart, s.socChargeStop = start, stop
+	s.mu.Unlock()
 	if v, err := settings.Bool(keys.BatterySocGridCharge); err == nil {
 		s.mu.Lock()
 		s.socChargeEnabled = v
@@ -165,7 +163,7 @@ func (site *Site) restoreLmSettings() {
 	}
 
 	var prios map[string]int
-	if err := settings.Json(keys.LmPriorities, &prios); err == nil {
+	if restoreJson(site.log, keys.LmPriorities, &prios) {
 		s.mu.Lock()
 		s.prios = prios
 		s.mu.Unlock()
@@ -179,7 +177,7 @@ func (site *Site) restoreLmSettings() {
 	site.restoreLmAdvanced()
 	site.restoreLmSwitch()
 	site.restoreBatteryIdent()
-	site.publishLmProfiles()
+	site.restoreLmProfiles()
 
 	site.publishLmSettings()
 
@@ -590,7 +588,7 @@ func (site *Site) GetBatterySocGridCharge() bool {
 
 // SetBatterySocGridCharge sets the soc-based grid charging switch
 func (site *Site) SetBatterySocGridCharge(val bool) error {
-	if !site.hasBatteryControl() {
+	if val && !site.hasBatteryControl() {
 		return ErrBatteryControlNotAvailable
 	}
 
@@ -626,23 +624,45 @@ func (site *Site) GetBatterySocGridChargeStart() float64 {
 	return s.socChargeStart
 }
 
+// validSocStart and validSocStop check the range of the grid charge thresholds,
+// validSocPair that start lies below stop
+func validSocStart(soc float64) error {
+	if soc < 0 || soc > 100 {
+		return fmt.Errorf("invalid soc: %.0f", soc)
+	}
+	return nil
+}
+
+func validSocStop(soc float64) error {
+	if soc <= 0 || soc > 100 {
+		return fmt.Errorf("invalid soc: %.0f", soc)
+	}
+	return nil
+}
+
+func validSocPair(start, stop float64) error {
+	if start >= stop {
+		return fmt.Errorf("start soc %.0f must be below stop soc %.0f", start, stop)
+	}
+	return nil
+}
+
 // SetBatterySocGridChargeStart sets the soc at or below which grid charging starts
 func (site *Site) SetBatterySocGridChargeStart(soc float64) error {
 	if !site.hasBatteryControl() {
 		return ErrBatteryControlNotAvailable
 	}
 
-	if soc < 0 || soc > 100 {
-		return fmt.Errorf("invalid soc: %.0f", soc)
+	if err := validSocStart(soc); err != nil {
+		return err
 	}
 
 	s := site.lms()
 
 	s.mu.Lock()
-	if soc >= s.socChargeStop {
-		stop := s.socChargeStop
+	if err := validSocPair(soc, s.socChargeStop); err != nil {
 		s.mu.Unlock()
-		return fmt.Errorf("start soc %.0f must be below stop soc %.0f", soc, stop)
+		return err
 	}
 	changed := s.socChargeStart != soc
 	s.socChargeStart = soc
@@ -674,17 +694,16 @@ func (site *Site) SetBatterySocGridChargeStop(soc float64) error {
 		return ErrBatteryControlNotAvailable
 	}
 
-	if soc <= 0 || soc > 100 {
-		return fmt.Errorf("invalid soc: %.0f", soc)
+	if err := validSocStop(soc); err != nil {
+		return err
 	}
 
 	s := site.lms()
 
 	s.mu.Lock()
-	if soc <= s.socChargeStart {
-		start := s.socChargeStart
+	if err := validSocPair(s.socChargeStart, soc); err != nil {
 		s.mu.Unlock()
-		return fmt.Errorf("stop soc %.0f must be above start soc %.0f", soc, start)
+		return err
 	}
 	changed := s.socChargeStop != soc
 	s.socChargeStop = soc

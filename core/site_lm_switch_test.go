@@ -354,3 +354,29 @@ func TestLmCircuitFromPeakRestart(t *testing.T) {
 	require.NoError(t, settings.Json(keys.LmAdvanced, &adv))
 	assert.False(t, adv.CircuitFromPeak)
 }
+
+// A restart between taking over the circuit and removing the old key leaves both:
+// the old key goes, the circuit stays
+func TestLmCircuitOldKeyLeftOver(t *testing.T) {
+	noSettingsDB(t)
+	config.Reset()
+	t.Cleanup(config.Reset)
+	keepSettings(t)
+
+	log := util.NewLogger("test")
+	main, err := circuit.New(log, "peak", 0, 10000, nil, 0)
+	require.NoError(t, err)
+	require.NoError(t, config.Circuits().Add(config.NewStaticDevice(config.Named{Name: "main"}, api.Circuit(main))))
+
+	settings.SetString(keys.LmCircuit, "main")
+	settings.SetString(keys.PeakFollowCircuit, "main")
+
+	site := &Site{log: log}
+	site.restoreLmSwitch()
+
+	assert.Equal(t, "main", site.GetLmCircuit())
+	_, err = settings.String(keys.PeakFollowCircuit)
+	assert.Error(t, err, "old key removed")
+	v, _ := settings.String(keys.LmCircuit)
+	assert.Equal(t, "main", v)
+}

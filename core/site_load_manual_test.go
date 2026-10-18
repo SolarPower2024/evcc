@@ -287,18 +287,11 @@ func TestHomeForecastSetting(t *testing.T) {
 
 	require.NoError(t, site.SetLmAdvanced("homeForecast", 2))
 	assert.Equal(t, homeForecastManual, site.homeForecast())
-	assert.False(t, site.homeWeekday())
 
 	require.NoError(t, site.SetLmAdvanced("homeWeekday", 1))
 	assert.Equal(t, homeForecastWeekday, site.homeForecast())
-	assert.True(t, site.homeWeekday())
 
 	require.Error(t, site.SetLmAdvanced("homeForecast", 3))
-
-	// stored before the forecast setting existed
-	one := 1.0
-	site.lms().adv = lmAdvanced{HomeWeekday: &one}
-	assert.Equal(t, homeForecastWeekday, site.homeForecast())
 }
 
 func TestHomeProfileManualFallback(t *testing.T) {
