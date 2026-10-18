@@ -1124,7 +1124,12 @@ repository):
   `core/metrics`, `core/circuit`, `core/loadpoint`, `core`, `server`,
   `util/logstash`, and the fork's tests in `charger` and `tariff`),
   the ui checks (format, lint, types, i18n, vitest, build) and a shuffled run
-  that reports but does not block.
+  that reports but does not block. On pull requests the job *Commit guard*
+  (`.github/commit-guard/guard.sh`, selftest `guard-selftest.sh`) fails for an
+  author other than the fork's owner and for issue numbers, evcc's organisation
+  name with a slash or links to its repository in commit messages (first
+  parent only), PR title or PR body; "evcc PR 123" in plain text passes. The
+  local git hooks of the working folder use the same rule with their own script.
 - `custom-image.yml` builds an add-on image from a tag only after these passed.
   All three fork workflows use actions at pinned commits (same versions as
   evcc's own workflows, comment with the tag); the image build checks out without
