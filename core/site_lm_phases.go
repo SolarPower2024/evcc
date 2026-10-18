@@ -15,7 +15,7 @@ func (site *Site) batteryPhasesMissing() bool {
 	}
 
 	site.lms().phasesWarn.Do(func() {
-				site.log.WARN.Println("load management: battery phases not set, needed for a circuit with a current limit - grid charging stays off until they are set under Lastmanagement-Details → Erweitert")
+		site.log.WARN.Println("load management: battery phases not set, needed for a circuit with a current limit - grid charging stays off until they are set under Lastmanagement-Details → Erweitert")
 	})
 	return true
 }
