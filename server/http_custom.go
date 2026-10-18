@@ -109,12 +109,12 @@ func addCustomSiteRoutes(routes map[string]route, site site.API) {
 func mergeRoutes(dst, add map[string]route) []string {
 	used := make(map[string]bool, len(dst))
 	for _, r := range dst {
-		used[r.Method+" "+r.Pattern] = true
+		used[r.Method+" "+patternShape(r.Pattern)] = true
 	}
 
 	var res []string
 	for name, r := range add {
-		if _, ok := dst[name]; ok || used[r.Method+" "+r.Pattern] {
+		if _, ok := dst[name]; ok || used[r.Method+" "+patternShape(r.Pattern)] {
 			res = append(res, name)
 			continue
 		}
@@ -123,6 +123,36 @@ func mergeRoutes(dst, add map[string]route) []string {
 
 	slices.Sort(res)
 	return res
+}
+
+// patternShape returns a route pattern without the regular expressions of its
+// variables, {name:[0-9]+} becomes {name}: the same route with another
+// expression is the same route. The braces inside an expression, as in
+// {until:[0-9]{2}:[0-9]{2}}, are counted.
+func patternShape(pattern string) string {
+	var sb strings.Builder
+
+	depth := 0
+	skip := false
+	for _, c := range pattern {
+		switch {
+		case c == '{':
+			depth++
+		case c == '}':
+			depth--
+			if depth == 0 {
+				skip = false
+			}
+		case c == ':' && depth == 1:
+			skip = true
+		}
+
+		if !skip || (c == '}' && depth == 0) {
+			sb.WriteRune(c)
+		}
+	}
+
+	return sb.String()
 }
 
 func customSiteRoutes(site site.API) map[string]route {

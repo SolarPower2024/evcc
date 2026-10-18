@@ -51,13 +51,14 @@ func TestMergeRoutesKeepsUpstream(t *testing.T) {
 	}
 
 	left := mergeRoutes(routes, map[string]route{
-		"limit":     {"POST", "/other/{value:[0-9]+}", nil}, // same name
-		"mystate":   {"GET", "/state", nil},                 // same method and path
-		"poststate": {"POST", "/state", nil},                // other method: fine
-		"new":       {"POST", "/new/{value:[0-9]+}", nil},   // fine
+		"limit":     {"POST", "/other/{value:[0-9]+}", nil},  // same name
+		"mystate":   {"GET", "/state", nil},                  // same method and path
+		"poststate": {"POST", "/state", nil},                 // other method: fine
+		"new":       {"POST", "/new/{value:[0-9]+}", nil},    // fine
+		"otherre":   {"POST", "/limit/{value:[0-9.]+}", nil}, // same path, other expression
 	})
 
-	assert.Equal(t, []string{"limit", "mystate"}, left)
+	assert.Equal(t, []string{"limit", "mystate", "otherre"}, left)
 	assert.Equal(t, "/limit/{value:[0-9]+}", routes["limit"].Pattern)
 	assert.NotNil(t, routes["limit"].HandlerFunc)
 	assert.NotContains(t, routes, "mystate")
@@ -357,4 +358,49 @@ func TestCustomRoutesAuth(t *testing.T) {
 		assert.NotEqual(t, http.StatusUnauthorized, code(enabled, name, ""), "%s without login", name)
 		assert.NotEqual(t, http.StatusUnauthorized, code(nil, name, ""), "%s without authentication set", name)
 	}
+}
+
+// TestCustomRoutesAgainstEvccRouter: in evcc's real route table, each custom
+// route is matched by itself and by no other route. No match means evcc has a
+// route of the same name and the custom one was left out, a second match an
+// overlap, for example after an evcc update.
+func TestCustomRoutesAgainstEvccRouter(t *testing.T) {
+	site := core.NewSite()
+
+	httpd := NewHTTPd("127.0.0.1:0", nil, Customization{})
+	httpd.RegisterSiteHandlers(site)
+
+	router := httpd.Server.Handler.(*mux.Router)
+
+	for name, rt := range customSiteRoutes(site) {
+		sample, ok := customRouteSamples[name]
+		if !assert.True(t, ok, "no sample for route %s", name) {
+			continue
+		}
+
+		var hits []string
+		assert.NoError(t, router.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
+			if route.GetHandler() == nil {
+				return nil
+			}
+
+			var m mux.RouteMatch
+			if route.Match(httptest.NewRequest(rt.Method, "/api"+sample, nil), &m) {
+				tpl, _ := route.GetPathTemplate()
+				hits = append(hits, tpl)
+			}
+			return nil
+		}))
+
+		assert.Equal(t, []string{"/api" + rt.Pattern}, hits, "route %s: %s %s", name, rt.Method, sample)
+	}
+}
+
+// TestPatternShape: the expressions of the variables are dropped, also with
+// braces inside
+func TestPatternShape(t *testing.T) {
+	assert.Equal(t, "/limit/{value}", patternShape("/limit/{value:[0-9]+}"))
+	assert.Equal(t, "/batterygridchargeonce/{soc}/{until}", patternShape("/batterygridchargeonce/{soc:[0-9]+}/{until:[0-9]{2}:[0-9]{2}}"))
+	assert.Equal(t, "/state", patternShape("/state"))
+	assert.Equal(t, "/a/{b}", patternShape("/a/{b}"))
 }

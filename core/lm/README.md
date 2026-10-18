@@ -1109,6 +1109,11 @@ unused:
   local server answers.
 - `TestCustomRoutesMatch`: every api route reaches its handler; a new route
   needs a sample request there.
+- `TestCustomRoutesAgainstEvccRouter`: in evcc's real route table each custom
+  route is matched by itself and by no other (none: evcc has a route of the same
+  name, the custom one was left out; two: overlap). `mergeRoutes` compares the
+  path without the expressions of its variables (`TestPatternShape`), so the
+  same route with another expression is reported as well.
 - `TestCustomRoutesAuth`: every api route is in exactly one of the two lists;
   configuration routes answer 401 without login, with a wrong key, locked and
   without authentication set, and pass with the api key or `--disable-auth`;
