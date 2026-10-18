@@ -400,9 +400,17 @@ func TestSocPass(t *testing.T) {
 		{StateOfCharge: []float32{4000, 3500, 3000}, ChargingPower: []float32{1500, 0, 0}, DischargingPower: []float32{0, 500, 500}},
 		{StateOfCharge: []float32{23000, 23000, 23000}, ChargingPower: make([]float32, 3), DischargingPower: make([]float32, 3)},
 	}, GridImport: []float32{2000, 1, 1}}
-	socPassJoin(res, res2, k)
+	// prices: the head counts once, the rest comes from the second solve
+	req.TimeSeries.PN = []float32{0.3, 0.3, 0.3, 1, 1, 1}
+	req.TimeSeries.PE = []float32{0.1, 0.1, 0.1, 0, 0, 0}
+	res.GridImport = []float32{10, 0, 20, 9, 9, 9}
+	res.GridExport = []float32{4, 0, 0, 0, 0, 0}
+	res.ObjectiveValue = -100
+	res2.ObjectiveValue = -30
+	socPassJoin(res, res2, req.TimeSeries, k)
 	assert.Equal(t, []float32{7000, 5000, 2500, 4000, 3500, 3000}, res.Batteries[0].StateOfCharge)
-	assert.Equal(t, []float32{0, 0, 0, 2000, 1, 1}, res.GridImport)
+	assert.Equal(t, []float32{10, 0, 20, 2000, 1, 1}, res.GridImport)
+	assert.InDelta(t, -8.6-30, res.ObjectiveValue, 1e-4)
 	assert.Len(t, res.Batteries[1].ChargingPower, 6)
 
 	// not reached, running, switched off, reserve above the start soc

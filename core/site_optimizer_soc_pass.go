@@ -100,7 +100,7 @@ func socPassRequest(req optimizer.OptimizationInput, res *optimizer.Optimization
 }
 
 // socPassJoin joins the plan of the second pass onto the first after slot k
-func socPassJoin(res *optimizer.OptimizationResult, res2 optimizer.OptimizationResult, k int) {
+func socPassJoin(res *optimizer.OptimizationResult, res2 optimizer.OptimizationResult, ts optimizer.TimeSeries, k int) {
 	join := func(a, b []float32) []float32 {
 		if len(a) <= k || len(b) == 0 {
 			return a
@@ -123,7 +123,13 @@ func socPassJoin(res *optimizer.OptimizationResult, res2 optimizer.OptimizationR
 		res.FlowDirection = append(res.FlowDirection[:k+1:k+1], res2.FlowDirection...)
 	}
 
-	res.ObjectiveValue += res2.ObjectiveValue
+	// the head of the first plan once, the rest from the second. An approximation:
+	// end value, demand and overshoot prices only enter the second solve.
+	var head float32
+	for i := 0; i <= k; i++ {
+		head += at(ts.PE, i)*at(res.GridExport, i) - at(ts.PN, i)*at(res.GridImport, i)
+	}
+	res.ObjectiveValue = head + res2.ObjectiveValue
 	res.LimitViolations.GridImportLimitExceeded = res.LimitViolations.GridImportLimitExceeded || res2.LimitViolations.GridImportLimitExceeded
 	res.LimitViolations.GridExportLimitHit = res.LimitViolations.GridExportLimitHit || res2.LimitViolations.GridExportLimitHit
 	if res2.Status != optimizer.Optimal {
@@ -196,7 +202,7 @@ func (site *Site) lmSocChargePass(ctx context.Context, client *optimizer.ClientW
 		return
 	}
 
-	socPassJoin(res, *res2, k)
+	socPassJoin(res, *res2, req.TimeSeries, k)
 
 	// the goals as part of the request, for the optimizer page
 	rb := &req.Batteries[home]
