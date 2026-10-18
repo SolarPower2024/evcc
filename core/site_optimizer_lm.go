@@ -166,6 +166,9 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 	wh := func(soc float64) float32 { return bat.SCapacity * float32(soc) / 100 }
 
 	plan := site.newLmPlan(*bat)
+	if req.EtaC > 0 {
+		plan.etaC = req.EtaC
+	}
 	if req.EtaD > 0 {
 		plan.etaD = req.EtaD
 	}
@@ -230,7 +233,7 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 				d = site.onceRequiredDuration(o.Target, float64(bat.SInitial/bat.SCapacity*100))
 				// unknown grid charge power: the battery's maximum charge power
 				if d <= 0 && bat.CMax > 0 {
-					d = time.Duration(float64(goal-bat.SInitial) / (float64(bat.CMax) * site.identChargeEta()) * float64(time.Hour))
+					d = time.Duration(float64(goal-bat.SInitial) / (float64(bat.CMax) * float64(plan.etaC)) * float64(time.Hour))
 				}
 			}
 			i := max(slotAfter(dt, max(d, 0)), firstGoalStep)

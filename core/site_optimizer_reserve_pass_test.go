@@ -7,7 +7,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/config"
 	optimizer "github.com/evcc-io/optimizer/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -323,4 +325,33 @@ func TestLmPlanCoarse(t *testing.T) {
 	// slots 3-6 merged into one hour: the goal of slot 6 ends in it
 	coarse := []int{600, 900, 900, 3600, 900}
 	assert.Equal(t, []lmGridGoal{{slot: 2, level: 1000}, {slot: 3, level: 2000}}, plan.coarse(coarse).grid)
+}
+
+// The plan charges with the efficiency the request carries, not the
+// identified one, so the floor does not run ahead of the optimizer's result.
+func TestLmPlanEtaFollowsRequest(t *testing.T) {
+	site := &Site{
+		log: util.NewLogger("test"),
+		batteryMeters: []config.Device[api.Meter]{
+			config.NewStaticDevice[api.Meter](config.Named{Name: "batt"}, &mockMeter{}),
+		},
+	}
+	s := site.lms()
+	s.ident = []batteryIdentResult{{Name: "batt", Capacity: 10, Efficiency: 0.9025, Valid: true}}
+	s.identUse = true
+	require.InDelta(t, 0.95, site.identChargeEta(), 1e-6)
+
+	req, res, _ := floorCase()
+	bat := &req.Batteries[0]
+	site.applyLmBatteryInputs(bat, req, true, 2000, 35)
+
+	plan := site.lmPlanInputs()
+	require.NotNil(t, plan)
+	assert.Equal(t, float32(0.9), plan.etaC)
+	assert.InDelta(t, 5000*0.25*0.9, plan.gridCharge(req.TimeSeries, *bat, 6, nil), 0.1, "slot energy with the request's efficiency")
+
+	// the passes with a running identification: no endless follow-up solves
+	client, calls := fakeOptimizer(t, http.StatusOK, res)
+	site.lmOptimizerPasses(client, req, requestDetails{BatteryDetails: []batteryDetail{{Type: batteryTypeBattery}}}, res)
+	assert.LessOrEqual(t, calls.Load(), int32(2), "second pass and at most one recheck")
 }
