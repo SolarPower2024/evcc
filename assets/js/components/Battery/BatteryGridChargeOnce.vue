@@ -46,7 +46,7 @@
 							:label="fmtSoc(target)"
 							nowrap
 							@change="
-								target = parseInt(($event.target as HTMLInputElement).value, 10)
+								choice = parseInt(($event.target as HTMLInputElement).value, 10)
 							"
 						/>
 					</template>
@@ -102,6 +102,7 @@ interface GridChargeOnce {
 	target: number;
 	until?: string | null;
 	active?: boolean;
+	last?: number;
 }
 
 // Custom extension: one-time grid charging up to a soc, right away or by a time
@@ -112,7 +113,8 @@ export default defineComponent({
 	mixins: [formatter],
 	data() {
 		// when: "now" or a time of day HH:MM
-		return { target: 80, when: "now", busy: false, error: "" };
+		// choice: soc picked here, 0 = the last target from the server, else 80
+		return { choice: 0, when: "now", busy: false, error: "" };
 	},
 	computed: {
 		once(): GridChargeOnce {
@@ -120,6 +122,9 @@ export default defineComponent({
 		},
 		running(): boolean {
 			return (this.once.target || 0) > 0;
+		},
+		target(): number {
+			return this.choice || this.once.last || 80;
 		},
 		soc(): number {
 			return store.state?.battery?.soc || 0;

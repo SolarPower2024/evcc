@@ -58,6 +58,33 @@ func TestGridChargeOnceRightAway(t *testing.T) {
 	assert.Zero(t, site.gridChargeOnce().Target, "ended at the target")
 }
 
+// The last chosen target stays after the end, a cancel and a restart, as the
+// preset for the next start on the battery page.
+func TestGridChargeOnceKeepsLastTarget(t *testing.T) {
+	noSettingsDB(t)
+	site := onceSite(t, 40)
+	assert.Zero(t, site.gridChargeOnce().Last, "never started")
+
+	require.NoError(t, site.SetBatteryGridChargeOnce(65, time.Time{}))
+	setBatterySoc(site, 65)
+	assert.False(t, site.batteryGridChargeOnceActive())
+	assert.Zero(t, site.gridChargeOnce().Target, "ended at the target")
+	assert.Equal(t, 65.0, site.gridChargeOnce().Last, "kept after the end")
+
+	setBatterySoc(site, 40)
+	require.NoError(t, site.SetBatteryGridChargeOnce(90, time.Now().Add(time.Hour)))
+	require.NoError(t, site.CancelBatteryGridChargeOnce())
+	assert.Equal(t, 90.0, site.gridChargeOnce().Last, "kept after a cancel")
+
+	var stored gridChargeOnce
+	require.NoError(t, settings.Json(keys.BatteryGridChargeOnce, &stored))
+	assert.Equal(t, 90.0, stored.Last, "stored")
+	restarted := &Site{log: util.NewLogger("test")}
+	restarted.restoreGridChargeOnce()
+	assert.Equal(t, 90.0, restarted.gridChargeOnce().Last, "kept across a restart")
+	assert.Zero(t, restarted.gridChargeOnce().Target)
+}
+
 // By a time: waits for the cheapest slots, charges right away once the time
 // has passed, and can be cancelled.
 func TestGridChargeOnceByTime(t *testing.T) {

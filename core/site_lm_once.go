@@ -30,6 +30,7 @@ type gridChargeOnce struct {
 	Target float64   `json:"target"`           // soc %, 0 = off
 	Until  time.Time `json:"until,omitzero"`   // cheapest slots before this time, zero = right away
 	Active bool      `json:"active,omitempty"` // charging in this slot
+	Last   float64   `json:"last,omitempty"`   // last chosen target, preset for the next start
 }
 
 // gridChargeOncePublished is what the ui gets: every field always present, as
@@ -38,10 +39,11 @@ type gridChargeOncePublished struct {
 	Target float64    `json:"target"`
 	Until  *time.Time `json:"until"` // null = right away
 	Active bool       `json:"active"`
+	Last   float64    `json:"last"` // 0 = never started
 }
 
 func (site *Site) publishGridChargeOnce(o gridChargeOnce) {
-	res := gridChargeOncePublished{Target: o.Target, Active: o.Active}
+	res := gridChargeOncePublished{Target: o.Target, Active: o.Active, Last: o.Last}
 	if !o.Until.IsZero() {
 		res.Until = &o.Until
 	}
@@ -75,6 +77,10 @@ func (site *Site) setGridChargeOnce(o gridChargeOnce) {
 	s := site.lms()
 
 	s.mu.Lock()
+	// the last target outlives the order, so the next start offers it again
+	if o.Last == 0 {
+		o.Last = s.gridOnce.Last
+	}
 	s.gridOnce = o
 	s.mu.Unlock()
 
@@ -125,7 +131,7 @@ func (site *Site) SetBatteryGridChargeOnce(target float64, until time.Time) erro
 	}
 
 	site.log.INFO.Printf("battery grid charge once: up to %.0f%%%s", target, onceUntilText(until))
-	site.setGridChargeOnce(gridChargeOnce{Target: target, Until: until})
+	site.setGridChargeOnce(gridChargeOnce{Target: target, Until: until, Last: target})
 	site.Optimize()
 
 	return nil
