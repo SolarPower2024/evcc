@@ -1120,7 +1120,9 @@ repository):
 
 - `fork-tests.yml` on every push and pull request: build, gofmt and
   `go mod tidy` (no diff allowed), vet, the whole Go
-  testsuite (evcc's and the fork's), the race detector on the fork's packages,
+  testsuite (evcc's and the fork's), the race detector on the fork's packages (`core/lm`, `core/peak`,
+  `core/metrics`, `core/circuit`, `core/loadpoint`, `core`, `server`,
+  `util/logstash`, and the fork's tests in `charger` and `tariff`),
   the ui checks (format, lint, types, i18n, vitest, build) and a shuffled run
   that reports but does not block.
 - `custom-image.yml` builds an add-on image from a tag only after these passed.

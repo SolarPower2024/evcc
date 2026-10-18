@@ -55,7 +55,7 @@ jobs:
           git diff --exit-code go.mod go.sum
 
       - name: Vet
-        run: go vet ./core/... ./charger/ ./server/
+        run: go vet ./core/... ./charger/ ./server/ ./tariff/ ./util/logstash/ ./cmd/ ./api/globalconfig/
 
       - name: Update check report filter
         run: bash .github/upstream-check/clean-report-test.sh
@@ -73,6 +73,7 @@ jobs:
         run: |
           set -o pipefail
           # charger: only the fork's tests, evcc's TestTemplates has an intermittent race of its own.
+          # tariff: the same for evcc's tariff tests, only the fork's TestHAForecast*.
           # core: evcc's enableAutomatic (optimizer_automatic_test.go) writes sponsor.Subject while an
           # optimizer run started by an earlier evcc test still reads it; evcc runs no race detector.
           # The skip list is built from the sources (every test calling enableAutomatic), so new evcc
@@ -80,9 +81,10 @@ jobs:
           evccRace="^($(awk '/^func Test/{n=$2; sub(/\(.*/,"",n)} /enableAutomatic\(t\)/{print n}' core/*_test.go | sort -u | paste -sd'|'))\$"
           echo "skipped for race (evcc enableAutomatic): $evccRace"
           {
-            go test -race -count=1 ./core/lm/... ./core/peak/ ./server/ &&
+            go test -race -count=1 ./core/lm/... ./core/peak/ ./server/ ./util/logstash/ ./core/metrics/ ./core/circuit/ ./core/loadpoint/ &&
               go test -race -count=1 -skip "$evccRace" ./core/ &&
-              go test -race -count=1 -run 'TestSwitchStages|TestSwitchSocketRatedPower' ./charger/
+              go test -race -count=1 -run 'TestSwitchStages|TestSwitchSocketRatedPower' ./charger/ &&
+                go test -race -count=1 -run 'TestHAForecast' ./tariff/
           } 2>&1 | tee /tmp/race.log || {
             grep -E "^(--- FAIL|FAIL|panic:)" /tmp/race.log | head -20 | sed "s/^/::error::/"
             # each race report as one annotation, newlines encoded
@@ -109,7 +111,7 @@ jobs:
       - run: mkdir -p dist && touch dist/empty
 
       - name: Shuffled
-        run: CGO_ENABLED=0 go test -count=1 -shuffle=on -skip TestProfilePercentile ./core/ ./core/lm/... ./core/peak/ ./server/
+        run: CGO_ENABLED=0 go test -count=1 -shuffle=on -skip TestProfilePercentile ./core/ ./core/lm/... ./core/peak/ ./server/ ./util/logstash/ ./core/metrics/ ./core/circuit/
 
   ui:
     name: UI
