@@ -10,15 +10,24 @@ package core
 // set: no value under Erweitert, and the battery's circuit or one above it has
 // a current limit. A circuit with only a power limit needs no phases.
 func (site *Site) batteryPhasesMissing() bool {
+	if !site.phasesMissing() {
+		return false
+	}
+
+	site.lms().phasesWarn.Do(func() {
+				site.log.WARN.Println("load management: battery phases not set, needed for a circuit with a current limit - grid charging stays off until they are set under Lastmanagement-Details → Erweitert")
+	})
+	return true
+}
+
+// phasesMissing is batteryPhasesMissing without the log, for readers that only ask
+func (site *Site) phasesMissing() bool {
 	if site.advanced().Phases != nil {
 		return false
 	}
 
 	for c := site.lmBatteryCircuit(); c != nil; c = c.GetParent() {
 		if c.GetMaxCurrent() > 0 {
-			site.lms().phasesWarn.Do(func() {
-				site.log.WARN.Println("load management: battery phases not set, needed for a circuit with a current limit - grid charging stays off until they are set under Lastmanagement-Details → Erweitert")
-			})
 			return true
 		}
 	}

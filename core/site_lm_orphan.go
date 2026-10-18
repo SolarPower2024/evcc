@@ -63,13 +63,18 @@ func (site *Site) dropOrphanCircuits() {
 // charging stays off: "no circuit" would otherwise read as "not in load
 // management" and charge without the circuit's check.
 func (site *Site) batteryCircuitOrphan() bool {
-	ref := site.GetPeakShavingCircuit()
-	if ref == "" || site.lmBatteryCircuit() != nil {
+	if !site.circuitOrphan() {
 		return false
 	}
 
+	ref := site.GetPeakShavingCircuit()
 	site.lms().orphanWarn.Do(func() {
 		site.log.WARN.Printf("load management: battery circuit %s does not exist, grid charging stays off until it is removed", ref)
 	})
 	return true
+}
+
+// circuitOrphan is batteryCircuitOrphan without the log, for readers that only ask
+func (site *Site) circuitOrphan() bool {
+	return site.GetPeakShavingCircuit() != "" && site.lmBatteryCircuit() == nil
 }

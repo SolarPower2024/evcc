@@ -85,3 +85,22 @@ func TestBatteryPhasesMissingPublishedAfterRestore(t *testing.T) {
 	}
 	assert.True(t, state.PhasesMissing)
 }
+
+// The optimizer is told that grid charging is refused without the phases on a
+// circuit with a current limit and on a circuit that is gone.
+func TestLmGridChargeBlockedPhasesOrphan(t *testing.T) {
+	site, main, _ := lmSwitchCircuits(t, 3500)
+	p := site.peak()
+	p.chargePower = 2500
+	p.circuit = "main"
+	lms := site.lms()
+	lms.batteryCircuitRef, lms.batteryCircuit = "main", main
+
+	assert.True(t, site.lmGridChargeBlocked(), "32 A circuit without phases")
+
+	require.NoError(t, site.SetLmAdvanced("phases", 3))
+	assert.False(t, site.lmGridChargeBlocked())
+
+	p.circuit = "gone"
+	assert.True(t, site.lmGridChargeBlocked(), "circuit not resolvable")
+}
