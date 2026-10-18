@@ -9,12 +9,10 @@
 # merge itself is tested in the runner. With nothing to do no issue is opened
 # and an open one is closed.
 #
-# With the secret UPDATE_TOKEN (a token of this repository with contents, pull
-# requests and workflows write) it also keeps the PR "evcc-Update" open: the
-# branch evcc-update holds evcc's newest release, the PR shows the conflicts
-# and is merged into load-peak-features once they are resolved. GITHUB_TOKEN
-# cannot do that, as evcc's commits touch workflow files. No issue numbers,
-# mentions or links of evcc's repository go into any text.
+# No issue numbers, mentions or links of evcc's repository go into any text.
+#
+# The update itself is done locally (skill upstream-update), not by this
+# workflow.
 name: evcc update check
 
 on:
@@ -77,33 +75,6 @@ jobs:
               echo '```'
             fi
           } >>/tmp/report.md
-
-      - name: Update PR
-        if: steps.review.outputs.count != '0'
-        env:
-          UPDATE_TOKEN: ${{ secrets.UPDATE_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          REF: ${{ steps.review.outputs.ref }}
-        run: |
-          if [ -z "$UPDATE_TOKEN" ]; then
-            printf '\n## Update-PR\n\nNicht angelegt: das Secret UPDATE_TOKEN fehlt.\n' >>/tmp/report.md
-            exit 0
-          fi
-          # a report is never dropped: lines referring to evcc's repository are replaced
-          if grep -qE '#[0-9]|evcc-io/' /tmp/report.md; then
-            sed -i -E '/#[0-9]|evcc-io\//s/.*/[entfernt]/' /tmp/report.md
-            echo "::warning::report had lines referring to evcc's repository, replaced by [entfernt]"
-          fi
-          export GH_TOKEN="$UPDATE_TOKEN"
-          git push --force "https://x-access-token:${UPDATE_TOKEN}@github.com/${GH_REPO}.git" "$(git rev-parse "$REF^{commit}")":refs/heads/evcc-update
-          title="evcc-Update: Release $REF ($(jq .count /tmp/summary.json) Commits)"
-          number=$(gh pr list --head evcc-update --base load-peak-features --state open --json number --jq '.[0].number')
-          if [ -n "$number" ]; then
-            gh pr edit "$number" --title "$title" --body-file /tmp/report.md
-          else
-            gh pr create --head evcc-update --base load-peak-features --title "$title" --body-file /tmp/report.md
-          fi
-          printf '\n## Update-PR\n\nAktualisiert: %s\n' "$title" >>/tmp/report.md
 
       - name: Report
         env:

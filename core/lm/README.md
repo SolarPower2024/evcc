@@ -1037,9 +1037,8 @@ The fork takes in evcc **releases** only, never the commits between them. Every
 day the issue *evcc-Update-Check* reviews evcc's newest release (see
 [Tests](#tests)): what changed, which fork features evcc may now have itself,
 which evcc commit causes which conflict, and whether the merge passes the
-tests. With the secret `UPDATE_TOKEN` the PR *evcc-Update* (branch
-`evcc-update` = evcc's newest release) is kept open as well; conflicts can
-then be resolved on it and it is merged with a merge commit.
+tests. The update itself is done locally (skill `upstream-update`, or the local
+task `evcc-update-release`, which opens it as a PR); the workflow opens no PR.
 
 1. `git fetch upstream --tags` and merge evcc's newest release tag (x.y.z) into
    `load-peak-features`, never `upstream/master`. A patch release lives on a
@@ -1132,8 +1131,7 @@ repository):
   added code, listed in `watch.json`; hints that need a review), c) each
   conflicting file with the evcc commit causing it (found with
   `git merge-tree`, commit by commit), d) the PRs to open. Without conflicts
-  the merge is built and tested. With the secret `UPDATE_TOKEN` it also keeps
-  the PR *evcc-Update* open. Never writes to evcc's repository; issue numbers
+  the merge is built and tested. It opens no PR. Never writes to evcc's repository; issue numbers
   in evcc's subjects become plain text ("evcc PR" and the number). The test output goes through
   `.github/upstream-check/clean-report.sh` (module path, organisation name,
   links); a line that still refers to evcc's repository is replaced by
