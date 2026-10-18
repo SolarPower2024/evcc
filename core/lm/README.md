@@ -144,9 +144,11 @@ the minimum current, and the circuit would stay overloaded. Here it only
 switches on when its whole power fits, against the circuit's power and current
 limits alike. Its power is, in this order: the measurement while it draws, the
 configured *Leistung* (template *Home Assistant Switch*, `ratedpower`), the last
-measurement, the nominal maximum current on one phase. Without a power sensor
-the configured power is also reported as its power while on. See
-`core/loadpoint_lm.go` and `charger/switchsocket_lm.go`.
+measurement, the nominal maximum current on the active phases (a 3-phase device
+without measurement or configured power needs 3 × 16 A × 230 V). A negative
+`standbypower` counts as the configured power (its amount), a positive one does
+not. Without a power sensor the configured power is also reported as its power
+while on. See `core/loadpoint_lm.go` and `charger/switchsocket_lm.go`.
 
 ## 4. Heater in stages
 

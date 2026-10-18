@@ -252,7 +252,7 @@ type ratedPower interface {
 
 // lmSwitchPower returns what the switch draws when on: the measurement while it
 // draws, else the configured power, else the last measurement, else the
-// nominal maximum current.
+// nominal maximum current on the active phases.
 func (lp *Loadpoint) lmSwitchPower() float64 {
 	lp.switchMu.Lock()
 	defer lp.switchMu.Unlock()
@@ -272,5 +272,5 @@ func (lp *Loadpoint) lmSwitchPower() float64 {
 		return p
 	}
 
-	return currentToPower(lp.effectiveMaxCurrent(), 1)
+	return currentToPower(lp.effectiveMaxCurrent(), lp.ActivePhases())
 }

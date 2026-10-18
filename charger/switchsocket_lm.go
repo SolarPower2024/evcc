@@ -5,7 +5,15 @@ package charger
 // while no measurement is available. Without a power sensor it also becomes the
 // device's reported power while on.
 
-// RatedPower returns the configured power drawn when on in W, 0 = not set
+// RatedPower returns the power drawn when on in W, 0 = not set: the configured
+// ratedpower, else the negative standbypower (its amount), which is how a switch
+// without a power sensor states what it draws
 func (c *SwitchSocket) RatedPower() float64 {
-	return c.ratedPower
+	if c.ratedPower > 0 {
+		return c.ratedPower
+	}
+	if c.standbypower < 0 {
+		return -c.standbypower
+	}
+	return 0
 }
