@@ -276,4 +276,3 @@ func TestRestoreHomeWeekdayMoved(t *testing.T) {
 	site.restoreLmAdvanced()
 	assert.Equal(t, homeForecastManual, site.homeForecast())
 }
-
