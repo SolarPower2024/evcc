@@ -65,6 +65,8 @@ type lmAdvancedState struct {
 	HomeForecast         int     `json:"homeForecast"`
 	ExportForecastEntity string  `json:"exportForecastEntity"`
 	CircuitFromPeak      bool    `json:"circuitFromPeak"`
+	// PhasesMissing: the circuit has a current limit and the battery phases are not set, grid charging stays off
+	PhasesMissing bool `json:"phasesMissing"`
 }
 
 // lmAdvancedLimit is a setting's valid range
@@ -133,6 +135,7 @@ func (site *Site) publishLmAdvanced() {
 		HomeForecast:         site.homeForecast(),
 		ExportForecastEntity: site.exportForecastEntity(),
 		CircuitFromPeak:      site.advanced().CircuitFromPeak,
+		PhasesMissing:        site.batteryPhasesMissing(),
 	})
 }
 

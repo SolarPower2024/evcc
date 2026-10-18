@@ -30,7 +30,7 @@
 		<DeviceCard
 			:title="$t('config.gridcharge.entryLabel')"
 			editable
-			:error="chargePowerMissing"
+			:error="chargePowerMissing || phasesMissing"
 			data-testid="gridcharge-entry"
 			@edit="openModal('gridcharge')"
 		>
@@ -114,6 +114,10 @@ export default defineComponent({
 	computed: {
 		// the charge power only matters once something checks against it: the
 		// circuit, or the dynamic setpoint it caps. Grid charging stays off without it.
+		// the battery phases are needed for a circuit with a current limit, see core/site_lm_phases.go
+		phasesMissing(): boolean {
+			return !!store.state.lmAdvanced?.phasesMissing;
+		},
 		chargePowerMissing(): boolean {
 			const needed =
 				!!store.state.peakShavingCircuit || !!store.state.peakShavingChargeEntity;

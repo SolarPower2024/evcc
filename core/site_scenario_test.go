@@ -109,6 +109,11 @@ func (sc *scenario) withCircuitLimits(maxCurrent, maxPower float64, wallbox *sce
 	lms := sc.site.lms()
 	lms.batteryCircuitRef = "test"
 	lms.batteryCircuit = c
+	if maxCurrent > 0 && lms.adv.Phases == nil {
+		// the phases are needed with a current limit, see batteryPhasesMissing (three unless a test set them)
+		phases := 3.0
+		lms.adv.Phases = &phases
+	}
 	lms.prios = map[string]int{lmBatteryName: batteryPrio}
 }
 

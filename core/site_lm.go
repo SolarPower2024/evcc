@@ -43,6 +43,7 @@ type lmState struct {
 	m          *lm.Manager // the load management of this site
 	warnOnce   sync.Once   // incomplete battery config warning
 	orphanWarn sync.Once   // battery circuit gone, see batteryCircuitOrphan
+	phasesWarn sync.Once   // battery phases missing, see batteryPhasesMissing
 	mu         sync.Mutex
 
 	socChargeEnabled bool    // soc-based grid charging switch
@@ -361,6 +362,10 @@ func (site *Site) batteryCircuitAllows() bool {
 		return !site.batteryCircuitOrphan()
 	}
 
+	if site.batteryPhasesMissing() {
+		return false
+	}
+
 	s := site.lms()
 
 	want, _ := site.lmBatteryChargePower()
@@ -482,7 +487,7 @@ const minGridChargePower = 500.0
 // below the peak limit and within the circuit. Zero when less than the minimum
 // is left.
 func (site *Site) batteryChargeSetpoint() float64 {
-	if site.batteryCircuitOrphan() {
+	if site.batteryCircuitOrphan() || site.batteryPhasesMissing() {
 		return 0
 	}
 

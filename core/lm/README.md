@@ -105,7 +105,7 @@ circuit:
 | priority | Lastmanagement-Details → Prioritäten | 0 |
 | expected grid charge power | Lastmanagement-Details → Batterie-Netzladen | sum of the battery meters' max charge power |
 | entity for the charge power | Lastmanagement-Details → Batterie-Netzladen | none = on/off charging |
-| phases, wait after a shed, reservation expiry | Lastmanagement-Details → Erweitert | 3, 5 min, 10 min |
+| phases, wait after a shed, reservation expiry | Lastmanagement-Details → Erweitert | none (3 for accounting), 5 min, 10 min |
 
 A battery switched through mode scripts is on or off, so the whole expected
 charge power has to fit into the circuit, against its power and its current
@@ -119,6 +119,15 @@ A circuit that is deleted after it was chosen takes the battery out of load
 management with a warning (at the start and with the next cycle,
 `core/site_lm_orphan.go`); until then grid charging stays off, so it does not run
 without a circuit check.
+
+The phases must be set when the battery's circuit or one above it has a current
+limit (A): without them the accounting would assume three phases and let a
+single-phase battery charge with more current than checked. Until they are set,
+grid charging stays off, a warning is logged once, `lmAdvanced.phasesMissing`
+turns the grid charge tile red and the dialog shows the choice empty with a hint
+(`core/site_lm_phases.go`). A circuit with a power limit only needs nothing. The
+accounting of a charge already running keeps three phases.
+
 After a shed, grid charging waits for the hold-off, as stopping it frees exactly
 the power that would let it start again. See `core/site_lm.go`.
 
@@ -819,7 +828,7 @@ values are not stored, so a changed default applies.
 | `writeTolerance` | smallest change written to the peak shaving and grid charge power entities (not to the soc threshold of Marstek), set in the *Peak Shaving* dialog | 0 W | 0-1000 |
 | `holdOff` | wait after battery grid charging was stopped | 5 min | 1-60 |
 | `timeout` | expiry of unserved demand | 10 min | 1-60 |
-| `phases` | battery phases for current accounting | 3 | 1-3 |
+| `phases` | battery phases for current accounting | not set, accounting uses 3; required with a current limit, see [2](#2-battery-in-load-management) | 1-3 |
 | `peakFreeze` | minute from which the peak budget no longer grows | 12 | 1-14 |
 | `peakCap` | allowed grid power at most × limit | 2 | 1-10 |
 | `followCycles` | cycles until a load not following is ignored | 3 | 0-20, 0 = off |
@@ -1023,7 +1032,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 | Area | Files |
 | --- | --- |
-| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_switch.go`, `core/site_lm_orphan.go`, `core/site_lm_advanced.go`, `core/circuit/circuit_custom.go` |
+| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_switch.go`, `core/site_lm_orphan.go`, `core/site_lm_phases.go`, `core/site_lm_advanced.go`, `core/circuit/circuit_custom.go` |
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |
