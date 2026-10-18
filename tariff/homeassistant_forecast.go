@@ -95,6 +95,9 @@ func NewHAForecastFromConfig(other map[string]any) (api.Tariff, error) {
 	if cc.Attribute == "" {
 		return nil, errors.New("missing attribute")
 	}
+	if cc.Interval <= 0 {
+		return nil, errors.New("interval: must be positive")
+	}
 
 	log := util.NewLogger("ha-forecast")
 

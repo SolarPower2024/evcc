@@ -216,6 +216,11 @@ func TestHAForecastNoForecast(t *testing.T) {
 
 		_, err = NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"attribute": ""}))
 		assert.ErrorContains(t, err, "missing attribute")
+
+		for _, iv := range []string{"0s", "-1s"} {
+			_, err = NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"interval": iv}))
+			assert.ErrorContains(t, err, "interval: must be positive", iv)
+		}
 	})
 }
 
