@@ -73,7 +73,7 @@ jobs:
               echo "Rot:"
               echo
               echo '```'
-              grep -E '^(--- FAIL|FAIL|panic:)|_test.go:[0-9]+:|\.go:[0-9]+:[0-9]+:' /tmp/test.log | sed -E 's/#([0-9]+)/evcc PR \1/g' | head -40
+              grep -E '^(--- FAIL|FAIL|panic:)|_test.go:[0-9]+:|\.go:[0-9]+:[0-9]+:' /tmp/test.log | .github/upstream-check/clean-report.sh | head -40
               echo '```'
             fi
           } >>/tmp/report.md
@@ -89,8 +89,10 @@ jobs:
             printf '\n## Update-PR\n\nNicht angelegt: das Secret UPDATE_TOKEN fehlt.\n' >>/tmp/report.md
             exit 0
           fi
+          # a report is never dropped: lines referring to evcc's repository are replaced
           if grep -qE '#[0-9]|evcc-io/' /tmp/report.md; then
-            echo "report refers to evcc's repository, no PR"; exit 1
+            sed -i -E '/#[0-9]|evcc-io\//s/.*/[entfernt]/' /tmp/report.md
+            echo "::warning::report had lines referring to evcc's repository, replaced by [entfernt]"
           fi
           export GH_TOKEN="$UPDATE_TOKEN"
           git push --force "https://x-access-token:${UPDATE_TOKEN}@github.com/${GH_REPO}.git" "$(git rev-parse "$REF^{commit}")":refs/heads/evcc-update
@@ -111,8 +113,10 @@ jobs:
           COUNT: ${{ steps.review.outputs.count }}
           REF: ${{ steps.review.outputs.ref }}
         run: |
+          # a report is never dropped: lines referring to evcc's repository are replaced
           if grep -qE '#[0-9]|evcc-io/' /tmp/report.md; then
-            echo "report refers to evcc's repository, not posted"; exit 1
+            sed -i -E '/#[0-9]|evcc-io\//s/.*/[entfernt]/' /tmp/report.md
+            echo "::warning::report had lines referring to evcc's repository, replaced by [entfernt]"
           fi
           cat /tmp/report.md >>"$GITHUB_STEP_SUMMARY"
           title="evcc-Update-Check"

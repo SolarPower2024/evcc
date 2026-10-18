@@ -43,6 +43,9 @@ jobs:
       - name: Vet
         run: go vet ./core/... ./charger/ ./server/
 
+      - name: Update check report filter
+        run: bash .github/upstream-check/clean-report-test.sh
+
       # failures also as annotations, shown on the run page without the log
       - name: Test
         run: |
