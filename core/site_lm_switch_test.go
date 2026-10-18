@@ -354,3 +354,56 @@ func TestLmCircuitFromPeakRestart(t *testing.T) {
 	require.NoError(t, settings.Json(keys.LmAdvanced, &adv))
 	assert.False(t, adv.CircuitFromPeak)
 }
+
+// A deleted load management circuit lifts nothing: with load management off the
+// power limits stay, and the cycle removes the name and switches load
+// management on again.
+func TestLmCircuitDeleted(t *testing.T) {
+	site, main, sub := lmSwitchCircuits(t, 3500)
+
+	require.NoError(t, site.SetLmCircuit("garage"))
+	require.NoError(t, site.SetLmEnabled(false))
+	assert.Zero(t, sub.GetMaxPower())
+	assert.Equal(t, 10000.0, main.GetMaxPower())
+
+	// the circuit goes while load management is off: the limit stays as it is,
+	// the other circuit is not lifted
+	sub.SetMaxPower(7000)
+	require.NoError(t, config.Circuits().Delete("garage"))
+	site.applyCircuitLimits()
+	assert.Equal(t, 10000.0, main.GetMaxPower(), "nothing lifted")
+	assert.Equal(t, "garage", site.GetLmCircuit(), "the stored name stays until the cycle")
+
+	site.updateCustom(siteState{})
+	assert.Empty(t, site.GetLmCircuit())
+	assert.True(t, site.GetLmEnabled(), "on again")
+	assert.Equal(t, 10000.0, main.GetMaxPower())
+	_, err := settings.String(keys.LmCircuit)
+	assert.Error(t, err, "key removed")
+
+	// without a circuit chosen, off lifts all as documented
+	require.NoError(t, site.SetLmEnabled(false))
+	assert.Zero(t, main.GetMaxPower())
+	require.NoError(t, site.SetLmEnabled(true))
+}
+
+// A stored name of a circuit that is gone does not lift anything at the start
+// and is cleaned up.
+func TestLmCircuitDeletedAtStart(t *testing.T) {
+	site, main, _ := lmSwitchCircuits(t, 3500)
+	settings.SetString(keys.LmCircuit, "gone")
+	settings.SetBool(keys.LmOff, true)
+
+	site = &Site{log: site.log}
+	site.restoreLmSwitch()
+	assert.Equal(t, 10000.0, main.GetMaxPower(), "nothing lifted while the name is unknown")
+	assert.Equal(t, "gone", site.GetLmCircuit())
+
+	site.dropOrphanCircuits()
+	assert.Empty(t, site.GetLmCircuit())
+	assert.True(t, site.GetLmEnabled())
+	assert.Equal(t, 10000.0, main.GetMaxPower())
+	v, err := settings.Bool(keys.LmOff)
+	require.NoError(t, err)
+	assert.False(t, v)
+}

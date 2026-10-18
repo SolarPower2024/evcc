@@ -260,6 +260,11 @@ value stays stored. With the 3.5 kW of a small peak limit the
 minimum of a 3-phase wallbox (6 A × 3 = 4.1 kW) no longer fits under the circuit:
 it charges 1-phase or with the battery's help until the reserve is reached.
 
+A chosen circuit that is deleted afterwards lifts nothing and is not followed:
+the name is removed with a warning at the start and with the next cycle
+(`core/site_lm_orphan.go`), and load management that was off is on again, so
+the limits are not left lifted for an unknown circuit.
+
 ## 8. Overview
 
 *Mehr → Lastmanagement (Peak)* shows circuit load, peak shaving, every load
@@ -1014,7 +1019,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 | Area | Files |
 | --- | --- |
-| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_switch.go`, `core/site_lm_advanced.go`, `core/circuit/circuit_custom.go` |
+| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_switch.go`, `core/site_lm_orphan.go`, `core/site_lm_advanced.go`, `core/circuit/circuit_custom.go` |
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |

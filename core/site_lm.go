@@ -106,6 +106,7 @@ type siteCustom struct {
 func (site *Site) restoreCustom() {
 	site.restoreLmSettings()
 	site.restorePeakSettings()
+	site.dropOrphanCircuits()
 	// the circuit may take the peak limit: restoreLmSettings ran before the peak
 	// settings were back, so the limit applies here, not with the first cycle
 	site.applyCircuitLimits()
@@ -118,6 +119,7 @@ func (site *Site) restoreCustom() {
 // upstream decides on battery grid charging and the battery mode: peak shaving,
 // the export under the second feed-in tariff, the battery identification and snow on pv
 func (site *Site) updateCustom(state siteState) {
+	site.dropOrphanCircuits()
 	site.updatePeakShaving(state)
 	site.updateFeedInEeg()
 	site.updateBatteryIdent()
