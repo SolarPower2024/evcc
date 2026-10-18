@@ -731,7 +731,7 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   close to the feed-in price the optimizer never discharges (stored energy is
   valued at least feed-in / 0.9, so discharging needs about 1.25 × feed-in); a
   fixed planning price fixes that, but also drives vehicle plans and smart cost
-  limits.
+  limits. A planner tariff without rates falls back to the grid tariff.
 - every further solve is checked (solved, complete, battery within its bounds,
   not more over the limit), otherwise the plan before stays.
 - the plan is solved again when soc-based grid charging starts or stops, and a

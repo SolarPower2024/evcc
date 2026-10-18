@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -258,6 +259,12 @@ type co2Tariff struct{}
 func (co2Tariff) Rates() (api.Rates, error) { return nil, nil }
 func (co2Tariff) Type() api.TariffType      { return api.TariffTypeCo2 }
 
+// noRatesTariff is a planner price tariff that has no rates
+type noRatesTariff struct{ err error }
+
+func (t noRatesTariff) Rates() (api.Rates, error) { return nil, t.err }
+func (noRatesTariff) Type() api.TariffType        { return api.TariffTypePriceDynamic }
+
 // A price tariff set as planner tariff is the optimizer's grid price, anything
 // else leaves the grid tariff.
 func TestLmOptimizerGridTariff(t *testing.T) {
@@ -281,6 +288,11 @@ func TestLmOptimizerGridTariff(t *testing.T) {
 
 	site.tariffs.Planner = co2Tariff{}
 	assert.Equal(t, 0.10, price(site), "co2 planner: grid")
+
+	for _, err := range []error{nil, errors.New("fail")} {
+		site.tariffs.Planner = noRatesTariff{err}
+		assert.Equal(t, 0.10, price(site), "planner without rates: grid")
+	}
 
 	assert.Nil(t, (&Site{}).optimizerGridTariff())
 }

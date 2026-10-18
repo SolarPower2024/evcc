@@ -57,7 +57,8 @@ func optimizerPriority(prio int) int {
 }
 
 // optimizerGridTariff returns the tariff the optimizer plans the grid price
-// with: a price tariff set as planner tariff, else the grid tariff as upstream.
+// with: a price tariff set as planner tariff that has rates, else the grid
+// tariff as upstream.
 // Lets a fixed planning price above the real one make discharging pay where the
 // real prices are too close to the feed-in price.
 func (site *Site) optimizerGridTariff() api.Tariff {
@@ -71,7 +72,11 @@ func (site *Site) optimizerGridTariff() api.Tariff {
 	if t := site.tariffs.Planner; t != nil {
 		switch t.Type() {
 		case api.TariffTypePriceStatic, api.TariffTypePriceDynamic, api.TariffTypePriceForecast:
-			return t
+			// without rates the optimizer would fail on too few slots
+			if len(currentRates(t)) > 0 {
+				return t
+			}
+			site.log.DEBUG.Println("optimizer: planner tariff has no rates, using the grid tariff")
 		}
 	}
 
