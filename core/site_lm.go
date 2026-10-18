@@ -39,10 +39,12 @@ const (
 
 // lmState is the runtime state of the load management extensions
 type lmState struct {
-	once     sync.Once   // defaults
-	m        *lm.Manager // the load management of this site
-	warnOnce sync.Once   // incomplete battery config warning
-	mu       sync.Mutex
+	once       sync.Once   // defaults
+	m          *lm.Manager // the load management of this site
+	warnOnce   sync.Once   // incomplete battery config warning
+	orphanWarn sync.Once   // battery circuit gone, see batteryCircuitOrphan
+	phasesWarn sync.Once   // battery phases missing, see batteryPhasesMissing
+	mu         sync.Mutex
 
 	socChargeEnabled bool    // soc-based grid charging switch
 	socChargeStart   float64 // start grid charging at or below this soc
@@ -107,9 +109,13 @@ func (site *Site) restoreCustom() {
 	site.dropStoredLoadpointKeys()
 	site.restoreLmSettings()
 	site.restorePeakSettings()
+	site.dropOrphanCircuits()
 	// the circuit may take the peak limit: restoreLmSettings ran before the peak
 	// settings were back, so the limit applies here, not with the first cycle
 	site.applyCircuitLimits()
+	// restoreLmSettings published the advanced settings before the battery circuit was
+	// back, so phasesMissing read false: publish them once more
+	site.publishLmAdvanced()
 	site.restoreFeedInEeg()
 	site.restoreLogFile()
 	site.restoreSnowCover()
@@ -119,6 +125,7 @@ func (site *Site) restoreCustom() {
 // upstream decides on battery grid charging and the battery mode: peak shaving,
 // the export under the second feed-in tariff, the battery identification and snow on pv
 func (site *Site) updateCustom(state siteState) {
+	site.dropOrphanCircuits()
 	site.updatePeakShaving(state)
 	site.updateFeedInEeg()
 	site.updateBatteryIdent()
@@ -353,7 +360,11 @@ func (site *Site) circuitLoads() []api.CircuitLoad {
 func (site *Site) batteryCircuitAllows() bool {
 	c := site.lmBatteryCircuit()
 	if c == nil {
-		return true
+		return !site.batteryCircuitOrphan()
+	}
+
+	if site.batteryPhasesMissing() {
+		return false
 	}
 
 	s := site.lms()
@@ -477,6 +488,10 @@ const minGridChargePower = 500.0
 // below the peak limit and within the circuit. Zero when less than the minimum
 // is left.
 func (site *Site) batteryChargeSetpoint() float64 {
+	if site.batteryCircuitOrphan() || site.batteryPhasesMissing() {
+		return 0
+	}
+
 	power, _ := site.lmBatteryChargePower()
 	if power <= 0 {
 		site.lms().warnOnce.Do(func() {

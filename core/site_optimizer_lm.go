@@ -308,9 +308,15 @@ func (site *Site) peakShavingConfigured() (bool, float64, float64) {
 
 // lmGridChargeBlocked reports without side effects whether grid charging is
 // currently refused: held off after load management shed it, or without a
-// known charge power on a circuit. A peak pausing it is not: that holds only
+// known charge power on a circuit, without the phases a current limit needs or
+// on a circuit that is gone. A peak pausing it is not: that holds only
 // while the demand exceeds the limit, which the import limit already plans.
 func (site *Site) lmGridChargeBlocked() bool {
+	// refused every cycle until the user sets the phases or the name is removed
+	if site.circuitOrphan() || site.phasesMissing() {
+		return true
+	}
+
 	if site.lmBatteryCircuit() == nil {
 		return false
 	}

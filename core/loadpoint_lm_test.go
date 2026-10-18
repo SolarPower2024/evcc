@@ -43,6 +43,7 @@ func newSwitchLoadpoint(t *testing.T, rated, grid float64) (*Loadpoint, *lmMeter
 		circuit:    c,
 		charger:    &lmSwitch{rated: rated},
 		maxCurrent: 16,
+		phases:     1, // a plug, unless a test says otherwise
 	}
 
 	return lp, m, c
@@ -129,9 +130,12 @@ func TestSwitchCurrentLimit(t *testing.T) {
 func TestSwitchPowerSources(t *testing.T) {
 	lp, _, _ := newSwitchLoadpoint(t, 0, 0)
 
-	// nothing known: nominal max current on one phase
+	// nothing known: nominal max current on the active phases
+	lp.phases = 1
 	assert.Equal(t, 3680.0, lp.lmSwitchPower())
-
+	lp.phases = 3
+	assert.Equal(t, 3*3680.0, lp.lmSwitchPower(), "3p draws 3 x 16 A x 230 V")
+	lp.phases = 1
 	// measured while on, remembered once off
 	lp.chargePower = 2800
 	assert.Equal(t, 2800.0, lp.lmSwitchPower())

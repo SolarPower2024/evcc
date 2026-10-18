@@ -97,17 +97,14 @@ func (site *Site) applyCircuitLimits() {
 	s.mu.Lock()
 	off, lmCircuit := s.off, s.circuit
 
-	// a chosen circuit that no longer exists: all circuits, nothing follows
-	if lmCircuit != "" {
-		if _, err := config.Circuits().ByName(lmCircuit); err != nil {
-			lmCircuit = ""
-		}
-	}
+	// a chosen circuit that no longer exists: nothing is lifted, nothing follows,
+	// see dropOrphanCircuits
+	orphan := lmCircuit != "" && !circuitExists(lmCircuit)
 	followCircuit, peakCircuit := "", ""
-	if following {
+	if following && !orphan {
 		followCircuit = lmCircuit
 	}
-	if fromPeak {
+	if fromPeak && !orphan {
 		peakCircuit = lmCircuit
 	}
 	var peakConfigured float64
@@ -125,7 +122,7 @@ func (site *Site) applyCircuitLimits() {
 			configured = c.GetMaxPower()
 		}
 
-		lift := off && (lmCircuit == "" || name == lmCircuit)
+		lift := off && !orphan && (lmCircuit == "" || name == lmCircuit)
 		wanted := circuitLimitWanted(configured, lift, name == peakCircuit, name == followCircuit, peakLimit)
 		if name == peakCircuit {
 			peakConfigured = configured

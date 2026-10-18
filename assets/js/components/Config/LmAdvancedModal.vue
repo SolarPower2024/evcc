@@ -98,9 +98,17 @@
 							class="form-select"
 							data-testid="lmadvanced-phases"
 						>
+							<option v-if="values.phases === null" :value="null" disabled>–</option>
 							<option :value="1">{{ $t("config.lmadvanced.phases1") }}</option>
 							<option :value="3">{{ $t("config.lmadvanced.phases3") }}</option>
 						</select>
+						<div
+							v-if="values.phases === null"
+							class="text-danger small mt-1"
+							data-testid="lmadvanced-phasesMissing"
+						>
+							{{ $t("config.lmadvanced.phasesMissing") }}
+						</div>
 					</FormRow>
 
 					<template v-if="g === 'optimizer'">
@@ -403,14 +411,17 @@ export default {
 			const state = store.state?.lmAdvanced || {};
 			const values = {};
 			FIELDS.forEach((f) => (values[f.name] = state[f.name] ?? f.default));
-			values.phases = state.phases ?? 3;
+			// not set but needed: empty until chosen, see core/site_lm_phases.go
+			values.phases = state.phasesMissing ? null : (state.phases ?? 3);
 			values.homeForecast = state.homeForecast ?? 0;
 
 			this.saving = false;
 			this.error = "";
 			this.values = { ...values };
 			this.initial = { ...values };
-			this.circuit = store.state?.lmOff?.circuit || "";
+			// a circuit that was deleted counts as none
+			const lmCircuit = store.state?.lmOff?.circuit || "";
+			this.circuit = store.state?.circuits?.[lmCircuit] ? lmCircuit : "";
 			this.initialCircuit = this.circuit;
 			this.circuitFromPeak = !!state.circuitFromPeak;
 			this.initialCircuitFromPeak = this.circuitFromPeak;

@@ -51,6 +51,8 @@ export interface LmAdvanced {
   exportForecastEntity?: string;
   /** The load management (peak) circuit's power limit is the peak limit while peak shaving is on. */
   circuitFromPeak?: boolean;
+  /** The battery's circuit has a current limit and the battery phases are not set: no grid charging. */
+  phasesMissing?: boolean;
 }
 
 // a battery profile, see core/lm/profile. Values left out are not changed.

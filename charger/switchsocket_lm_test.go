@@ -52,3 +52,26 @@ func TestSwitchSocketRatedPower(t *testing.T) {
 	_, err = NewSwitchSocketFromConfig(t.Context(), switchConfig(true, 0, false))
 	assert.Error(t, err)
 }
+
+func TestSwitchSocketRatedPowerFromStandbypower(t *testing.T) {
+	cfg := func(standby float64, rated float64) map[string]any {
+		cc := switchConfig(true, rated, true)
+		cc["standbypower"] = standby
+		return cc
+	}
+
+	// a negative standbypower is the power drawn when on
+	c, err := NewSwitchSocketFromConfig(t.Context(), cfg(-3000, 0))
+	require.NoError(t, err)
+	assert.Equal(t, 3000.0, c.(*SwitchSocket).RatedPower())
+
+	// a positive one is the standby draw, not a rating
+	c, err = NewSwitchSocketFromConfig(t.Context(), cfg(15, 0))
+	require.NoError(t, err)
+	assert.Equal(t, 0.0, c.(*SwitchSocket).RatedPower())
+
+	// ratedpower comes first
+	c, err = NewSwitchSocketFromConfig(t.Context(), cfg(-3000, 2500))
+	require.NoError(t, err)
+	assert.Equal(t, 2500.0, c.(*SwitchSocket).RatedPower())
+}

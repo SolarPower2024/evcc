@@ -12,6 +12,7 @@ import (
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSocChargeRunningSurvivesRestart verifies that soc-based grid charging
@@ -138,4 +139,34 @@ func TestPeakReserveUnknownSoc(t *testing.T) {
 	site.battery.Soc = 90
 	site.updatePeakShaving(site.state())
 	assert.True(t, site.peakShavingActive(), "state kept while the soc is not read")
+}
+
+// A battery assigned to a circuit that does not exist is not grid-charged
+// without a check, and the assignment is removed with the next cycle.
+func TestBatteryUnknownCircuitNoGridCharge(t *testing.T) {
+	site, _, _ := lmSwitchCircuits(t, 3500)
+	p := site.peak()
+	p.chargePower = 2500
+	p.circuit = "gone"
+	settings.SetString(keys.PeakShavingCircuit, "gone")
+
+	assert.False(t, site.batteryCircuitAllows(), "no grid charging on an unknown circuit")
+	assert.Zero(t, site.batteryChargeSetpoint())
+
+	// removed with the cycle: not in load management, charges as without a circuit
+	site.updateCustom(siteState{})
+	assert.Empty(t, site.GetPeakShavingCircuit())
+	v, err := settings.String(keys.PeakShavingCircuit)
+	require.NoError(t, err)
+	assert.Empty(t, v, "stored assignment emptied")
+	assert.True(t, site.batteryCircuitAllows())
+	assert.Equal(t, 2500.0, site.batteryChargeSetpoint())
+
+	// a circuit deleted at runtime is dropped with the next cycle as well
+	require.NoError(t, site.SetPeakShavingCircuit("garage"))
+	require.NotNil(t, site.lmBatteryCircuit())
+	require.NoError(t, config.Circuits().Delete("garage"))
+	site.updateCustom(siteState{})
+	assert.Empty(t, site.GetPeakShavingCircuit())
+	assert.Nil(t, site.lmBatteryCircuit())
 }

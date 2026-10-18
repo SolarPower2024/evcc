@@ -1470,6 +1470,7 @@ func (site *Site) SetPeakShavingCircuit(name string) error {
 
 		// the battery only appears among the priorities once it is on a circuit
 		site.publishLmPriorities()
+		site.publishLmAdvanced() // phasesMissing depends on the circuit
 	}
 
 	return nil
