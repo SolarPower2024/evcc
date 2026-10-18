@@ -190,6 +190,12 @@ func (site *Site) lmSocChargePass(ctx context.Context, client *optimizer.ClientW
 		return
 	}
 
+	// not more over the limit than the plan it replaces after slot k
+	if over, over2 := tailSum(res.GridImportOvershoot, k+1), sumOf(res2.GridImportOvershoot); over2 > over+1 {
+		site.log.DEBUG.Printf("optimizer: soc grid charge pass: more over the limit (%.0f Wh, first pass %.0f Wh)", over2, over)
+		return
+	}
+
 	socPassJoin(res, *res2, k)
 
 	// the goals as part of the request, for the optimizer page

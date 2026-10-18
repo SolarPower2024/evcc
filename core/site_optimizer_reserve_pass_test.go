@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/core/circuit"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
 	optimizer "github.com/evcc-io/optimizer/client"
@@ -521,4 +522,120 @@ func TestLmOptimizerPassesTimeBudget(t *testing.T) {
 	cancel()
 	assert.True(t, site.lmBudgetUsed(ctx))
 	assert.False(t, site.lmBudgetUsed(context.Background()))
+}
+
+// The soc pass replaces the rest of the plan with one that charges to the stop
+// soc, and keeps the first plan when the second is worse.
+func TestLmSocChargePass(t *testing.T) {
+	// the second pass covers slots 1-7, the battery has reached the start soc in slot 0
+	second := func() *optimizer.OptimizationResult {
+		return &optimizer.OptimizationResult{Status: optimizer.Optimal, Batteries: []optimizer.BatteryResult{{
+			StateOfCharge:    []float32{4625, 5750, 6000, 6000, 6000, 6000, 6000},
+			ChargingPower:    []float32{5000, 5000, 1000, 0, 0, 0, 0},
+			DischargingPower: make([]float32, 7),
+		}}, GridImport: []float32{4000, 4000, 1000, 0, 0, 0, 0}, GridExport: make([]float32, 7)}
+	}
+
+	run := func(t *testing.T, client *optimizer.ClientWithResponses, mod func(*optimizer.OptimizationInput, *optimizer.OptimizationResult)) (*optimizer.OptimizationInput, *optimizer.OptimizationResult) {
+		req, res, plan := floorCase()
+		plan.limit, plan.controlled = 0, false
+		req.Batteries[0].SMin = 0
+		res.GridImportOvershoot = nil
+		if mod != nil {
+			mod(req, res)
+		}
+		site := &Site{log: util.NewLogger("test")}
+		s := site.lms()
+		s.socChargeEnabled, s.socChargeStart, s.socChargeStop = true, 36, 60
+		site.lmSocChargePass(context.Background(), client, req, 0, plan, nil, res)
+		return req, res
+	}
+
+	_, before := run(t, func() *optimizer.ClientWithResponses {
+		c, _ := fakeOptimizer(t, http.StatusInternalServerError, nil)
+		return c
+	}(), nil)
+
+	t.Run("success", func(t *testing.T) {
+		client, calls := fakeOptimizer(t, http.StatusOK, second())
+		req, res := run(t, client, nil)
+		assert.EqualValues(t, 1, calls.Load())
+		assert.Equal(t, []float32{3583, 4625, 5750, 6000, 6000, 6000, 6000, 6000}, res.Batteries[0].StateOfCharge, "joined")
+		assert.Len(t, req.Batteries[0].SGoal, 8, "goals in the request")
+		assert.Contains(t, req.Batteries[0].SGoal, float32(6000), "the stop soc")
+	})
+
+	t.Run("error", func(t *testing.T) {
+		client, _ := fakeOptimizer(t, http.StatusInternalServerError, nil)
+		_, res := run(t, client, nil)
+		assert.Equal(t, before.Batteries[0].StateOfCharge, res.Batteries[0].StateOfCharge)
+	})
+
+	t.Run("invalid plan", func(t *testing.T) {
+		bad := second()
+		bad.Batteries[0].StateOfCharge = []float32{50000, 50000, 50000, 50000, 50000, 50000, 50000}
+		client, _ := fakeOptimizer(t, http.StatusOK, bad)
+		_, res := run(t, client, nil)
+		assert.Equal(t, before.Batteries[0].StateOfCharge, res.Batteries[0].StateOfCharge)
+	})
+
+	t.Run("more over the limit in the rest", func(t *testing.T) {
+		worse := second()
+		worse.GridImportOvershoot = []float32{0, 900, 0, 0, 0, 0, 0}
+		client, _ := fakeOptimizer(t, http.StatusOK, worse)
+		_, res := run(t, client, nil)
+		assert.Equal(t, before.Batteries[0].StateOfCharge, res.Batteries[0].StateOfCharge)
+	})
+
+	t.Run("overshoot before the start does not count", func(t *testing.T) {
+		withHead := second()
+		withHead.GridImportOvershoot = make([]float32, 7)
+		client, _ := fakeOptimizer(t, http.StatusOK, withHead)
+		_, res := run(t, client, func(_ *optimizer.OptimizationInput, res *optimizer.OptimizationResult) {
+			res.GridImportOvershoot = []float32{500, 0, 0, 0, 0, 0, 0, 0}
+		})
+		assert.Equal(t, float32(4625), res.Batteries[0].StateOfCharge[1], "joined")
+	})
+
+	t.Run("no overshoot field", func(t *testing.T) {
+		worse := second()
+		worse.GridImportOvershoot = nil
+		client, _ := fakeOptimizer(t, http.StatusOK, worse)
+		require.NotPanics(t, func() {
+			_, res := run(t, client, nil)
+			assert.Equal(t, float32(4625), res.Batteries[0].StateOfCharge[1])
+		})
+	})
+}
+
+func TestTailSum(t *testing.T) {
+	assert.Equal(t, float32(5), tailSum([]float32{1, 2, 3}, 1))
+	assert.Zero(t, tailSum([]float32{1, 2, 3}, 3))
+	assert.Zero(t, tailSum(nil, 2))
+	assert.Equal(t, float32(6), tailSum([]float32{1, 2, 3}, -1))
+}
+
+// Grid charging is refused without a known charge power on a circuit and while
+// the shed hold-off runs.
+func TestLmGridChargeBlocked(t *testing.T) {
+	config.Reset()
+	t.Cleanup(config.Reset)
+
+	site := &Site{log: util.NewLogger("test")}
+	assert.False(t, site.lmGridChargeBlocked(), "no circuit")
+
+	root, err := circuit.New(util.NewLogger("test"), "main", 0, 22000, nil, 0)
+	require.NoError(t, err)
+	require.NoError(t, config.Circuits().Add(config.NewStaticDevice(config.Named{Name: "main"}, api.Circuit(root))))
+	require.NoError(t, site.SetPeakShavingCircuit("main"))
+	assert.True(t, site.lmGridChargeBlocked(), "unknown charge power")
+
+	site.peak().chargePower = 5000
+	assert.False(t, site.lmGridChargeBlocked(), "known charge power")
+
+	site.lms().batteryShedUntil = time.Now().Add(time.Hour)
+	assert.True(t, site.lmGridChargeBlocked(), "shed hold-off")
+
+	site.lms().batteryShedUntil = time.Now().Add(-time.Minute)
+	assert.False(t, site.lmGridChargeBlocked(), "hold-off over")
 }

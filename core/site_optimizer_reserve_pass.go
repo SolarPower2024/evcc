@@ -315,6 +315,14 @@ func lmPlanValid(req optimizer.OptimizationInput, home int, res *optimizer.Optim
 	return true
 }
 
+// tailSum is the sum of v from index from on, 0 where it is shorter
+func tailSum(v []float32, from int) float32 {
+	if from >= len(v) {
+		return 0
+	}
+	return sumOf(v[max(from, 0):])
+}
+
 func sumOf(v []float32) float32 {
 	var res float32
 	for _, x := range v {
