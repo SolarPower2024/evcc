@@ -40,6 +40,20 @@ jobs:
       - name: Build
         run: go build ./...
 
+      # -z: git ls-files quotes names with umlauts (charger/weidmüller.go) otherwise
+      - name: Format
+        run: |
+          unformatted=$(git ls-files -z '*.go' | xargs -0 gofmt -l)
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted" | sed "s/^/::error file=/;s/$/::not formatted (gofmt)/"
+            exit 1
+          fi
+
+      - name: Mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
       - name: Vet
         run: go vet ./core/... ./charger/ ./server/
 

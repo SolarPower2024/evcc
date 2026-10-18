@@ -1118,7 +1118,8 @@ database closes it again. The fork's tests pass in any order (`-shuffle=on`).
 **On GitHub** (`.github/workflows/`, standard runners, free for a public
 repository):
 
-- `fork-tests.yml` on every push and pull request: build, vet, the whole Go
+- `fork-tests.yml` on every push and pull request: build, gofmt and
+  `go mod tidy` (no diff allowed), vet, the whole Go
   testsuite (evcc's and the fork's), the race detector on the fork's packages,
   the ui checks (format, lint, types, i18n, vitest, build) and a shuffled run
   that reports but does not block.
