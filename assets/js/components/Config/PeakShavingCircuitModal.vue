@@ -91,7 +91,9 @@ export default {
 	},
 	methods: {
 		reset() {
-			const circuit = store?.state?.peakShavingCircuit || "";
+			// a circuit that was deleted counts as none
+			const name = store?.state?.peakShavingCircuit || "";
+			const circuit = store?.state?.circuits?.[name] ? name : "";
 			this.saving = false;
 			this.error = "";
 			this.circuit = circuit;

@@ -115,6 +115,10 @@ logged once. With a charge power entity, evcc writes the grid charge power
 instead: the expected power, trimmed to what fits into the rest budget of the
 running 15 minute window (at most below the peak limit) and into the circuit,
 at least 500 W.
+A circuit that is deleted after it was chosen takes the battery out of load
+management with a warning (at the start and with the next cycle,
+`core/site_lm_orphan.go`); until then grid charging stays off, so it does not run
+without a circuit check.
 After a shed, grid charging waits for the hold-off, as stopping it frees exactly
 the power that would let it start again. See `core/site_lm.go`.
 

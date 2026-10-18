@@ -39,10 +39,11 @@ const (
 
 // lmState is the runtime state of the load management extensions
 type lmState struct {
-	once     sync.Once   // defaults
-	m        *lm.Manager // the load management of this site
-	warnOnce sync.Once   // incomplete battery config warning
-	mu       sync.Mutex
+	once       sync.Once   // defaults
+	m          *lm.Manager // the load management of this site
+	warnOnce   sync.Once   // incomplete battery config warning
+	orphanWarn sync.Once   // battery circuit gone, see batteryCircuitOrphan
+	mu         sync.Mutex
 
 	socChargeEnabled bool    // soc-based grid charging switch
 	socChargeStart   float64 // start grid charging at or below this soc
@@ -357,7 +358,7 @@ func (site *Site) circuitLoads() []api.CircuitLoad {
 func (site *Site) batteryCircuitAllows() bool {
 	c := site.lmBatteryCircuit()
 	if c == nil {
-		return true
+		return !site.batteryCircuitOrphan()
 	}
 
 	s := site.lms()
@@ -481,6 +482,10 @@ const minGridChargePower = 500.0
 // below the peak limit and within the circuit. Zero when less than the minimum
 // is left.
 func (site *Site) batteryChargeSetpoint() float64 {
+	if site.batteryCircuitOrphan() {
+		return 0
+	}
+
 	power, _ := site.lmBatteryChargePower()
 	if power <= 0 {
 		site.lms().warnOnce.Do(func() {

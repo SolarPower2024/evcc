@@ -47,7 +47,29 @@ func (site *Site) dropOrphanCircuits() {
 		changed = true
 	}
 
+	if ref := site.GetPeakShavingCircuit(); ref != "" && !circuitExists(ref) {
+		site.log.WARN.Printf("peak shaving: battery circuit %s no longer exists, removed, the battery is not part of load management", ref)
+		_ = site.SetPeakShavingCircuit("")
+		changed = true
+	}
+
 	if changed {
 		site.applyCircuitLimits()
 	}
+}
+
+// batteryCircuitOrphan reports whether the battery is assigned to a circuit
+// that cannot be resolved. Until dropOrphanCircuits has removed the name, grid
+// charging stays off: "no circuit" would otherwise read as "not in load
+// management" and charge without the circuit's check.
+func (site *Site) batteryCircuitOrphan() bool {
+	ref := site.GetPeakShavingCircuit()
+	if ref == "" || site.lmBatteryCircuit() != nil {
+		return false
+	}
+
+	site.lms().orphanWarn.Do(func() {
+		site.log.WARN.Printf("load management: battery circuit %s does not exist, grid charging stays off until it is removed", ref)
+	})
+	return true
 }

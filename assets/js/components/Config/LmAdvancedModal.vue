@@ -410,7 +410,9 @@ export default {
 			this.error = "";
 			this.values = { ...values };
 			this.initial = { ...values };
-			this.circuit = store.state?.lmOff?.circuit || "";
+			// a circuit that was deleted counts as none
+			const lmCircuit = store.state?.lmOff?.circuit || "";
+			this.circuit = store.state?.circuits?.[lmCircuit] ? lmCircuit : "";
 			this.initialCircuit = this.circuit;
 			this.circuitFromPeak = !!state.circuitFromPeak;
 			this.initialCircuitFromPeak = this.circuitFromPeak;
