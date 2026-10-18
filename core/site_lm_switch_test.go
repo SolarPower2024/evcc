@@ -326,6 +326,8 @@ func TestLmCircuitFromPeakPlugin(t *testing.T) {
 // the load management settings back before the peak settings, so the circuit
 // takes the peak limit only after both, not with the first cycle.
 func TestLmCircuitFromPeakRestart(t *testing.T) {
+	noSettingsDB(t)
+	freshSettings(t)
 	a, main, _ := lmSwitchCircuits(t, 3500)
 	require.NoError(t, a.SetLmCircuit("main"))
 	require.NoError(t, a.SetLmAdvanced("circuitFromPeak", 1))

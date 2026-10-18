@@ -68,8 +68,9 @@ func TestBatteryPhasesRequired(t *testing.T) {
 // publishes phasesMissing: the circuit is back only after the load management
 // settings, which publish first.
 func TestBatteryPhasesMissingPublishedAfterRestore(t *testing.T) {
+	noSettingsDB(t)
+	freshSettings(t)
 	a, _, _ := lmSwitchCircuits(t, 3500)
-	_ = settings.Delete(keys.LmAdvanced)
 	settings.SetString(keys.PeakShavingCircuit, "main")
 	useLogFileDir(t)
 
