@@ -611,7 +611,7 @@ battery usage (priority, buffer and buffer start soc, discharge lock), peak
 shaving (on/off, reserve, limit) and each wallbox's solar share; values not
 ticked are left alone. Applied through the regular setters; priority, buffer
 and buffer start soc are checked together and set bottom up, as evcc checks
-each against the other two. Type in `core/lm/profile`, the rest in
+each against the other two. A disabled loadpoint has no instance: its solar share is refused with an error, the other values still apply. Type in `core/lm/profile`, the rest in
 `core/site_lm_profiles.go`.
 
 ```

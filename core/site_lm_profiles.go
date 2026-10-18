@@ -17,6 +17,7 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm/profile"
+	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/config"
 )
@@ -238,28 +239,40 @@ func (site *Site) applyProfileBatteryUsage(p profile.Profile, add func(string, e
 	}
 }
 
-// lmCheckWallbox checks that a loadpoint exists and is not a heating device
-func lmCheckWallbox(name string) error {
+// lmRunningWallbox returns the loadpoint if it exists, is running and is not a heating
+// device. A disabled loadpoint has no instance.
+func lmRunningWallbox(name string) (loadpoint.API, error) {
 	dev, err := config.Loadpoints().ByName(name)
 	if err != nil {
-		return fmt.Errorf("unknown loadpoint: %s", name)
+		return nil, fmt.Errorf("unknown loadpoint: %s", name)
 	}
 
-	if lp, ok := dev.Instance().(*Loadpoint); ok && lp.chargerHasFeature(api.Heating) {
-		return fmt.Errorf("%s is a heating device", name)
+	lp := dev.Instance()
+	if lp == nil {
+		return nil, fmt.Errorf("loadpoint %s is disabled", name)
 	}
 
-	return nil
+	if lp, ok := lp.(*Loadpoint); ok && lp.chargerHasFeature(api.Heating) {
+		return nil, fmt.Errorf("%s is a heating device", name)
+	}
+
+	return lp, nil
+}
+
+// lmCheckWallbox checks that a loadpoint exists, is running and is not a heating device
+func lmCheckWallbox(name string) error {
+	_, err := lmRunningWallbox(name)
+	return err
 }
 
 // lmSetSolarShare sets a wallbox's solar share, given in %
 func lmSetSolarShare(name string, percent float64) error {
-	if err := lmCheckWallbox(name); err != nil {
+	lp, err := lmRunningWallbox(name)
+	if err != nil {
 		return err
 	}
 
-	dev, _ := config.Loadpoints().ByName(name)
-	dev.Instance().SetSolarShare(percent / 100)
+	lp.SetSolarShare(percent / 100)
 
 	return nil
 }

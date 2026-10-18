@@ -5,7 +5,9 @@ import (
 
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm/profile"
+	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/db/settings"
+	"github.com/evcc-io/evcc/util/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -87,4 +89,34 @@ func TestApplyLmProfile(t *testing.T) {
 	assert.Error(t, site.ApplyLmProfile("unknown"))
 	_, err = site.SaveLmProfile(profile.Profile{Name: "Wallbox", SolarShare: map[string]float64{"db:99": 50}})
 	assert.Error(t, err, "unknown loadpoint")
+}
+
+// TestLmProfileDisabledLoadpoint: a loadpoint without instance (disabled) is
+// refused with an error instead of a panic, the other values of the profile apply
+func TestLmProfileDisabledLoadpoint(t *testing.T) {
+	noSettingsDB(t)
+	config.Reset()
+	t.Cleanup(config.Reset)
+	sc := newScenario(t)
+	site := sc.site
+	settings.SetJson(keys.LmProfiles, []profile.Profile{})
+	site.peak().set = func(float64) error { return nil }
+
+	require.NoError(t, config.Loadpoints().Add(config.NewStaticDevice(config.Named{Name: "off"}, loadpoint.API(nil))))
+
+	_, err := site.SaveLmProfile(profile.Profile{Name: "Aus", SolarShare: map[string]float64{"off": 50}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "disabled")
+
+	// a profile saved while the loadpoint was running
+	require.NoError(t, settings.SetJson(keys.LmProfiles, []profile.Profile{{
+		ID: "p1", Name: "Alt", Icon: "sun",
+		PrioritySoc: fp(25), BufferSoc: fp(35), BufferStartSoc: fp(45),
+		SolarShare: map[string]float64{"off": 50},
+	}}))
+
+	require.NotPanics(t, func() { err = site.ApplyLmProfile("p1") })
+	require.Error(t, err)
+	assert.Equal(t, 25.0, site.GetPrioritySoc(), "the other values are applied")
+	assert.Equal(t, 35.0, site.GetBufferSoc())
 }
