@@ -26,11 +26,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
 
@@ -40,8 +40,25 @@ jobs:
       - name: Build
         run: go build ./...
 
+      # -z: git ls-files quotes names with umlauts (charger/weidmüller.go) otherwise
+      - name: Format
+        run: |
+          unformatted=$(git ls-files -z '*.go' | xargs -0 gofmt -l)
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted" | sed "s/^/::error file=/;s/$/::not formatted (gofmt)/"
+            exit 1
+          fi
+
+      - name: Mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
       - name: Vet
-        run: go vet ./core/... ./charger/ ./server/
+        run: go vet ./core/... ./charger/ ./server/ ./tariff/ ./util/logstash/ ./cmd/ ./api/globalconfig/
+
+      - name: Update check report filter
+        run: bash .github/upstream-check/clean-report-test.sh
 
       # failures also as annotations, shown on the run page without the log
       - name: Test
@@ -56,6 +73,7 @@ jobs:
         run: |
           set -o pipefail
           # charger: only the fork's tests, evcc's TestTemplates has an intermittent race of its own.
+          # tariff: the same for evcc's tariff tests, only the fork's TestHAForecast*.
           # core: evcc's enableAutomatic (optimizer_automatic_test.go) writes sponsor.Subject while an
           # optimizer run started by an earlier evcc test still reads it; evcc runs no race detector.
           # The skip list is built from the sources (every test calling enableAutomatic), so new evcc
@@ -63,9 +81,10 @@ jobs:
           evccRace="^($(awk '/^func Test/{n=$2; sub(/\(.*/,"",n)} /enableAutomatic\(t\)/{print n}' core/*_test.go | sort -u | paste -sd'|'))\$"
           echo "skipped for race (evcc enableAutomatic): $evccRace"
           {
-            go test -race -count=1 ./core/lm/... ./core/peak/ ./server/ &&
+            go test -race -count=1 ./core/lm/... ./core/peak/ ./server/ ./util/logstash/ ./core/metrics/ ./core/circuit/ ./core/loadpoint/ &&
               go test -race -count=1 -skip "$evccRace" ./core/ &&
-              go test -race -count=1 -run 'TestSwitchStages|TestSwitchSocketRatedPower' ./charger/
+              go test -race -count=1 -run 'TestSwitchStages|TestSwitchSocketRatedPower' ./charger/ &&
+                go test -race -count=1 -run 'TestHAForecast' ./tariff/
           } 2>&1 | tee /tmp/race.log || {
             grep -E "^(--- FAIL|FAIL|panic:)" /tmp/race.log | head -20 | sed "s/^/::error::/"
             # each race report as one annotation, newlines encoded
@@ -81,29 +100,29 @@ jobs:
     continue-on-error: true
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
 
       - run: mkdir -p dist && touch dist/empty
 
       - name: Shuffled
-        run: CGO_ENABLED=0 go test -count=1 -shuffle=on -skip TestProfilePercentile ./core/ ./core/lm/... ./core/peak/ ./server/
+        run: CGO_ENABLED=0 go test -count=1 -shuffle=on -skip TestProfilePercentile ./core/ ./core/lm/... ./core/peak/ ./server/ ./util/logstash/ ./core/metrics/ ./core/circuit/
 
   ui:
     name: UI
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
-      - uses: voidzero-dev/setup-vp@v1
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
         with:
           node-version-file: ".node-version"
           cache: true
@@ -124,3 +143,25 @@ jobs:
       - name: Porcelain
         run: |
           test -z "$(git status --porcelain)" || (git status; git diff; false)
+
+  # authors and texts of the commits of a pull request, see .github/commit-guard/guard.sh
+  commit-guard:
+    name: Commit guard
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'preview/') && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Selftest
+        run: bash .github/commit-guard/guard-selftest.sh
+
+      # title and body as environment variables, never interpolated into the script
+      - name: Guard
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: bash .github/commit-guard/guard.sh ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}

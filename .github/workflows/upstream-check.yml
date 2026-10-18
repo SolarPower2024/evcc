@@ -9,12 +9,10 @@
 # merge itself is tested in the runner. With nothing to do no issue is opened
 # and an open one is closed.
 #
-# With the secret UPDATE_TOKEN (a token of this repository with contents, pull
-# requests and workflows write) it also keeps the PR "evcc-Update" open: the
-# branch evcc-update holds evcc's newest release, the PR shows the conflicts
-# and is merged into load-peak-features once they are resolved. GITHUB_TOKEN
-# cannot do that, as evcc's commits touch workflow files. No issue numbers,
-# mentions or links of evcc's repository go into any text.
+# No issue numbers, mentions or links of evcc's repository go into any text.
+#
+# The update itself is done locally (skill upstream-update), not by this
+# workflow.
 name: evcc update check
 
 on:
@@ -32,13 +30,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: load-peak-features
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
 
@@ -73,35 +71,10 @@ jobs:
               echo "Rot:"
               echo
               echo '```'
-              grep -E '^(--- FAIL|FAIL|panic:)|_test.go:[0-9]+:|\.go:[0-9]+:[0-9]+:' /tmp/test.log | sed -E 's/#([0-9]+)/evcc PR \1/g' | head -40
+              grep -E '^(--- FAIL|FAIL|panic:)|_test.go:[0-9]+:|\.go:[0-9]+:[0-9]+:' /tmp/test.log | .github/upstream-check/clean-report.sh | head -40
               echo '```'
             fi
           } >>/tmp/report.md
-
-      - name: Update PR
-        if: steps.review.outputs.count != '0'
-        env:
-          UPDATE_TOKEN: ${{ secrets.UPDATE_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          REF: ${{ steps.review.outputs.ref }}
-        run: |
-          if [ -z "$UPDATE_TOKEN" ]; then
-            printf '\n## Update-PR\n\nNicht angelegt: das Secret UPDATE_TOKEN fehlt.\n' >>/tmp/report.md
-            exit 0
-          fi
-          if grep -qE '#[0-9]|evcc-io/' /tmp/report.md; then
-            echo "report refers to evcc's repository, no PR"; exit 1
-          fi
-          export GH_TOKEN="$UPDATE_TOKEN"
-          git push --force "https://x-access-token:${UPDATE_TOKEN}@github.com/${GH_REPO}.git" "$(git rev-parse "$REF^{commit}")":refs/heads/evcc-update
-          title="evcc-Update: Release $REF ($(jq .count /tmp/summary.json) Commits)"
-          number=$(gh pr list --head evcc-update --base load-peak-features --state open --json number --jq '.[0].number')
-          if [ -n "$number" ]; then
-            gh pr edit "$number" --title "$title" --body-file /tmp/report.md
-          else
-            gh pr create --head evcc-update --base load-peak-features --title "$title" --body-file /tmp/report.md
-          fi
-          printf '\n## Update-PR\n\nAktualisiert: %s\n' "$title" >>/tmp/report.md
 
       - name: Report
         env:
@@ -111,8 +84,10 @@ jobs:
           COUNT: ${{ steps.review.outputs.count }}
           REF: ${{ steps.review.outputs.ref }}
         run: |
+          # a report is never dropped: lines referring to evcc's repository are replaced
           if grep -qE '#[0-9]|evcc-io/' /tmp/report.md; then
-            echo "report refers to evcc's repository, not posted"; exit 1
+            sed -i -E '/#[0-9]|evcc-io\//s/.*/[entfernt]/' /tmp/report.md
+            echo "::warning::report had lines referring to evcc's repository, replaced by [entfernt]"
           fi
           cat /tmp/report.md >>"$GITHUB_STEP_SUMMARY"
           title="evcc-Update-Check"

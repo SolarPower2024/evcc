@@ -1037,9 +1037,8 @@ The fork takes in evcc **releases** only, never the commits between them. Every
 day the issue *evcc-Update-Check* reviews evcc's newest release (see
 [Tests](#tests)): what changed, which fork features evcc may now have itself,
 which evcc commit causes which conflict, and whether the merge passes the
-tests. With the secret `UPDATE_TOKEN` the PR *evcc-Update* (branch
-`evcc-update` = evcc's newest release) is kept open as well; conflicts can
-then be resolved on it and it is merged with a merge commit.
+tests. The update itself is done locally (skill `upstream-update`, or the local
+task `evcc-update-release`, which opens it as a PR); the workflow opens no PR.
 
 1. `git fetch upstream --tags` and merge evcc's newest release tag (x.y.z) into
    `load-peak-features`, never `upstream/master`. A patch release lives on a
@@ -1119,11 +1118,22 @@ database closes it again. The fork's tests pass in any order (`-shuffle=on`).
 **On GitHub** (`.github/workflows/`, standard runners, free for a public
 repository):
 
-- `fork-tests.yml` on every push and pull request: build, vet, the whole Go
-  testsuite (evcc's and the fork's), the race detector on the fork's packages,
+- `fork-tests.yml` on every push and pull request: build, gofmt and
+  `go mod tidy` (no diff allowed), vet, the whole Go
+  testsuite (evcc's and the fork's), the race detector on the fork's packages (`core/lm`, `core/peak`,
+  `core/metrics`, `core/circuit`, `core/loadpoint`, `core`, `server`,
+  `util/logstash`, and the fork's tests in `charger` and `tariff`),
   the ui checks (format, lint, types, i18n, vitest, build) and a shuffled run
-  that reports but does not block.
+  that reports but does not block. On pull requests the job *Commit guard*
+  (`.github/commit-guard/guard.sh`, selftest `guard-selftest.sh`) fails for an
+  author other than the fork's owner and for issue numbers, evcc's organisation
+  name with a slash or links to its repository in commit messages (first
+  parent only), PR title or PR body; "evcc PR 123" in plain text passes. The
+  local git hooks of the working folder use the same rule with their own script.
 - `custom-image.yml` builds an add-on image from a tag only after these passed.
+  All three fork workflows use actions at pinned commits (same versions as
+  evcc's own workflows, comment with the tag); the image build checks out without
+  stored credentials.
 - `upstream-check.yml` daily at noon (10:00 UTC): fetches evcc's release tags
   read only and runs the review `.github/upstream-check/review.mjs` into the
   issue *evcc-Update-Check* for the newest release: a) the commits by area and
@@ -1132,9 +1142,12 @@ repository):
   added code, listed in `watch.json`; hints that need a review), c) each
   conflicting file with the evcc commit causing it (found with
   `git merge-tree`, commit by commit), d) the PRs to open. Without conflicts
-  the merge is built and tested. With the secret `UPDATE_TOKEN` it also keeps
-  the PR *evcc-Update* open. Never writes to evcc's repository; issue numbers
-  in evcc's subjects become plain text ("evcc PR" and the number).
+  the merge is built and tested. It opens no PR. Never writes to evcc's repository; issue numbers
+  in evcc's subjects become plain text ("evcc PR" and the number). The test output goes through
+  `.github/upstream-check/clean-report.sh` (module path, organisation name,
+  links); a line that still refers to evcc's repository is replaced by
+  `[entfernt]` with a warning, the report is always posted (a red test is never
+  lost). `clean-report-test.sh` runs in `fork-tests.yml`.
 
 **Locally** the Go tests run in WSL (no Windows firewall prompts), the ui checks
 in a checkout with `node_modules`. Live checks of a build with a simulated Home
