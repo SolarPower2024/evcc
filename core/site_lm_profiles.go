@@ -35,12 +35,17 @@ func lmProfilesLoad() ([]profile.Profile, error) {
 	return res, nil
 }
 
+// restoreLmProfiles checks the stored profiles at start: an unreadable list is
+// logged once and kept as lmProfilesInvalid, then published as empty
+func (site *Site) restoreLmProfiles() {
+	var profiles []profile.Profile
+	restoreJson(site.log, keys.LmProfiles, &profiles)
+	site.publishLmProfiles()
+}
+
+// publishLmProfiles publishes the stored profiles, empty if the list is unreadable
 func (site *Site) publishLmProfiles() {
-	profiles, err := lmProfilesLoad()
-	if err != nil {
-		site.log.ERROR.Printf("profiles: %v", err)
-		keepInvalid(keys.LmProfiles)
-	}
+	profiles, _ := lmProfilesLoad()
 	if profiles == nil {
 		profiles = []profile.Profile{}
 	}
@@ -65,9 +70,16 @@ func (site *Site) SaveLmProfile(p profile.Profile) (profile.Profile, error) {
 		}
 	}
 
+	// a new profile is the way out of an unreadable list: the raw value is kept
+	// as lmProfilesInvalid, the list starts over with this profile
 	profiles, err := lmProfilesLoad()
 	if err != nil {
-		return p, err
+		if p.ID != "" {
+			return p, err
+		}
+		keepInvalid(keys.LmProfiles)
+		site.log.WARN.Printf("profiles: replacing unreadable list: %v", err)
+		profiles = nil
 	}
 
 	if p.ID == "" {

@@ -33,7 +33,7 @@ func TestRestoreUnreadableJson(t *testing.T) {
 
 	restores := map[string]func(*Site){
 		keys.LmAdvanced:            (*Site).restoreLmAdvanced,
-		keys.LmProfiles:            (*Site).publishLmProfiles,
+		keys.LmProfiles:            (*Site).restoreLmProfiles,
 		keys.PeakMonths:            (*Site).restorePeakMonths,
 		keys.PeakTariff:            (*Site).restorePeakTariff,
 		keys.LmShedProtected:       (*Site).restoreLmGuard,
@@ -70,7 +70,7 @@ func TestRestoreFreshDatabase(t *testing.T) {
 	site.restoreLmSettings()
 	site.restorePeakMonths()
 	site.restorePeakTariff()
-	site.publishLmProfiles()
+	site.restoreLmProfiles()
 
 	assert.NotContains(t, buf.String(), "ERROR")
 	for _, s := range settings.All() {
@@ -115,19 +115,35 @@ func TestRestoreLmAdvancedKeepsGoodFields(t *testing.T) {
 	assert.Contains(t, kept, `"timeout":"x"`)
 }
 
-// TestSaveLmProfileUnreadableList: saving or deleting on top of an unreadable list
-// fails and leaves the raw value
+// TestSaveLmProfileUnreadableList: changing, deleting or applying on top of an
+// unreadable list fails and leaves the raw value; publishing stays quiet after the
+// start check; a new profile replaces the list and the copy keeps the raw value
 func TestSaveLmProfileUnreadableList(t *testing.T) {
-	site, _ := restoreTestSite(t)
-	settings.SetString(keys.LmProfiles, `[{"id":`)
+	const raw = `[{"id":`
+	site, buf := restoreTestSite(t)
+	settings.SetString(keys.LmProfiles, raw)
 
-	_, err := site.SaveLmProfile(profile.Profile{Name: "Neu", Icon: "sun", GridCharge: bp(false)})
+	site.restoreLmProfiles()
+	site.publishLmProfiles()
+	site.publishLmProfiles()
+	assert.Equal(t, 1, strings.Count(buf.String(), "ERROR"), buf.String())
+
+	_, err := site.SaveLmProfile(profile.Profile{ID: "x", Name: "Alt", Icon: "sun"})
 	assert.Error(t, err)
 	assert.Error(t, site.DeleteLmProfile("x"))
 	assert.Error(t, site.ApplyLmProfile("x"))
+	stored, _ := settings.String(keys.LmProfiles)
+	assert.Equal(t, raw, stored)
 
-	raw, _ := settings.String(keys.LmProfiles)
-	assert.Equal(t, `[{"id":`, raw)
+	p, err := site.SaveLmProfile(profile.Profile{Name: "Neu", Icon: "sun", GridCharge: bp(false)})
+	require.NoError(t, err)
+	profiles, err := lmProfilesLoad()
+	require.NoError(t, err)
+	require.Len(t, profiles, 1)
+	assert.Equal(t, p.ID, profiles[0].ID)
+
+	kept, _ := settings.String(keys.LmProfiles + invalidSuffix)
+	assert.Equal(t, raw, kept)
 }
 
 // TestRestoreOutOfRange: a stored value its setter would refuse is ignored, the
@@ -260,3 +276,4 @@ func TestRestoreHomeWeekdayMoved(t *testing.T) {
 	site.restoreLmAdvanced()
 	assert.Equal(t, homeForecastManual, site.homeForecast())
 }
+

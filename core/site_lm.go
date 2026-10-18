@@ -177,7 +177,7 @@ func (site *Site) restoreLmSettings() {
 	site.restoreLmAdvanced()
 	site.restoreLmSwitch()
 	site.restoreBatteryIdent()
-	site.publishLmProfiles()
+	site.restoreLmProfiles()
 
 	site.publishLmSettings()
 

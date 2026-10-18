@@ -975,8 +975,10 @@ Every fork feature follows these, so taking in a new evcc version stays cheap:
    start (`core/site_restore.go`) falls back to its default, is logged once as
    error and its raw value is saved under `<key>Invalid` (one copy per key, only
    replaced by a later invalid value, never deleted). `lmAdvanced` is read field
-   by field, so one wrong field does not lose the others. Profiles are not saved
-   or deleted while the stored list is unreadable.
+   by field, so one wrong field does not lose the others. Profiles are checked at
+   start the same way. While the stored list is unreadable, existing profiles
+   cannot be changed, deleted or applied; saving a new profile replaces the list
+   (the raw value stays in `lmProfilesInvalid`).
    A stored value its setter would refuse (out of range, start soc not below
    stop soc, a phase count of 2) is warned about once, deleted and the default
    applies; the setters and the restore share the checks (`valid…` functions).
