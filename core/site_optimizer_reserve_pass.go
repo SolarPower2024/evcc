@@ -41,12 +41,17 @@ type lmPlan struct {
 	controlled bool    // grid charge power set through an entity, trimmed to the room below the limit
 	etaC, etaD float32 // efficiencies
 	grid       []lmGridGoal
+	share      float32 // part of the grid charge power and room this battery takes, 0 is all
 }
 
-func (site *Site) newLmPlan(bat optimizer.BatteryConfig) lmPlan {
+func (site *Site) newLmPlan(bat optimizer.BatteryConfig, share float32) lmPlan {
 	power, _ := site.lmBatteryChargePower()
 	if power <= 0 {
+		// the battery's own maximum is no plant-wide power: it is scaled by share
 		power = float64(bat.CMax)
+		if share > 0 {
+			power /= float64(share)
+		}
 	}
 	return lmPlan{
 		devMin:     bat.SMin,
@@ -54,6 +59,7 @@ func (site *Site) newLmPlan(bat optimizer.BatteryConfig) lmPlan {
 		controlled: site.chargePowerControlled(),
 		etaC:       float32(site.identChargeEta()),
 		etaD:       eta,
+		share:      share,
 	}
 }
 
@@ -77,7 +83,12 @@ func at(v []float32, i int) float32 {
 // what the vehicles charge), not at all while the demand exceeds it
 func (p lmPlan) gridCharge(ts optimizer.TimeSeries, bat optimizer.BatteryConfig, i int, ev []float32) float32 {
 	h := float32(ts.Dt[i]) / 3600
-	power := p.power
+	share := p.share
+	if share <= 0 {
+		share = 1
+	}
+
+	power := p.power * share
 	if bat.CMax > 0 {
 		power = min(power, bat.CMax)
 	}
@@ -86,7 +97,7 @@ func (p lmPlan) gridCharge(ts optimizer.TimeSeries, bat optimizer.BatteryConfig,
 		net := (at(ts.Gt, i) - at(ts.Ft, i) + at(ev, i)) / h
 		switch {
 		case p.controlled:
-			if power = min(power, max(0, p.limit-max(0, net))); power < minGridChargePower {
+			if power = min(power, max(0, p.limit-max(0, net))*share); power < minGridChargePower {
 				power = 0
 			}
 		case net > p.limit:
@@ -312,6 +323,17 @@ func sumOf(v []float32) float32 {
 	return res
 }
 
+// lmHomeBatteries is the number of home batteries in the request
+func lmHomeBatteries(details requestDetails) int {
+	var n int
+	for _, d := range details.BatteryDetails {
+		if d.Type == batteryTypeBattery {
+			n++
+		}
+	}
+	return n
+}
+
 // lmHomeBattery is the index of the only home battery, -1 without exactly one
 func lmHomeBattery(details requestDetails, req *optimizer.OptimizationInput, res *optimizer.OptimizationResult) int {
 	home := -1
@@ -456,7 +478,11 @@ func (site *Site) lmOptimizerPasses(client *optimizer.ClientWithResponses, req *
 
 	plan := site.lmPlanInputs()
 	home := lmHomeBattery(details, req, res)
-	if plan == nil || home < 0 {
+	if plan == nil {
+		return
+	}
+	if home < 0 {
+		site.log.DEBUG.Printf("optimizer: passes skipped, %d home batteries", lmHomeBatteries(details))
 		return
 	}
 

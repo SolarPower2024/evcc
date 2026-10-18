@@ -328,7 +328,7 @@ func TestLmBatteryInputsSocChargeSwitch(t *testing.T) {
 
 	// switched off: no goal, no floor from it
 	req, bat := newReq()
-	site.applyLmBatteryInputs(bat, req, false, 0, 0)
+	site.applyLmBatteryInputs(bat, req, false, 0, 0, 1)
 	assert.Empty(t, bat.SGoal)
 	assert.Zero(t, bat.SMin)
 
@@ -336,7 +336,7 @@ func TestLmBatteryInputsSocChargeSwitch(t *testing.T) {
 	// by the second pass
 	s.socChargeEnabled = true
 	req, bat = newReq()
-	site.applyLmBatteryInputs(bat, req, false, 0, 0)
+	site.applyLmBatteryInputs(bat, req, false, 0, 0, 1)
 	assert.Equal(t, float32(2500), bat.SMin)
 	assert.Empty(t, bat.SGoal)
 
@@ -345,21 +345,21 @@ func TestLmBatteryInputsSocChargeSwitch(t *testing.T) {
 	s.socChargeRunning = true
 	req, bat = newReq()
 	bat.SInitial = 2500
-	site.applyLmBatteryInputs(bat, req, false, 0, 0)
+	site.applyLmBatteryInputs(bat, req, false, 0, 0, 1)
 	require.Len(t, bat.SGoal, 96)
 	assert.Equal(t, float32(4000), bat.SGoal[1])
 	s.socChargeRunning = false
 
 	// peak shaving reserve 50 % above the stop soc: hard minimum, nothing planned
 	req, bat = newReq()
-	site.applyLmBatteryInputs(bat, req, true, 10000, 50)
+	site.applyLmBatteryInputs(bat, req, true, 10000, 50, 1)
 	assert.Equal(t, float32(5000), bat.SMin)
 	assert.Empty(t, bat.SGoal)
 
 	// grid charging not allowed from the grid: no goal
 	req, bat = newReq()
 	bat.ChargeFromGrid = false
-	site.applyLmBatteryInputs(bat, req, false, 0, 0)
+	site.applyLmBatteryInputs(bat, req, false, 0, 0, 1)
 	assert.Empty(t, bat.SGoal)
 }
 

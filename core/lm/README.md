@@ -732,6 +732,9 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   valued at least feed-in / 0.9, so discharging needs about 1.25 × feed-in); a
   fixed planning price fixes that, but also drives vehicle plans and smart cost
   limits. A planner tariff without rates falls back to the grid tariff.
+- the passes run with exactly one home battery; with several the grid charge
+  power and the room below the limit are shared by capacity (the passes are
+  skipped, DEBUG line in the log).
 - every further solve is checked (solved, complete, battery within its bounds,
   not more over the limit), otherwise the plan before stays.
 - the plan is solved again when soc-based grid charging starts or stops, and a

@@ -1,7 +1,9 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -11,6 +13,7 @@ import (
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
 	optimizer "github.com/evcc-io/optimizer/client"
+	jww "github.com/spf13/jwalterweatherman"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -301,8 +304,11 @@ func TestLmOptimizerPasses(t *testing.T) {
 		res.Batteries = append(res.Batteries, res.Batteries[0])
 		site := &Site{log: util.NewLogger("test")}
 		site.lms().plan = &plan
+		logger, out := captureLog()
+		site.log = logger
 		site.lmOptimizerPasses(client, req, two, res)
 		assert.Zero(t, calls.Load())
+		assert.Contains(t, out.String(), "passes skipped, 2 home batteries")
 	})
 }
 
@@ -343,7 +349,7 @@ func TestLmPlanEtaFollowsRequest(t *testing.T) {
 
 	req, res, _ := floorCase()
 	bat := &req.Batteries[0]
-	site.applyLmBatteryInputs(bat, req, true, 2000, 35)
+	site.applyLmBatteryInputs(bat, req, true, 2000, 35, 1)
 
 	plan := site.lmPlanInputs()
 	require.NotNil(t, plan)
@@ -354,4 +360,90 @@ func TestLmPlanEtaFollowsRequest(t *testing.T) {
 	client, calls := fakeOptimizer(t, http.StatusOK, res)
 	site.lmOptimizerPasses(client, req, requestDetails{BatteryDetails: []batteryDetail{{Type: batteryTypeBattery}}}, res)
 	assert.LessOrEqual(t, calls.Load(), int32(2), "second pass and at most one recheck")
+}
+
+// Home batteries share the grid charge power and the room below the limit by
+// their capacity.
+func TestLmPlanGridChargeShare(t *testing.T) {
+	ts := optimizer.TimeSeries{Dt: []int{900}, Gt: []float32{500}, Ft: []float32{0}} // 2000 W
+	bat := optimizer.BatteryConfig{CMax: 10000}
+
+	p := lmPlan{power: 8000, etaC: 1}
+	assert.InDelta(t, 2000, p.gridCharge(ts, bat, 0, nil), 0.1, "one battery: all")
+
+	p.share = 0.5
+	assert.InDelta(t, 1000, p.gridCharge(ts, bat, 0, nil), 0.1, "half")
+	p.share = 0.25
+	assert.InDelta(t, 500, p.gridCharge(ts, bat, 0, nil), 0.1, "1:3")
+
+	// the room below the limit: 5000 - 2000 = 3000 W, a share of it
+	p = lmPlan{power: 8000, etaC: 1, controlled: true, limit: 5000, share: 0.5}
+	assert.InDelta(t, 3000*0.5*0.25, p.gridCharge(ts, bat, 0, nil), 0.1, "half of the room")
+	p.share = 1
+	assert.InDelta(t, 3000*0.25, p.gridCharge(ts, bat, 0, nil), 0.1, "all of the room")
+
+	// the peak rule stays
+	p.share = 0.5
+	p.limit = 1500
+	assert.Zero(t, p.gridCharge(ts, bat, 0, nil), "no room")
+}
+
+// Two home batteries take their part of the power, so together they reach the
+// stop soc no earlier than one battery with the sum of both.
+func TestLmOptimizerInputsTwoBatteries(t *testing.T) {
+	config.Reset()
+	t.Cleanup(config.Reset)
+
+	newReq := func() *optimizer.OptimizationInput {
+		req := &optimizer.OptimizationInput{EtaC: 0.9, EtaD: 0.9}
+		for range 96 {
+			req.TimeSeries.Dt = append(req.TimeSeries.Dt, 900)
+			req.TimeSeries.Gt = append(req.TimeSeries.Gt, 0)
+			req.TimeSeries.Ft = append(req.TimeSeries.Ft, 0)
+		}
+		return req
+	}
+	bat := func(capacity, power float32) optimizerBattery {
+		return optimizerBattery{
+			cfg:    optimizer.BatteryConfig{SCapacity: capacity, SMax: capacity, SInitial: capacity / 10, CMax: power, DMax: power, ChargeFromGrid: true},
+			detail: batteryDetail{Type: batteryTypeBattery},
+		}
+	}
+	goalSlot := func(b optimizerBattery) int {
+		for i, g := range b.cfg.SGoal {
+			if g >= b.cfg.SCapacity*0.8-1 {
+				return i
+			}
+		}
+		return -1
+	}
+
+	run := func(batteries []optimizerBattery) *Site {
+		site := &Site{log: util.NewLogger("test")}
+		s := site.lms()
+		s.socChargeEnabled, s.socChargeStart, s.socChargeStop, s.socChargeRunning = true, 20, 80, true
+		site.applyLmOptimizerInputs(newReq(), batteries)
+		return site
+	}
+
+	single := []optimizerBattery{bat(10000, 4000)}
+	run(single)
+
+	two := []optimizerBattery{bat(5000, 2000), bat(5000, 2000)}
+	site := run(two)
+
+	require.NotEqual(t, -1, goalSlot(single[0]))
+	for _, b := range two {
+		assert.GreaterOrEqual(t, goalSlot(b), goalSlot(single[0]))
+	}
+	assert.Equal(t, float32(0.5), site.lmPlanInputs().share)
+}
+
+// captureLog returns a logger that writes into a buffer
+func captureLog() (*util.Logger, *bytes.Buffer) {
+	var out bytes.Buffer
+	return &util.Logger{
+		Notepad:  jww.NewNotepad(jww.LevelTrace, jww.LevelTrace, io.Discard, &out, "", 0),
+		Redactor: new(util.Redactor),
+	}, &out
 }

@@ -100,13 +100,25 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 		req.Grid.PMaxImp = float32(limit)
 	}
 
+	// several home batteries share the grid charge power by capacity
+	var total float32
+	for i := range batteries {
+		if b := &batteries[i]; b.detail.Type == batteryTypeBattery {
+			site.applyBatteryIdent(&b.cfg, &b.detail)
+			total += max(b.cfg.SCapacity, 0)
+		}
+	}
+
 	for i := range batteries {
 		b := &batteries[i]
 
 		switch b.detail.Type {
 		case batteryTypeBattery:
-			site.applyBatteryIdent(&b.cfg, &b.detail)
-			site.applyLmBatteryInputs(&b.cfg, req, peakOn, limit, reserve)
+			share := float32(1)
+			if total > 0 && b.cfg.SCapacity > 0 {
+				share = b.cfg.SCapacity / total
+			}
+			site.applyLmBatteryInputs(&b.cfg, req, peakOn, limit, reserve, share)
 
 			if lmActive && site.lmBatteryCircuit() != nil {
 				b.cfg.CPriority = optimizerPriority(site.lmm().Priority(site.lmBattery()))
@@ -154,8 +166,9 @@ func circuitPower(c api.Circuit, phases int) float64 {
 	return res
 }
 
-// applyLmBatteryInputs sets the home battery's minimum soc and grid charge goals
-func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimizer.OptimizationInput, peakOn bool, limit, reserve float64) {
+// applyLmBatteryInputs sets the home battery's minimum soc and grid charge goals,
+// share is its part of the capacity of all home batteries
+func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimizer.OptimizationInput, peakOn bool, limit, reserve float64, share float32) {
 	if bat.SCapacity <= 0 {
 		return
 	}
@@ -165,7 +178,7 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 
 	wh := func(soc float64) float32 { return bat.SCapacity * float32(soc) / 100 }
 
-	plan := site.newLmPlan(*bat)
+	plan := site.newLmPlan(*bat, share)
 	if req.EtaC > 0 {
 		plan.etaC = req.EtaC
 	}
