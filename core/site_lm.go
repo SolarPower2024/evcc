@@ -112,6 +112,9 @@ func (site *Site) restoreCustom() {
 	// the circuit may take the peak limit: restoreLmSettings ran before the peak
 	// settings were back, so the limit applies here, not with the first cycle
 	site.applyCircuitLimits()
+	// restoreLmSettings published the advanced settings before the battery circuit was
+	// back, so phasesMissing read false: publish them once more
+	site.publishLmAdvanced()
 	site.restoreFeedInEeg()
 	site.restoreLogFile()
 	site.restoreSnowCover()

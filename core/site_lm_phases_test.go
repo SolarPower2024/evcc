@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/db/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,4 +62,26 @@ func TestBatteryPhasesRequired(t *testing.T) {
 	// no circuit: not part of load management
 	assign(nil, "")
 	assert.False(t, site.batteryPhasesMissing())
+}
+
+// A restart with a battery on a circuit with a current limit and no phases set
+// publishes phasesMissing: the circuit is back only after the load management
+// settings, which publish first.
+func TestBatteryPhasesMissingPublishedAfterRestore(t *testing.T) {
+	a, _, _ := lmSwitchCircuits(t, 3500)
+	_ = settings.Delete(keys.LmAdvanced)
+	settings.SetString(keys.PeakShavingCircuit, "main")
+	useLogFileDir(t)
+
+	ch := make(chan util.Param, 1000)
+	b := &Site{log: a.log, batteryMeters: a.batteryMeters, valueChan: ch}
+	b.restoreCustom()
+
+	var state lmAdvancedState
+	for len(ch) > 0 {
+		if p := <-ch; p.Key == keys.LmAdvanced {
+			state = p.Val.(lmAdvancedState)
+		}
+	}
+	assert.True(t, state.PhasesMissing)
 }
