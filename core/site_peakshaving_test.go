@@ -758,32 +758,31 @@ func TestPeakReserveClearsExternalTimer(t *testing.T) {
 	sc.cycle(25, 3000, 0)
 	require.Equal(t, api.BatteryNormal, sc.mode())
 
-	// external normal through the api, lapsed after 2 minutes: the watchdog hands back
-	require.NoError(t, site.SetBatteryModeExternal(api.BatteryNormal))
-	age := func(d time.Duration) {
-		site.Lock()
-		site.batteryModeExternalTimer = time.Now().Add(-d)
-		site.Unlock()
-	}
+	// an external mode that lapsed after 2 minutes and was handed back: the timer stays.
+	// Set directly, no watchdog goroutine runs that could interfere later
+	site.Lock()
+	site.batteryModeExternal = api.BatteryUnknown
+	site.batteryModeExternalTimer = time.Now().Add(-2 * time.Minute)
+	site.Unlock()
 	timer := func() time.Time {
 		site.RLock()
 		defer site.RUnlock()
 		return site.batteryModeExternalTimer
 	}
-
-	age(2 * time.Minute)
-	site.batteryModeWatchdogExpired() // the watchdog of the api may have been faster
-	require.Equal(t, api.BatteryUnknown, site.GetBatteryModeExternal())
 	require.False(t, timer().IsZero(), "the lapsed mode leaves its timer")
 
 	// one cycle in the reserve with the battery in normal mode
 	sc.cycle(25, 3000, 0)
 	assert.True(t, timer().IsZero(), "timer cleared")
 
-	// the next external mode starts its watchdog: the timer is set and lapses
+	// the next external mode starts its watchdog, which hands it back once it lapsed.
+	// Without the cleared timer no watchdog starts and the mode would stay
 	require.NoError(t, site.SetBatteryModeExternal(api.BatteryHold))
-	assert.False(t, timer().IsZero())
-	age(2 * time.Minute)
-	site.batteryModeWatchdogExpired()
-	assert.Equal(t, api.BatteryUnknown, site.GetBatteryModeExternal())
+	require.Equal(t, api.BatteryHold, site.GetBatteryModeExternal())
+	site.Lock()
+	site.batteryModeExternalTimer = time.Now().Add(-2 * time.Minute)
+	site.Unlock()
+	require.Eventually(t, func() bool {
+		return site.GetBatteryModeExternal() == api.BatteryUnknown
+	}, 3*time.Second, 50*time.Millisecond, "the watchdog hands the mode back")
 }
