@@ -193,3 +193,35 @@ func TestDimMetersNotAvailable(t *testing.T) {
 	require.NoError(t, site.dimMeters(false))
 	assert.Equal(t, []bool{true, false}, m.dimCalls)
 }
+
+// loadRecorder is a circuit that records the loads handed to Update
+type loadRecorder struct {
+	api.Circuit
+	loads []api.CircuitLoad
+}
+
+func (c *loadRecorder) Update(loads []api.CircuitLoad) error {
+	c.loads = loads
+	return nil
+}
+
+// TestUpdateCircuitsIncludesBattery: the home battery stands in the circuit's
+// loads when it is assigned to a circuit of load management, without it only the
+// loadpoints do.
+func TestUpdateCircuitsIncludesBattery(t *testing.T) {
+	site, main, _ := lmSwitchCircuits(t, 3500)
+	rec := &loadRecorder{Circuit: main}
+	site.circuit = rec
+
+	site.updateCircuits()
+	assert.Empty(t, rec.loads, "no loadpoints, no battery circuit")
+
+	require.NoError(t, site.SetPeakShavingCircuit("garage"))
+	site.updateCircuits()
+	require.Len(t, rec.loads, 1)
+	assert.Same(t, site.lmBattery(), rec.loads[0], "the battery takes part")
+
+	require.NoError(t, site.SetPeakShavingCircuit(""))
+	site.updateCircuits()
+	assert.Empty(t, rec.loads)
+}

@@ -1128,6 +1128,11 @@ unused:
   `TestFastChargingPhasesNoScaleUpWith1pMinOnly`, `TestBoostPowerBridgesWith3pMin`,
   `TestPvMaxCurrentUsesLimitsOfNewPhases`. The two lines in `fastChargingPhases`
   shield each other (either one holds the result), only the count tells one lost.
+- Hooks with a name test only until now: `TestUpdateCircuitsIncludesBattery` (`circuitLoads`),
+  `TestPreparePublishesPhaseSwitch` (`publishPhaseSwitch`),
+  `TestGetLoadpointDynamicConfigPhaseSwitch` (`getLoadpointDynamicConfig`),
+  `TestTariffRefsFeedInEeg` and `TestCleanupTariffRefFeedInEeg` (`FeedInEeg`); the min and max power
+  use of the per phase limits is in `forkHooks` and `TestEffectiveCurrent1p`.
 - `TestForkInertWhenUnused`, `TestEqualPrioritiesAreUpstream`,
   `TestCurrents1pInertWhenUnused`, `TestLmSMaxFromUpstream`: without
   configuration the fork changes nothing.

@@ -7,8 +7,10 @@ import (
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/benbjohnson/clock"
 	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/core/settings"
+	"github.com/evcc-io/evcc/messenger"
 	"github.com/evcc-io/evcc/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -452,4 +454,25 @@ func TestPvMaxCurrentUsesLimitsOfNewPhases(t *testing.T) {
 	// 3.33A of the charge power on three phases plus 6.7kW over three phases: above
 	// the 1p maximum of 10A, below the 3p one of 16A
 	assert.InDelta(t, 13.04, current, 0.01, "not capped at the 1p maximum of 10A")
+}
+
+// TestPreparePublishesPhaseSwitch: Prepare publishes the 1p limits and the two phase
+// delays, the ui shows them in the loadpoint form
+func TestPreparePublishesPhaseSwitch(t *testing.T) {
+	lp := phaseCurrentsLoadpoint(t, 1, 6, 20)
+	lp.phaseScale3pDelay, lp.phaseScale1pDelay = 5*time.Minute, 4*time.Minute
+
+	uiChan := make(chan util.Param, 2000)
+	lp.Prepare(new(Site), uiChan, make(chan messenger.Event, 10), make(chan *Loadpoint, 10))
+	close(uiChan)
+
+	got := make(map[string]any)
+	for p := range uiChan {
+		got[p.Key] = p.Val
+	}
+
+	assert.Equal(t, 6.0, got[keys.MinCurrent1p])
+	assert.Equal(t, 20.0, got[keys.MaxCurrent1p])
+	assert.Equal(t, 5*time.Minute, got[keys.PhaseScale3pDelay])
+	assert.Equal(t, 4*time.Minute, got[keys.PhaseScale1pDelay])
 }
