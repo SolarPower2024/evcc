@@ -56,6 +56,9 @@ const (
 	// advanced load management settings, see core/site_lm_advanced.go
 	LmAdvanced = "lmAdvanced"
 
+	// id of this instance as writer of the export forecast entity, see core/site_lm_export_forecast.go
+	LmExportForecastID = "lmExportForecastID"
+
 	// uploaded load profile for the home consumption forecast, see core/site_load_manual.go
 	LmHomeProfile = "lmHomeProfile"
 

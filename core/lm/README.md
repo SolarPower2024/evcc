@@ -383,6 +383,11 @@ write that fails is logged as an error once; the same error then only at debug
 level until a write lands again (once at info), with the first 200 characters of
 the answer on one line, and for a general 500 of Home Assistant the hint to look
 into its log (`TestPeakWriteErrorLoggedOnce`, `TestPeakWriteErrorBody`).
+If the entity is removed (BYD) and the free value cannot be written, or the type is
+changed with no target left, the mark is cleared with a warning ("free value not
+written, the battery may stay at the last setpoint"): with no target nothing can be
+handed back, and the mark would otherwise refuse every change to Marstek
+(`TestPeakEntityRemovedHandBackFails`).
 
 Stopping evcc hands back as well, not only evcc's battery mode
 (`TestPeakReleasedOnShutdown`): a Marstek gets the charge power 0 and the manual
@@ -771,11 +776,16 @@ elsewhere saving the field fails.
   kept until a write fails or the entity changes. An unchanged list for the same
   entity is not written again, but at the latest after 10 minutes, so `updated`
   stays current for the reader. While a write runs, the newest list waits and is
-  written when it ends (older ones are dropped). A failed write is logged as a
-  warning (at most every 15 minutes) and tried again with the next run. The size
+  written when it ends (older ones are dropped). A list is compared with the newest one queued or written, so Z, A running, Z again
+  still writes Z (`TestPublishExportForecastKeepsOrder`). Turning the entity off or changing it
+  sets the old entity to `unavailable` once, only if evcc wrote to it (a never written name may be a foreign sensor), in the background (`TestSetLmExportForecastTurnsOldOff`), so a
+  reading instance drops the list at once instead of after an hour; a write that runs at
+  the change may still land on the old entity afterwards. A failed write is logged once per cause as a
+  warning (`util.CauseLog`: the same cause again at debug level, "ok again" once
+  with the first success) and tried again with the next run. The size
   of the attribute is logged at debug level; there is no limit.
 - The entity is gone after a restart of Home Assistant until the next optimizer
-  run (about 15 minutes at most). Exclude it from the recorder, which keeps no
+  run (about 15 minutes at most). The reading instance keeps its data meanwhile. Exclude it from the recorder, which keeps no
   attributes above 16 KB: `recorder: exclude: entities:` with the entity.
 
 A second evcc instance of the fork reads the entity as solar forecast: *Konfiguration
@@ -785,13 +795,17 @@ no token; in the add-on the supervisor connection is used). Entity (required),
 attribute (default `forecast`) and interval (default 15 min) are set there; the data
 stays valid for twice the interval.
 
-The tariff never breaks the sum of the solar tariffs. A missing entity (404),
-`unavailable`, a missing or wrong attribute, a forecast whose `updated` attribute
-is older than an hour (without that attribute, e.g. from another source, the
+The tariff never breaks the sum of the solar tariffs. `unavailable`, a missing or
+wrong attribute, a forecast whose `updated` attribute is older than an hour (without that attribute, e.g. from another source, the
 forecast counts as current) and data older than twice the interval give no rates
-and no error, so the instance's own forecast goes on alone. Each case is logged as a
-warning, at most every 15 minutes. The tariff is also created while the entity does
-not exist yet (the first read may stay empty); only a missing entity name or
+and no error, so the instance's own forecast goes on alone. Each cause is logged once as a
+warning (`util.CauseLog`, only the read loop logs, not `Rates`), the return of the data once as info
+(`TestHAForecastLogOnce`). A missing entity (404) keeps the last data until they are older than twice the interval
+(`TestHAForecastGoesAway`), as after a restart of Home Assistant until the writer creates the
+entity again (a deliberately deleted entity acts for up to 30 minutes with the default
+interval); before the first read there are none. The tariff is also created while the entity does
+not exist yet; the constructor waits up to 10 s for the first read and then
+starts without rates (`TestHAForecastConstructorWait`), the data follow with the next cycle. Only a missing entity name or
 instance is a configuration error. If Home Assistant itself does not answer, the
 last data stays until it is outdated. Only entries from a day ago to a week ahead
 are taken, a longer entry only as far as that.
@@ -818,8 +832,13 @@ are taken, a longer entry only as far as that.
   only planned as far as the optimizer's horizon reaches (48 hours, to the end of
   that day from 6:00): after it the sum is the other tariff alone, it does not end
   with the shorter one.
-- Not in the instance that writes the entity: the optimizer would plan with double
-  the solar power. The template says so.
+- The instance that writes the entity recognises and rejects its own list: the writer
+  adds the attribute `writer`, an id created once per database (`lmExportForecastID`,
+  `site.exportWriterID`), and the reader (`tariff.HAForecastWriterID`, set by an `init`
+  of the writer file that only reads the id) gives no rates and a warning "written by
+  this instance" for that id. A missing attribute (another source, an old list) is a
+  foreign entity. A copied `evcc.db` copies the id: two instances made so reject each
+  other's entity. `TestExportWriterID`, `TestHAForecastOwnWriter`.
 
 ## 17. Advanced settings
 

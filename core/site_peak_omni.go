@@ -599,6 +599,13 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 		released = omni && prot
 
 	case site.peakOwned():
+		// no target: nothing can hand back, owned would block the change for good
+		if set == nil {
+			site.setPeakOwned(false)
+			site.log.WARN.Println(peakFreeNotWritten)
+			break
+		}
+
 		if released = site.releaseOutput("peak shaving", set, site.peakFreeValue()); released {
 			site.setPeakOwned(false)
 		}

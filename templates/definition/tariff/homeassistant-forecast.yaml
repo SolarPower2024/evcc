@@ -10,9 +10,9 @@ requirements:
   evcc: ["skiptest"]
   description:
     de: |
-      Liest eine Prognose aus einem Attribut der Entität als Liste mit start, end und value in W, z. B. die Einspeise-Prognose einer anderen evcc-custom-Instanz. Nicht in derselben Instanz verwenden, die schreibt: der Optimizer würde mit doppelter PV rechnen.
+      Liest eine Prognose aus einem Attribut der Entität als Liste mit start, end und value in W, z. B. die Einspeise-Prognose einer anderen evcc-custom-Instanz. Die schreibende Instanz erkennt und lehnt ihre eigene Entität ab.
     en: |
-      Reads a forecast from an attribute of the entity as a list with start, end and value in W, e.g. the export forecast of another evcc custom instance. Do not use it in the instance that writes it: the optimizer would plan with double the solar power.
+      Reads a forecast from an attribute of the entity as a list with start, end and value in W, e.g. the export forecast of another evcc custom instance. The writing instance recognises and rejects its own entity.
 auth:
   type: homeassistant
   params: [uri, insecure]

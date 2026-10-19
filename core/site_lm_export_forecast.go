@@ -26,39 +26,33 @@ import (
 	"sync"
 	"time"
 
+	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/tariff"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/homeassistant"
+	"github.com/evcc-io/evcc/util/machine"
 	"github.com/evcc-io/evcc/util/request"
 	optimizer "github.com/evcc-io/optimizer/client"
 )
 
 const (
-	exportForecastTimeout   = 10 * time.Second
-	exportForecastRefresh   = 10 * time.Minute // an unchanged list is written again after this time
-	exportForecastWarnEvery = 15 * time.Minute // at most one warning in this time
+	exportForecastTimeout = 10 * time.Second
+	exportForecastRefresh = 10 * time.Minute // an unchanged list is written again after this time
 )
 
 var exportForecastEntityRe = regexp.MustCompile(`^sensor\.[a-z0-9_]+$`)
 
-// exportRate is one entry of the exported forecast, value is the mean power in W
-type exportRate struct {
-	Start time.Time `json:"start"`
-	End   time.Time `json:"end"`
-	Value float64   `json:"value"`
-}
-
 // exportWrite is a list for an entity
 type exportWrite struct {
 	entity string
-	rates  []exportRate
+	rates  []api.Rate
 }
 
 // same reports whether both are the same list for the same entity
 func (w *exportWrite) same(o *exportWrite) bool {
-	return w != nil && o != nil && w.entity == o.entity && slices.EqualFunc(w.rates, o.rates, func(a, b exportRate) bool {
+	return w != nil && o != nil && w.entity == o.entity && slices.EqualFunc(w.rates, o.rates, func(a, b api.Rate) bool {
 		return a.Start.Equal(b.Start) && a.End.Equal(b.End) && a.Value == b.Value
 	})
 }
@@ -71,7 +65,9 @@ type exportForecastState struct {
 	inflight  *exportWrite // list being written
 	pending   *exportWrite // newest list that came in while writing
 	writing   bool
-	lastWarn  time.Time
+	cause     util.CauseLog             // a failed write is logged once per cause
+	offCause  util.CauseLog             // the same for turning the old entity off
+	idMu      sync.Mutex                // creates the writer id once
 	conn      *homeassistant.Connection // kept until a write fails or the entity changes
 	wg        sync.WaitGroup            // writer running, for tests
 
@@ -90,13 +86,13 @@ func (site *Site) exportFc() *exportForecastState {
 // the reader can then divide it onto its own slots. Steps with export, and
 // partial hours at either end of the horizon, stay as they are. A result that
 // does not fit the request gives nil.
-func exportForecast(details requestDetails, req optimizer.OptimizationInput, res optimizer.OptimizationResult) []exportRate {
+func exportForecast(details requestDetails, req optimizer.OptimizationInput, res optimizer.OptimizationResult) []api.Rate {
 	n := len(res.GridExport)
 	if n == 0 || len(details.Timestamps) != n || len(req.TimeSeries.Dt) != n {
 		return nil
 	}
 
-	steps := make([]exportRate, 0, n)
+	steps := make([]api.Rate, 0, n)
 	for i, wh := range res.GridExport {
 		dt := time.Duration(req.TimeSeries.Dt[i]) * time.Second
 		if dt <= 0 {
@@ -115,13 +111,13 @@ func exportForecast(details requestDetails, req optimizer.OptimizationInput, res
 			start = q
 		}
 
-		steps = append(steps, exportRate{Start: start, End: end, Value: w})
+		steps = append(steps, api.Rate{Start: start, End: end, Value: w})
 	}
 
-	res2 := make([]exportRate, 0, n)
+	res2 := make([]api.Rate, 0, n)
 	for i := 0; i < len(steps); {
 		if j := zeroHourEnd(steps, i); j > i+1 {
-			res2 = append(res2, exportRate{Start: steps[i].Start, End: steps[j-1].End})
+			res2 = append(res2, api.Rate{Start: steps[i].Start, End: steps[j-1].End})
 			i = j
 			continue
 		}
@@ -135,7 +131,7 @@ func exportForecast(details requestDetails, req optimizer.OptimizationInput, res
 
 // zeroHourEnd returns the index after the steps from i that make up a full hour
 // at 0 W, i if they are not
-func zeroHourEnd(steps []exportRate, i int) int {
+func zeroHourEnd(steps []api.Rate, i int) int {
 	start := steps[i].Start
 	if start.Minute() != 0 || start.Second() != 0 || start.Nanosecond() != 0 {
 		return i
@@ -160,7 +156,7 @@ func zeroHourEnd(steps []exportRate, i int) int {
 }
 
 // exportCurrent is the power of the step covering now, 0 if none does
-func exportCurrent(rates []exportRate, now time.Time) float64 {
+func exportCurrent(rates []api.Rate, now time.Time) float64 {
 	for _, r := range rates {
 		if !now.Before(r.Start) && now.Before(r.End) {
 			return r.Value
@@ -200,7 +196,17 @@ func (site *Site) publishExportForecast(details requestDetails, req optimizer.Op
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.inflight.same(w) || s.pending == nil && s.last.same(w) && time.Since(s.lastWrite) < exportForecastRefresh {
+	// compared with the newest list that is queued or written, not with the last one
+	// written: Z written, A running, Z again must not be dropped as unchanged. A list
+	// equal to the one written is sent again after exportForecastRefresh only.
+	latest := s.pending
+	if latest == nil {
+		latest = s.inflight
+	}
+	if latest == nil {
+		latest = s.last
+	}
+	if latest.same(w) && (latest != s.last || time.Since(s.lastWrite) < exportForecastRefresh) {
 		return
 	}
 
@@ -235,7 +241,8 @@ func (site *Site) exportForecastWriter() {
 
 		// the entity was changed or turned off meanwhile
 		var err error
-		if w.entity == site.exportForecastEntity() {
+		current := w.entity == site.exportForecastEntity()
+		if current {
 			err = site.writeExportForecast(w)
 		}
 
@@ -246,8 +253,8 @@ func (site *Site) exportForecastWriter() {
 		}
 		s.mu.Unlock()
 
-		if err != nil {
-			site.exportForecastWarn(err)
+		if current {
+			s.cause.Report(site.log, "export forecast", err)
 		}
 	}
 }
@@ -279,6 +286,7 @@ func (site *Site) writeExportForecast(w *exportWrite) error {
 		"friendly_name":       "evcc Einspeiseprognose",
 		"forecast":            w.rates,
 		"updated":             now.Format(time.RFC3339),
+		"writer":              site.exportWriterID(),
 	}
 
 	size, err := writeHAState(conn, w.entity, exportCurrent(w.rates, now), attrs)
@@ -310,29 +318,18 @@ func (site *Site) exportForecastConnection() (*homeassistant.Connection, error) 
 	return homeassistant.NewConnection(util.NewLogger("exportforecast"), uri, "", false)
 }
 
-// exportForecastWarn logs a failed write, at most once in exportForecastWarnEvery
-func (site *Site) exportForecastWarn(err error) {
-	s := site.exportFc()
-
-	s.mu.Lock()
-	warn := time.Since(s.lastWarn) >= exportForecastWarnEvery
-	if warn {
-		s.lastWarn = time.Now()
-	}
-	s.mu.Unlock()
-
-	if warn {
-		site.log.WARN.Printf("export forecast: %v", err)
-	}
-}
-
 // writeHAState sets the state of an entity, creating it if needed. It returns
 // the size of the request body.
 func writeHAState(conn *homeassistant.Connection, entity string, state float64, attrs map[string]any) (int, error) {
+	return writeHAStateText(conn, entity, strconv.FormatFloat(state, 'f', -1, 64), attrs)
+}
+
+// writeHAStateText is writeHAState for a state that is text, e.g. unavailable
+func writeHAStateText(conn *homeassistant.Connection, entity, state string, attrs map[string]any) (int, error) {
 	uri := fmt.Sprintf("%s/api/states/%s", conn.URI(), url.PathEscape(entity))
 
 	body, err := json.Marshal(map[string]any{
-		"state":      strconv.FormatFloat(state, 'f', -1, 64),
+		"state":      state,
 		"attributes": attrs,
 	})
 	if err != nil {
@@ -349,6 +346,37 @@ func writeHAState(conn *homeassistant.Connection, entity string, state float64, 
 
 	_, err = conn.DoBody(req.WithContext(ctx))
 	return len(body), err
+}
+
+// exportWriterID returns the id this instance writes into the entity, so a reader
+// on the same instance can tell it is reading its own list. It is created once per
+// database. A copied database copies it, then two instances reject each other's entity.
+func (site *Site) exportWriterID() string {
+	f := site.exportFc()
+
+	f.idMu.Lock()
+	defer f.idMu.Unlock()
+
+	if id, err := settings.String(keys.LmExportForecastID); err == nil && id != "" {
+		return id
+	}
+
+	id := machine.RandomID()
+	settings.SetString(keys.LmExportForecastID, id)
+	if err := settings.Persist(); err != nil {
+		site.log.ERROR.Printf("export forecast: %v", err)
+	}
+
+	return id
+}
+
+// the reader of this instance rejects an entity with this id, it only reads and
+// never creates the id: without one this instance has written nothing
+func init() {
+	tariff.HAForecastWriterID = func() string {
+		id, _ := settings.String(keys.LmExportForecastID)
+		return id
+	}
 }
 
 // exportForecastEntity is the entity set in the ui, empty = off
@@ -376,6 +404,7 @@ func (site *Site) SetLmExportForecast(entity string) error {
 	s := site.lms()
 
 	s.advMu.Lock()
+	old := s.adv.ExportForecastEntity
 	s.adv.ExportForecastEntity = entity
 	adv := s.adv
 	s.advMu.Unlock()
@@ -385,6 +414,7 @@ func (site *Site) SetLmExportForecast(entity string) error {
 	// a changed entity gets the forecast on the next run, with a new connection
 	f := site.exportFc()
 	f.mu.Lock()
+	wrote := f.last != nil && f.last.entity == old
 	f.last, f.lastWrite, f.conn = nil, time.Time{}, nil
 	f.mu.Unlock()
 
@@ -394,5 +424,33 @@ func (site *Site) SetLmExportForecast(entity string) error {
 
 	site.publishLmAdvanced()
 
+	// the reading instance would keep the old list until it is stale; an entity
+	// evcc never wrote to may be a foreign sensor and is left alone
+	if wrote && old != entity {
+		f.wg.Add(1)
+		go site.exportForecastOff(old)
+	}
+
 	return nil
+}
+
+// exportForecastOff sets the state of the entity that is no longer written to
+// unavailable, so a reading instance drops its list at once. It runs in the
+// background over a new connection, once; a write still running at the change may
+// land on the old entity afterwards.
+func (site *Site) exportForecastOff(entity string) {
+	f := site.exportFc()
+	defer f.wg.Done()
+
+	err := func() error {
+		conn, err := site.exportForecastConnection()
+		if err != nil {
+			return err
+		}
+
+		_, err = writeHAStateText(conn, entity, "unavailable", map[string]any{"friendly_name": "evcc Einspeiseprognose"})
+		return err
+	}()
+
+	f.offCause.Report(site.log, "export forecast off "+entity, err)
 }

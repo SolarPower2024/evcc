@@ -14,8 +14,9 @@ package tariff
 // This forecast never breaks the sum of the solar tariffs: a missing entity,
 // `unavailable`, a wrong attribute, a forecast not updated for an hour and data
 // older than twice the interval give no rates and no error, so the instance's own
-// forecast goes on alone. Each case is logged as a warning, at most every 15
-// minutes.
+// forecast goes on alone. A missing entity (after a restart of Home Assistant)
+// keeps the data until they are older than twice the interval. Each cause is logged once as a warning, the return of
+// the data once as info, see util.CauseLog; only the loop logs, not Rates.
 
 import (
 	"cmp"
@@ -25,7 +26,6 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -43,13 +43,19 @@ const (
 	// entries are taken from this window around now
 	haForecastPast   = 24 * time.Hour
 	haForecastFuture = 7 * 24 * time.Hour
-
-	haForecastWarnEvery = 15 * time.Minute
 )
+
+// how long the constructor waits for the first read, a variable for the tests
+var haForecastWait = 10 * time.Second
 
 // errNoForecast marks a state of the entity that gives no forecast, as opposed to
 // a failed request
 var errNoForecast = errors.New("no forecast")
+
+// errEntityMissing marks a missing entity (404). After a restart of Home Assistant
+// the entity is gone until its writer creates it again, so the data are kept, as
+// when Home Assistant does not answer.
+var errEntityMissing = errors.New("entity not found")
 
 // HAForecast is a solar forecast from the attribute of a Home Assistant entity
 type HAForecast struct {
@@ -58,14 +64,17 @@ type HAForecast struct {
 	entity    string
 	attribute string
 	data      *util.Monitor[api.Rates]
-
-	mu       sync.Mutex
-	lastWarn time.Time
+	cause     util.CauseLog // each cause is logged once
 }
 
 var _ api.Tariff = (*HAForecast)(nil)
 
 // HAForecastConnection creates the connection; tests replace it to reach a local server instead of Home Assistant
+// HAForecastWriterID returns the id this instance writes into the export forecast
+// entity, empty if it has none. The entity of that id is not read: it is this
+// instance's own list. nil = no check, tests set it like HAForecastConnection.
+var HAForecastWriterID func() string
+
 var HAForecastConnection = func(log *util.Logger, c homeassistant.Config) (*homeassistant.Connection, error) {
 	return c.NewConnection(log)
 }
@@ -95,6 +104,9 @@ func NewHAForecastFromConfig(other map[string]any) (api.Tariff, error) {
 	if cc.Attribute == "" {
 		return nil, errors.New("missing attribute")
 	}
+	if cc.Interval <= 0 {
+		return nil, errors.New("interval: must be positive")
+	}
 
 	log := util.NewLogger("ha-forecast")
 
@@ -112,67 +124,57 @@ func NewHAForecastFromConfig(other map[string]any) (api.Tariff, error) {
 	}
 
 	// the first read may stay empty: the entity may not exist yet, the instance
-	// that writes it may start later. Wait for it a short time only.
-	done := make(chan struct{})
-	go t.run(cc.Interval, done)
+	// that writes it may start later. Wait for it haForecastWait at most, then
+	// start empty (Rates would block until the first Set otherwise); the loop sets
+	// the real data when it has them.
+	go t.run(cc.Interval)
 
 	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
+	case <-t.data.Done():
+	case <-time.After(haForecastWait):
+		t.data.Set(nil)
 	}
 
 	return t, nil
 }
 
-func (t *HAForecast) run(interval time.Duration, done chan struct{}) {
-	var once sync.Once
-
+func (t *HAForecast) run(interval time.Duration) {
 	for ; true; <-time.Tick(interval) {
-		var data api.Rates
-
-		err := backoff.Retry(func() error {
-			var err error
-			data, err = t.forecast(time.Now())
-
-			// a state of the entity does not change by asking again
-			if errors.Is(err, errNoForecast) {
-				return backoff.Permanent(err)
-			}
-			return backoffPermanentError(err)
-		}, bo())
-
-		switch {
-		case err == nil:
-			t.data.Set(data)
-		case errors.Is(err, errNoForecast):
-			t.warn(err)
-			t.data.Set(nil)
-		default:
-			// Home Assistant not reached: keep the data until it is outdated
-			t.warn(err)
-			select {
-			case <-t.data.Done():
-			default:
-				t.data.Set(nil)
-			}
-		}
-
-		once.Do(func() { close(done) })
+		t.update()
 	}
 }
 
-// warn logs at most once in haForecastWarnEvery
-func (t *HAForecast) warn(err error) {
-	t.mu.Lock()
-	warn := time.Since(t.lastWarn) >= haForecastWarnEvery
-	if warn {
-		t.lastWarn = time.Now()
-	}
-	t.mu.Unlock()
+// update reads once and reports the result
+func (t *HAForecast) update() {
+	var data api.Rates
 
-	if warn {
-		t.log.WARN.Printf("%s: %v", t.entity, err)
+	err := backoff.Retry(func() error {
+		var err error
+		data, err = t.forecast(time.Now())
+
+		// a state of the entity does not change by asking again
+		if errors.Is(err, errNoForecast) || errors.Is(err, errEntityMissing) {
+			return backoff.Permanent(err)
+		}
+		return backoffPermanentError(err)
+	}, bo())
+
+	switch {
+	case err == nil:
+		t.data.Set(data)
+	case errors.Is(err, errNoForecast):
+		t.data.Set(nil)
+	default:
+		// Home Assistant not reached or the entity missing: keep the data until
+		// they are outdated, empty only while there were none
+		select {
+		case <-t.data.Done():
+		default:
+			t.data.Set(nil)
+		}
 	}
+
+	t.cause.Report(t.log, t.entity, err)
 }
 
 // forecast reads the list from the entity and divides it into slots. A state of
@@ -186,13 +188,23 @@ func (t *HAForecast) forecast(now time.Time) (api.Rates, error) {
 	uri := fmt.Sprintf("%s/api/states/%s", t.URI(), url.PathEscape(t.entity))
 	if err := t.GetJSON(uri, &res); err != nil {
 		if se, ok := errors.AsType[*request.StatusError](err); ok && se.StatusCode() == http.StatusNotFound {
-			return nil, fmt.Errorf("entity not found: %w", errNoForecast)
+			return nil, errEntityMissing
 		}
 		return nil, err
 	}
 
 	if res.State == "unknown" || res.State == "unavailable" {
 		return nil, fmt.Errorf("entity %s: %w", res.State, errNoForecast)
+	}
+
+	if own := HAForecastWriterID; own != nil {
+		if id := own(); id != "" {
+			// a missing attribute (another source, an old list) is a foreign entity
+			var writer string
+			if raw, ok := res.Attributes["writer"]; ok && json.Unmarshal(raw, &writer) == nil && writer == id {
+				return nil, fmt.Errorf("written by this instance: %w", errNoForecast)
+			}
+		}
 	}
 
 	raw, ok := res.Attributes[t.attribute]
@@ -272,7 +284,6 @@ func (t *HAForecast) Rates() (api.Rates, error) {
 	if err := t.data.GetFunc(func(val api.Rates) {
 		res = slices.Clone(val)
 	}); err != nil {
-		t.warn(err)
 		return nil, nil
 	}
 

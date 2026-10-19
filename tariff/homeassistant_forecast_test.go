@@ -1,8 +1,10 @@
 package tariff
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/homeassistant"
 	"github.com/evcc-io/evcc/util/templates"
+	jww "github.com/spf13/jwalterweatherman"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v4"
@@ -216,6 +219,11 @@ func TestHAForecastNoForecast(t *testing.T) {
 
 		_, err = NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"attribute": ""}))
 		assert.ErrorContains(t, err, "missing attribute")
+
+		for _, iv := range []string{"0s", "-1s"} {
+			_, err = NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"interval": iv}))
+			assert.ErrorContains(t, err, "interval: must be positive", iv)
+		}
 	})
 }
 
@@ -224,10 +232,12 @@ func TestHAForecastGoesAway(t *testing.T) {
 	body := fmt.Sprintf(`{"state":"1","attributes":{"forecast":[{"start":%q,"end":%q,"value":5}]}}`,
 		at(10, 0).Format(time.RFC3339), at(10, 15).Format(time.RFC3339))
 
+	// after a restart of Home Assistant the entity is missing until it is written
+	// again: the data stay for twice the interval, then there are none
 	t.Run("entity vanishes", func(t *testing.T) {
 		h := haForecastServer(t, body)
 
-		tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"interval": "100ms"}))
+		tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"interval": "1s"}))
 		require.NoError(t, err)
 
 		rates, err := tr.Rates()
@@ -236,10 +246,16 @@ func TestHAForecastGoesAway(t *testing.T) {
 
 		h.set(`{"message":"Entity not found."}`, http.StatusNotFound)
 
+		// the next cycle has seen the 404, the data of the last read are still valid
+		time.Sleep(1200 * time.Millisecond)
+		rates, err = tr.Rates()
+		require.NoError(t, err)
+		assert.Len(t, rates, 1, "kept")
+
 		assert.Eventually(t, func() bool {
 			rates, err := tr.Rates()
 			return err == nil && len(rates) == 0
-		}, 5*time.Second, 20*time.Millisecond)
+		}, 5*time.Second, 50*time.Millisecond)
 	})
 
 	t.Run("home assistant not answering", func(t *testing.T) {
@@ -406,4 +422,134 @@ func TestHAForecastZones(t *testing.T) {
 	for i, r := range got {
 		assert.Equal(t, float64(1000+100+i/4), r.Value, "slot %d at %v", i, r.Start)
 	}
+}
+
+// The constructor waits for the first read a limited time: with Home Assistant not
+// reachable it returns with no rates and no error, the loop fills in the data later.
+func TestHAForecastConstructorWait(t *testing.T) {
+	prevWait := haForecastWait
+	haForecastWait = 200 * time.Millisecond
+	t.Cleanup(func() { haForecastWait = prevWait })
+
+	body := fmt.Sprintf(`{"state":"1","attributes":{"forecast":[{"start":%q,"end":%q,"value":5}]}}`,
+		at(10, 0).Format(time.RFC3339), at(10, 15).Format(time.RFC3339))
+
+	h := haForecastServer(t, body)
+	h.set(``, http.StatusInternalServerError)
+
+	start := time.Now()
+	tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"interval": "100ms"}))
+	require.NoError(t, err)
+	assert.Less(t, time.Since(start), 2*time.Second)
+
+	rates, err := tr.Rates()
+	require.NoError(t, err)
+	assert.Empty(t, rates)
+
+	h.set(body, http.StatusOK)
+
+	assert.Eventually(t, func() bool {
+		rates, err := tr.Rates()
+		return err == nil && len(rates) == 1
+	}, 5*time.Second, 20*time.Millisecond)
+}
+
+// Each cause is logged once, over the cycles of the loop: the same cause again is
+// not new, another one is, and the return of the data is reported once.
+func TestHAForecastLogOnce(t *testing.T) {
+	good := fmt.Sprintf(`{"state":"1","attributes":{"forecast":[{"start":%q,"end":%q,"value":5}]}}`,
+		at(10, 0).Format(time.RFC3339), at(10, 15).Format(time.RFC3339))
+
+	h := haForecastServer(t, good)
+
+	conn, err := HAForecastConnection(util.NewLogger("test"), homeassistant.Config{URI: "http://unused"})
+	require.NoError(t, err)
+
+	var out bytes.Buffer
+	tr := &HAForecast{
+		Connection: conn,
+		log:        &util.Logger{Notepad: jww.NewNotepad(jww.LevelTrace, jww.LevelTrace, &out, io.Discard, "", 0)},
+		entity:     "sensor.x",
+		attribute:  "forecast",
+		data:       util.NewMonitor[api.Rates](time.Hour),
+	}
+
+	count := func(level string) int { return strings.Count(out.String(), level) }
+
+	h.set(`{"state":"unavailable","attributes":{}}`, http.StatusOK)
+	for range 3 {
+		tr.update()
+	}
+	assert.Equal(t, 1, count("WARN"), "same cause over several cycles")
+	assert.Equal(t, 2, count("DEBUG"))
+
+	h.set(`{"state":"1","attributes":{}}`, http.StatusOK)
+	tr.update()
+	assert.Equal(t, 2, count("WARN"), "another cause")
+
+	h.set(good, http.StatusOK)
+	tr.update()
+	tr.update()
+	assert.Equal(t, 1, count("INFO"), "the data are back, once")
+	assert.Equal(t, 2, count("WARN"))
+
+	rates, err := tr.Rates()
+	require.NoError(t, err)
+	assert.Len(t, rates, 1)
+}
+
+// The entity this instance wrote is not read back: no rates, a new cause. An
+// entity of another writer, or without the attribute, is read.
+func TestHAForecastOwnWriter(t *testing.T) {
+	prev := HAForecastWriterID
+	HAForecastWriterID = func() string { return "me" }
+	t.Cleanup(func() { HAForecastWriterID = prev })
+
+	body := func(writer string) string {
+		w := ""
+		if writer != "" {
+			w = fmt.Sprintf(`"writer":%q,`, writer)
+		}
+		return fmt.Sprintf(`{"state":"1","attributes":{%s"forecast":[{"start":%q,"end":%q,"value":5}]}}`,
+			w, at(10, 0).Format(time.RFC3339), at(10, 15).Format(time.RFC3339))
+	}
+
+	for name, tc := range map[string]struct {
+		body string
+		want int
+	}{
+		"own id":            {body("me"), 0},
+		"foreign id":        {body("other"), 1},
+		"no writer":         {body(""), 1},
+		"no own id (empty)": {body("me"), 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if name == "no own id (empty)" {
+				HAForecastWriterID = func() string { return "" }
+			} else {
+				HAForecastWriterID = func() string { return "me" }
+			}
+
+			haForecastServer(t, tc.body)
+
+			tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(nil))
+			require.NoError(t, err)
+
+			rates, err := tr.Rates()
+			require.NoError(t, err)
+			assert.Len(t, rates, tc.want)
+		})
+	}
+
+	t.Run("cause", func(t *testing.T) {
+		HAForecastWriterID = func() string { return "me" }
+		haForecastServer(t, body("me"))
+		conn, err := HAForecastConnection(util.NewLogger("test"), homeassistant.Config{URI: "http://unused"})
+		require.NoError(t, err)
+		tr := &HAForecast{Connection: conn, entity: "sensor.x", attribute: "forecast"}
+
+		_, err = tr.forecast(time.Now())
+		assert.ErrorIs(t, err, errNoForecast)
+		assert.ErrorContains(t, err, "written by this instance")
+	})
 }

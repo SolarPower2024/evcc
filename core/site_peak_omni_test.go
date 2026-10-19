@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1533,4 +1534,55 @@ func TestOmniWindowEnded(t *testing.T) {
 	sc.site.updateBatteryModePeakAware(false, false, sc.rate)
 	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000"}, ha.take())
 	assert.Equal(t, "5000", ha.get(haProtLimit))
+}
+
+// byd is the scenario with the battery type BYD, holding the battery through the entity
+func byd(t *testing.T) (*scenario, *fakeHA, *bytes.Buffer) {
+	t.Helper()
+
+	sc, ha := newOmni(t)
+	keepSettings(t)
+
+	s := sc.site.peak()
+	s.batteryType = batteryTypeBYD
+	require.NoError(t, sc.site.rebuildPeakSetter())
+
+	var buf bytes.Buffer
+	sc.site.log = testLogger(&buf)
+
+	sc.site.setPeakOwned(true)
+
+	return sc, ha, &buf
+}
+
+// TestPeakEntityRemovedHandBackFails verifies that removing the entity does not
+// leave `owned` set when the free value cannot be written: with no target there
+// is nothing to hand back to, and `owned` would block the change to Marstek for
+// good, with an empty log.
+func TestPeakEntityRemovedHandBackFails(t *testing.T) {
+	t.Run("entity removed, release fails", func(t *testing.T) {
+		sc, ha, buf := byd(t)
+		ha.fail["number/set_value"] = http.StatusInternalServerError
+
+		require.NoError(t, sc.site.SetPeakShavingEntity(""))
+		assert.False(t, sc.site.peakOwned())
+		assert.Equal(t, 1, strings.Count(buf.String(), peakFreeNotWritten))
+
+		require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek))
+		assert.Equal(t, batteryTypeMarstek, sc.site.GetPeakShavingBatteryType())
+	})
+
+	t.Run("type change with no target and owned", func(t *testing.T) {
+		sc, _, buf := byd(t)
+
+		s := sc.site.peak()
+		s.mu.Lock()
+		s.set, s.entity = nil, ""
+		s.mu.Unlock()
+
+		require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek))
+		assert.False(t, sc.site.peakOwned())
+		assert.Equal(t, 1, strings.Count(buf.String(), peakFreeNotWritten))
+		assert.Equal(t, batteryTypeMarstek, sc.site.GetPeakShavingBatteryType())
+	})
 }
