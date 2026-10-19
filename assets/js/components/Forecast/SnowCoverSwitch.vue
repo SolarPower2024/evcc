@@ -1,5 +1,5 @@
 <template>
-	<div class="snow mt-2" data-testid="snow-mode">
+	<div class="snow mt-2 text-muted" data-testid="snow-mode">
 		<i18n-t keypath="snowCover.sentence" tag="span" scope="global">
 			<template #mode>
 				<CustomSelect
@@ -17,7 +17,7 @@
 				</CustomSelect>
 			</template>
 		</i18n-t>
-		<span v-if="detected" class="text-primary small ms-1" data-testid="snow-detected">
+		<span v-if="detected" class="small ms-1" data-testid="snow-detected">
 			· {{ $t("snowCover.detected") }}
 		</span>
 		<span ref="help" v-bind="infoProps" data-testid="snow-help" @click.prevent>
