@@ -6,6 +6,8 @@
 import api from "@/api";
 import colors, { lighten } from "@/colors";
 import type { HistorySeries, HistorySlot } from "./GroupChart.vue";
+import type { Legend } from "../Sessions/types";
+import type { FlowCost, StatItem } from "./types";
 
 export interface FeedInSplit {
   start: string;
@@ -113,4 +115,102 @@ export function splitGridSeries(
   };
 
   return [eegSeries, ...standard];
+}
+
+export type Translate = (key: string) => string;
+
+// number formats of the page, as the components own them
+export interface StatFormats {
+  money: (amount: number) => string; // with the currency symbol
+  price: (perKWh: number) => string;
+}
+
+// Revenue per feed-in tariff, priced slot by slot on its own and so also shown
+// without a grid price.
+export function feedInEegStats(
+  totals: FeedInSplitTotals,
+  cost: FlowCost | undefined,
+  fmt: StatFormats,
+  t: Translate
+): StatItem[] {
+  const empty = t("energy.stat.noPrice");
+  const money = (key: string, label: string, amount: number, energy: number): StatItem => ({
+    key,
+    label,
+    number: amount,
+    format: fmt.money,
+    sub: energy ? `ø ${fmt.price(amount / energy)}` : "",
+  });
+  const revenue = (
+    key: string,
+    label: string,
+    amount: number,
+    energy: number,
+    priced: number
+  ): StatItem =>
+    energy > 0 && !priced
+      ? { key, label, empty }
+      : { ...money(key, label, amount, priced), accent: "text-accent1" };
+  return [
+    cost
+      ? money("gridImport", t("energy.grid.cost"), cost.import, cost.importEnergy)
+      : { key: "gridImport", label: t("energy.grid.cost"), empty },
+    revenue(
+      "gridExport",
+      t("energy.grid.revenue"),
+      totals.standardRevenue,
+      totals.standard,
+      totals.standardPriced
+    ),
+    revenue(
+      "gridExportEeg",
+      t("energy.feedInEeg.revenue"),
+      totals.eegRevenue,
+      totals.eeg,
+      totals.eegPriced
+    ),
+  ];
+}
+
+// The grid legend with the export entry replaced by the standard tariff's part and
+// the EEG part, in the colors of the chart.
+export function splitLegends(
+  list: Legend[],
+  totals: FeedInSplitTotals,
+  t: Translate,
+  fmtKWh: (kWh: number) => string
+): Legend[] {
+  const res = [...list];
+  res.splice(
+    1,
+    1,
+    {
+      label: t("energy.grid.revenue"),
+      color: colors.export || "",
+      value: fmtKWh(totals.standard),
+    },
+    {
+      label: t("energy.feedInEeg.eeg"),
+      color: eegColor(),
+      value: fmtKWh(totals.eeg),
+    }
+  );
+  return res;
+}
+
+// The split of the export for the period, empty without an EEG counter or when it
+// cannot be read (the page then shows the grid as a whole).
+export async function loadFeedInSplit(
+  from: Date,
+  to: Date,
+  aggregate: string,
+  entity: string | undefined
+): Promise<FeedInSplit[]> {
+  if (!entity) return [];
+  try {
+    return await fetchFeedInSplit(from, to, aggregate);
+  } catch (e) {
+    console.error("Failed to load feed-in split", e);
+    return [];
+  }
 }

@@ -449,10 +449,10 @@ import { CURRENCY } from "@/types/evcc";
 import api from "../api";
 // custom: export split by feed-in tariff, see core/site_feedin_eeg.go
 import {
-	eegColor,
 	feedInSplitTotals,
-	fetchFeedInSplit,
+	loadFeedInSplit,
 	splitGridSeries,
+	splitLegends,
 	withoutFeedInEeg,
 	type FeedInSplit,
 	type FeedInSplitTotals,
@@ -903,7 +903,7 @@ export default defineComponent({
 		},
 		// with the price overlay on, both prices as lines with their range over the period
 		gridLegends(): Legend[] {
-			const list: Legend[] = [
+			let list: Legend[] = [
 				{
 					label: this.$t("energy.grid.import"),
 					color: colors.grid || "",
@@ -916,22 +916,8 @@ export default defineComponent({
 				},
 			];
 			// custom: export split by feed-in tariff, see feedInEeg.ts
-			if (this.feedInEeg) {
-				list.splice(
-					1,
-					1,
-					{
-						label: this.$t("energy.grid.revenue"),
-						color: colors.export || "",
-						value: this.fmtKWh(this.feedInEeg.standard),
-					},
-					{
-						label: this.$t("energy.feedInEeg.eeg"),
-						color: eegColor(),
-						value: this.fmtKWh(this.feedInEeg.eeg),
-					}
-				);
-			}
+			if (this.feedInEeg)
+				list = splitLegends(list, this.feedInEeg, (key) => this.$t(key), this.fmtKWh);
 			const prices = this.gridPrices;
 			const range = (band: PriceBand) => {
 				const known = (v: (number | null)[]) => v.filter((x): x is number => x !== null);
@@ -1399,18 +1385,13 @@ export default defineComponent({
 		},
 		// custom: export split by feed-in tariff, only with an EEG counter
 		async loadFeedInSplit(requestKey: string) {
-			if (!store.state.feedInEegEntity) {
-				this.feedInSplit = [];
-				return;
-			}
-			try {
-				const split = await fetchFeedInSplit(this.from, this.to, this.aggregate);
-				if (requestKey === this.fetchKey) this.feedInSplit = split;
-			} catch (e) {
-				console.error("Failed to load feed-in split", e);
-				// no split of another period on this one
-				if (requestKey === this.fetchKey) this.feedInSplit = [];
-			}
+			const split = await loadFeedInSplit(
+				this.from,
+				this.to,
+				this.aggregate,
+				store.state.feedInEegEntity
+			);
+			if (requestKey === this.fetchKey) this.feedInSplit = split;
 		},
 		fetchFlow(from: Date, to: Date) {
 			return api.get("history/flow", {
