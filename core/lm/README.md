@@ -1044,7 +1044,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
-| `assets/js/views/Forecast.vue` | evcc's *adjust* switch in the solar card header gets `d-none`; `Forecast/SnowCoverSwitch.vue` under the chart shows it with the snow switches in one row, getting label, state and `changeAdjusted` from Forecast.vue |
+| `assets/js/views/Forecast.vue` | evcc's own *adjust* switch moves from the solar card header into the slot of `Forecast/SnowCoverSwitch.vue` under the chart, which shows it with the snow switches in one row |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
 | `assets/js/components/Config/CircuitModal.vue` | mounts `CircuitPeakHint.vue` at the start of `before-actions`: the hint under the power limit while the circuit takes the peak limit |

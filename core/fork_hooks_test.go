@@ -89,7 +89,7 @@ var forkUiHooks = []struct {
 	{"assets/js/components/Loadpoints/Loadpoint.vue", []string{"chargerStages: Boolean", "const estimate = fmtPowerEstimate(", `:value="chargePower || chargePowerEstimate"`}},
 	{"assets/js/components/Site/Site.vue", []string{"loadpoints: measuredLoadpoints(this.enabledLoadpoints)"}},
 	{"assets/js/components/Loadpoints/Mode.vue", []string{"chargerStages: Boolean", "this.switchDevice || this.chargerStages"}},
-	{"assets/js/views/Forecast.vue", []string{"@adjust=\"changeAdjusted\"", "form-switch mb-0 text-nowrap d-none\"", "SnowCoverSwitch, // custom"}},
+	{"assets/js/views/Forecast.vue", []string{"<SnowCoverSwitch>", "form-check form-switch mt-2 mb-0\"", "SnowCoverSwitch, // custom"}},
 	{"assets/js/views/Log.vue", []string{"<LogFileButton", "LogFileButton,"}},
 	{"assets/js/components/Config/DeviceTags.vue", []string{"case \"stages\": // custom"}},
 	{"assets/js/components/Config/TariffCard.vue", []string{"<FeedInEegSummary"}},
