@@ -1123,6 +1123,11 @@ unused:
   return, the two battery calls of the fork are statements of the function level
   in order and evcc's originals are not called any more; `updateCustom` calls its
   four parts. Peak shaving's safeguard for a failing grid meter hangs on this.
+- `TestForkHookCounts`: hooks placed at two lines of one function (the 3p limits in
+  `fastChargingPhases` and `boostPower`) are counted, not only named. Behaviour:
+  `TestFastChargingPhasesNoScaleUpWith1pMinOnly`, `TestBoostPowerBridgesWith3pMin`,
+  `TestPvMaxCurrentUsesLimitsOfNewPhases`. The two lines in `fastChargingPhases`
+  shield each other (either one holds the result), only the count tells one lost.
 - `TestForkInertWhenUnused`, `TestEqualPrioritiesAreUpstream`,
   `TestCurrents1pInertWhenUnused`, `TestLmSMaxFromUpstream`: without
   configuration the fork changes nothing.

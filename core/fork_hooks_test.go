@@ -373,3 +373,40 @@ func TestForkOptimizerRequestOrder(t *testing.T) {
 	assert.Greater(t, hook, limit, "applyLmOptimizerInputs has to follow the circuit's PMaxImp")
 	assert.Less(t, hook, move, "applyLmOptimizerInputs has to precede the loop moving the batteries")
 }
+
+// forkHookCounts lists the names a function has to refer to at least that often:
+// a hook placed at two lines of one function is no longer there in full when only
+// one of them is left, while the name check of forkHooks stays green.
+var forkHookCounts = []struct {
+	file, fn, name string
+	min            int
+}{
+	{"core/loadpoint.go", "Loadpoint.fastChargingPhases", "effectiveMinCurrentFor", 2},
+	{"core/loadpoint.go", "Loadpoint.fastChargingPhases", "circuitAllowsPhases", 2},
+	{"core/loadpoint.go", "Loadpoint.boostPower", "effectiveMinCurrentFor", 2},
+}
+
+// referencedCount returns how often a function's body refers to the names
+func referencedCount(t *testing.T, file, fn string) map[string]int {
+	t.Helper()
+
+	res := make(map[string]int)
+	ast.Inspect(funcBody(t, file, fn), func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok {
+			res[id.Name]++
+		}
+		return true
+	})
+
+	return res
+}
+
+// TestForkHookCounts fails when one of the lines of a hook placed more than once
+// in a function was lost
+func TestForkHookCounts(t *testing.T) {
+	for _, h := range forkHookCounts {
+		t.Run(h.file+" "+h.fn+" "+h.name, func(t *testing.T) {
+			assert.GreaterOrEqual(t, referencedCount(t, h.file, h.fn)[h.name], h.min, "%s refers to %s too rarely", h.fn, h.name)
+		})
+	}
+}
