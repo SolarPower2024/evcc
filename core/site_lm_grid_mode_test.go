@@ -55,11 +55,22 @@ func TestBatteryGridChargeModeRestart(t *testing.T) {
 	require.NoError(t, site.SetBatteryGridChargeLimit(&limit))
 	require.NoError(t, site.SetBatterySocGridCharge(true))
 
+	// the restart reads what is stored: the price limit set while soc was chosen and
+	// the soc switch, neither is touched by the restore
+	limitBefore, _ := settings.Float(keys.BatteryGridChargeLimit)
+	socBefore, _ := settings.Bool(keys.BatterySocGridCharge)
+
 	restarted := newScenario(t).site
+	restarted.setBatteryGridChargeLimit(&limit)
 	restarted.restoreBatteryGridChargeMode()
 
 	assert.Equal(t, gridModeSoc, restarted.GetBatteryGridChargeMode())
 	assert.True(t, restarted.GetBatterySocGridCharge(), "restore switches nothing")
+	assert.NotNil(t, restarted.GetBatteryGridChargeLimit(), "restore clears no price limit")
+	limitAfter, _ := settings.Float(keys.BatteryGridChargeLimit)
+	socAfter, _ := settings.Bool(keys.BatterySocGridCharge)
+	assert.Equal(t, limitBefore, limitAfter, "stored price limit unchanged")
+	assert.Equal(t, socBefore, socAfter, "stored soc switch unchanged")
 
 	require.NoError(t, site.SetBatteryGridChargeMode(gridModePrice))
 	restarted.restoreBatteryGridChargeMode()
