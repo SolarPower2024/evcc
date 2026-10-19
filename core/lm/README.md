@@ -1119,6 +1119,8 @@ unused:
   `custom` marker in a comment (json files excepted). The other way round, an evcc file changed
   but missing in the table, the monthly skill `wartung` checks against the evcc tag (the
   checkout of the tests is shallow).
+- `TestWatchJsonPathsExist`: every file of `.github/upstream-check/watch.json` exists, every
+  `paths` entry is a directory or the start of an existing file name.
 - `TestForkDeferHooks`: the hook in `restoreSettings` is a deferred call of the
   function body, with no return of evcc before it. A call at the end would be
   skipped by the first failing restore step, and the fork would start without its

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -481,5 +482,37 @@ func TestTouchPointTable(t *testing.T) {
 				assert.Regexp(t, markerRegexp, string(b), "%s is in the table of the touch points, but has no custom marker", file)
 			}
 		})
+	}
+}
+
+// TestWatchJsonPathsExist fails when an entry of the upstream watch list points at a
+// file or directory that is gone: the daily check would look for nothing and stay
+// quiet. A file of "files" has to exist, a "paths" entry is a directory or the start
+// of the name of an existing file.
+func TestWatchJsonPathsExist(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", ".github", "upstream-check", "watch.json"))
+	require.NoError(t, err)
+
+	var watch struct {
+		Features []struct {
+			Name  string   `json:"name"`
+			Files []string `json:"files"`
+			Paths []string `json:"paths"`
+		} `json:"features"`
+	}
+	require.NoError(t, json.Unmarshal(b, &watch))
+	require.NotEmpty(t, watch.Features)
+
+	for _, f := range watch.Features {
+		for _, file := range f.Files {
+			_, err := os.Stat(filepath.Join("..", filepath.FromSlash(file)))
+			assert.NoError(t, err, "%s: file %s", f.Name, file)
+		}
+
+		for _, p := range f.Paths {
+			matches, err := filepath.Glob(filepath.Join("..", filepath.FromSlash(p)) + "*")
+			require.NoError(t, err)
+			assert.NotEmpty(t, matches, "%s: path %s", f.Name, p)
+		}
 	}
 }
