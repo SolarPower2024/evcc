@@ -22,42 +22,61 @@ func (l *testLoad) GetChargePower() float64     { return l.power }
 func (l *testLoad) GetMaxPhaseCurrent() float64 { return l.current }
 func (l *testLoad) GetCircuit() api.Circuit     { return l.circuit }
 
-// Over power is no ui notification, over current still is.
-func TestOverPowerNotNotified(t *testing.T) {
-	// the capture stays for the whole test binary: keep draining it
-	var (
-		mu  sync.Mutex
-		ui  []string
-		src = make(chan util.Param)
-	)
-	go func() {
-		for p := range src {
-			mu.Lock()
-			ui = append(ui, fmt.Sprintf("%+v", p.Val))
-			mu.Unlock()
-		}
-	}()
-	util.CaptureLogs(src)
+var (
+	captureOnce sync.Once
+	uiMsgs      = make(chan string, 100)
+)
 
-	notified := func() []string {
-		time.Sleep(100 * time.Millisecond)
-		mu.Lock()
-		defer mu.Unlock()
-		res := ui
-		ui = nil
-		return res
+// captureUi starts the capture of ui messages once per test binary, as it
+// stays for the whole process
+func captureUi() {
+	captureOnce.Do(func() {
+		src := make(chan util.Param)
+		go func() {
+			for p := range src {
+				// other tests log warnings of their own too
+				msg := fmt.Sprintf("%+v", p.Val)
+				if !strings.Contains(msg, "over ") {
+					continue
+				}
+				select {
+				case uiMsgs <- msg:
+				default:
+				}
+			}
+		}()
+		util.CaptureLogs(src)
+	})
+}
+
+// Over power is no ui notification, over current still is. Messages of other
+// tests arrive late (also from a run before), so only the ones of this circuit
+// count: 7000 W and 20 A.
+func TestOverPowerNotNotified(t *testing.T) {
+	captureUi()
+
+	// seen reports whether a message with sub arrives within wait
+	seen := func(sub string, wait time.Duration) bool {
+		timeout := time.After(wait)
+		for {
+			select {
+			case m := <-uiMsgs:
+				if strings.Contains(m, sub) {
+					return true
+				}
+			case <-timeout:
+				return false
+			}
+		}
 	}
 
-	log := util.NewLogger("overload")
-	c, err := New(log, "peak", 16, 5000, nil, 0)
+	c, err := New(util.NewLogger("overload"), "peak", 16, 5000, nil, 0)
 	require.NoError(t, err)
-	notified()
 
 	require.NoError(t, c.Update([]api.CircuitLoad{&testLoad{circuit: c, power: 7000, current: 10}}))
-	assert.Empty(t, notified(), "over power only")
+	assert.False(t, seen("7000W", 150*time.Millisecond), "over power only")
 
 	require.NoError(t, c.Update([]api.CircuitLoad{&testLoad{circuit: c, power: 7000, current: 20}}))
-	msgs := notified()
-	require.Len(t, msgs, 1)
-	assert.True(t, strings.Contains(msgs[0], "over current detected"), msgs[0])
+	assert.True(t, seen("over current detected: 20A", 5*time.Second), "no message for over current")
+	assert.False(t, seen("7000W", 100*time.Millisecond), "no message for over power")
 }

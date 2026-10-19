@@ -1,9 +1,11 @@
 package logstash_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var runs atomic.Int32
+
 // TestLoggerWritesToLogFile pins the hook in newLogger: every line of every
 // level, redacted, reaches the log file as well as the log page. The buffer
 // content before switching on is in the file. An external test, as the lines
@@ -23,7 +27,9 @@ import (
 func TestLoggerWritesToLogFile(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "logs")
 
-	log := util.NewLogger("tstfile").Redact("pwd")
+	// a name of its own per run: the log buffer is global and outlives a run
+	name := fmt.Sprintf("tstfile%d", runs.Add(1))
+	log := util.NewLogger(name).Redact("pwd")
 	log.DEBUG.Print("before the file")
 
 	// inert until switched on
@@ -41,7 +47,7 @@ func TestLoggerWritesToLogFile(t *testing.T) {
 	log.ERROR.Print("an error")
 
 	// the log page keeps its content
-	page := logstash.All([]string{"tstfile"}, jww.LevelTrace, 0)
+	page := logstash.All([]string{name}, jww.LevelTrace, 0)
 	assert.Len(t, page, 4)
 
 	logstash.CloseFile()
@@ -88,8 +94,8 @@ func TestCloseFileWritesOut(t *testing.T) {
 
 	// nothing is written after closing
 	util.NewLogger("tstclose").INFO.Print("after")
-	time.Sleep(10 * time.Millisecond)
-	b, err = os.ReadFile(files[0])
-	require.NoError(t, err)
-	assert.NotContains(t, string(b), "after")
+	assert.Never(t, func() bool {
+		b, err := os.ReadFile(files[0])
+		return err != nil || strings.Contains(string(b), "after")
+	}, 50*time.Millisecond, 5*time.Millisecond)
 }
