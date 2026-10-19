@@ -45,6 +45,13 @@
 		</div>
 		<!-- custom: one-time grid charging, see core/site_lm_once.go -->
 		<BatteryGridChargeOnce />
+		<div
+			v-if="error"
+			class="alert alert-danger mt-3 mb-0 py-2 small"
+			data-testid="battery-soc-grid-charge-error"
+		>
+			{{ error }}
+		</div>
 	</Card>
 </template>
 
@@ -75,6 +82,7 @@ export default defineComponent({
 		return {
 			selectedStart: 20,
 			selectedStop: 80,
+			error: "",
 		};
 	},
 	computed: {
@@ -119,10 +127,12 @@ export default defineComponent({
 	methods: {
 		async changeEnabled(e: Event) {
 			const target = e.target as HTMLInputElement;
+			this.error = "";
 			try {
 				await api.post(`batterysocgridcharge/${target.checked}`);
-			} catch (err) {
+			} catch (err: any) {
 				target.checked = this.enabled; // revert to stay in sync with state
+				this.error = this.apiError(err);
 				console.error(err);
 			}
 		},
@@ -130,10 +140,12 @@ export default defineComponent({
 			const soc = parseInt(($event.target as HTMLInputElement).value, 10);
 			const previous = this.selectedStart;
 			this.selectedStart = soc;
+			this.error = "";
 			try {
 				await api.post(`batterysocgridchargestart/${encodeURIComponent(soc)}`);
-			} catch (err) {
+			} catch (err: any) {
 				this.selectedStart = previous;
+				this.error = this.apiError(err);
 				console.error(err);
 			}
 		},
@@ -141,12 +153,17 @@ export default defineComponent({
 			const soc = parseInt(($event.target as HTMLInputElement).value, 10);
 			const previous = this.selectedStop;
 			this.selectedStop = soc;
+			this.error = "";
 			try {
 				await api.post(`batterysocgridchargestop/${encodeURIComponent(soc)}`);
-			} catch (err) {
+			} catch (err: any) {
 				this.selectedStop = previous;
+				this.error = this.apiError(err);
 				console.error(err);
 			}
+		},
+		apiError(err: any): string {
+			return err?.response?.data?.error || err?.message || "error";
 		},
 		fmtSoc(soc: number) {
 			return this.fmtPercentage(soc);

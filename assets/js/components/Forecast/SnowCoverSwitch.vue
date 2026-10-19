@@ -54,6 +54,13 @@
 				</span>
 			</label>
 		</div>
+		<div
+			v-if="error"
+			class="alert alert-danger mt-3 mb-0 py-2 small w-100"
+			data-testid="snowcover-error"
+		>
+			{{ error }}
+		</div>
 	</div>
 </template>
 
@@ -80,7 +87,7 @@ export default defineComponent({
 	},
 	emits: ["adjust"],
 	data() {
-		return { tooltips: {} as Record<string, Tooltip> };
+		return { tooltips: {} as Record<string, Tooltip>, error: "" };
 	},
 	computed: {
 		snowCover() {
@@ -144,10 +151,12 @@ export default defineComponent({
 		// on failure the switch goes back to the state evcc has, the store did not change
 		async post(e: Event, path: string, current: boolean) {
 			const input = e.target as HTMLInputElement;
+			this.error = "";
 			try {
 				await api.post(`${path}/${input.checked}`);
-			} catch (err) {
+			} catch (err: any) {
 				input.checked = current;
+				this.error = err?.response?.data?.error || err?.message || "error";
 				console.error(err);
 			}
 		},
