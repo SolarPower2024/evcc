@@ -1,45 +1,28 @@
 <template>
-	<div class="d-md-flex flex-wrap column-gap-4" data-testid="forecast-switches">
-		<slot />
-		<div class="form-check form-switch mt-2 mb-0">
-			<input
-				id="snowCover"
-				:checked="snowCover"
-				class="form-check-input"
-				type="checkbox"
-				role="switch"
-				data-testid="snowcover-switch"
-				@change="change"
-			/>
-			<label class="form-check-label text-muted" for="snowCover">
-				{{ $t("snowCover.label") }}
-				<span
-					ref="coverHelp"
-					v-bind="infoProps"
-					data-testid="snowcover-help"
-					@click.prevent
+	<div class="snow mt-2" data-testid="snow-mode">
+		<i18n-t keypath="snowCover.sentence" tag="span" scope="global">
+			<template #mode>
+				<CustomSelect
+					id="snowMode"
+					:options="modeOptions"
+					:selected="mode"
+					:aria-label="$t('snowCover.label')"
+					data-testid="snow-mode-select"
+					inline
+					@change="change"
 				>
-					<shopicon-regular-info size="s"></shopicon-regular-info>
-				</span>
-			</label>
-		</div>
-		<div v-if="autoAvailable" class="form-check form-switch mt-2 mb-0">
-			<input
-				id="snowAuto"
-				:checked="snowAuto"
-				class="form-check-input"
-				type="checkbox"
-				role="switch"
-				data-testid="snowauto-switch"
-				@change="changeAuto"
-			/>
-			<label class="form-check-label text-muted" for="snowAuto">
-				{{ $t("snowCover.autoLabel") }}
-				<span ref="autoHelp" v-bind="infoProps" data-testid="snowauto-help" @click.prevent>
-					<shopicon-regular-info size="s"></shopicon-regular-info>
-				</span>
-			</label>
-		</div>
+					<span class="text-decoration-underline fw-bold text-nowrap">{{
+						modeText
+					}}</span>
+				</CustomSelect>
+			</template>
+		</i18n-t>
+		<span v-if="detected" class="text-primary small ms-1" data-testid="snow-detected">
+			· {{ $t("snowCover.detected") }}
+		</span>
+		<span ref="help" v-bind="infoProps" data-testid="snow-help" @click.prevent>
+			<shopicon-regular-info size="s"></shopicon-regular-info>
+		</span>
 		<div
 			v-if="error"
 			class="alert alert-danger mt-3 mb-0 py-2 small w-100"
@@ -56,23 +39,23 @@ import { defineComponent } from "vue";
 import Tooltip from "bootstrap/js/dist/tooltip";
 import api from "@/api";
 import store from "@/store";
+import CustomSelect from "../Helper/CustomSelect.vue";
 
-// Custom extension: the switches of the solar card in one row under the chart, side
-// by side from md up, stacked below: evcc's own "adjust forecast" switch (the slot,
-// filled by Forecast.vue), "snow on pv", see core/site_snow.go, and its detection, see
-// core/site_snow_auto.go. The help texts are tooltips on the info icons.
+type SnowMode = "off" | "auto" | "on";
+
+// Custom extension: snow on pv as one choice in a sentence under the solar chart,
+// like the battery page: off, automatic (the detection from the weather, see
+// core/site_snow_auto.go) or on by hand (see core/site_snow.go). The two stored
+// switches stay as they are; the choice sets both.
 export default defineComponent({
 	name: "SnowCoverSwitch",
+	components: { CustomSelect },
 	data() {
-		return { tooltips: {} as Record<string, Tooltip>, error: "" };
+		return { tooltip: null as Tooltip | null, error: "" };
 	},
 	computed: {
 		snowCover() {
 			return !!store.state?.snowCover;
-		},
-		// turned on by the detection from the weather
-		snowCoverAuto() {
-			return !!store.state?.snowCoverAuto;
 		},
 		snowAuto() {
 			return !!store.state?.snowAuto;
@@ -81,58 +64,54 @@ export default defineComponent({
 		autoAvailable() {
 			return !!store.state?.snowAutoAvailable;
 		},
+		mode(): SnowMode {
+			if (this.snowAuto) return "auto";
+			return this.snowCover ? "on" : "off";
+		},
+		// automatic and snow found right now
+		detected(): boolean {
+			return this.snowAuto && this.snowCover;
+		},
+		modeOptions() {
+			const modes: SnowMode[] =
+				this.autoAvailable || this.snowAuto ? ["off", "auto", "on"] : ["off", "on"];
+			return modes.map((value) => ({ value, name: this.$t(`snowCover.mode.${value}`) }));
+		},
+		modeText(): string {
+			return this.$t(`snowCover.mode.${this.mode}`);
+		},
 		infoProps() {
 			return { class: "info-icon text-muted ms-1", role: "button", tabindex: 0 };
 		},
-		coverHelp(): string {
+		helpText(): string {
 			const help = this.$t("snowCover.help");
-			return this.snowCover && this.snowCoverAuto
-				? `${this.$t("snowCover.autoOn")} ${help}`
-				: help;
+			return this.autoAvailable ? `${this.$t("snowCover.autoHelp")} ${help}` : help;
 		},
 	},
-	// the detection's icon only exists with an Open-Meteo solar forecast, so the
-	// tooltips follow the icons rendered
 	mounted() {
-		this.syncTooltips();
-	},
-	updated() {
-		this.syncTooltips();
+		const el = this.$refs["help"] as Element | undefined;
+		// not markRaw: its read-only __v_skip breaks Tooltip.dispose(), which nulls every own property
+		if (el) this.tooltip = new Tooltip(el, { title: () => this.helpText });
 	},
 	beforeUnmount() {
-		Object.values(this.tooltips).forEach((t) => t.dispose());
+		this.tooltip?.dispose();
 	},
 	methods: {
-		syncTooltips() {
-			const titles: Record<string, () => string> = {
-				coverHelp: () => this.coverHelp,
-				autoHelp: () => this.$t("snowCover.autoHelp"),
-			};
-			for (const [ref, title] of Object.entries(titles)) {
-				const el = this.$refs[ref] as Element | undefined;
-				if (el && !this.tooltips[ref]) {
-					// not markRaw: its read-only __v_skip breaks Tooltip.dispose(), which nulls every own property
-					this.tooltips[ref] = new Tooltip(el, { title });
-				} else if (!el && this.tooltips[ref]) {
-					this.tooltips[ref].dispose();
-					delete this.tooltips[ref];
-				}
-			}
-		},
-		change(e: Event) {
-			this.post(e, "snowcover", this.snowCover);
-		},
-		changeAuto(e: Event) {
-			this.post(e, "snowauto", this.snowAuto);
-		},
-		// on failure the switch goes back to the state evcc has, the store did not change
-		async post(e: Event, path: string, current: boolean) {
-			const input = e.target as HTMLInputElement;
+		// off: detection off, snow off; automatic: detection on, it decides; on: detection
+		// off, snow on. On failure the choice shows the state evcc has again.
+		async change(e: Event) {
+			const select = e.target as HTMLSelectElement;
+			const next = select.value as SnowMode;
 			this.error = "";
 			try {
-				await api.post(`${path}/${input.checked}`);
+				if (next === "auto") {
+					await api.post("snowauto/true");
+				} else {
+					await api.post("snowauto/false");
+					await api.post(`snowcover/${next === "on"}`);
+				}
 			} catch (err: any) {
-				input.checked = current;
+				select.value = this.mode;
 				this.error = err?.response?.data?.error || err?.message || "error";
 				console.error(err);
 			}

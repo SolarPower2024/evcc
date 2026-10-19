@@ -32,19 +32,8 @@
 					edge-to-edge
 					class="box-pull-out mb-4"
 				>
-					<div class="chart-edge">
-						<SolarChart
-							:solar="solar"
-							:raw-solar="forecast.solar"
-							:chart-width="chartWidth"
-							:end-date="chartEndDate"
-							:scroll-left="scrollLeft"
-							@scroll="onChartScroll"
-						/>
-					</div>
-					<SnowCoverSwitch>
-						<!-- custom: evcc's own switch in the row under the chart, see SnowCoverSwitch -->
-						<div v-if="showSolarAdjust" class="form-check form-switch mt-2 mb-0">
+					<template v-if="showSolarAdjust" #actions>
+						<div class="form-check form-switch mb-0 text-nowrap">
 							<input
 								id="solarForecastAdjust"
 								:checked="solarAdjusted"
@@ -58,8 +47,18 @@
 								<span class="d-none d-md-inline">{{ solarAdjustTextMedium }}</span>
 							</label>
 						</div>
-					</SnowCoverSwitch>
-					<!-- custom -->
+					</template>
+					<div class="chart-edge">
+						<SolarChart
+							:solar="solar"
+							:raw-solar="forecast.solar"
+							:chart-width="chartWidth"
+							:end-date="chartEndDate"
+							:scroll-left="scrollLeft"
+							@scroll="onChartScroll"
+						/>
+					</div>
+					<SnowCoverSwitch /><!-- custom: snow on pv as one choice under the chart -->
 					<SolarDetails :solar="solar" />
 				</Card>
 

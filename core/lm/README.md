@@ -941,16 +941,19 @@ checked whether evcc brings a file output itself. See `util/logstash/file_custom
 
 Snow on the modules cuts the yield to almost nothing while the solar forecast
 still shows the full yield, so the optimizer plans grid charging, reserve and
-peaks around pv that does not come. *Forecast page → Solar card → Snow on PV*
-(off by default) tells it: while it is on, the solar series of every optimizer
+peaks around pv that does not come. *Forecast page → Solar card → Schnee auf PV:*
+*aus / automatisch / liegt* (default aus) tells it: while it is on, the solar series of every optimizer
 request is 0 (`core/site_snow.go`, `applySnowCover` from
 `applyLmOptimizerInputs`, after evcc has built the series, so it also overrides
 the adjusted forecast and the blend of the first slots). Switching runs the
 optimizer again at once, as evcc's *adjust forecast* switch does. The forecast
-display, the regulation and evcc's planner stay as they are. The switch sits
-under the chart in one row with evcc's *adjust* switch and the detection (side by
-side from 768 px, stacked below); the card header only has the title. The help of
-both snow switches is a tooltip on an info icon beside the label. It is not shown without a solar forecast.
+display, the regulation and evcc's planner stay as they are. The choice is one
+sentence under the chart, styled like the battery page (underlined value that
+opens a select); evcc's *adjust* switch stays in the card header as in evcc.
+*aus* turns the detection and snow off, *automatisch* turns the detection on (it
+sets snow, “erkannt” is shown then), *liegt* turns the detection off and snow on.
+The stored switches `snowCover` and `snowAuto` stay; the choice sets both. The
+help is a tooltip on an info icon. It is not shown without a solar forecast.
 
 It turns itself off: after each completed quarter hour the measured pv energy
 is compared with the forecast energy of that quarter hour (the collector values
@@ -972,7 +975,7 @@ POST /api/snowcover/{true|false}
 State `snowCover`. See `core/site_snow.go`,
 `assets/js/components/Forecast/SnowCoverSwitch.vue`.
 
-**Detect snow automatically** (*Detect snow automatically* under the chart, off by
+**Detect snow automatically** (choice *automatisch* under the chart, off by
 default, `core/site_snow_auto.go`): the first snow day is not caught by the
 measurement, the plan for it still runs with the full forecast. With the setting
 on, the weather is fetched from Open-Meteo every 30 minutes (own request,
@@ -1089,7 +1092,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
-| `assets/js/views/Forecast.vue` | evcc's own *adjust* switch moves from the solar card header into the slot of `Forecast/SnowCoverSwitch.vue` under the chart, which shows it with the snow switches in one row |
+| `assets/js/views/Forecast.vue` | `<SnowCoverSwitch />` under the solar chart (snow on pv as one choice); evcc's *adjust* switch stays in the card header |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
 | `assets/js/components/BottomTabs/MoreItem.vue` | `showConfigBadge` also true while the load management is off (`lmOffBadge()` from `utils/lmOff.ts`): the more button gets its warning dot, `MoreMenuItems.vue` shows "aus" at the entry |
