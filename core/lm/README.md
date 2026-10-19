@@ -336,6 +336,17 @@ The cycle writes a change to the order (active, reached, expired) only while the
 order still is the one it read (`updateGridChargeOnce`), so a cancel or a new
 order by the user is never overwritten.
 
+*Netzladen nach* (config, *Batterie* → *Netzladen*): what grid charging goes
+by, `both` (default), `soc` or `price`. It only decides what the battery page
+shows and, when it is chosen, ends the other one: `soc` clears evcc's price
+limit (`setBatteryGridChargeLimit`, evcc's own setter body, so it also works
+while the optimizer is automatic), `price` switches the soc-based charging off
+and keeps its thresholds. `both` changes nothing, a restart only restores the
+choice and clears or switches nothing; an unknown stored value is dropped with
+a warning and reads as `both`. One-time charging stays available in every mode.
+A price limit set in evcc through its api while `soc` is chosen still charges
+by price. See `core/site_lm_grid_mode.go`.
+
 Both pass the same gate as price-based grid charging: the circuit
 ([2](#2-battery-in-load-management)) and a running peak
 ([11](#11-peak-shaving)).
@@ -348,6 +359,7 @@ and peak shaving's reserve keep their state instead of deciding on a soc of 0.
 POST   /api/batterysocgridcharge/{true|false}
 POST   /api/batterysocgridchargestart/{soc}
 POST   /api/batterysocgridchargestop/{soc}
+POST   /api/batterygridchargemode/{both|soc|price}   (login)
 POST   /api/batterygridchargeonce/{soc}[/{hh:mm}]
 DELETE /api/batterygridchargeonce
 ```
@@ -1066,7 +1078,7 @@ in a running evcc) they answer 401. The ui opens the login on a 401 by itself.
 | List | Routes |
 |---|---|
 | `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmenabled`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakfollow`, `peakshavingreserve`, `feedinsplit` |
-| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `lmcircuit(delete)`, `batteryidentuse`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peakfollowbuffer`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
+| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `lmcircuit(delete)`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peakfollowbuffer`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
 
 ## Upstream touch points
 
@@ -1116,7 +1128,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_switch.go`, `core/site_lm_orphan.go`, `core/site_lm_phases.go`, `core/site_lm_advanced.go`, `core/site_restore.go`, `core/site_lm_dropped.go`, `core/circuit/circuit_custom.go` |
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
-| grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |
+| grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
 | peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_omni.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |

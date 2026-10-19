@@ -100,6 +100,7 @@ var customRouteSamples = map[string]string{
 	"batterysocgridcharge":          "/batterysocgridcharge/true",
 	"batterysocgridchargestart":     "/batterysocgridchargestart/25",
 	"batterysocgridchargestop":      "/batterysocgridchargestop/85",
+	"batterygridchargemode":         "/batterygridchargemode/soc",
 	"batterygridchargeonce":         "/batterygridchargeonce/80",
 	"batterygridchargeonceuntil":    "/batterygridchargeonce/80/06:30",
 	"batterygridchargeoncecancel":   "/batterygridchargeonce",

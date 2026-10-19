@@ -18,6 +18,10 @@ type CustomAPI interface {
 	GetBatterySocGridChargeStop() float64
 	SetBatterySocGridChargeStop(float64) error
 
+	// what grid charging goes by, see core/site_lm_grid_mode.go
+	GetBatteryGridChargeMode() string
+	SetBatteryGridChargeMode(string) error
+
 	// one-time grid charging, see core/site_lm_once.go
 	SetBatteryGridChargeOnce(target float64, until time.Time) error
 	CancelBatteryGridChargeOnce() error

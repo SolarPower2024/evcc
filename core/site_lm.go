@@ -50,6 +50,7 @@ type lmState struct {
 	socChargeStart   float64 // start grid charging at or below this soc
 	socChargeStop    float64 // stop grid charging at or above this soc
 	socChargeRunning bool    // hysteresis state between start and stop
+	gridMode         string  // what grid charging goes by, see site_lm_grid_mode.go
 
 	prios map[string]int // shed priorities set in the ui, by load name
 
@@ -184,6 +185,7 @@ func (site *Site) restoreLmSettings() {
 	site.restoreLmAdvanced()
 	site.restoreLmSwitch()
 	site.restoreBatteryIdent()
+	site.restoreBatteryGridChargeMode()
 	site.restoreLmProfiles()
 
 	site.publishLmSettings()
