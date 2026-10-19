@@ -1809,6 +1809,7 @@
     "events": "Recent events",
     "loads": "Loads by priority · throttled/switched off from the bottom up",
     "menu": "Load management (peak)",
+    "menuOff": "off",
     "noEvents": "No events since the start.",
     "noLoads": "No loads in load management.",
     "overall": {
