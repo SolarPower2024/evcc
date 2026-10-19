@@ -9,6 +9,7 @@ package metrics
 
 import (
 	"errors"
+	"math"
 	"time"
 
 	"github.com/evcc-io/evcc/db"
@@ -133,4 +134,35 @@ func QueryFeedInSplit(from, to time.Time, aggregate string) ([]FeedInSplit, erro
 	}
 
 	return out, nil
+}
+
+// ErrInvalidPrice is returned for a price that is not finite or negative
+var ErrInvalidPrice = errors.New("invalid price")
+
+// DeleteEegPrices removes the stored EEG prices of the slots in [from,to). The
+// count is the number of removed rows. Slots without a price count as without
+// revenue in the statistics.
+func DeleteEegPrices(from, to time.Time) (int64, error) {
+	if from.IsZero() || to.IsZero() {
+		return 0, errors.New("missing from/to")
+	}
+
+	res := db.Instance.Where("ts >= ? AND ts < ?", from.Unix(), to.Unix()).Delete(new(eegPrice))
+	return res.RowsAffected, res.Error
+}
+
+// SetEegPrices sets the price of the stored slots in [from,to). Slots without a
+// row stay without a price. The count is the number of changed rows.
+func SetEegPrices(from, to time.Time, price float64) (int64, error) {
+	if from.IsZero() || to.IsZero() {
+		return 0, errors.New("missing from/to")
+	}
+	if math.IsNaN(price) || math.IsInf(price, 0) || price < 0 {
+		return 0, ErrInvalidPrice
+	}
+
+	res := db.Instance.Model(new(eegPrice)).
+		Where("ts >= ? AND ts < ?", from.Unix(), to.Unix()).
+		Update("price", price)
+	return res.RowsAffected, res.Error
 }

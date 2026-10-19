@@ -148,7 +148,9 @@ measurement, the nominal maximum current on the active phases (a 3-phase device
 without measurement or configured power needs 3 × 16 A × 230 V). A negative
 `standbypower` counts as the configured power (its amount), a positive one does
 not. Without a power sensor the configured power is also reported as its power
-while on. See `core/loadpoint_lm.go` and `charger/switchsocket_lm.go`.
+while on; as in evcc's static mode it counts as measured (home consumption and
+session kWh include it), whereas the heater in stages carries it as an estimate
+(see 4). See `core/loadpoint_lm.go` and `charger/switchsocket_lm.go`.
 
 ## 4. Heater in stages
 
@@ -452,6 +454,10 @@ says more than 20 Wh in 2 minutes is replaced for the rest of the window
 (`peakShavingSource`). A failing sensor is logged once, then at debug level
 until it works again (`TestPeakEnergyReadLoggedOnce`).
 
+A counter coarser than 0.01 kWh or updating less often than every 30 s delays the
+cut by the counter lag; the value from the window end then only counts in the
+next window (a known compromise, `TestMeterLateCounter`).
+
 Below the reserve the battery is kept in normal mode, as hold would block the
 discharge controller; a battery mode set from outside through the api stays.
 While the demand without the battery exceeds the limit, or the grid power the
@@ -698,6 +704,14 @@ counter of the EEG export (kWh, Wh or MWh).
   regular = export − EEG, and the revenue of both
 - only counters are used; pv control, load management and peak shaving are
   untouched
+- fix the stored price: the slots are written once, a price entered later does
+  not change them. `DELETE /api/db/metrics/tariffs/eeg?from=<rfc3339>&to=<rfc3339>`
+  removes the prices of the range (slots without a price count as without
+  revenue), `PUT /api/db/metrics/tariffs/eeg?from=…&to=…&price=0.082` sets the
+  price (currency per kWh, finite and not negative) of the stored slots in the
+  range; slots without a row stay without a price. Both bounds are required, the
+  group needs the admin password or the api key (`ensureDbAuth`), the change
+  cannot be undone: back up first (Configuration, Backup)
 
 The energy page shows the split in its grid card: EEG as its own lighter
 export bar, both amounts in the legend, and the revenue of the regular feed-in
@@ -724,6 +738,9 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   reaches it the rest is solved again (`core/site_optimizer_soc_pass.go`) with
   the stop soc as goal, as the optimizer only knows minimums. While charging
   runs the stop soc is a goal of the first solve.
+- the peak limit stays a hard grid import limit in the plan, also with load
+  management off or a load management circuit set higher: the loads then draw
+  more than planned and only the battery cuts, which is right for the battery.
 - grid charging goals follow the charge slot by slot as the fork does it, at the
   grid charge power with the charging efficiency; with peak shaving only with
   the room below the limit, paused while a peak runs.
@@ -862,7 +879,7 @@ values are not stored, so a changed default applies.
 | `peakFreeze` | minute from which the peak budget no longer grows | 12 | 1-14 |
 | `peakCap` | allowed grid power at most × limit | 2 | 1-10 |
 | `followCycles` | cycles until a load not following is ignored | 3 | 0-20, 0 = off |
-| `gridChargeWindow` | hours to reach the stop soc in the plan | 3 | 1-24 |
+| `gridChargeWindow` | hours to reach the stop soc in the plan; it only moves the stop soc forward without peak shaving and only if the fork's charge time is longer than the window, otherwise it has no effect (no harm done) | 3 | 1-24 |
 | `homeForecast` | home forecast: evcc, per weekday, manual. The old name `homeWeekday` (0/1) is still accepted; a stored `homeWeekday` moves into `homeForecast` at start | 0 | 0-2 |
 | `exportForecastEntity` | text, not a number: entity for the export forecast, see [16](#export-forecast) | empty = off | `sensor.<name>` |
 | `circuitFromPeak` | the load management circuit's limit is the peak limit, see [7](#7-load-management-circuit-and-switch) | 0 (off) | 0-1 |
@@ -1068,7 +1085,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `server/http_config_helper.go` | `customTestResults` in `testInstance`: the config page shows the switch of each stage of a heater in stages (`server/http_config_custom.go`) |
-| `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)) |
+| `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes (`server/http_custom_db.go`), a colliding route is left out and logged |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
@@ -1181,6 +1198,7 @@ unused:
   `TestLoadpointUsesSiteLoadManagement`, `TestMergeRoutesKeepsUpstream`: the
   hooks act on evcc's real control path.
 - `TestRestoreCustomAfterRestart`: every fork setting survives a restart.
+- `TestGridChargeOnceSurvivesRestartOnDisk`: the one-time order stored by its setter comes back from a database file after reopening it.
 - `TestLmOptimizerResultExport`: the hook in `optimizerUpdate` passes a usable
   result (optimal, feasible) to the export forecast and nothing else;
   `TestExportForecast*` and `TestPublishExportForecast` cover the list, the

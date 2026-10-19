@@ -470,6 +470,7 @@ func (s *HTTPd) RegisterSystemHandler(site *core.Site, pub publisher, cache *uti
 			"deleteenergy":  {"DELETE", "/metrics/energy", deleteEnergyHandler},
 			"deletetariffs": {"DELETE", "/metrics/tariffs", deleteTariffsHandler},
 		}
+		addCustomDbRoutes(routes) // custom: see server/http_custom_db.go
 
 		for _, r := range routes {
 			api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)
