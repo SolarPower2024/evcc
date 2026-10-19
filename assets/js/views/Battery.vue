@@ -42,12 +42,18 @@
 
 					<!-- custom: soc grid charging and peak shaving, see core/lm/README.md -->
 					<BatterySocGridChargeCard
-						v-if="batteryControllable"
+						v-if="batteryControllable && socCardShown"
 						class="box-pull-out mt-4"
 						:enabled="socGridChargeEnabled"
 						:active="socGridChargeEnabled && !!state.batteryGridChargeActive"
 						:start-soc="state.batterySocGridChargeStart ?? 20"
 						:stop-soc="state.batterySocGridChargeStop ?? 80"
+					/>
+
+					<!-- custom: grid charging by price only keeps one-time charging, see core/site_lm_grid_mode.go -->
+					<BatteryGridChargeOnceCard
+						v-if="batteryControllable && onceCardShown"
+						class="box-pull-out mt-4"
 					/>
 
 					<!-- custom -->
@@ -95,8 +101,10 @@ import BatteryStatusCards from "../components/Battery/BatteryStatusCards.vue";
 import BatteryConfigCard from "../components/Battery/BatteryConfigCard.vue";
 import BatteryHistoryCard from "../components/Battery/BatteryHistoryCard.vue";
 import BatterySocGridChargeCard from "../components/Battery/BatterySocGridChargeCard.vue"; // custom
+import BatteryGridChargeOnceCard from "../components/Battery/BatteryGridChargeOnceCard.vue"; // custom
 import BatteryPeakShavingCard from "../components/Battery/BatteryPeakShavingCard.vue"; // custom
 import BatteryProfileCard from "../components/Battery/BatteryProfileCard.vue"; // custom
+import { onceCardVisible, priceCardVisible, socCardVisible } from "@/utils/gridChargeMode"; // custom
 import {
 	historyToSeries,
 	forecastToSeries,
@@ -117,6 +125,7 @@ export default defineComponent({
 		BatteryConfigCard,
 		BatteryHistoryCard,
 		BatterySocGridChargeCard, // custom
+		BatteryGridChargeOnceCard, // custom
 		BatteryPeakShavingCard, // custom
 		BatteryProfileCard, // custom
 	},
@@ -190,8 +199,17 @@ export default defineComponent({
 		socGridChargeEnabled(): boolean {
 			return !!this.state.batterySocGridCharge;
 		},
+		socCardShown(): boolean {
+			return socCardVisible(this.state.batteryGridChargeMode);
+		},
+		onceCardShown(): boolean {
+			return onceCardVisible(this.state.batteryGridChargeMode);
+		},
 		gridChargeVisible(): boolean {
-			return this.gridChargePossible || this.gridChargeLimit !== null;
+			return priceCardVisible(
+				this.gridChargePossible || this.gridChargeLimit !== null,
+				this.state.batteryGridChargeMode
+			); // custom: not for grid charging by soc only, see core/site_lm_grid_mode.go
 		},
 		gridChargeTariff() {
 			return store.uiForecast.value.planner;

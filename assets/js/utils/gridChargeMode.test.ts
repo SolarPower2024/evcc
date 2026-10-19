@@ -1,5 +1,11 @@
 import { describe, expect, test } from "vite-plus/test";
-import { gridChargeMode, gridChargeModeOptions } from "./gridChargeMode";
+import {
+  gridChargeMode,
+  gridChargeModeOptions,
+  onceCardVisible,
+  priceCardVisible,
+  socCardVisible,
+} from "./gridChargeMode";
 
 describe("gridChargeMode", () => {
   test("a known value is kept", () => {
@@ -27,5 +33,31 @@ describe("gridChargeModeOptions", () => {
   });
   test("a stored price stays selectable without a tariff", () => {
     expect(values(false, "price")).toEqual(["both", "soc", "price"]);
+  });
+});
+
+describe("cards on the battery page", () => {
+  test("price card: evcc's own condition and not soc only", () => {
+    // with a dynamic tariff or a limit set (evcc's condition true)
+    expect(priceCardVisible(true, "both")).toBe(true);
+    expect(priceCardVisible(true, undefined)).toBe(true);
+    expect(priceCardVisible(true, "price")).toBe(true);
+    expect(priceCardVisible(true, "soc")).toBe(false);
+    // without a dynamic tariff: never, whatever is stored
+    expect(priceCardVisible(false, "both")).toBe(false);
+    expect(priceCardVisible(false, "price")).toBe(false);
+    expect(priceCardVisible(false, "soc")).toBe(false);
+  });
+  test("soc card unless price only", () => {
+    expect(socCardVisible("both")).toBe(true);
+    expect(socCardVisible(undefined)).toBe(true);
+    expect(socCardVisible("soc")).toBe(true);
+    expect(socCardVisible("price")).toBe(false);
+  });
+  test("once card of its own only for price only", () => {
+    expect(onceCardVisible("price")).toBe(true);
+    expect(onceCardVisible("soc")).toBe(false);
+    expect(onceCardVisible("both")).toBe(false);
+    expect(onceCardVisible(undefined)).toBe(false);
   });
 });

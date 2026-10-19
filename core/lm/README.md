@@ -356,6 +356,13 @@ a warning and reads as `both`. One-time charging stays available in every mode.
 A price limit set in evcc through its api while `soc` is chosen still charges
 by price. See `core/site_lm_grid_mode.go`.
 
+On the battery page the choice shows the matching cards: evcc's price card
+only for `price` and `both` (and only with a dynamic tariff or a limit set, as
+before), the soc card only for `soc` and `both`. For `price` the card *Einmalig
+laden* stands alone, otherwise it is part of the soc card; it is never hidden.
+`assets/js/utils/gridChargeMode.ts` holds the rules, `BatteryGridChargeOnceCard`
+the card.
+
 Both pass the same gate as price-based grid charging: the circuit
 ([2](#2-battery-in-load-management)) and a running peak
 ([11](#11-peak-shaving)).
@@ -1112,7 +1119,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `server/http_config_helper.go` | `customTestResults` in `testInstance`: the config page shows the switch of each stage of a heater in stages (`server/http_config_custom.go`) |
 | `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes (`server/http_custom_db.go`), a colliding route is left out and logged |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
-| `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
+| `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection; `gridChargeVisible` passes evcc's own condition through `priceCardVisible` (`utils/gridChargeMode.ts`): the price card is hidden for grid charging by soc only; the soc card has a `v-if` (`socCardShown`) and one-time charging a card of its own (`BatteryGridChargeOnceCard`) for price only; contract test: `utils/gridChargeMode.test.ts` and `TestForkHooksInPlace` |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
 | `assets/js/views/Forecast.vue` | `<SnowCoverSwitch />` under the solar chart (snow on pv as one choice); evcc's *adjust* switch stays in the card header |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
@@ -1148,7 +1155,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
-| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
+| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
 | build | `.github/workflows/custom-image.yml` |
 | start page | `.github/README.md` (GitHub shows it instead of the evcc `README.md`; its feature list follows part 1) |
 
