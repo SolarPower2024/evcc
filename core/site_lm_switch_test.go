@@ -153,6 +153,10 @@ func lmSwitchCircuits(t *testing.T, limit float64) (*Site, *circuit.Circuit, *ci
 	keepSettings(t)
 	config.Reset()
 	t.Cleanup(config.Reset)
+	// circuits convert power and current: a shuffled run may start here before any test set the voltage
+	if Voltage == 0 {
+		Voltage = 230
+	}
 
 	log := util.NewLogger("test")
 	main, err := circuit.New(log, "peak", 32, 10000, nil, 0)
