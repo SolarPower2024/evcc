@@ -232,10 +232,12 @@ func TestHAForecastGoesAway(t *testing.T) {
 	body := fmt.Sprintf(`{"state":"1","attributes":{"forecast":[{"start":%q,"end":%q,"value":5}]}}`,
 		at(10, 0).Format(time.RFC3339), at(10, 15).Format(time.RFC3339))
 
+	// after a restart of Home Assistant the entity is missing until it is written
+	// again: the data stay for twice the interval, then there are none
 	t.Run("entity vanishes", func(t *testing.T) {
 		h := haForecastServer(t, body)
 
-		tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"interval": "100ms"}))
+		tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(map[string]any{"interval": "1s"}))
 		require.NoError(t, err)
 
 		rates, err := tr.Rates()
@@ -244,10 +246,16 @@ func TestHAForecastGoesAway(t *testing.T) {
 
 		h.set(`{"message":"Entity not found."}`, http.StatusNotFound)
 
+		// the next cycle has seen the 404, the data of the last read are still valid
+		time.Sleep(1200 * time.Millisecond)
+		rates, err = tr.Rates()
+		require.NoError(t, err)
+		assert.Len(t, rates, 1, "kept")
+
 		assert.Eventually(t, func() bool {
 			rates, err := tr.Rates()
 			return err == nil && len(rates) == 0
-		}, 5*time.Second, 20*time.Millisecond)
+		}, 5*time.Second, 50*time.Millisecond)
 	})
 
 	t.Run("home assistant not answering", func(t *testing.T) {

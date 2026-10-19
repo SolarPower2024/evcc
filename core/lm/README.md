@@ -772,7 +772,7 @@ elsewhere saving the field fails.
   with the first success) and tried again with the next run. The size
   of the attribute is logged at debug level; there is no limit.
 - The entity is gone after a restart of Home Assistant until the next optimizer
-  run (about 15 minutes at most). Exclude it from the recorder, which keeps no
+  run (about 15 minutes at most). The reading instance keeps its data meanwhile. Exclude it from the recorder, which keeps no
   attributes above 16 KB: `recorder: exclude: entities:` with the entity.
 
 A second evcc instance of the fork reads the entity as solar forecast: *Konfiguration
@@ -782,13 +782,15 @@ no token; in the add-on the supervisor connection is used). Entity (required),
 attribute (default `forecast`) and interval (default 15 min) are set there; the data
 stays valid for twice the interval.
 
-The tariff never breaks the sum of the solar tariffs. A missing entity (404),
-`unavailable`, a missing or wrong attribute, a forecast whose `updated` attribute
-is older than an hour (without that attribute, e.g. from another source, the
+The tariff never breaks the sum of the solar tariffs. `unavailable`, a missing or
+wrong attribute, a forecast whose `updated` attribute is older than an hour (without that attribute, e.g. from another source, the
 forecast counts as current) and data older than twice the interval give no rates
 and no error, so the instance's own forecast goes on alone. Each cause is logged once as a
 warning (`util.CauseLog`, only the read loop logs, not `Rates`), the return of the data once as info
-(`TestHAForecastLogOnce`). The tariff is also created while the entity does
+(`TestHAForecastLogOnce`). A missing entity (404) keeps the last data until they are older than twice the interval
+(`TestHAForecastGoesAway`), as after a restart of Home Assistant until the writer creates the
+entity again (a deliberately deleted entity acts for up to 30 minutes with the default
+interval); before the first read there are none. The tariff is also created while the entity does
 not exist yet; the constructor waits up to 10 s for the first read and then
 starts without rates (`TestHAForecastConstructorWait`), the data follow with the next cycle. Only a missing entity name or
 instance is a configuration error. If Home Assistant itself does not answer, the

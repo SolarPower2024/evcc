@@ -14,7 +14,8 @@ package tariff
 // This forecast never breaks the sum of the solar tariffs: a missing entity,
 // `unavailable`, a wrong attribute, a forecast not updated for an hour and data
 // older than twice the interval give no rates and no error, so the instance's own
-// forecast goes on alone. Each cause is logged once as a warning, the return of
+// forecast goes on alone. A missing entity (after a restart of Home Assistant)
+// keeps the data until they are older than twice the interval. Each cause is logged once as a warning, the return of
 // the data once as info, see util.CauseLog; only the loop logs, not Rates.
 
 import (
@@ -50,6 +51,11 @@ var haForecastWait = 10 * time.Second
 // errNoForecast marks a state of the entity that gives no forecast, as opposed to
 // a failed request
 var errNoForecast = errors.New("no forecast")
+
+// errEntityMissing marks a missing entity (404). After a restart of Home Assistant
+// the entity is gone until its writer creates it again, so the data are kept, as
+// when Home Assistant does not answer.
+var errEntityMissing = errors.New("entity not found")
 
 // HAForecast is a solar forecast from the attribute of a Home Assistant entity
 type HAForecast struct {
@@ -142,7 +148,7 @@ func (t *HAForecast) update() {
 		data, err = t.forecast(time.Now())
 
 		// a state of the entity does not change by asking again
-		if errors.Is(err, errNoForecast) {
+		if errors.Is(err, errNoForecast) || errors.Is(err, errEntityMissing) {
 			return backoff.Permanent(err)
 		}
 		return backoffPermanentError(err)
@@ -154,7 +160,8 @@ func (t *HAForecast) update() {
 	case errors.Is(err, errNoForecast):
 		t.data.Set(nil)
 	default:
-		// Home Assistant not reached: keep the data until it is outdated
+		// Home Assistant not reached or the entity missing: keep the data until
+		// they are outdated, empty only while there were none
 		select {
 		case <-t.data.Done():
 		default:
@@ -176,7 +183,7 @@ func (t *HAForecast) forecast(now time.Time) (api.Rates, error) {
 	uri := fmt.Sprintf("%s/api/states/%s", t.URI(), url.PathEscape(t.entity))
 	if err := t.GetJSON(uri, &res); err != nil {
 		if se, ok := errors.AsType[*request.StatusError](err); ok && se.StatusCode() == http.StatusNotFound {
-			return nil, fmt.Errorf("entity not found: %w", errNoForecast)
+			return nil, errEntityMissing
 		}
 		return nil, err
 	}
