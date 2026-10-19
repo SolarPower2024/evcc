@@ -174,6 +174,8 @@ export interface LmState {
   batterySocGridChargeStart?: number;
   /** Soc in % at or above which soc-based grid charging stops. */
   batterySocGridChargeStop?: number;
+  /** What grid charging goes by: soc thresholds, evcc price limit or both (default), see core/site_lm_grid_mode.go. */
+  batteryGridChargeMode?: "both" | "soc" | "price";
   /** One-time grid charging up to target soc, right away or by until. */
   batteryGridChargeOnce?: {
     target: number;
