@@ -208,7 +208,8 @@ export default defineComponent({
 		gridChargeVisible(): boolean {
 			return priceCardVisible(
 				this.gridChargePossible || this.gridChargeLimit !== null,
-				this.state.batteryGridChargeMode
+				this.state.batteryGridChargeMode,
+				this.gridChargeLimit !== null
 			); // custom: not for grid charging by soc only, see core/site_lm_grid_mode.go
 		},
 		gridChargeTariff() {

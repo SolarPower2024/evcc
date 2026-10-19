@@ -20,9 +20,14 @@ export function gridChargeModeOptions(
   );
 }
 
-// evcc's price card (visible with a dynamic tariff or a limit set) is hidden for soc only
-export function priceCardVisible(evccVisible: boolean, raw?: string | null): boolean {
-  return evccVisible && gridChargeMode(raw) !== "soc";
+// evcc's price card (visible with a dynamic tariff or a limit set) is hidden for soc
+// only, unless a limit is still set: it stays visible so it can be removed
+export function priceCardVisible(
+  evccVisible: boolean,
+  raw?: string | null,
+  limitSet = false
+): boolean {
+  return evccVisible && (gridChargeMode(raw) !== "soc" || limitSet);
 }
 
 // the card of the soc thresholds is hidden for price only, unless the switch is on

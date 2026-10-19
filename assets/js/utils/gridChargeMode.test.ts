@@ -48,6 +48,11 @@ describe("cards on the battery page", () => {
     expect(priceCardVisible(false, "price")).toBe(false);
     expect(priceCardVisible(false, "soc")).toBe(false);
   });
+  test("price card stays for soc while a limit is set", () => {
+    expect(priceCardVisible(true, "soc", true)).toBe(true);
+    expect(priceCardVisible(true, "soc", false)).toBe(false);
+    expect(priceCardVisible(false, "soc", true)).toBe(false);
+  });
   test("soc card unless price only", () => {
     expect(socCardVisible("both")).toBe(true);
     expect(socCardVisible(undefined)).toBe(true);
