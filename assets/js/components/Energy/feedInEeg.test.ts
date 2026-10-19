@@ -101,6 +101,30 @@ describe("feedInEegStats", () => {
     expect(std!.number).toBeCloseTo(1);
   });
 
+  test("a revenue of 0 is hidden, the cost stays", () => {
+    const zero = feedInSplitTotals([
+      bucket({
+        standard: 0,
+        eeg: 0.22,
+        standardRevenue: 0,
+        eegRevenue: 0,
+        standardPriced: 0,
+        eegPriced: 0.22,
+      }),
+    ]);
+    const cost = { import: 0.73, export: 0, importEnergy: 3, exportEnergy: 0.22, avgGrid: 0.247 };
+    expect(feedInEegStats(zero, cost, fmt, t).map((s) => s.key)).toEqual(["gridImport"]);
+    const half = feedInSplitTotals([
+      bucket({ standard: 1, standardRevenue: 0.004, standardPriced: 1 }),
+    ]);
+    expect(feedInEegStats(half, cost, fmt, t).map((s) => s.key)).toEqual(["gridImport"]);
+    const some = feedInSplitTotals([bucket({ eeg: 1, eegRevenue: 0.05, eegPriced: 1 })]);
+    expect(feedInEegStats(some, cost, fmt, t).map((s) => s.key)).toEqual([
+      "gridImport",
+      "gridExportEeg",
+    ]);
+  });
+
   test("an export without a price shows empty", () => {
     const [, std] = feedInEegStats(
       feedInSplitTotals([bucket({ standard: 4, standardPriced: 0 })]),
