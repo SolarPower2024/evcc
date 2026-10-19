@@ -491,15 +491,13 @@
       "entityHelp": "Erhält die erlaubte Ladeleistung in W, 0 = nicht laden, passend zu Min, Max und Schritt der Entität. Leer = Ein/Aus.",
       "entityInvalid": "Entität konnte nicht gesetzt werden.",
       "entityLabel": "Entität für die Ladeleistung",
-      "entryLabel": "Batterie-Netzladen",
       "marstekHint": "Bei Marstek nötig, damit evcc beim Netzladen auf manuell schaltet.",
       "setpoint": "Aktuelle Vorgabe:",
       "source": {
         "setting": "hier eingetragen",
         "meter": "aus der Batteriekonfiguration",
         "unknown": "unbekannt"
-      },
-      "title": "Batterie-Netzladen"
+      }
     },
     "hems": {
       "changeConfirm": "Bestehende Konfiguration wird gelöscht. Fortfahren?",
@@ -615,7 +613,7 @@
       "description": "Oben der wichtigste Verbraucher. Reicht die Leistung nicht, wird von unten her gedrosselt oder abgeschaltet, bei gleicher Priorität zählt, wer zuerst da ist. Bei Ladepunkten ist es ihre normale Priorität, sie gilt auch für PV-Überschuss und Planer. Die Batterie hat einen eigenen Wert.",
       "entryLabel": "Prioritäten",
       "invalid": "Priorität konnte nicht gespeichert werden.",
-      "noLoads": "Keine Verbraucher im Lastmanagement. Ladepunkte erscheinen mit zugewiesenem Stromkreis, die Batterie über Batterie-Stromkreis.",
+      "noLoads": "Keine Verbraucher im Lastmanagement. Ladepunkte erscheinen mit zugewiesenem Stromkreis, die Batterie über Batterie → Stromkreis.",
       "title": "Lastmanagement-Prioritäten",
       "value": "Prio {priority}"
     },
@@ -1095,13 +1093,11 @@
       "batteryTypeHelp": "BYD: evcc schreibt die Entladeleistung. Marstek: evcc steuert Omnibattery's Spitzenlastkappung und schaltet nur beim Netzladen auf manuell.",
       "batteryTypeLabel": "Batterietyp",
       "circuitDescription": "Erst mit Stromkreis nimmt die Hausbatterie am Lastmanagement teil.",
-      "circuitEntryLabel": "Batterie-Stromkreis",
       "circuitHelp": "Netzladen und Abwurf der Batterie richten sich nach seiner Leistungsgrenze.",
       "circuitInvalid": "Stromkreis konnte nicht gesetzt werden.",
       "circuitLabel": "Stromkreis der Batterie",
       "circuitNone": "Keiner — Batterie nicht im Lastmanagement",
       "circuitNoneConfigured": "Es sind keine Stromkreise konfiguriert.",
-      "circuitTitle": "Batterie-Stromkreis",
       "description": "evcc gibt Home Assistant vor, was zum Kappen nötig ist. Wie, hängt vom Batterietyp ab.",
       "energyEntityHelp": "Zählerstand Netzbezug in kWh oder Wh. Nur nötig, wenn der Netzzähler in evcc keinen Energiezähler liefert. Template-Sensoren müssen bei Ausfall unavailable liefern, nicht 0. Feine Zähler (0,01 kWh) halten die Grenze genau, grobe verzögern die Kappung.",
       "energyEntityLabel": "Energiezähler Netzbezug",
@@ -1416,8 +1412,6 @@
       "titleEdit": "Fahrzeug bearbeiten"
     },
     "batteryident": {
-      "entryLabel": "Batterie-Vermessung",
-      "title": "Batterie-Vermessung",
       "description": "Nutzbare Kapazität und Wirkungsgrad, gelernt aus den gespeicherten Lade- und Entladevorgängen der letzten 60 Tage (je mindestens 20 % Ladestand am Stück).",
       "none": "Keine Hausbatterie konfiguriert.",
       "configured": "Laut Konfiguration",
@@ -1428,6 +1422,22 @@
       "learning": "Lernt noch: {charges} Lade- und {discharges} Entladevorgänge, je {min} nötig.",
       "use": "Gemessene Werte verwenden",
       "useHelp": "Optimizer und Einmal-Netzladen planen dann mit der gemessenen Kapazität, Einmal-Netzladen auch mit dem gemessenen Wirkungsgrad. Nur solange die Werte plausibel sind."
+    },
+    "batterysettings": {
+      "entryLabel": "Batterie",
+      "title": "Batterie",
+      "group": {
+        "circuit": "Stromkreis",
+        "gridCharge": "Netzladen",
+        "ident": "Vermessung"
+      },
+      "gridChargeMode": "Netzladen nach",
+      "gridChargeModeHelp": "SoC: lädt zwischen Start- und Stopp-SoC. Preis: lädt unter dem Preis-Limit (dynamischer Tarif). SoC löscht das Preis-Limit, Preis schaltet das SoC-Netzladen aus (Schwellen bleiben).",
+      "mode": {
+        "both": "beides",
+        "soc": "SoC",
+        "price": "Preis"
+      }
     }
   },
   "energy": {

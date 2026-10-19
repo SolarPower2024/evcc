@@ -50,6 +50,7 @@ var customConfigRoutes = []string{
 	"peakshavingenergyentity", "peakshavingenergyentitydelete",
 	"peakshavingchargepower",
 	"peakshavingcircuit", "peakshavingcircuitdelete",
+	"batterygridchargemode",
 }
 
 // customOperateRoutes are switches, actions and soc thresholds of the main and
@@ -161,6 +162,9 @@ func customSiteRoutes(site site.API) map[string]route {
 		"batterysocgridcharge":      {"POST", "/batterysocgridcharge/{value:[01truefalse]+}", boolHandler(site.SetBatterySocGridCharge, site.GetBatterySocGridCharge)},
 		"batterysocgridchargestart": {"POST", "/batterysocgridchargestart/{value:[0-9.]+}", floatHandler(site.SetBatterySocGridChargeStart, site.GetBatterySocGridChargeStart)},
 		"batterysocgridchargestop":  {"POST", "/batterysocgridchargestop/{value:[0-9.]+}", floatHandler(site.SetBatterySocGridChargeStop, site.GetBatterySocGridChargeStop)},
+
+		// what grid charging goes by, see core/site_lm_grid_mode.go
+		"batterygridchargemode": {"POST", "/batterygridchargemode/{value:both|soc|price}", stringHandler(site.SetBatteryGridChargeMode, site.GetBatteryGridChargeMode)},
 
 		// one-time grid charging, see core/site_lm_once.go
 		"batterygridchargeonce":       {"POST", "/batterygridchargeonce/{soc:[0-9]+}", gridChargeOnceHandler(site)},

@@ -61,12 +61,13 @@
     },
     {
       "name": "Netzladen nach Ladestand / einmalig",
-      "files": ["core/site_lm.go", "core/site_lm_once.go"],
+      "files": ["core/site_lm.go", "core/site_lm_once.go", "core/site_lm_grid_mode.go"],
       "keywords": [
         "SocGridCharge",
         "socGridCharge",
         "gridChargeSoc",
         "GridChargeOnce",
+        "GridChargeMode",
         "chargeOnce"
       ]
     },

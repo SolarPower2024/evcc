@@ -210,7 +210,10 @@ func (site *Site) applyProfileGridCharge(p profile.Profile, add func(string, err
 		}
 	}
 
-	if v := p.GridCharge; v != nil {
+	// grid charging by price only: the soc switch stays off, see core/site_lm_grid_mode.go
+	if v := p.GridCharge; v != nil && *v && site.GetBatteryGridChargeMode() == gridModePrice {
+		add("grid charge", errors.New("soc grid charging not switched on: grid charging goes by price"))
+	} else if v != nil {
 		add("grid charge", site.SetBatterySocGridCharge(*v))
 	}
 }

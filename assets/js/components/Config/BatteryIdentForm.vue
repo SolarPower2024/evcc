@@ -1,12 +1,5 @@
 <template>
-	<GenericModal
-		id="batteryIdentModal"
-		ref="modal"
-		:title="$t('config.batteryident.title')"
-		data-testid="batteryident-modal"
-		config-modal-name="batteryident"
-		@open="open"
-	>
+	<div data-testid="batteryident-form">
 		<p>{{ $t("config.batteryident.description") }}</p>
 		<p v-if="error" class="text-danger">{{ error }}</p>
 
@@ -50,18 +43,11 @@
 			</div>
 			<p class="small evcc-gray">{{ $t("config.batteryident.useHelp") }}</p>
 
-			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
-				<button
-					type="button"
-					class="btn btn-link text-muted btn-cancel"
-					data-bs-dismiss="modal"
-				>
-					{{ $t("config.general.cancel") }}
-				</button>
-
+			<div class="mt-4 d-flex justify-content-end">
 				<button
 					type="submit"
-					class="btn btn-primary order-1 order-sm-2 flex-grow-1 flex-sm-grow-0 px-4"
+					class="btn btn-primary flex-grow-1 flex-sm-grow-0 px-4"
+					data-testid="batteryident-save"
 					:disabled="saving || use === initialUse"
 				>
 					<span
@@ -74,11 +60,10 @@
 				</button>
 			</div>
 		</form>
-	</GenericModal>
+	</div>
 </template>
 
 <script>
-import GenericModal from "../Helper/GenericModal.vue";
 import formatter from "@/mixins/formatter";
 import store from "@/store";
 import api from "@/api";
@@ -89,8 +74,7 @@ import api from "@/api";
 const MIN_RUNS = 3;
 
 export default {
-	name: "BatteryIdentModal",
-	components: { GenericModal },
+	name: "BatteryIdentForm",
 	mixins: [formatter],
 	emits: ["changed"],
 	data() {
@@ -105,7 +89,7 @@ export default {
 		},
 	},
 	methods: {
-		open() {
+		reset() {
 			this.saving = false;
 			this.error = "";
 			this.use = !!this.state?.use;
@@ -131,8 +115,8 @@ export default {
 			this.error = "";
 			try {
 				await api.post(`batteryidentuse/${this.use}`);
+				this.initialUse = this.use;
 				this.$emit("changed");
-				this.$refs.modal.close();
 			} catch (e) {
 				this.error = e?.response?.data?.error || e.message;
 			}

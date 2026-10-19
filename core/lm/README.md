@@ -101,15 +101,24 @@ circuit:
 
 | Setting | Where | Default |
 | --- | --- | --- |
-| circuit the battery draws from | Lastmanagement-Details → Batterie-Stromkreis | none = not managed |
+| circuit the battery draws from | Lastmanagement-Details → Batterie → Stromkreis | none = not managed |
 | priority | Lastmanagement-Details → Prioritäten | 0 |
-| expected grid charge power | Lastmanagement-Details → Batterie-Netzladen | sum of the battery meters' max charge power |
-| entity for the charge power | Lastmanagement-Details → Batterie-Netzladen | none = on/off charging |
-| phases, wait after a shed, reservation expiry | Lastmanagement-Details → Erweitert | none (3 for accounting), 5 min, 10 min |
+| expected grid charge power | Lastmanagement-Details → Batterie → Netzladen | sum of the battery meters' max charge power |
+| entity for the charge power | Lastmanagement-Details → Batterie → Netzladen | none = on/off charging |
+| phases | Lastmanagement-Details → Batterie → Stromkreis | none (3 for accounting) |
+| wait after a shed, reservation expiry | Lastmanagement-Details → Erweitert | 5 min, 10 min |
+
+The home battery has one card, *Batterie* (config, *Lastmanagement-Details*),
+whose dialog has three closed groups, each saving on its own: *Stromkreis*
+(circuit and battery phases), *Netzladen* (*Netzladen nach*, charge power
+entity and expected charge power) and *Vermessung* (see
+[14](#14-battery-identification)). The card shows the circuit and what grid
+charging goes by, red while the charge power or the phases are missing. The
+forms are `BatteryCircuitForm`, `BatteryGridChargeForm` and `BatteryIdentForm`.
 
 A battery switched through mode scripts is on or off, so the whole expected
 charge power has to fit into the circuit, against its power and its current
-limit (the current spread over the phases set under *Erweitert*). Without a
+limit (the current spread over the phases set under *Batterie → Stromkreis*). Without a
 known charge power, grid charging on a circuit stays off and a warning is
 logged once. With a charge power entity, evcc writes the grid charge power
 instead: the expected power, trimmed to what fits into the rest budget of the
@@ -336,6 +345,25 @@ The cycle writes a change to the order (active, reached, expired) only while the
 order still is the one it read (`updateGridChargeOnce`), so a cancel or a new
 order by the user is never overwritten.
 
+*Netzladen nach* (config, *Batterie* → *Netzladen*): what grid charging goes
+by, `both` (default), `soc` or `price`. It only decides what the battery page
+shows and, when it is chosen, ends the other one: `soc` clears evcc's price
+limit (`setBatteryGridChargeLimit`, evcc's own setter body, so it also works
+while the optimizer is automatic), `price` switches the soc-based charging off
+and keeps its thresholds. `both` changes nothing, a restart only restores the
+choice and clears or switches nothing; an unknown stored value is dropped with
+a warning and reads as `both`. One-time charging stays available in every mode.
+A price limit set in evcc through its api while `soc` is chosen still charges
+by price. See `core/site_lm_grid_mode.go`.
+
+On the battery page the choice shows the matching cards: evcc's price card
+only for `price` and `both` (and only with a dynamic tariff or a limit set, as
+before; for `soc` it stays while a limit is set, so it can be removed), the soc card only for `soc` and `both`. For `price` the card *Einmalig
+laden* stands alone, otherwise it is part of the soc card; it is never hidden.
+The soc card also stays for `price` while the soc switch is on (set through the api), so it can be turned off; an applied profile with grid charging on does not switch it on in `price` and reports that.
+`assets/js/utils/gridChargeMode.ts` holds the rules, `BatteryGridChargeOnceCard`
+the card.
+
 Both pass the same gate as price-based grid charging: the circuit
 ([2](#2-battery-in-load-management)) and a running peak
 ([11](#11-peak-shaving)).
@@ -348,6 +376,7 @@ and peak shaving's reserve keep their state instead of deciding on a soc of 0.
 POST   /api/batterysocgridcharge/{true|false}
 POST   /api/batterysocgridchargestart/{soc}
 POST   /api/batterysocgridchargestop/{soc}
+POST   /api/batterygridchargemode/{both|soc|price}   (login)
 POST   /api/batterygridchargeonce/{soc}[/{hh:mm}]
 DELETE /api/batterygridchargeonce
 ```
@@ -537,7 +566,7 @@ Peak shaving cannot be turned on without these three
 *manual control switch* (`switch.` or `input_boolean.`) and the *force mode*
 select (`select.` or `input_select.`, offering `None`, `Charge` and `Discharge`
 exactly so; checked when set, `TestOmniEntityChecks`), next to the charge power
-entity of *Batterie-Netzladen*.
+entity of *Batterie → Netzladen*.
 
 At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
 `applyOmni` does two independent things:
@@ -679,7 +708,7 @@ percentile per quarter hour instead of the mean, for all of these profiles.
 
 ## 14. Battery identification
 
-*Lastmanagement-Details → Batterie-Vermessung* learns the usable capacity and
+*Lastmanagement-Details → Batterie → Vermessung* learns the usable capacity and
 round trip efficiency from evcc's stored 15 minute battery slots of the last 60
 days: charging runs over at least 20 % soc give capacity / η, discharging runs
 capacity × η; from the medians of at least 3 runs each, capacity = √(kc × kd)
@@ -876,7 +905,7 @@ values are not stored, so a changed default applies.
 | `writeTolerance` | smallest change written to the peak shaving and grid charge power entities (not to the soc threshold of Marstek), set in the *Peak Shaving* dialog | 0 W | 0-1000 |
 | `holdOff` | wait after battery grid charging was stopped | 5 min | 1-60 |
 | `timeout` | expiry of unserved demand | 10 min | 1-60 |
-| `phases` | battery phases for current accounting | not set, accounting uses 3; required with a current limit, see [2](#2-battery-in-load-management) | 1-3 |
+| `phases` | battery phases for current accounting, set under *Batterie → Stromkreis* (same key) | not set, accounting uses 3; required with a current limit, see [2](#2-battery-in-load-management) | 1-3 |
 | `peakFreeze` | minute from which the peak budget no longer grows | 12 | 1-14 |
 | `peakCap` | allowed grid power at most × limit | 2 | 1-10 |
 | `followCycles` | cycles until a load not following is ignored | 3 | 0-20, 0 = off |
@@ -891,7 +920,7 @@ and evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
 The dialog shows the settings in four closed groups, so it stays short on a
 phone: *Lastmanagement* (circuit, `circuitFromPeak`, `timeout`, `followCycles`), *Peak Shaving*
 (`hysteresis`, `freeValue`, `peakFreeze`, `peakCap`), *Batterie-Netzladen*
-(`holdOff`, `gridChargeWindow`, `phases`) and *Optimizer* (`homeForecast`, load
+(`holdOff`, `gridChargeWindow`) and *Optimizer* (`homeForecast`, load
 profile, `profilePercentile`, `exportForecastEntity`). A rejected value opens its group.
 
 ## 18. Log file
@@ -1066,7 +1095,7 @@ in a running evcc) they answer 401. The ui opens the login on a 401 by itself.
 | List | Routes |
 |---|---|
 | `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmenabled`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakfollow`, `peakshavingreserve`, `feedinsplit` |
-| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `lmcircuit(delete)`, `batteryidentuse`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peakfollowbuffer`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
+| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `lmcircuit(delete)`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peakfollowbuffer`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
 
 ## Upstream touch points
 
@@ -1091,7 +1120,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `server/http_config_helper.go` | `customTestResults` in `testInstance`: the config page shows the switch of each stage of a heater in stages (`server/http_config_custom.go`) |
 | `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes (`server/http_custom_db.go`), a colliding route is left out and logged |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
-| `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
+| `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection; `gridChargeVisible` passes evcc's own condition through `priceCardVisible` (`utils/gridChargeMode.ts`): the price card is hidden for grid charging by soc only; the soc card has a `v-if` (`socCardShown`) and one-time charging a card of its own (`BatteryGridChargeOnceCard`) for price only; contract test: `utils/gridChargeMode.test.ts` and `TestForkHooksInPlace` |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
 | `assets/js/views/Forecast.vue` | `<SnowCoverSwitch />` under the solar chart (snow on pv as one choice); evcc's *adjust* switch stays in the card header |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
@@ -1116,7 +1145,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_switch.go`, `core/site_lm_orphan.go`, `core/site_lm_phases.go`, `core/site_lm_advanced.go`, `core/site_restore.go`, `core/site_lm_dropped.go`, `core/circuit/circuit_custom.go` |
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
-| grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |
+| grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
 | peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_omni.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |
@@ -1127,7 +1156,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
-| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
+| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
 | build | `.github/workflows/custom-image.yml` |
 | start page | `.github/README.md` (GitHub shows it instead of the evcc `README.md`; its feature list follows part 1) |
 

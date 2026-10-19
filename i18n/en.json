@@ -491,15 +491,13 @@
       "entityHelp": "Receives the allowed charge power in W, 0 = don't charge, fitted to the entity's min, max and step. Empty = on/off.",
       "entityInvalid": "Could not set the entity.",
       "entityLabel": "Charge power entity",
-      "entryLabel": "Battery grid charging",
       "marstekHint": "Needed for Marstek so evcc switches to manual while grid charging.",
       "setpoint": "Current setpoint:",
       "source": {
         "setting": "entered here",
         "meter": "from the battery configuration",
         "unknown": "unknown"
-      },
-      "title": "Battery grid charging"
+      }
     },
     "hems": {
       "changeConfirm": "Existing configuration will be deleted. Continue?",
@@ -615,7 +613,7 @@
       "description": "The most important load on top. If the power is not enough, loads are throttled or switched off from the bottom up; with equal priority, the first to arrive wins. For loadpoints it is their regular priority, which also applies to solar surplus and the planner. The battery has its own value.",
       "entryLabel": "Priorities",
       "invalid": "Could not save the priority.",
-      "noLoads": "No loads in load management. Loadpoints appear once assigned to a circuit, the battery via Battery circuit.",
+      "noLoads": "No loads in load management. Loadpoints appear once assigned to a circuit, the battery via Battery → Circuit.",
       "title": "Load management priorities",
       "value": "Prio {priority}"
     },
@@ -1095,13 +1093,11 @@
       "batteryTypeHelp": "BYD: evcc writes the discharge power. Marstek: evcc drives Omnibattery's peak shaving and switches to manual only while grid charging.",
       "batteryTypeLabel": "Battery type",
       "circuitDescription": "Only with a circuit does the home battery take part in load management.",
-      "circuitEntryLabel": "Battery circuit",
       "circuitHelp": "Grid charging and shedding of the battery follow its power limit.",
       "circuitInvalid": "Could not set the circuit.",
       "circuitLabel": "Battery circuit",
       "circuitNone": "None — battery outside load management",
       "circuitNoneConfigured": "No circuits are configured.",
-      "circuitTitle": "Battery circuit",
       "description": "evcc tells Home Assistant what peak shaving needs. How depends on the battery type.",
       "energyEntityHelp": "Grid import counter in kWh or Wh. Only needed when the grid meter in evcc has no energy counter. Template sensors must report unavailable on failure, not 0. Fine counters (0.01 kWh) keep the limit exact, coarse ones delay the cut.",
       "energyEntityLabel": "Grid import energy counter",
@@ -1416,8 +1412,6 @@
       "titleEdit": "Edit Vehicle"
     },
     "batteryident": {
-      "entryLabel": "Battery identification",
-      "title": "Battery identification",
       "description": "Usable capacity and efficiency, learned from the stored charging and discharging runs of the last 60 days (each over at least 20 % soc).",
       "none": "No home battery configured.",
       "configured": "Configured",
@@ -1428,6 +1422,22 @@
       "learning": "Still learning: {charges} charging and {discharges} discharging runs, {min} each needed.",
       "use": "Use measured values",
       "useHelp": "The optimizer and one-time grid charging then plan with the measured capacity, one-time grid charging also with the measured efficiency. Only while the values are plausible."
+    },
+    "batterysettings": {
+      "entryLabel": "Battery",
+      "title": "Battery",
+      "group": {
+        "circuit": "Circuit",
+        "gridCharge": "Grid charging",
+        "ident": "Identification"
+      },
+      "gridChargeMode": "Grid charging by",
+      "gridChargeModeHelp": "SoC: charges between the start and stop soc. Price: charges below the price limit (dynamic tariff). SoC clears the price limit, price turns soc grid charging off (thresholds stay).",
+      "mode": {
+        "both": "both",
+        "soc": "SoC",
+        "price": "price"
+      }
     }
   },
   "footer": {
