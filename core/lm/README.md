@@ -768,7 +768,10 @@ elsewhere saving the field fails.
   entity is not written again, but at the latest after 10 minutes, so `updated`
   stays current for the reader. While a write runs, the newest list waits and is
   written when it ends (older ones are dropped). A list is compared with the newest one queued or written, so Z, A running, Z again
-  still writes Z (`TestPublishExportForecastKeepsOrder`). A failed write is logged once per cause as a
+  still writes Z (`TestPublishExportForecastKeepsOrder`). Turning the entity off or changing it
+  sets the old entity to `unavailable` once, in the background (`TestSetLmExportForecastTurnsOldOff`), so a
+  reading instance drops the list at once instead of after an hour; a write that runs at
+  the change may still land on the old entity afterwards. A failed write is logged once per cause as a
   warning (`util.CauseLog`: the same cause again at debug level, "ok again" once
   with the first success) and tried again with the next run. The size
   of the attribute is logged at debug level; there is no limit.

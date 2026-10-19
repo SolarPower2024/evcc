@@ -65,6 +65,7 @@ type exportForecastState struct {
 	pending   *exportWrite // newest list that came in while writing
 	writing   bool
 	cause     util.CauseLog             // a failed write is logged once per cause
+	offCause  util.CauseLog             // the same for turning the old entity off
 	conn      *homeassistant.Connection // kept until a write fails or the entity changes
 	wg        sync.WaitGroup            // writer running, for tests
 
@@ -317,10 +318,15 @@ func (site *Site) exportForecastConnection() (*homeassistant.Connection, error) 
 // writeHAState sets the state of an entity, creating it if needed. It returns
 // the size of the request body.
 func writeHAState(conn *homeassistant.Connection, entity string, state float64, attrs map[string]any) (int, error) {
+	return writeHAStateText(conn, entity, strconv.FormatFloat(state, 'f', -1, 64), attrs)
+}
+
+// writeHAStateText is writeHAState for a state that is text, e.g. unavailable
+func writeHAStateText(conn *homeassistant.Connection, entity, state string, attrs map[string]any) (int, error) {
 	uri := fmt.Sprintf("%s/api/states/%s", conn.URI(), url.PathEscape(entity))
 
 	body, err := json.Marshal(map[string]any{
-		"state":      strconv.FormatFloat(state, 'f', -1, 64),
+		"state":      state,
 		"attributes": attrs,
 	})
 	if err != nil {
@@ -364,6 +370,7 @@ func (site *Site) SetLmExportForecast(entity string) error {
 	s := site.lms()
 
 	s.advMu.Lock()
+	old := s.adv.ExportForecastEntity
 	s.adv.ExportForecastEntity = entity
 	adv := s.adv
 	s.advMu.Unlock()
@@ -382,5 +389,32 @@ func (site *Site) SetLmExportForecast(entity string) error {
 
 	site.publishLmAdvanced()
 
+	// the reading instance would keep the old list until it is stale
+	if old != "" && old != entity {
+		f.wg.Add(1)
+		go site.exportForecastOff(old)
+	}
+
 	return nil
+}
+
+// exportForecastOff sets the state of the entity that is no longer written to
+// unavailable, so a reading instance drops its list at once. It runs in the
+// background over a new connection, once; a write still running at the change may
+// land on the old entity afterwards.
+func (site *Site) exportForecastOff(entity string) {
+	f := site.exportFc()
+	defer f.wg.Done()
+
+	err := func() error {
+		conn, err := site.exportForecastConnection()
+		if err != nil {
+			return err
+		}
+
+		_, err = writeHAStateText(conn, entity, "unavailable", map[string]any{"friendly_name": "evcc Einspeiseprognose"})
+		return err
+	}()
+
+	f.offCause.Report(site.log, "export forecast off "+entity, err)
 }

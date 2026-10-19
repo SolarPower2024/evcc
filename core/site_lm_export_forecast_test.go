@@ -336,10 +336,11 @@ func TestPublishExportForecast(t *testing.T) {
 		// a changed entity gets the plan again
 		t.Setenv(homeassistant.SupervisorToken, "token")
 		require.NoError(t, site.SetLmExportForecast("sensor.other"))
+		site.exportFc().wg.Wait() // the old entity is set to unavailable
 		site.publishExportForecast(details2, req2, res2)
 		site.exportFc().wg.Wait()
-		assert.Equal(t, 3, ha.count())
-		path, _ := ha.call(2)
+		assert.Equal(t, 4, ha.count())
+		path, _ := ha.call(3)
 		assert.Equal(t, "POST /api/states/sensor.other", path)
 	})
 
@@ -551,4 +552,55 @@ func TestPublishExportForecastKeepsOrder(t *testing.T) {
 	_, body := ha.call(2)
 	fc := body["attributes"].(map[string]any)["forecast"].([]any)
 	assert.Equal(t, 1000.0, fc[0].(map[string]any)["value"], "250 Wh in 15 min, Z")
+}
+
+// Turning the entity off or changing it sets the old one to unavailable, once, and
+// never touches the new one. Setting it with none before writes nothing.
+func TestSetLmExportForecastTurnsOldOff(t *testing.T) {
+	noSettingsDB(t)
+	keepSettings(t)
+	t.Setenv(homeassistant.SupervisorToken, "token")
+
+	unavailable := func(t *testing.T, ha *haRecorder, i int, path string) {
+		t.Helper()
+		p, body := ha.call(i)
+		assert.Equal(t, "POST /api/states/"+path, p)
+		assert.Equal(t, "unavailable", body["state"])
+	}
+
+	t.Run("turned off", func(t *testing.T) {
+		ha := new(haRecorder)
+		site := exportSite(t, ha, "sensor.a")
+
+		require.NoError(t, site.SetLmExportForecast(""))
+		site.exportFc().wg.Wait()
+
+		require.Equal(t, 1, ha.count())
+		unavailable(t, ha, 0, "sensor.a")
+	})
+
+	t.Run("changed", func(t *testing.T) {
+		ha := new(haRecorder)
+		site := exportSite(t, ha, "sensor.a")
+
+		require.NoError(t, site.SetLmExportForecast("sensor.b"))
+		site.exportFc().wg.Wait()
+
+		require.Equal(t, 1, ha.count(), "nothing is written to b")
+		unavailable(t, ha, 0, "sensor.a")
+
+		// the same entity again changes nothing
+		require.NoError(t, site.SetLmExportForecast("sensor.b"))
+		site.exportFc().wg.Wait()
+		assert.Equal(t, 1, ha.count())
+	})
+
+	t.Run("set with none before", func(t *testing.T) {
+		ha := new(haRecorder)
+		site := exportSite(t, ha, "")
+
+		require.NoError(t, site.SetLmExportForecast("sensor.b"))
+		site.exportFc().wg.Wait()
+		assert.Equal(t, 0, ha.count())
+	})
 }
