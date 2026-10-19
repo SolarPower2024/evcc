@@ -415,7 +415,7 @@
       "entityHelp": "Sensor in kWh or Wh. Empty = all export at the export tariff.",
       "counterLabel": "EEG counter",
       "none": "not set",
-      "set": "Set counter"
+      "isSet": "set"
     },
     "form": {
       "danger": "Danger",
