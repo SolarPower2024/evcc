@@ -1118,6 +1118,11 @@ unused:
   skipped by the first failing restore step, and the fork would start without its
   settings (`restoreSettings` does nothing in tests, so only the syntax tree can
   tell).
+- `TestForkUpdateOrder`, `TestUpdateCustomCalls`: in `Site.update` `updateCustom` stands in the
+  else block of the meter read after `updatePower`, the error branch does not
+  return, the two battery calls of the fork are statements of the function level
+  in order and evcc's originals are not called any more; `updateCustom` calls its
+  four parts. Peak shaving's safeguard for a failing grid meter hangs on this.
 - `TestForkInertWhenUnused`, `TestEqualPrioritiesAreUpstream`,
   `TestCurrents1pInertWhenUnused`, `TestLmSMaxFromUpstream`: without
   configuration the fork changes nothing.

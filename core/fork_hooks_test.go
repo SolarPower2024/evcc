@@ -247,3 +247,74 @@ func TestForkHooksInPlace(t *testing.T) {
 		})
 	}
 }
+
+// callsMethod reports whether a node contains a call of the method name
+func callsMethod(n ast.Node, name string) bool {
+	found := false
+
+	ast.Inspect(n, func(n ast.Node) bool {
+		if c, ok := n.(*ast.CallExpr); ok {
+			if sel, ok := c.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == name {
+				found = true
+			}
+		}
+		return !found
+	})
+
+	return found
+}
+
+// flatStmtIndex returns the index of the statement of the list that is a plain
+// statement (no if, for, switch or block) and calls the method, or -1
+func flatStmtIndex(list []ast.Stmt, name string) int {
+	for i, st := range list {
+		switch st.(type) {
+		case *ast.ExprStmt, *ast.AssignStmt, *ast.DeclStmt:
+			if callsMethod(st, name) {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// TestForkUpdateOrder fails when the fork's calls in Site.update moved: updateCustom
+// runs once the meters are read and the power is calculated, and only then, the
+// battery calls of the fork replace evcc's. Peak shaving's safeguard for a failing
+// grid meter hangs on this order.
+func TestForkUpdateOrder(t *testing.T) {
+	body := funcBody(t, "core/site.go", "Site.update")
+
+	// (1) updateCustom in the else block of the meter read, after updatePower
+	var meters *ast.IfStmt
+	for _, st := range body.List {
+		if ifs, ok := st.(*ast.IfStmt); ok && ifs.Init != nil && callsMethod(ifs.Init, "updateMeters") {
+			meters = ifs
+		}
+	}
+	require.NotNil(t, meters, "no if with updateMeters")
+
+	els, ok := meters.Else.(*ast.BlockStmt)
+	require.True(t, ok, "the meter read has no else block")
+
+	power := flatStmtIndex(els.List, "updatePower")
+	custom := flatStmtIndex(els.List, "updateCustom")
+	require.GreaterOrEqual(t, power, 0, "updatePower is no statement of the else block")
+	require.GreaterOrEqual(t, custom, 0, "updateCustom is no statement of the else block")
+	assert.Greater(t, custom, power, "updateCustom has to follow updatePower")
+
+	// (3) a failing meter read goes on with the battery handling
+	assert.False(t, returns(meters.Body), "the error branch of the meter read must not return")
+
+	// (2) the battery calls of the fork are plain statements of the function, in order
+	charge := flatStmtIndex(body.List, "batteryGridChargeRequested")
+	mode := flatStmtIndex(body.List, "updateBatteryModePeakAware")
+	require.GreaterOrEqual(t, charge, 0, "batteryGridChargeRequested is no statement of the function level")
+	require.GreaterOrEqual(t, mode, 0, "updateBatteryModePeakAware is no statement of the function level")
+	assert.Greater(t, mode, charge)
+
+	// (4) evcc's originals are not called any more
+	for _, n := range []string{"batteryGridChargeActive", "updateBatteryMode"} {
+		assert.False(t, callsMethod(body, n), "Site.update calls evcc's %s again", n)
+	}
+}
