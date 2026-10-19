@@ -136,7 +136,10 @@ func socPassJoin(res *optimizer.OptimizationResult, res2 optimizer.OptimizationR
 		}
 	}
 	for j, b := range req.Batteries {
-		head += (at(res.Batteries[j].StateOfCharge, k) - b.SInitial) * b.PA
+		// a result with fewer batteries than the request adds nothing here instead of panicking
+		if j < len(res.Batteries) {
+			head += (at(res.Batteries[j].StateOfCharge, k) - b.SInitial) * b.PA
+		}
 	}
 	res.ObjectiveValue = head + res2.ObjectiveValue
 	res.LimitViolations.GridImportLimitExceeded = res.LimitViolations.GridImportLimitExceeded || res2.LimitViolations.GridImportLimitExceeded
