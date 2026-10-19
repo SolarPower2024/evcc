@@ -1,18 +1,16 @@
 <template>
-	<div class="feedin-eeg mt-2" data-testid="feedineeg-summary">
-		<div class="d-flex gap-2">
-			<div class="label flex-grow-1">{{ $t("config.feedineeg.counterLabel") }}</div>
-			<div class="value text-end" :class="{ missing: !entity }">
-				{{ entity || $t("config.feedineeg.none") }}
-			</div>
-		</div>
+	<div class="feedin-eeg mt-2 d-flex gap-2 align-items-baseline" data-testid="feedineeg-summary">
+		<div class="label flex-grow-1">{{ $t("config.feedineeg.counterLabel") }}</div>
+		<!-- set or not set as a link to the dialog, the entity as tooltip -->
 		<button
 			type="button"
-			class="btn btn-link btn-sm p-0 mt-1"
+			class="btn btn-link p-0 value"
+			:class="{ missing: !entity }"
+			:title="entity || undefined"
 			data-testid="feedineeg-open"
 			@click.stop="openModal('feedineeg')"
 		>
-			{{ $t("config.feedineeg.set") }}
+			{{ entity ? $t("config.feedineeg.isSet") : $t("config.feedineeg.none") }}
 		</button>
 	</div>
 </template>
@@ -35,14 +33,9 @@ export default {
 </script>
 
 <style scoped>
-.feedin-eeg {
-	display: grid;
-	grid-gap: 0.5rem;
-}
 .value {
 	font-weight: bold;
 	color: var(--bs-primary);
-	word-break: break-all;
 }
 .value.missing {
 	color: var(--bs-danger);

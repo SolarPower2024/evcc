@@ -415,7 +415,7 @@
       "entityHelp": "Sensor in kWh oder Wh. Leer = gesamte Einspeisung zur Einspeisevergütung.",
       "counterLabel": "EEG-Zähler",
       "none": "nicht festgelegt",
-      "set": "Zähler festlegen"
+      "isSet": "festgelegt"
     },
     "form": {
       "danger": "Achtung",
