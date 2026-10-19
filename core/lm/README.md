@@ -148,7 +148,9 @@ measurement, the nominal maximum current on the active phases (a 3-phase device
 without measurement or configured power needs 3 × 16 A × 230 V). A negative
 `standbypower` counts as the configured power (its amount), a positive one does
 not. Without a power sensor the configured power is also reported as its power
-while on. See `core/loadpoint_lm.go` and `charger/switchsocket_lm.go`.
+while on; as in evcc's static mode it counts as measured (home consumption and
+session kWh include it), whereas the heater in stages carries it as an estimate
+(see 4). See `core/loadpoint_lm.go` and `charger/switchsocket_lm.go`.
 
 ## 4. Heater in stages
 
@@ -714,6 +716,9 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   reaches it the rest is solved again (`core/site_optimizer_soc_pass.go`) with
   the stop soc as goal, as the optimizer only knows minimums. While charging
   runs the stop soc is a goal of the first solve.
+- the peak limit stays a hard grid import limit in the plan, also with load
+  management off or a load management circuit set higher: the loads then draw
+  more than planned and only the battery cuts, which is right for the battery.
 - grid charging goals follow the charge slot by slot as the fork does it, at the
   grid charge power with the charging efficiency; with peak shaving only with
   the room below the limit, paused while a peak runs.
@@ -834,7 +839,7 @@ values are not stored, so a changed default applies.
 | `peakFreeze` | minute from which the peak budget no longer grows | 12 | 1-14 |
 | `peakCap` | allowed grid power at most × limit | 2 | 1-10 |
 | `followCycles` | cycles until a load not following is ignored | 3 | 0-20, 0 = off |
-| `gridChargeWindow` | hours to reach the stop soc in the plan | 3 | 1-24 |
+| `gridChargeWindow` | hours to reach the stop soc in the plan; it only moves the stop soc forward without peak shaving and only if the fork's charge time is longer than the window, otherwise it has no effect (no harm done) | 3 | 1-24 |
 | `homeForecast` | home forecast: evcc, per weekday, manual. The old name `homeWeekday` (0/1) is still accepted; a stored `homeWeekday` moves into `homeForecast` at start | 0 | 0-2 |
 | `exportForecastEntity` | text, not a number: entity for the export forecast, see [16](#export-forecast) | empty = off | `sensor.<name>` |
 | `circuitFromPeak` | the load management circuit's limit is the peak limit, see [7](#7-load-management-circuit-and-switch) | 0 (off) | 0-1 |
