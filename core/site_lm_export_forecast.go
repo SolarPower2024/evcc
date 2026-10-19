@@ -32,6 +32,7 @@ import (
 	"github.com/evcc-io/evcc/tariff"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/homeassistant"
+	"github.com/evcc-io/evcc/util/machine"
 	"github.com/evcc-io/evcc/util/request"
 	optimizer "github.com/evcc-io/optimizer/client"
 )
@@ -66,6 +67,7 @@ type exportForecastState struct {
 	writing   bool
 	cause     util.CauseLog             // a failed write is logged once per cause
 	offCause  util.CauseLog             // the same for turning the old entity off
+	idMu      sync.Mutex                // creates the writer id once
 	conn      *homeassistant.Connection // kept until a write fails or the entity changes
 	wg        sync.WaitGroup            // writer running, for tests
 
@@ -284,6 +286,7 @@ func (site *Site) writeExportForecast(w *exportWrite) error {
 		"friendly_name":       "evcc Einspeiseprognose",
 		"forecast":            w.rates,
 		"updated":             now.Format(time.RFC3339),
+		"writer":              site.exportWriterID(),
 	}
 
 	size, err := writeHAState(conn, w.entity, exportCurrent(w.rates, now), attrs)
@@ -343,6 +346,37 @@ func writeHAStateText(conn *homeassistant.Connection, entity, state string, attr
 
 	_, err = conn.DoBody(req.WithContext(ctx))
 	return len(body), err
+}
+
+// exportWriterID returns the id this instance writes into the entity, so a reader
+// on the same instance can tell it is reading its own list. It is created once per
+// database. A copied database copies it, then two instances reject each other's entity.
+func (site *Site) exportWriterID() string {
+	f := site.exportFc()
+
+	f.idMu.Lock()
+	defer f.idMu.Unlock()
+
+	if id, err := settings.String(keys.LmExportForecastID); err == nil && id != "" {
+		return id
+	}
+
+	id := machine.RandomID()
+	settings.SetString(keys.LmExportForecastID, id)
+	if err := settings.Persist(); err != nil {
+		site.log.ERROR.Printf("export forecast: %v", err)
+	}
+
+	return id
+}
+
+// the reader of this instance rejects an entity with this id, it only reads and
+// never creates the id: without one this instance has written nothing
+func init() {
+	tariff.HAForecastWriterID = func() string {
+		id, _ := settings.String(keys.LmExportForecastID)
+		return id
+	}
 }
 
 // exportForecastEntity is the entity set in the ui, empty = off

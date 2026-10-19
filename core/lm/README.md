@@ -823,8 +823,13 @@ are taken, a longer entry only as far as that.
   only planned as far as the optimizer's horizon reaches (48 hours, to the end of
   that day from 6:00): after it the sum is the other tariff alone, it does not end
   with the shorter one.
-- Not in the instance that writes the entity: the optimizer would plan with double
-  the solar power. The template says so.
+- The instance that writes the entity recognises and rejects its own list: the writer
+  adds the attribute `writer`, an id created once per database (`lmExportForecastID`,
+  `site.exportWriterID`), and the reader (`tariff.HAForecastWriterID`, set by an `init`
+  of the writer file that only reads the id) gives no rates and a warning "written by
+  this instance" for that id. A missing attribute (another source, an old list) is a
+  foreign entity. A copied `evcc.db` copies the id: two instances made so reject each
+  other's entity. `TestExportWriterID`, `TestHAForecastOwnWriter`.
 
 ## 17. Advanced settings
 

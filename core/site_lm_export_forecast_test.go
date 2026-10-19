@@ -14,6 +14,7 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/db/settings"
+	"github.com/evcc-io/evcc/tariff"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/homeassistant"
 	optimizer "github.com/evcc-io/optimizer/client"
@@ -603,4 +604,32 @@ func TestSetLmExportForecastTurnsOldOff(t *testing.T) {
 		site.exportFc().wg.Wait()
 		assert.Equal(t, 0, ha.count())
 	})
+}
+
+// The writer id is created once per database and written with the list.
+func TestExportWriterID(t *testing.T) {
+	noSettingsDB(t)
+	keepSettings(t)
+
+	_ = settings.Delete(keys.LmExportForecastID)
+	assert.Empty(t, tariff.HAForecastWriterID(), "the reader never creates it")
+
+	ha := new(haRecorder)
+	site := exportSite(t, ha, "sensor.evcc_einspeiseprognose")
+
+	id := site.exportWriterID()
+	assert.NotEmpty(t, id)
+	assert.Equal(t, id, site.exportWriterID(), "created once")
+	assert.Equal(t, id, tariff.HAForecastWriterID(), "the reader sees it")
+
+	other := &Site{log: util.NewLogger("test")}
+	assert.Equal(t, id, other.exportWriterID(), "stable with the same database")
+
+	start := time.Now().Truncate(time.Hour)
+	site.publishExportForecast(exportCase(start, 900, 250, 125))
+	site.exportFc().wg.Wait()
+
+	require.Equal(t, 1, ha.count())
+	_, body := ha.call(0)
+	assert.Equal(t, id, body["attributes"].(map[string]any)["writer"])
 }

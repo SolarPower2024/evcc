@@ -70,6 +70,11 @@ type HAForecast struct {
 var _ api.Tariff = (*HAForecast)(nil)
 
 // HAForecastConnection creates the connection; tests replace it to reach a local server instead of Home Assistant
+// HAForecastWriterID returns the id this instance writes into the export forecast
+// entity, empty if it has none. The entity of that id is not read: it is this
+// instance's own list. nil = no check, tests set it like HAForecastConnection.
+var HAForecastWriterID func() string
+
 var HAForecastConnection = func(log *util.Logger, c homeassistant.Config) (*homeassistant.Connection, error) {
 	return c.NewConnection(log)
 }
@@ -190,6 +195,16 @@ func (t *HAForecast) forecast(now time.Time) (api.Rates, error) {
 
 	if res.State == "unknown" || res.State == "unavailable" {
 		return nil, fmt.Errorf("entity %s: %w", res.State, errNoForecast)
+	}
+
+	if own := HAForecastWriterID; own != nil {
+		if id := own(); id != "" {
+			// a missing attribute (another source, an old list) is a foreign entity
+			var writer string
+			if raw, ok := res.Attributes["writer"]; ok && json.Unmarshal(raw, &writer) == nil && writer == id {
+				return nil, fmt.Errorf("written by this instance: %w", errNoForecast)
+			}
+		}
 	}
 
 	raw, ok := res.Attributes[t.attribute]

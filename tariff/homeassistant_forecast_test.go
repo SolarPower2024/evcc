@@ -497,3 +497,59 @@ func TestHAForecastLogOnce(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, rates, 1)
 }
+
+// The entity this instance wrote is not read back: no rates, a new cause. An
+// entity of another writer, or without the attribute, is read.
+func TestHAForecastOwnWriter(t *testing.T) {
+	prev := HAForecastWriterID
+	HAForecastWriterID = func() string { return "me" }
+	t.Cleanup(func() { HAForecastWriterID = prev })
+
+	body := func(writer string) string {
+		w := ""
+		if writer != "" {
+			w = fmt.Sprintf(`"writer":%q,`, writer)
+		}
+		return fmt.Sprintf(`{"state":"1","attributes":{%s"forecast":[{"start":%q,"end":%q,"value":5}]}}`,
+			w, at(10, 0).Format(time.RFC3339), at(10, 15).Format(time.RFC3339))
+	}
+
+	for name, tc := range map[string]struct {
+		body string
+		want int
+	}{
+		"own id":            {body("me"), 0},
+		"foreign id":        {body("other"), 1},
+		"no writer":         {body(""), 1},
+		"no own id (empty)": {body("me"), 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if name == "no own id (empty)" {
+				HAForecastWriterID = func() string { return "" }
+			} else {
+				HAForecastWriterID = func() string { return "me" }
+			}
+
+			haForecastServer(t, tc.body)
+
+			tr, err := NewFromConfig(t.Context(), "homeassistant-forecast", haConfig(nil))
+			require.NoError(t, err)
+
+			rates, err := tr.Rates()
+			require.NoError(t, err)
+			assert.Len(t, rates, tc.want)
+		})
+	}
+
+	t.Run("cause", func(t *testing.T) {
+		HAForecastWriterID = func() string { return "me" }
+		haForecastServer(t, body("me"))
+		conn, err := HAForecastConnection(util.NewLogger("test"), homeassistant.Config{URI: "http://unused"})
+		require.NoError(t, err)
+		tr := &HAForecast{Connection: conn, entity: "sensor.x", attribute: "forecast"}
+
+		_, err = tr.forecast(time.Now())
+		assert.ErrorIs(t, err, errNoForecast)
+		assert.ErrorContains(t, err, "written by this instance")
+	})
+}
