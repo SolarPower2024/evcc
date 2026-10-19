@@ -2413,11 +2413,16 @@
     "title": "Feed-in Priority"
   },
   "snowCover": {
-    "autoHelp": "Turns on at ≥ 1 cm of new snow (≤ 1 °C) in 24 h per forecast.",
-    "autoLabel": "Detect snow automatically",
-    "autoOn": "Detected automatically.",
+    "autoHelp": "Automatic: on at ≥ 1 cm of new snow (≤ 1 °C) in 24 h per forecast.",
+    "detected": "detected",
     "help": "The optimizer plans without solar yield. Turns off once the system delivers at least 70 % of the forecast for 1 h.",
-    "label": "Snow on PV"
+    "label": "Snow on PV",
+    "mode": {
+      "off": "off",
+      "auto": "automatic",
+      "on": "covered"
+    },
+    "sentence": "Snow on PV: {mode}"
   },
   "startupError": {
     "configFile": "Configuration file used:",
