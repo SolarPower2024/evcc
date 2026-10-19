@@ -444,6 +444,10 @@ says more than 20 Wh in 2 minutes is replaced for the rest of the window
 (`peakShavingSource`). A failing sensor is logged once, then at debug level
 until it works again (`TestPeakEnergyReadLoggedOnce`).
 
+A counter coarser than 0.01 kWh or updating less often than every 30 s delays the
+cut by the counter lag; the value from the window end then only counts in the
+next window (a known compromise, `TestMeterLateCounter`).
+
 Below the reserve the battery is kept in normal mode, as hold would block the
 discharge controller; a battery mode set from outside through the api stays.
 While the demand without the battery exceeds the limit, or the grid power the

@@ -1099,7 +1099,7 @@
       "circuitNoneConfigured": "No circuits are configured.",
       "circuitTitle": "Battery circuit",
       "description": "evcc tells Home Assistant what peak shaving needs. How depends on the battery type.",
-      "energyEntityHelp": "Grid import counter in kWh or Wh. Only needed when the grid meter in evcc has no energy counter. Template sensors must report unavailable on failure, not 0.",
+      "energyEntityHelp": "Grid import counter in kWh or Wh. Only needed when the grid meter in evcc has no energy counter. Template sensors must report unavailable on failure, not 0. Fine counters (0.01 kWh) keep the limit exact, coarse ones delay the cut.",
       "energyEntityLabel": "Grid import energy counter",
       "entityHelp": "Receives the setpoint in W, fitted to the entity's min, max and step.",
       "entityInvalid": "Could not set the entity.",
