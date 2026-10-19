@@ -1108,7 +1108,7 @@
       "followBufferHelp": "So weit bleibt die Grenze unter der Monatsspitze, 0–5 kW. Beispiel 0,5 kW: Spitze 10 kW → Grenze 9,5 kW.",
       "followBufferInvalid": "Der Puffer muss zwischen 0 und 5 kW liegen, in Schritten von 0,1 kW.",
       "followBufferLabel": "Puffer",
-      "followHelp": "Liegt die höchste Viertelstunde des Monats schon über deiner Peak-Grenze, steigt die Grenze auf diese Spitze. Zum Monatsbeginn gilt wieder deine Grenze.",
+      "followHelp": "Liegt die höchste Viertelstunde des Monats um mehr als den Puffer über deiner Peak-Grenze, steigt die Grenze auf diese Spitze minus Puffer. Zum Monatsbeginn gilt wieder deine Grenze.",
       "followLabel": "Follow the Peak: Grenze folgt der Monatsspitze",
       "manualEntityHelp": "Omnibattery-Schalter. evcc schaltet ihn nur beim Netzladen ein.",
       "manualEntityLabel": "Schalter manuelle Steuerung",
