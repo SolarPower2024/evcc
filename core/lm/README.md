@@ -383,6 +383,11 @@ write that fails is logged as an error once; the same error then only at debug
 level until a write lands again (once at info), with the first 200 characters of
 the answer on one line, and for a general 500 of Home Assistant the hint to look
 into its log (`TestPeakWriteErrorLoggedOnce`, `TestPeakWriteErrorBody`).
+If the entity is removed (BYD) and the free value cannot be written, or the type is
+changed with no target left, the mark is cleared with a warning ("free value not
+written, the battery may stay at the last setpoint"): with no target nothing can be
+handed back, and the mark would otherwise refuse every change to Marstek
+(`TestPeakEntityRemovedHandBackFails`).
 
 Stopping evcc hands back as well, not only evcc's battery mode
 (`TestPeakReleasedOnShutdown`): a Marstek gets the charge power 0 and the manual

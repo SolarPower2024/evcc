@@ -1201,6 +1201,9 @@ func (site *Site) GetPeakShavingEntity() string {
 	return s.entity
 }
 
+// peakFreeNotWritten is logged when the target is gone and the free value could not be written
+const peakFreeNotWritten = "peak shaving: free value not written, the battery may stay at the last setpoint"
+
 // SetPeakShavingEntity sets the Home Assistant number entity receiving the
 // setpoint and rebuilds the connection
 func (site *Site) SetPeakShavingEntity(entity string) error {
@@ -1238,6 +1241,11 @@ func (site *Site) SetPeakShavingEntity(entity string) error {
 		// the previous target would otherwise keep the last setpoint
 		if site.releaseOutput("peak shaving", previousSet, site.peakFreeValue()) {
 			site.setPeakOwned(false)
+		} else if entity == "" {
+			// no target is left to hand back to, owned would block every change of
+			// the battery type for good
+			site.setPeakOwned(false)
+			site.log.WARN.Println(peakFreeNotWritten)
 		}
 	}
 	s.out.Unlock()
