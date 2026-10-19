@@ -8,7 +8,7 @@ import StatCards from "./StatCards.vue";
 import formatter from "@/mixins/formatter";
 import { CURRENCY } from "@/types/evcc";
 import type { FlowCost, StatItem } from "./types";
-import { feedInEegStats, type FeedInSplitTotals, type StatFormats } from "./feedInEeg";
+import { feedInEegStats, type FeedInSplitTotals, type StatFormats } from "./feedInEeg"; // custom
 
 // what import cost and export earned, pointing at the tariff settings without one
 export default defineComponent({
@@ -59,7 +59,7 @@ export default defineComponent({
 						cost.export,
 						cost.exportEnergy
 					),
-					accent: "text-export",
+					accent: "text-export", // custom: the export color
 				},
 			];
 		},

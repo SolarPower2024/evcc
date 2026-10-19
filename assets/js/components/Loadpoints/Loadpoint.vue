@@ -56,6 +56,7 @@
 		<div class="details d-flex align-items-start mb-2">
 			<div>
 				<div class="d-flex align-items-center">
+					<!-- custom: an assumed power stands in for the missing measurement -->
 					<LabelAndValue
 						:label="$t('main.loadpoint.power')"
 						:value="chargePower || chargePowerEstimate"

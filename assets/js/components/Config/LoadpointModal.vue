@@ -358,6 +358,7 @@
 							</template>
 
 							<div class="row mb-4">
+								<!-- custom: 3p label with 1p limits -->
 								<FormRow
 									id="loadpointMinCurrent"
 									:label="
@@ -383,6 +384,7 @@
 									</div>
 								</FormRow>
 
+								<!-- custom: 3p label with 1p limits -->
 								<FormRow
 									id="loadpointMaxCurrent"
 									:label="
@@ -712,7 +714,7 @@ export default {
 		NewDeviceButton,
 		InvalidReferenceAlert,
 		CreateFlowStatus,
-		PhaseSwitchFields,
+		PhaseSwitchFields, // custom
 	},
 	mixins: [formatter],
 	props: {
@@ -875,6 +877,7 @@ export default {
 			return [OFF, SMART, NOW].map((key) => ({
 				key,
 				name: this.$t(
+					// custom: a heater in stages is labelled as a switch device
 					chargeModeLabelKey(
 						key,
 						this.chargerIsContinuous,

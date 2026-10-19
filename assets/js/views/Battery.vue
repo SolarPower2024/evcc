@@ -40,6 +40,7 @@
 						<SmartCostLimit v-bind="smartCostLimitProps" />
 					</Card>
 
+					<!-- custom: soc grid charging and peak shaving, see core/lm/README.md -->
 					<BatterySocGridChargeCard
 						v-if="batteryControllable"
 						class="box-pull-out mt-4"
@@ -49,6 +50,7 @@
 						:stop-soc="state.batterySocGridChargeStop ?? 80"
 					/>
 
+					<!-- custom -->
 					<BatteryPeakShavingCard
 						class="box-pull-out mt-4"
 						:enabled="!!state.peakShaving"
@@ -92,9 +94,9 @@ import SmartFeedInPriority from "../components/Tariff/SmartFeedInPriority.vue";
 import BatteryStatusCards from "../components/Battery/BatteryStatusCards.vue";
 import BatteryConfigCard from "../components/Battery/BatteryConfigCard.vue";
 import BatteryHistoryCard from "../components/Battery/BatteryHistoryCard.vue";
-import BatterySocGridChargeCard from "../components/Battery/BatterySocGridChargeCard.vue";
-import BatteryPeakShavingCard from "../components/Battery/BatteryPeakShavingCard.vue";
-import BatteryProfileCard from "../components/Battery/BatteryProfileCard.vue";
+import BatterySocGridChargeCard from "../components/Battery/BatterySocGridChargeCard.vue"; // custom
+import BatteryPeakShavingCard from "../components/Battery/BatteryPeakShavingCard.vue"; // custom
+import BatteryProfileCard from "../components/Battery/BatteryProfileCard.vue"; // custom
 import {
 	historyToSeries,
 	forecastToSeries,
@@ -114,9 +116,9 @@ export default defineComponent({
 		BatteryStatusCards,
 		BatteryConfigCard,
 		BatteryHistoryCard,
-		BatterySocGridChargeCard,
-		BatteryPeakShavingCard,
-		BatteryProfileCard,
+		BatterySocGridChargeCard, // custom
+		BatteryPeakShavingCard, // custom
+		BatteryProfileCard, // custom
 	},
 	head() {
 		return { title: this.$t("batterySettings.modalTitle") };
@@ -184,6 +186,7 @@ export default defineComponent({
 		gridChargeLimit(): number | null {
 			return this.state.batteryGridChargeLimit ?? null;
 		},
+		// custom: see core/site_lm.go
 		socGridChargeEnabled(): boolean {
 			return !!this.state.batterySocGridCharge;
 		},

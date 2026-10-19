@@ -81,10 +81,10 @@ var forkUiHooks = []struct {
 }{
 	{"assets/js/views/App.vue", []string{"<LmGlobalModals"}},
 	{"assets/js/views/Config.vue", []string{"<PeakShavingConfig", "<LmConfigModals", "feedInEegTariff"}},
-	{"assets/js/views/Battery.vue", []string{"<BatterySocGridChargeCard", "<BatteryPeakShavingCard", "<BatteryProfileCard"}},
+	{"assets/js/views/Battery.vue", []string{"<!-- custom: soc grid charging and peak shaving", "<BatterySocGridChargeCard", "<BatteryPeakShavingCard", "<BatteryProfileCard"}},
 	{"assets/js/components/BottomTabs/MoreMenu.vue", []string{"<LmMoreMenuItems"}},
 	{"assets/js/components/Config/CircuitModal.vue", []string{"<CircuitPeakHint", "CircuitPeakHint,"}},
-	{"assets/js/components/Config/LoadpointModal.vue", []string{"<PhaseSwitchFields", "emptyUnsetPhaseSwitch", "chargerIsStages"}},
+	{"assets/js/components/Config/LoadpointModal.vue", []string{"<PhaseSwitchFields", "emptyUnsetPhaseSwitch(this.values)", "config.loadpoint.minCurrent${showCurrent1p ? '3p' : ''}Label", "chargerIsStages"}},
 	{"assets/js/components/Energyflow/Energyflow.vue", []string{"batteryChargeLabelKey(this.batteryChargeHold"}},
 	{"assets/js/components/Loadpoints/Loadpoint.vue", []string{"chargerStages: Boolean", "const estimate = fmtPowerEstimate(", `:value="chargePower || chargePowerEstimate"`}},
 	{"assets/js/components/Site/Site.vue", []string{"loadpoints: measuredLoadpoints(this.enabledLoadpoints)"}},
