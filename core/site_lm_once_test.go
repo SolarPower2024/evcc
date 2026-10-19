@@ -1,11 +1,13 @@
 package core
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/db"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
@@ -21,10 +23,10 @@ type capacityBattery struct {
 
 func (b *capacityBattery) Capacity() float64 { return b.kWh }
 
-func onceSite(t *testing.T, soc float64) *Site {
+// newOnceSite is a site with a battery at soc and the charge power set, the
+// stored order is left as it is
+func newOnceSite(t *testing.T, soc float64) *Site {
 	t.Helper()
-	settings.SetJson(keys.BatteryGridChargeOnce, gridChargeOnce{})
-	t.Cleanup(func() { settings.SetJson(keys.BatteryGridChargeOnce, gridChargeOnce{}) })
 
 	site := &Site{
 		log:           util.NewLogger("test"),
@@ -33,6 +35,15 @@ func onceSite(t *testing.T, soc float64) *Site {
 	setBatterySoc(site, soc)
 	site.peak().chargePower = 5000
 	return site
+}
+
+// onceSite is a new site with no stored order, which is cleared again after the test
+func onceSite(t *testing.T, soc float64) *Site {
+	t.Helper()
+	settings.SetJson(keys.BatteryGridChargeOnce, gridChargeOnce{})
+	t.Cleanup(func() { settings.SetJson(keys.BatteryGridChargeOnce, gridChargeOnce{}) })
+
+	return newOnceSite(t, soc)
 }
 
 // Right away: charges until the target, then switches itself off.
@@ -47,9 +58,8 @@ func TestGridChargeOnceRightAway(t *testing.T) {
 	assert.True(t, site.batteryGridChargeRequested(api.Rate{}))
 	assert.True(t, site.gridChargeOnce().Active)
 
-	// survives a restart
-	restarted := onceSite(t, 40)
-	settings.SetJson(keys.BatteryGridChargeOnce, site.gridChargeOnce())
+	// survives a restart: what the setter stored, not what the test sets
+	restarted := newOnceSite(t, 40)
 	restarted.restoreGridChargeOnce()
 	assert.Equal(t, 80.0, restarted.gridChargeOnce().Target)
 
@@ -184,4 +194,45 @@ func TestGridChargeOnceExpired(t *testing.T) {
 	site.lms().gridOnce = gridChargeOnce{Target: 80, Until: time.Now().Add(-50 * time.Hour)}
 	assert.False(t, site.batteryGridChargeOnceActive())
 	assert.Zero(t, site.gridChargeOnce().Target)
+}
+
+// The order survives a restart through a database file: stored by the setter,
+// written out, the database opened anew, the settings read back from the file.
+func TestGridChargeOnceSurvivesRestartOnDisk(t *testing.T) {
+	noSettingsDB(t)
+
+	// the settings in memory come back after the test, the file database replaces them
+	before := settings.All()
+	t.Cleanup(func() {
+		if db.Instance != nil {
+			if sqlDB, err := db.Instance.DB(); err == nil {
+				sqlDB.Close()
+			}
+		}
+		db.Instance = nil
+		for _, s := range settings.All() {
+			_ = settings.Delete(s.Key)
+		}
+		for _, s := range before {
+			settings.SetString(s.Key, s.Value)
+		}
+	})
+
+	path := filepath.Join(t.TempDir(), "evcc.db")
+	require.NoError(t, db.NewInstance("sqlite", path))
+
+	site := newOnceSite(t, 40)
+	require.NoError(t, site.SetBatteryGridChargeOnce(80, time.Now().Add(6*time.Hour)))
+	require.NoError(t, settings.Persist())
+
+	// the restart: close, open the same file, the settings load from it
+	sqlDB, err := db.Instance.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+	require.NoError(t, db.NewInstance("sqlite", path))
+
+	restarted := newOnceSite(t, 40)
+	restarted.restoreGridChargeOnce()
+	assert.Equal(t, 80.0, restarted.gridChargeOnce().Target)
+	assert.False(t, restarted.gridChargeOnce().Until.IsZero())
 }

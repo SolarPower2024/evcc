@@ -1142,6 +1142,7 @@ unused:
   `TestLoadpointUsesSiteLoadManagement`, `TestMergeRoutesKeepsUpstream`: the
   hooks act on evcc's real control path.
 - `TestRestoreCustomAfterRestart`: every fork setting survives a restart.
+- `TestGridChargeOnceSurvivesRestartOnDisk`: the one-time order stored by its setter comes back from a database file after reopening it.
 - `TestLmOptimizerResultExport`: the hook in `optimizerUpdate` passes a usable
   result (optimal, feasible) to the export forecast and nothing else;
   `TestExportForecast*` and `TestPublishExportForecast` cover the list, the
