@@ -7,8 +7,10 @@ import (
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/benbjohnson/clock"
 	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/core/settings"
+	"github.com/evcc-io/evcc/messenger"
 	"github.com/evcc-io/evcc/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -387,4 +389,90 @@ func TestProjectPhaseSwitch1p(t *testing.T) {
 	lp.minCurrent1p = 0
 	power, phases, minCurrent = lp.projectPhaseSwitch1p(1000, 8)
 	assert.Equal(t, []any{1000 - 230*8*2.0, 1, 8.0}, []any{power, phases, minCurrent})
+}
+
+// circuitOf returns a circuit that grants the given power to every request
+func circuitOf(t *testing.T, power float64) api.Circuit {
+	t.Helper()
+	circuit := api.NewMockCircuit(gomock.NewController(t))
+	circuit.EXPECT().ValidatePower(gomock.Any(), gomock.Any()).Return(power).AnyTimes()
+	circuit.EXPECT().ValidateCurrent(gomock.Any(), gomock.Any()).DoAndReturn(func(_, new float64) float64 { return new }).AnyTimes()
+	circuit.EXPECT().GetMaxPower().Return(power).AnyTimes()
+	return circuit
+}
+
+// TestFastChargingPhasesNoScaleUpWith1pMinOnly: the circuit has room for the 1p
+// minimum on three phases (6A: 4140W), not for the 3p minimum (8A: 5520W). The
+// scale up is judged with the limits of the 3p range, not the active 1p ones.
+func TestFastChargingPhasesNoScaleUpWith1pMinOnly(t *testing.T) {
+	lp := phaseCurrentsLoadpoint(t, 1, 6, 16)
+	lp.circuit = circuitOf(t, 5000)
+
+	waiting, err := lp.fastChargingPhases()
+	require.NoError(t, err)
+	assert.False(t, waiting)
+	assert.Equal(t, 1, lp.GetPhases(), "no scale up")
+
+	// control: a circuit with room for the 3p minimum and its buffer scales up
+	lp = phaseCurrentsLoadpoint(t, 1, 6, 16)
+	lp.circuit = circuitOf(t, 6500)
+
+	_, err = lp.fastChargingPhases()
+	require.NoError(t, err)
+	assert.Equal(t, 3, lp.GetPhases(), "scale up")
+}
+
+// TestBoostPowerBridgesWith3pMin: the gap to bridge is the one between the 1p
+// maximum and the minimum of the three phases, with the 3p minimum current
+func TestBoostPowerBridgesWith3pMin(t *testing.T) {
+	limit := 10000.0
+
+	lp := phaseCurrentsLoadpoint(t, 1, 6, 16)
+	lp.batteryBoost = boostContinue
+	lp.site = &mockSite{maxDischargePower: &limit}
+	lp.circuit = circuitOf(t, 10000)
+
+	// 100W base + 230W step on 1p + (230V * 8A * 3 - 3680W of 1p at 16A)
+	assert.Equal(t, 330.0+1840, lp.boostPower(0))
+
+	// a circuit without room for the 3p minimum: nothing to bridge
+	lp.circuit = circuitOf(t, 5000)
+	assert.Equal(t, 330.0, lp.boostPower(0))
+}
+
+// TestPvMaxCurrentUsesLimitsOfNewPhases: after the scale up to 3p the current is
+// capped with the limits of three phases, not with the 1p ones
+func TestPvMaxCurrentUsesLimitsOfNewPhases(t *testing.T) {
+	lp := phaseCurrentsLoadpoint(t, 1, 6, 10)
+	lp.site = &mockSite{}
+	lp.chargePower = currentToPower(10, 1)
+
+	// 9kW available: the 1p maximum (10A) is used up, the 3p minimum (8A) reached
+	current := lp.pvMaxCurrent(lp.chargePower-9000, 0, false, false)
+
+	assert.Equal(t, 3, lp.GetPhases(), "scaled up")
+	// 3.33A of the charge power on three phases plus 6.7kW over three phases: above
+	// the 1p maximum of 10A, below the 3p one of 16A
+	assert.InDelta(t, 13.04, current, 0.01, "not capped at the 1p maximum of 10A")
+}
+
+// TestPreparePublishesPhaseSwitch: Prepare publishes the 1p limits and the two phase
+// delays, the ui shows them in the loadpoint form
+func TestPreparePublishesPhaseSwitch(t *testing.T) {
+	lp := phaseCurrentsLoadpoint(t, 1, 6, 20)
+	lp.phaseScale3pDelay, lp.phaseScale1pDelay = 5*time.Minute, 4*time.Minute
+
+	uiChan := make(chan util.Param, 2000)
+	lp.Prepare(new(Site), uiChan, make(chan messenger.Event, 10), make(chan *Loadpoint, 10))
+	close(uiChan)
+
+	got := make(map[string]any)
+	for p := range uiChan {
+		got[p.Key] = p.Val
+	}
+
+	assert.Equal(t, 6.0, got[keys.MinCurrent1p])
+	assert.Equal(t, 20.0, got[keys.MaxCurrent1p])
+	assert.Equal(t, 5*time.Minute, got[keys.PhaseScale3pDelay])
+	assert.Equal(t, 4*time.Minute, got[keys.PhaseScale1pDelay])
 }

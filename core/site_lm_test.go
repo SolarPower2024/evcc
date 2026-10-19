@@ -170,3 +170,11 @@ func TestBatteryUnknownCircuitNoGridCharge(t *testing.T) {
 	assert.Empty(t, site.GetPeakShavingCircuit())
 	assert.Nil(t, site.lmBatteryCircuit())
 }
+
+// TestUpdateCustomCalls fails when updateCustom drops one of its parts
+func TestUpdateCustomCalls(t *testing.T) {
+	body := funcBody(t, "core/site_lm.go", "Site.updateCustom")
+	for _, n := range []string{"updatePeakShaving", "updateFeedInEeg", "updateBatteryIdent", "updateSnowCover"} {
+		assert.True(t, callsMethod(body, n), "updateCustom no longer calls %s", n)
+	}
+}

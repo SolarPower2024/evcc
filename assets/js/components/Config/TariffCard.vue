@@ -32,7 +32,7 @@ import { type PropType } from "vue";
 import type { TariffType, CURRENCY } from "@/types/evcc";
 import DeviceCard from "./DeviceCard.vue";
 import DeviceTags from "./DeviceTags.vue";
-import FeedInEegSummary from "./FeedInEegSummary.vue";
+import FeedInEegSummary from "./FeedInEegSummary.vue"; // custom
 
 type ConfigTariff = {
 	id: number;
@@ -49,7 +49,7 @@ export default {
 	components: {
 		DeviceCard,
 		DeviceTags,
-		FeedInEegSummary,
+		FeedInEegSummary, // custom
 	},
 	props: {
 		tariff: { type: Object as PropType<ConfigTariff>, required: true },

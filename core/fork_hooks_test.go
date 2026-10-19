@@ -1,11 +1,14 @@
 package core
 
 import (
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -46,6 +49,8 @@ var forkHooks = []struct {
 	{"core/loadpoint.go", "Loadpoint.pvMaxCurrent", []string{"effectiveMinCurrentFor", "effectiveMaxCurrentFor", "projectPhaseSwitch1p", "holdStage"}},
 	{"core/loadpoint_effective.go", "Loadpoint.effectiveMinCurrent", []string{"effectiveMinCurrentFor", "currents1pPhases"}},
 	{"core/loadpoint_effective.go", "Loadpoint.effectiveMaxCurrent", []string{"effectiveMaxCurrentFor", "currents1pPhases"}},
+	{"core/loadpoint_effective.go", "Loadpoint.EffectiveMinPower", []string{"effectiveMinCurrentFor"}},
+	{"core/loadpoint_effective.go", "Loadpoint.effectiveMaxPower", []string{"effectiveMaxCurrentFor"}},
 	{"core/loadpoint/config.go", "DynamicConfig.Apply", []string{"applyPhaseSwitch"}},
 	{"core/loadpoint/config.go", "SplitConfig", []string{"withoutDroppedKeys"}},
 	{"core/circuit/circuit.go", "Circuit.Update", []string{"overPowerLog"}},
@@ -59,7 +64,7 @@ var forkHooks = []struct {
 	{"api/globalconfig/types.go", "TariffRefs.Used", []string{"FeedInEeg"}},
 	{"charger/switchsocket.go", "NewSwitchSocketFromConfig", []string{"RatedPower"}},
 	{"util/log.go", "newLogger", []string{"Output"}},
-	{"cmd/root.go", "runRoot", []string{"CloseFile"}},
+	{"cmd/root.go", "runRoot", []string{"CloseFile", "forkUpdateCheck"}},
 }
 
 // forkDeferHooks lists the hooks that have to run on every way out of an evcc
@@ -79,22 +84,25 @@ var forkUiHooks = []struct {
 }{
 	{"assets/js/views/App.vue", []string{"<LmGlobalModals"}},
 	{"assets/js/views/Config.vue", []string{"<PeakShavingConfig", "<LmConfigModals", "feedInEegTariff"}},
-	{"assets/js/views/Battery.vue", []string{"<BatterySocGridChargeCard", "<BatteryPeakShavingCard", "<BatteryProfileCard"}},
+	{"assets/js/views/Battery.vue", []string{"<!-- custom: soc grid charging and peak shaving", "<BatterySocGridChargeCard", "<BatteryPeakShavingCard", "<BatteryProfileCard"}},
 	{"assets/js/components/BottomTabs/MoreMenu.vue", []string{"<LmMoreMenuItems"}},
 	{"assets/js/components/BottomTabs/MoreItem.vue", []string{"lmOffBadge()"}},
 	{"assets/js/components/Config/CircuitModal.vue", []string{"<CircuitPeakHint", "CircuitPeakHint,"}},
-	{"assets/js/components/Config/LoadpointModal.vue", []string{"<PhaseSwitchFields", "emptyUnsetPhaseSwitch", "chargerIsStages"}},
-	{"assets/js/components/Loadpoints/Loadpoint.vue", []string{"chargerStages: Boolean", "chargePowerEstimate"}},
+	{"assets/js/components/Config/LoadpointModal.vue", []string{"<PhaseSwitchFields", "emptyUnsetPhaseSwitch(this.values)", "config.loadpoint.minCurrent${showCurrent1p ? '3p' : ''}Label", "chargerIsStages"}},
+	{"assets/js/components/Energyflow/Energyflow.vue", []string{"batteryChargeLabelKey(this.batteryChargeHold"}},
+	{"assets/js/components/Loadpoints/Loadpoint.vue", []string{"chargerStages: Boolean", "const estimate = fmtPowerEstimate(", `:value="chargePower || chargePowerEstimate"`}},
 	{"assets/js/components/Site/Site.vue", []string{"loadpoints: measuredLoadpoints(this.enabledLoadpoints)"}},
 	{"assets/js/components/Loadpoints/Mode.vue", []string{"chargerStages: Boolean", "this.switchDevice || this.chargerStages"}},
-	{"assets/js/views/Forecast.vue", []string{"@adjust=\"changeAdjusted\"", "form-switch mb-0 text-nowrap d-none\"", "SnowCoverSwitch, // custom"}},
+	{"assets/js/views/Forecast.vue", []string{"<SnowCoverSwitch>", "form-check form-switch mt-2 mb-0\"", "SnowCoverSwitch, // custom"}},
 	{"assets/js/views/Log.vue", []string{"<LogFileButton", "LogFileButton,"}},
 	{"assets/js/components/Config/DeviceTags.vue", []string{"case \"stages\": // custom"}},
 	{"assets/js/components/Config/TariffCard.vue", []string{"<FeedInEegSummary"}},
 	{"assets/js/components/Config/TariffModal.vue", []string{"feedInEeg", "tariff-planner-optimizer"}},
-	{"assets/js/views/Energy.vue", []string{"gridChartSeries", ":feed-in-eeg=\"feedInEeg\"", "loadFeedInSplit(requestKey)", "withoutFeedInEeg("}},
+	{"assets/js/views/Energy.vue", []string{"gridChartSeries", ":feed-in-eeg=\"feedInEeg\"", "loadFeedInSplit(requestKey)", "withoutFeedInEeg(", "splitLegends(list, this.feedInEeg"}},
 	{"assets/js/components/Energy/GroupChart.vue", []string{"s.returnColor ||"}},
-	{"assets/js/components/Energy/GridStats.vue", []string{"feedInEegStats(this.feedInEeg)"}},
+	{"assets/js/components/Energy/GridStats.vue", []string{"feedInEegStats(this.feedInEeg"}},
+	{"assets/js/utils/version.ts", []string{"version.replace(/^v/, \"\")"}},
+	{"assets/js/components/AboutModal.vue", []string{"<!-- custom: the fork's tags carry a v", "{{ getShortVersion(installed) }}"}},
 	{"assets/js/types/evcc.ts", []string{"extends LmState", "extends LmConfigLoadpoint", `export type * from "./evcc-lm"`}},
 }
 
@@ -246,5 +254,268 @@ func TestForkHooksInPlace(t *testing.T) {
 				assert.Contains(t, string(b), s)
 			}
 		})
+	}
+}
+
+// callsMethod reports whether a node contains a call of the method name
+func callsMethod(n ast.Node, name string) bool {
+	found := false
+
+	ast.Inspect(n, func(n ast.Node) bool {
+		if c, ok := n.(*ast.CallExpr); ok {
+			if sel, ok := c.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == name {
+				found = true
+			}
+		}
+		return !found
+	})
+
+	return found
+}
+
+// flatStmtIndex returns the index of the statement of the list that is a plain
+// statement (no if, for, switch or block) and calls the method, or -1
+func flatStmtIndex(list []ast.Stmt, name string) int {
+	for i, st := range list {
+		switch st.(type) {
+		case *ast.ExprStmt, *ast.AssignStmt, *ast.DeclStmt:
+			if callsMethod(st, name) {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// TestForkUpdateOrder fails when the fork's calls in Site.update moved: updateCustom
+// runs once the meters are read and the power is calculated, and only then, the
+// battery calls of the fork replace evcc's. Peak shaving's safeguard for a failing
+// grid meter hangs on this order.
+func TestForkUpdateOrder(t *testing.T) {
+	body := funcBody(t, "core/site.go", "Site.update")
+
+	// (1) updateCustom in the else block of the meter read, after updatePower
+	var meters *ast.IfStmt
+	for _, st := range body.List {
+		if ifs, ok := st.(*ast.IfStmt); ok && ifs.Init != nil && callsMethod(ifs.Init, "updateMeters") {
+			meters = ifs
+		}
+	}
+	require.NotNil(t, meters, "no if with updateMeters")
+
+	els, ok := meters.Else.(*ast.BlockStmt)
+	require.True(t, ok, "the meter read has no else block")
+
+	power := flatStmtIndex(els.List, "updatePower")
+	custom := flatStmtIndex(els.List, "updateCustom")
+	require.GreaterOrEqual(t, power, 0, "updatePower is no statement of the else block")
+	require.GreaterOrEqual(t, custom, 0, "updateCustom is no statement of the else block")
+	assert.Greater(t, custom, power, "updateCustom has to follow updatePower")
+
+	// (3) a failing meter read goes on with the battery handling
+	assert.False(t, returns(meters.Body), "the error branch of the meter read must not return")
+
+	// (2) the battery calls of the fork are plain statements of the function, in order
+	charge := flatStmtIndex(body.List, "batteryGridChargeRequested")
+	mode := flatStmtIndex(body.List, "updateBatteryModePeakAware")
+	require.GreaterOrEqual(t, charge, 0, "batteryGridChargeRequested is no statement of the function level")
+	require.GreaterOrEqual(t, mode, 0, "updateBatteryModePeakAware is no statement of the function level")
+	assert.Greater(t, mode, charge)
+
+	// (4) evcc's originals are not called any more
+	for _, n := range []string{"batteryGridChargeActive", "updateBatteryMode"} {
+		assert.False(t, callsMethod(body, n), "Site.update calls evcc's %s again", n)
+	}
+}
+
+// mentions reports whether a node contains the identifier (a field name of a
+// literal, a selector's field, a variable)
+func mentions(n ast.Node, name string) bool {
+	found := false
+
+	ast.Inspect(n, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && id.Name == name {
+			found = true
+		}
+		return !found
+	})
+
+	return found
+}
+
+// TestForkOptimizerRequestOrder fails when applyLmOptimizerInputs moved inside
+// optimizerRequest: it reads the series evcc built (Ft per slot, the circuit's
+// PMaxImp) and changes them, and it hands the batteries over before evcc moves
+// them into the request. No test runs optimizerRequest (it needs tariffs, home
+// profile, loadpoints and meters), so the order is checked in the syntax tree.
+func TestForkOptimizerRequestOrder(t *testing.T) {
+	body := funcBody(t, "core/site_optimizer.go", "Site.optimizerRequest")
+
+	build, limit, hook, move := -1, -1, -1, -1
+	for i, st := range body.List {
+		switch s := st.(type) {
+		case *ast.AssignStmt:
+			if mentions(s, "OptimizationInput") && mentions(s, "Ft") {
+				build = i
+			}
+		case *ast.IfStmt:
+			if mentions(s.Cond, "circuit") && mentions(s.Body, "PMaxImp") {
+				limit = i
+			}
+		case *ast.ExprStmt:
+			if callsMethod(s, "applyLmOptimizerInputs") {
+				hook = i
+			}
+		case *ast.RangeStmt:
+			if mentions(s.Body, "Batteries") && mentions(s.Body, "append") {
+				move = i
+			}
+		}
+	}
+
+	require.GreaterOrEqual(t, build, 0, "the request literal with Ft is no statement of the function level")
+	require.GreaterOrEqual(t, limit, 0, "the circuit's PMaxImp is no statement of the function level")
+	require.GreaterOrEqual(t, hook, 0, "applyLmOptimizerInputs is no statement of the function level")
+	require.GreaterOrEqual(t, move, 0, "the loop moving the batteries into the request is no statement of the function level")
+
+	assert.Greater(t, hook, build, "applyLmOptimizerInputs has to follow the request literal")
+	assert.Greater(t, hook, limit, "applyLmOptimizerInputs has to follow the circuit's PMaxImp")
+	assert.Less(t, hook, move, "applyLmOptimizerInputs has to precede the loop moving the batteries")
+}
+
+// forkHookCounts lists the names a function has to refer to at least that often:
+// a hook placed at two lines of one function is no longer there in full when only
+// one of them is left, while the name check of forkHooks stays green.
+var forkHookCounts = []struct {
+	file, fn, name string
+	min            int
+}{
+	{"core/loadpoint.go", "Loadpoint.fastChargingPhases", "effectiveMinCurrentFor", 2},
+	{"core/loadpoint.go", "Loadpoint.fastChargingPhases", "circuitAllowsPhases", 2},
+	{"core/loadpoint.go", "Loadpoint.boostPower", "effectiveMinCurrentFor", 2},
+}
+
+// referencedCount returns how often a function's body refers to the names
+func referencedCount(t *testing.T, file, fn string) map[string]int {
+	t.Helper()
+
+	res := make(map[string]int)
+	ast.Inspect(funcBody(t, file, fn), func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok {
+			res[id.Name]++
+		}
+		return true
+	})
+
+	return res
+}
+
+// TestForkHookCounts fails when one of the lines of a hook placed more than once
+// in a function was lost
+func TestForkHookCounts(t *testing.T) {
+	for _, h := range forkHookCounts {
+		t.Run(h.file+" "+h.fn+" "+h.name, func(t *testing.T) {
+			assert.GreaterOrEqual(t, referencedCount(t, h.file, h.fn)[h.name], h.min, "%s refers to %s too rarely", h.fn, h.name)
+		})
+	}
+}
+
+// touchPointFiles returns the files of the first column of the table "Upstream touch
+// points" in core/lm/README.md. A file named without a directory ("Mode.vue") stands
+// in the directory of the one before it.
+func touchPointFiles(t *testing.T) []string {
+	t.Helper()
+
+	b, err := os.ReadFile("lm/README.md")
+	require.NoError(t, err)
+
+	text := string(b)
+	_, table, ok := strings.Cut(text, "\n## Upstream touch points\n")
+	require.True(t, ok, "no section Upstream touch points")
+	table, _, ok = strings.Cut(table, "\n## Own files\n")
+	require.True(t, ok, "no section Own files after the table")
+
+	quoted := regexp.MustCompile("`([^`]+)`")
+
+	var res []string
+	for _, line := range strings.Split(table, "\n") {
+		if !strings.HasPrefix(line, "| `") {
+			continue
+		}
+
+		cell := strings.SplitN(line, "|", 3)[1]
+
+		dir := ""
+		for _, m := range quoted.FindAllStringSubmatch(cell, -1) {
+			name := m[1]
+			if strings.Contains(name, "/") {
+				dir = path.Dir(name)
+			} else {
+				name = path.Join(dir, name)
+			}
+			res = append(res, name)
+		}
+	}
+
+	require.NotEmpty(t, res)
+	return res
+}
+
+// touchPointNoMarker lists the files of the table that cannot carry a marker comment
+var touchPointNoMarker = map[string]bool{
+	"i18n/de.json": true, // json has no comments, the texts are added only
+	"i18n/en.json": true,
+}
+
+// hasMarker reports whether a file has a "custom" marker in a comment
+var markerRegexp = regexp.MustCompile(`(?i)(//|#|/\*|<!--)[^\n]*custom`)
+
+// TestTouchPointTable fails when the table of the touch points in evcc's files and
+// the files differ: a file of the table that is gone (renamed in a merge), or one
+// without any marker. The other way round, an evcc file changed but not in the
+// table, is checked monthly by the skill wartung against the evcc tag: the
+// checkout of the tests is shallow.
+func TestTouchPointTable(t *testing.T) {
+	for _, file := range touchPointFiles(t) {
+		t.Run(file, func(t *testing.T) {
+			b, err := os.ReadFile(filepath.Join("..", filepath.FromSlash(file)))
+			require.NoError(t, err, "%s is in the table of the touch points, but not a file", file)
+
+			if !touchPointNoMarker[file] {
+				assert.Regexp(t, markerRegexp, string(b), "%s is in the table of the touch points, but has no custom marker", file)
+			}
+		})
+	}
+}
+
+// TestWatchJsonPathsExist fails when an entry of the upstream watch list points at a
+// file or directory that is gone: the daily check would look for nothing and stay
+// quiet. A file of "files" has to exist, a "paths" entry is a directory or the start
+// of the name of an existing file.
+func TestWatchJsonPathsExist(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", ".github", "upstream-check", "watch.json"))
+	require.NoError(t, err)
+
+	var watch struct {
+		Features []struct {
+			Name  string   `json:"name"`
+			Files []string `json:"files"`
+			Paths []string `json:"paths"`
+		} `json:"features"`
+	}
+	require.NoError(t, json.Unmarshal(b, &watch))
+	require.NotEmpty(t, watch.Features)
+
+	for _, f := range watch.Features {
+		for _, file := range f.Files {
+			_, err := os.Stat(filepath.Join("..", filepath.FromSlash(file)))
+			assert.NoError(t, err, "%s: file %s", f.Name, file)
+		}
+
+		for _, p := range f.Paths {
+			matches, err := filepath.Glob(filepath.Join("..", filepath.FromSlash(p)) + "*")
+			require.NoError(t, err)
+			assert.NotEmpty(t, matches, "%s: path %s", f.Name, p)
+		}
 	}
 }

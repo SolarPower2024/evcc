@@ -118,7 +118,7 @@ export default defineComponent({
 	methods: {
 		label(mode: CHARGE_MODE) {
 			return this.$t(
-				chargeModeLabelKey(mode, this.continuous, this.switchDevice || this.chargerStages)
+				chargeModeLabelKey(mode, this.continuous, this.switchDevice || this.chargerStages) // custom: chargerStages
 			);
 		},
 		isActive(mode: CHARGE_MODE) {

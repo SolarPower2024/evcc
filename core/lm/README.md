@@ -1003,7 +1003,8 @@ Every fork feature follows these, so taking in a new evcc version stays cheap:
 1. **Inputs, not overrides.** Feed settings into evcc's mechanisms (circuit
    checks, optimizer request, planner, regular setters) instead of overwriting
    its decisions. The one override, `updateBatteryModePeakAware`, keeps the
-   battery in normal mode below the peak reserve.
+   battery in normal mode below the peak reserve and leaves the exit from the external
+   battery control untouched (`clearExternalBatteryTimer`, `TestPeakReserveClearsExternalTimer`).
 2. **evcc first.** Check whether evcc has the capability or an open PR. When
    evcc ships an equivalent, switch to it and remove ours; where the result
    differs, decide explicitly.
@@ -1058,7 +1059,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
 | `charger/switchsocket.go` | `RatedPower` config field |
 | `util/log.go` | `newLogger` writes to `logstash.Output` instead of `logstash.DefaultHandler`, which passes every line on to it and to the log file |
-| `cmd/root.go` | `logstash.CloseFile()` at the end of `runRoot`, after the shutdown functions |
+| `cmd/root.go` | `logstash.CloseFile()` at the end of `runRoot`, after the shutdown functions; `forkUpdateCheck()` (always false, `cmd/root_custom.go`) in the condition of the update check: no "new version" hint in the fork, updates come with the add-on |
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `server/http_config_helper.go` | `customTestResults` in `testInstance`: the config page shows the switch of each stage of a heater in stages (`server/http_config_custom.go`) |
@@ -1066,18 +1067,19 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
-| `assets/js/views/Forecast.vue` | evcc's *adjust* switch in the solar card header gets `d-none`; `Forecast/SnowCoverSwitch.vue` under the chart shows it with the snow switches in one row, getting label, state and `changeAdjusted` from Forecast.vue |
+| `assets/js/views/Forecast.vue` | evcc's own *adjust* switch moves from the solar card header into the slot of `Forecast/SnowCoverSwitch.vue` under the chart, which shows it with the snow switches in one row |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
 | `assets/js/components/BottomTabs/MoreItem.vue` | `showConfigBadge` also true while the load management is off (`lmOffBadge()` from `utils/lmOff.ts`): the more button gets its warning dot, `MoreMenuItems.vue` shows "aus" at the entry |
 | `assets/js/components/Config/CircuitModal.vue` | mounts `CircuitPeakHint.vue` at the start of `before-actions`: the hint under the power limit while the circuit takes the peak limit |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown; default mode labels Aus/Smart/Ein for a heater in stages (`chargerIsStages`) |
-| `assets/js/components/Loadpoints/Loadpoint.vue`, `Mode.vue` | `chargerStages` prop, mode labels Aus/Smart/Ein for a heater in stages; `chargePowerEstimate` shown as "≈ 6 kW" (whole kW, fits a phone) |
+| `assets/js/components/Loadpoints/Loadpoint.vue`, `Mode.vue` | `chargerStages` prop, mode labels Aus/Smart/Ein for a heater in stages; `chargePowerEstimate` shown as "≈ 6 kW" (whole kW, fits a phone), formatted by `fmtPowerEstimate` (`utils/lmEnergyflow.ts`) |
 | `assets/js/components/Site/Site.vue` | energy flow gets `measuredLoadpoints(…)` (`utils/lmEnergyflow.ts`): a loadpoint with `chargePowerEstimated` is left out |
 | `assets/js/components/Config/DeviceTags.vue` | value `stages` shown as "ein · ein · aus" |
 | `assets/js/components/Config/TariffCard.vue`, `TariffModal.vue` | EEG counter in the EEG card, price templates for `feedInEeg`, planner price hint |
-| `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label |
-| `assets/js/views/Energy.vue`, `assets/js/components/Energy/GroupChart.vue`, `GridStats.vue` | EEG split of the grid card: series, legend, `returnColor`, revenue tiles, meters without the EEG counter |
+| `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label (`batteryChargeLabelKey` in `utils/lmEnergyflow.ts`) |
+| `assets/js/views/Energy.vue`, `assets/js/components/Energy/GroupChart.vue`, `GridStats.vue` | EEG split of the grid card: series, legend, `returnColor`, revenue tiles, meters without the EEG counter; the logic (`feedInEegStats`, `splitLegends`, `loadFeedInSplit`) is in `feedInEeg.ts`, the files only call it |
+| `assets/js/utils/version.ts`, `assets/js/components/AboutModal.vue` | `getShortVersion` drops a leading `v` before it sets one: the fork's tags (`v0.317.1-lm2`) carry it and the more menu and the about dialog showed `vv0.317.1-lm2`; the dialog shows the version as text, the evcc release page of the fork's tag does not exist (nightly keeps its commit link) |
 | `assets/js/types/evcc.ts` | `State`/`ConfigLoadpoint` extend the types in `evcc-lm.ts`; `feedInEeg` tariff type |
 | `i18n/de.json`, `i18n/en.json` | added texts only |
 
@@ -1091,6 +1093,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |
 | peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_omni.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
+| update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
 | EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
@@ -1137,11 +1140,35 @@ unused:
   hook from the table above is still there (Go: in the right function; ui: the
   mount). A hook lost in a merge fails here, while all other tests would stay
   green. A new hook gets a line in its table.
+- `TestTouchPointTable` reads the table above: every file named in it exists and carries a
+  `custom` marker in a comment (json files excepted). The other way round, an evcc file changed
+  but missing in the table, the monthly skill `wartung` checks against the evcc tag (the
+  checkout of the tests is shallow).
+- `TestWatchJsonPathsExist`: every file of `.github/upstream-check/watch.json` exists, every
+  `paths` entry is a directory or the start of an existing file name.
 - `TestForkDeferHooks`: the hook in `restoreSettings` is a deferred call of the
   function body, with no return of evcc before it. A call at the end would be
   skipped by the first failing restore step, and the fork would start without its
   settings (`restoreSettings` does nothing in tests, so only the syntax tree can
   tell).
+- `TestForkUpdateOrder`, `TestUpdateCustomCalls`: in `Site.update` `updateCustom` stands in the
+  else block of the meter read after `updatePower`, the error branch does not
+  return, the two battery calls of the fork are statements of the function level
+  in order and evcc's originals are not called any more; `updateCustom` calls its
+  four parts. Peak shaving's safeguard for a failing grid meter hangs on this.
+- `TestForkHookCounts`: hooks placed at two lines of one function (the 3p limits in
+  `fastChargingPhases` and `boostPower`) are counted, not only named. Behaviour:
+  `TestFastChargingPhasesNoScaleUpWith1pMinOnly`, `TestBoostPowerBridgesWith3pMin`,
+  `TestPvMaxCurrentUsesLimitsOfNewPhases`. The two lines in `fastChargingPhases`
+  shield each other (either one holds the result), only the count tells one lost.
+- Hooks with a name test only until now: `TestUpdateCircuitsIncludesBattery` (`circuitLoads`),
+  `TestPreparePublishesPhaseSwitch` (`publishPhaseSwitch`),
+  `TestGetLoadpointDynamicConfigPhaseSwitch` (`getLoadpointDynamicConfig`),
+  `TestTariffRefsFeedInEeg` and `TestCleanupTariffRefFeedInEeg` (`FeedInEeg`); the min and max power
+  use of the per phase limits is in `forkHooks` and `TestEffectiveCurrent1p`.
+- `TestSwitchTemplateRatedPower`: the template *Home Assistant Switch* renders `ratedpower`
+  only when given, and the rendered config reaches `SwitchSocket` (the template carries
+  `skiptest`, so evcc's template tests do not render it).
 - `TestForkInertWhenUnused`, `TestEqualPrioritiesAreUpstream`,
   `TestCurrents1pInertWhenUnused`, `TestLmSMaxFromUpstream`: without
   configuration the fork changes nothing.

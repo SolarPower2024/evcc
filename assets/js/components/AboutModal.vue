@@ -36,14 +36,19 @@
 						<td v-if="development">---</td>
 						<td v-else>
 							<div class="d-flex flex-wrap column-gap-2 align-items-baseline">
+								<!-- custom: the fork's tags carry a v and have no release page in the evcc repo -->
 								<a
+									v-if="nightly"
 									class="text-nowrap"
-									:href="nightly ? githubCommitUrl : releaseNotesUrl(installed)"
+									:href="githubCommitUrl"
 									target="_blank"
 									rel="noopener noreferrer"
 								>
-									v{{ installed }}
+									{{ getShortVersion(installed) }}
 								</a>
+								<span v-else class="text-nowrap">{{
+									getShortVersion(installed)
+								}}</span>
 								<Badge v-if="newVersionAvailable">
 									{{ $t("footer.version.availableLong") }}
 								</Badge>
@@ -158,7 +163,13 @@ import Badge from "./Helper/Badge.vue";
 import api from "@/api";
 import settings from "@/settings";
 import { extractHostname } from "@/utils/extractDomain";
-import { isDevelopment, isNightly, getReleaseName, isNewVersionAvailable } from "@/utils/version";
+import {
+	isDevelopment,
+	isNightly,
+	getReleaseName,
+	getShortVersion,
+	isNewVersionAvailable,
+} from "@/utils/version";
 import { defineComponent } from "vue";
 
 const GITHUB_REPO = "https://github.com/evcc-io/evcc";
@@ -237,6 +248,7 @@ export default defineComponent({
 				this.updateStatus = `${this.$t("footer.version.modalUpdateStatusStart")} ${e}`;
 			}
 		},
+		getShortVersion,
 		releaseNotesUrl(version?: string) {
 			return `${GITHUB_REPO}/releases/tag/${version}`;
 		},

@@ -78,7 +78,8 @@
     {
       "name": "Schaltgeräte mit Nennleistung",
       "files": ["charger/switchsocket_lm.go"],
-      "keywords": ["ratedpower", "RatedPower"]
+      "keywords": ["ratedpower", "RatedPower"],
+      "paths": ["charger/switchsocket", "templates/definition/charger/"]
     },
     {
       "name": "Heizstab in Stufen",
@@ -105,12 +106,13 @@
     {
       "name": "Batterie-Vermessung (Kapazität, Wirkungsgrad)",
       "files": ["core/site_battery_ident.go"],
-      "keywords": ["roundtrip efficiency", "round trip efficiency", "round-trip efficiency", "RoundTripEfficiency", "roundTripEfficiency", "RoundtripEfficiency", "usable capacity", "UsableCapacity"]
+      "keywords": ["roundtrip efficiency", "round trip efficiency", "round-trip efficiency", "RoundTripEfficiency", "roundTripEfficiency", "RoundtripEfficiency", "usable capacity", "UsableCapacity"],
+      "paths": ["core/", "api/", "assets/js/components/Battery/"]
     },
     {
       "name": "Zweiter Einspeisetarif (EEG) / Energieseite",
       "files": ["core/site_feedin_eeg.go", "core/metrics/feedin_eeg_custom.go"],
-      "prs": [33989, 33635, 33735],
+      "prs": [33635, 33735],
       "keywords": ["feedInEeg", "energy community", "Energiegemeinschaft"]
     },
     {
@@ -146,7 +148,7 @@
     {
       "name": "Schnee auf PV (Schalter, Optimizer ohne PV-Ertrag, Erkennung aus dem Wetter)",
       "files": ["core/site_snow.go", "core/site_snow_auto.go", "assets/js/components/Forecast/SnowCoverSwitch.vue"],
-      "keywords": ["snow", "Snow", "Schnee", "snowCover", "snowfall"],
+      "keywords": ["Schnee", "snowCover", "snowfall"],
       "paths": ["core/site_tariffs.go", "core/site_optimizer.go", "assets/js/views/Forecast.vue"]
     },
     {
@@ -157,6 +159,12 @@
         "templates/definition/tariff/homeassistant-forecast.yaml"
       ],
       "keywords": ["homeassistant-forecast", "exportForecast", "forecast_json"]
+    },
+    {
+      "name": "Optimizer: Planer-Tarif als Preisreihe",
+      "files": ["core/site_optimizer_lm.go"],
+      "keywords": ["TariffUsagePlanner"],
+      "paths": ["core/site_optimizer.go"]
     },
     {
       "name": "Grundlagen, auf denen der Fork aufbaut",

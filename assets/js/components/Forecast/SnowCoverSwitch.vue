@@ -1,20 +1,6 @@
 <template>
 	<div class="d-md-flex flex-wrap column-gap-4" data-testid="forecast-switches">
-		<div v-if="adjust" class="form-check form-switch mt-2 mb-0">
-			<input
-				id="solarForecastAdjustRow"
-				:checked="adjusted"
-				class="form-check-input"
-				type="checkbox"
-				role="switch"
-				data-testid="solar-adjust-row"
-				@change="$emit('adjust', $event)"
-			/>
-			<label class="form-check-label text-muted" for="solarForecastAdjustRow">
-				<span class="d-md-none">{{ adjust }}</span>
-				<span class="d-none d-md-inline">{{ adjustMedium || adjust }}</span>
-			</label>
-		</div>
+		<slot />
 		<div class="form-check form-switch mt-2 mb-0">
 			<input
 				id="snowCover"
@@ -72,20 +58,11 @@ import api from "@/api";
 import store from "@/store";
 
 // Custom extension: the switches of the solar card in one row under the chart, side
-// by side from md up, stacked below: evcc's "adjust forecast" (label, state and
-// handler from Forecast.vue, evcc's own one in the header is hidden), "snow on pv",
-// see core/site_snow.go, and its detection, see core/site_snow_auto.go. The help
-// texts are tooltips on the info icons.
+// by side from md up, stacked below: evcc's own "adjust forecast" switch (the slot,
+// filled by Forecast.vue), "snow on pv", see core/site_snow.go, and its detection, see
+// core/site_snow_auto.go. The help texts are tooltips on the info icons.
 export default defineComponent({
 	name: "SnowCoverSwitch",
-	props: {
-		// evcc's "adjust forecast" switch: short label (empty = not shown), label
-		// from md up, its state and its change handler, all from Forecast.vue
-		adjust: { type: String, default: "" },
-		adjustMedium: { type: String, default: "" },
-		adjusted: Boolean,
-	},
-	emits: ["adjust"],
 	data() {
 		return { tooltips: {} as Record<string, Tooltip>, error: "" };
 	},

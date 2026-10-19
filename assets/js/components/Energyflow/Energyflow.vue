@@ -311,6 +311,7 @@ import "@h2d2/shopicons/es/filled/square";
 import Visualization from "./Visualization.vue";
 import Entry from "./Entry.vue";
 import formatter, { POWER_UNIT } from "@/mixins/formatter";
+import { batteryChargeLabelKey } from "@/utils/lmEnergyflow"; // custom
 import AnimatedNumber from "../Helper/AnimatedNumber.vue";
 import settings from "@/settings";
 import collector from "@/mixins/collector.js";
@@ -414,15 +415,10 @@ export default defineComponent({
 			return this.chargePower(this.batteryPower);
 		},
 		batteryChargeLabel() {
-			if (this.batteryChargeHold) {
-				return this.$t("main.energyflow.batteryChargeHold");
-			}
-			// custom: the existing "Netzladen: aktiv" subline only shows with a
-			// price limit set, so soc-based grid charging would go unmentioned
-			if (this.batteryGridChargeActive) {
-				return this.$t("main.energyflow.batteryChargeGrid");
-			}
-			return this.$t("main.energyflow.batteryCharge");
+			// custom: see assets/js/utils/lmEnergyflow.ts
+			return this.$t(
+				batteryChargeLabelKey(this.batteryChargeHold, this.batteryGridChargeActive)
+			);
 		},
 		batteryDischargeLabel() {
 			return this.$t(

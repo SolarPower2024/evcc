@@ -745,3 +745,44 @@ func TestPeakShavingOffWithoutBattery(t *testing.T) {
 		site.applyOmni()
 	})
 }
+
+// TestPeakReserveClearsExternalTimer: an external mode that lapsed leaves its timer
+// set. The reserve holding the battery in normal mode clears it, otherwise the
+// next external mode would start without its watchdog and hold the battery for good.
+func TestPeakReserveClearsExternalTimer(t *testing.T) {
+	sc := newScenario(t)
+	site := sc.site
+	site.lms().socChargeEnabled = false
+
+	// below the reserve, the battery in normal mode
+	sc.cycle(25, 3000, 0)
+	require.Equal(t, api.BatteryNormal, sc.mode())
+
+	// an external mode that lapsed after 2 minutes and was handed back: the timer stays.
+	// Set directly, no watchdog goroutine runs that could interfere later
+	site.Lock()
+	site.batteryModeExternal = api.BatteryUnknown
+	site.batteryModeExternalTimer = time.Now().Add(-2 * time.Minute)
+	site.Unlock()
+	timer := func() time.Time {
+		site.RLock()
+		defer site.RUnlock()
+		return site.batteryModeExternalTimer
+	}
+	require.False(t, timer().IsZero(), "the lapsed mode leaves its timer")
+
+	// one cycle in the reserve with the battery in normal mode
+	sc.cycle(25, 3000, 0)
+	assert.True(t, timer().IsZero(), "timer cleared")
+
+	// the next external mode starts its watchdog, which hands it back once it lapsed.
+	// Without the cleared timer no watchdog starts and the mode would stay
+	require.NoError(t, site.SetBatteryModeExternal(api.BatteryHold))
+	require.Equal(t, api.BatteryHold, site.GetBatteryModeExternal())
+	site.Lock()
+	site.batteryModeExternalTimer = time.Now().Add(-2 * time.Minute)
+	site.Unlock()
+	require.Eventually(t, func() bool {
+		return site.GetBatteryModeExternal() == api.BatteryUnknown
+	}, 3*time.Second, 50*time.Millisecond, "the watchdog hands the mode back")
+}
