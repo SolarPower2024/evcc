@@ -1122,6 +1122,7 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 	}
 
 	if site.GetBatteryMode() == api.BatteryNormal {
+		site.clearExternalBatteryTimer()
 		return
 	}
 
@@ -1578,4 +1579,19 @@ func (site *Site) SetPeakShavingReserve(soc float64) error {
 	}
 
 	return nil
+}
+
+// clearExternalBatteryTimer ends the leave of the external battery control when
+// the reserve holds the battery in normal mode, as SetBatteryMode does: the timer
+// of a lapsed external mode stays set until upstream applies normal mode, which the
+// reserve does not do while the battery is already in it. A left over timer keeps
+// the next external mode from starting its watchdog. SetBatteryMode itself is not
+// called, it logs on every cycle.
+func (site *Site) clearExternalBatteryTimer() {
+	site.Lock()
+	defer site.Unlock()
+
+	if site.batteryModeExternal == api.BatteryUnknown {
+		site.batteryModeExternalTimer = time.Time{}
+	}
 }

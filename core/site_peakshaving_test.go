@@ -745,3 +745,45 @@ func TestPeakShavingOffWithoutBattery(t *testing.T) {
 		site.applyOmni()
 	})
 }
+
+// TestPeakReserveClearsExternalTimer: an external mode that lapsed leaves its timer
+// set. The reserve holding the battery in normal mode clears it, otherwise the
+// next external mode would start without its watchdog and hold the battery for good.
+func TestPeakReserveClearsExternalTimer(t *testing.T) {
+	sc := newScenario(t)
+	site := sc.site
+	site.lms().socChargeEnabled = false
+
+	// below the reserve, the battery in normal mode
+	sc.cycle(25, 3000, 0)
+	require.Equal(t, api.BatteryNormal, sc.mode())
+
+	// external normal through the api, lapsed after 2 minutes: the watchdog hands back
+	require.NoError(t, site.SetBatteryModeExternal(api.BatteryNormal))
+	age := func(d time.Duration) {
+		site.Lock()
+		site.batteryModeExternalTimer = time.Now().Add(-d)
+		site.Unlock()
+	}
+	timer := func() time.Time {
+		site.RLock()
+		defer site.RUnlock()
+		return site.batteryModeExternalTimer
+	}
+
+	age(2 * time.Minute)
+	site.batteryModeWatchdogExpired() // the watchdog of the api may have been faster
+	require.Equal(t, api.BatteryUnknown, site.GetBatteryModeExternal())
+	require.False(t, timer().IsZero(), "the lapsed mode leaves its timer")
+
+	// one cycle in the reserve with the battery in normal mode
+	sc.cycle(25, 3000, 0)
+	assert.True(t, timer().IsZero(), "timer cleared")
+
+	// the next external mode starts its watchdog: the timer is set and lapses
+	require.NoError(t, site.SetBatteryModeExternal(api.BatteryHold))
+	assert.False(t, timer().IsZero())
+	age(2 * time.Minute)
+	site.batteryModeWatchdogExpired()
+	assert.Equal(t, api.BatteryUnknown, site.GetBatteryModeExternal())
+}

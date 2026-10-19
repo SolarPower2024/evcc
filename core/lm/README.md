@@ -980,7 +980,8 @@ Every fork feature follows these, so taking in a new evcc version stays cheap:
 1. **Inputs, not overrides.** Feed settings into evcc's mechanisms (circuit
    checks, optimizer request, planner, regular setters) instead of overwriting
    its decisions. The one override, `updateBatteryModePeakAware`, keeps the
-   battery in normal mode below the peak reserve.
+   battery in normal mode below the peak reserve and leaves the exit from the external
+   battery control untouched (`clearExternalBatteryTimer`, `TestPeakReserveClearsExternalTimer`).
 2. **evcc first.** Check whether evcc has the capability or an open PR. When
    evcc ships an equivalent, switch to it and remove ours; where the result
    differs, decide explicitly.
