@@ -23,7 +23,9 @@
 				<ProfileIcon :icon="p.icon" />
 				<strong class="flex-grow-1">{{ p.name }}</strong>
 				<span class="small evcc-gray me-2">
-					{{ $t("config.lmprofiles.valueCount", { count: valueCount(p) }) }}
+					{{
+						$t("config.lmprofiles.valueCount", { count: valueCount(p) }, valueCount(p))
+					}}
 				</span>
 				<button type="button" class="btn btn-sm btn-outline-secondary" @click="edit(p)">
 					{{ $t("config.lmprofiles.edit") }}

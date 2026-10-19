@@ -659,7 +659,7 @@
       "takeCurrent": "Aktuelle Werte übernehmen",
       "title": "Profile",
       "unchanged": "nicht ändern",
-      "valueCount": "{count} Werte",
+      "valueCount": "{count} Wert | {count} Werte",
       "yes": "Ja"
     },
     "lmshedguard": {
@@ -1820,9 +1820,7 @@
     "peakReserve": "Reserve aktiv · Soll {setpoint}",
     "protected": "Abwurfschutz",
     "state": {
-      "blocked": "Gesperrt",
       "off": "Aus",
-      "paused": "Pausiert",
       "running": "Läuft"
     },
     "stateDetail": {

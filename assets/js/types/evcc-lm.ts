@@ -146,7 +146,7 @@ export interface LmLoadStatus {
 
 export interface LmEvent {
   at: string;
-  type: "shed" | "throttled" | "gridChargePaused" | "gridChargeDenied" | "peak";
+  type: "shed" | "throttled" | "gridChargePaused" | "gridChargeDenied" | "peak" | "notFollowing";
   load?: string;
   a: number;
   b: number;
@@ -191,7 +191,7 @@ export interface LmState {
   peakShavingChargePower?: number;
   /** Grid charge power in W actually used by the peak check, 0 = not determinable. */
   peakShavingChargePowerEffective?: number;
-  /** Where the effective charge power came from: setting, config, meter or unknown. */
+  /** Where the effective charge power came from: setting, meter or unknown. */
   peakShavingChargePowerSource?: string;
   /** Battery reserve is currently being held for peaks. */
   peakShavingActive?: boolean;

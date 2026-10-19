@@ -1820,9 +1820,7 @@
     "peakReserve": "Reserve active · setpoint {setpoint}",
     "protected": "Shed guard",
     "state": {
-      "blocked": "Blocked",
       "off": "Off",
-      "paused": "Paused",
       "running": "Running"
     },
     "stateDetail": {
