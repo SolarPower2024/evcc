@@ -694,6 +694,14 @@ counter of the EEG export (kWh, Wh or MWh).
   regular = export − EEG, and the revenue of both
 - only counters are used; pv control, load management and peak shaving are
   untouched
+- fix the stored price: the slots are written once, a price entered later does
+  not change them. `DELETE /api/db/metrics/tariffs/eeg?from=<rfc3339>&to=<rfc3339>`
+  removes the prices of the range (slots without a price count as without
+  revenue), `PUT /api/db/metrics/tariffs/eeg?from=…&to=…&price=0.082` sets the
+  price (currency per kWh, finite and not negative) of the stored slots in the
+  range; slots without a row stay without a price. Both bounds are required, the
+  group needs the admin password or the api key (`ensureDbAuth`), the change
+  cannot be undone: back up first (Configuration, Backup)
 
 The energy page shows the split in its grid card: EEG as its own lighter
 export bar, both amounts in the legend, and the revenue of the regular feed-in
@@ -1048,7 +1056,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `server/http_config_helper.go` | `customTestResults` in `testInstance`: the config page shows the switch of each stage of a heater in stages (`server/http_config_custom.go`) |
-| `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)) |
+| `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes (`server/http_custom_db.go`), a colliding route is left out and logged |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |

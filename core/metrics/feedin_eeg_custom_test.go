@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/db"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -105,4 +106,60 @@ func TestPersistFeedInEegPrice(t *testing.T) {
 	require.NoError(t, db.Instance.Find(&res).Error)
 	require.Len(t, res, 1)
 	require.Zero(t, res[0].Price, "0 is a valid price and kept")
+}
+
+func TestEegPricesCorrect(t *testing.T) {
+	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	require.NoError(t, SetupSchema())
+	require.NoError(t, db.Instance.AutoMigrate(new(tariffValue), new(eegPrice)))
+
+	grid, err := createEntity(Grid, Grid, Grid)
+	require.NoError(t, err)
+	eeg, err := createEntity(Meter, FeedInEeg, "EEG")
+	require.NoError(t, err)
+
+	loc := time.UTC
+	local := time.Local
+	time.Local = loc
+	t.Cleanup(func() { time.Local = local })
+
+	base := time.Date(2026, 9, 10, 12, 0, 0, 0, loc)
+	for n := range 4 {
+		ts := base.Add(time.Duration(n) * 15 * time.Minute)
+		require.NoError(t, persist(grid, ts, 0, 2, nil, false))
+		require.NoError(t, persist(eeg, ts, 1, 0, nil, false))
+		require.NoError(t, PersistEegPrice(ts, 0))
+	}
+
+	revenue := func() (float64, float64) {
+		res, err := QueryFeedInSplit(base, base.Add(time.Hour), "day")
+		require.NoError(t, err)
+		require.Len(t, res, 1)
+		return res[0].EegRevenue, res[0].EegPriced
+	}
+	at := func(n int) time.Time { return base.Add(time.Duration(n) * 15 * time.Minute) }
+
+	rev, priced := revenue()
+	assert.Zero(t, rev)
+	assert.Equal(t, 4.0, priced)
+
+	n, err := SetEegPrices(at(0), at(2), 0.082)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, n)
+	rev, _ = revenue()
+	assert.InDelta(t, 2*0.082, rev, 1e-9)
+
+	n, err = DeleteEegPrices(at(0), at(2))
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, n)
+	rev, priced = revenue()
+	assert.Zero(t, rev)
+	assert.Equal(t, 2.0, priced, "slots without a price are no revenue")
+
+	_, err = SetEegPrices(at(0), at(2), -1)
+	assert.ErrorIs(t, err, ErrInvalidPrice)
+	_, err = SetEegPrices(time.Time{}, at(2), 1)
+	assert.Error(t, err)
+	_, err = DeleteEegPrices(at(0), time.Time{})
+	assert.Error(t, err)
 }

@@ -50,7 +50,7 @@ var forkHooks = []struct {
 	{"core/loadpoint/config.go", "SplitConfig", []string{"withoutDroppedKeys"}},
 	{"core/circuit/circuit.go", "Circuit.Update", []string{"overPowerLog"}},
 	{"server/http.go", "HTTPd.RegisterSiteHandlers", []string{"addCustomSiteRoutes"}},
-	{"server/http.go", "HTTPd.RegisterSystemHandler", []string{"setCustomAuth"}},
+	{"server/http.go", "HTTPd.RegisterSystemHandler", []string{"setCustomAuth", "addCustomDbRoutes"}},
 	{"server/http_config_loadpoint_handler.go", "getLoadpointDynamicConfig", []string{"PhaseSwitchConfigOf"}},
 	{"server/http_config_helper.go", "testInstance", []string{"customTestResults"}},
 	{"server/http_config_device_handler.go", "cleanupTariffRef", []string{"FeedInEeg"}},
