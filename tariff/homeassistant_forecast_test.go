@@ -1,8 +1,10 @@
 package tariff
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/homeassistant"
 	"github.com/evcc-io/evcc/util/templates"
+	jww "github.com/spf13/jwalterweatherman"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v4"
@@ -441,4 +444,48 @@ func TestHAForecastConstructorWait(t *testing.T) {
 		rates, err := tr.Rates()
 		return err == nil && len(rates) == 1
 	}, 5*time.Second, 20*time.Millisecond)
+}
+
+// Each cause is logged once, over the cycles of the loop: the same cause again is
+// not new, another one is, and the return of the data is reported once.
+func TestHAForecastLogOnce(t *testing.T) {
+	good := fmt.Sprintf(`{"state":"1","attributes":{"forecast":[{"start":%q,"end":%q,"value":5}]}}`,
+		at(10, 0).Format(time.RFC3339), at(10, 15).Format(time.RFC3339))
+
+	h := haForecastServer(t, good)
+
+	conn, err := HAForecastConnection(util.NewLogger("test"), homeassistant.Config{URI: "http://unused"})
+	require.NoError(t, err)
+
+	var out bytes.Buffer
+	tr := &HAForecast{
+		Connection: conn,
+		log:        &util.Logger{Notepad: jww.NewNotepad(jww.LevelTrace, jww.LevelTrace, &out, io.Discard, "", 0)},
+		entity:     "sensor.x",
+		attribute:  "forecast",
+		data:       util.NewMonitor[api.Rates](time.Hour),
+	}
+
+	count := func(level string) int { return strings.Count(out.String(), level) }
+
+	h.set(`{"state":"unavailable","attributes":{}}`, http.StatusOK)
+	for range 3 {
+		tr.update()
+	}
+	assert.Equal(t, 1, count("WARN"), "same cause over several cycles")
+	assert.Equal(t, 2, count("DEBUG"))
+
+	h.set(`{"state":"1","attributes":{}}`, http.StatusOK)
+	tr.update()
+	assert.Equal(t, 2, count("WARN"), "another cause")
+
+	h.set(good, http.StatusOK)
+	tr.update()
+	tr.update()
+	assert.Equal(t, 1, count("INFO"), "the data are back, once")
+	assert.Equal(t, 2, count("WARN"))
+
+	rates, err := tr.Rates()
+	require.NoError(t, err)
+	assert.Len(t, rates, 1)
 }

@@ -14,8 +14,8 @@ package tariff
 // This forecast never breaks the sum of the solar tariffs: a missing entity,
 // `unavailable`, a wrong attribute, a forecast not updated for an hour and data
 // older than twice the interval give no rates and no error, so the instance's own
-// forecast goes on alone. Each case is logged as a warning, at most every 15
-// minutes.
+// forecast goes on alone. Each cause is logged once as a warning, the return of
+// the data once as info, see util.CauseLog; only the loop logs, not Rates.
 
 import (
 	"cmp"
@@ -25,7 +25,6 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -43,8 +42,6 @@ const (
 	// entries are taken from this window around now
 	haForecastPast   = 24 * time.Hour
 	haForecastFuture = 7 * 24 * time.Hour
-
-	haForecastWarnEvery = 15 * time.Minute
 )
 
 // how long the constructor waits for the first read, a variable for the tests
@@ -61,9 +58,7 @@ type HAForecast struct {
 	entity    string
 	attribute string
 	data      *util.Monitor[api.Rates]
-
-	mu       sync.Mutex
-	lastWarn time.Time
+	cause     util.CauseLog // each cause is logged once
 }
 
 var _ api.Tariff = (*HAForecast)(nil)
@@ -134,49 +129,40 @@ func NewHAForecastFromConfig(other map[string]any) (api.Tariff, error) {
 
 func (t *HAForecast) run(interval time.Duration) {
 	for ; true; <-time.Tick(interval) {
-		var data api.Rates
-
-		err := backoff.Retry(func() error {
-			var err error
-			data, err = t.forecast(time.Now())
-
-			// a state of the entity does not change by asking again
-			if errors.Is(err, errNoForecast) {
-				return backoff.Permanent(err)
-			}
-			return backoffPermanentError(err)
-		}, bo())
-
-		switch {
-		case err == nil:
-			t.data.Set(data)
-		case errors.Is(err, errNoForecast):
-			t.warn(err)
-			t.data.Set(nil)
-		default:
-			// Home Assistant not reached: keep the data until it is outdated
-			t.warn(err)
-			select {
-			case <-t.data.Done():
-			default:
-				t.data.Set(nil)
-			}
-		}
+		t.update()
 	}
 }
 
-// warn logs at most once in haForecastWarnEvery
-func (t *HAForecast) warn(err error) {
-	t.mu.Lock()
-	warn := time.Since(t.lastWarn) >= haForecastWarnEvery
-	if warn {
-		t.lastWarn = time.Now()
-	}
-	t.mu.Unlock()
+// update reads once and reports the result
+func (t *HAForecast) update() {
+	var data api.Rates
 
-	if warn {
-		t.log.WARN.Printf("%s: %v", t.entity, err)
+	err := backoff.Retry(func() error {
+		var err error
+		data, err = t.forecast(time.Now())
+
+		// a state of the entity does not change by asking again
+		if errors.Is(err, errNoForecast) {
+			return backoff.Permanent(err)
+		}
+		return backoffPermanentError(err)
+	}, bo())
+
+	switch {
+	case err == nil:
+		t.data.Set(data)
+	case errors.Is(err, errNoForecast):
+		t.data.Set(nil)
+	default:
+		// Home Assistant not reached: keep the data until it is outdated
+		select {
+		case <-t.data.Done():
+		default:
+			t.data.Set(nil)
+		}
 	}
+
+	t.cause.Report(t.log, t.entity, err)
 }
 
 // forecast reads the list from the entity and divides it into slots. A state of
@@ -276,7 +262,6 @@ func (t *HAForecast) Rates() (api.Rates, error) {
 	if err := t.data.GetFunc(func(val api.Rates) {
 		res = slices.Clone(val)
 	}); err != nil {
-		t.warn(err)
 		return nil, nil
 	}
 

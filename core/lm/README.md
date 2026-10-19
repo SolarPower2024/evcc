@@ -786,8 +786,9 @@ The tariff never breaks the sum of the solar tariffs. A missing entity (404),
 `unavailable`, a missing or wrong attribute, a forecast whose `updated` attribute
 is older than an hour (without that attribute, e.g. from another source, the
 forecast counts as current) and data older than twice the interval give no rates
-and no error, so the instance's own forecast goes on alone. Each case is logged as a
-warning, at most every 15 minutes. The tariff is also created while the entity does
+and no error, so the instance's own forecast goes on alone. Each cause is logged once as a
+warning (`util.CauseLog`, only the read loop logs, not `Rates`), the return of the data once as info
+(`TestHAForecastLogOnce`). The tariff is also created while the entity does
 not exist yet; the constructor waits up to 10 s for the first read and then
 starts without rates (`TestHAForecastConstructorWait`), the data follow with the next cycle. Only a missing entity name or
 instance is a configuration error. If Home Assistant itself does not answer, the
