@@ -1069,6 +1069,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/views/Forecast.vue` | evcc's *adjust* switch in the solar card header gets `d-none`; `Forecast/SnowCoverSwitch.vue` under the chart shows it with the snow switches in one row, getting label, state and `changeAdjusted` from Forecast.vue |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
+| `assets/js/components/BottomTabs/MoreItem.vue` | `showConfigBadge` also true while the load management is off (`lmOffBadge()` from `utils/lmOff.ts`): the more button gets its warning dot, `MoreMenuItems.vue` shows "aus" at the entry |
 | `assets/js/components/Config/CircuitModal.vue` | mounts `CircuitPeakHint.vue` at the start of `before-actions`: the hint under the power limit while the circuit takes the peak limit |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown; default mode labels Aus/Smart/Ein for a heater in stages (`chargerIsStages`) |
 | `assets/js/components/Loadpoints/Loadpoint.vue`, `Mode.vue` | `chargerStages` prop, mode labels Aus/Smart/Ein for a heater in stages; `chargePowerEstimate` shown as "≈ 6 kW" (whole kW, fits a phone) |

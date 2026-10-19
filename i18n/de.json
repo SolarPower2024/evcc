@@ -649,6 +649,10 @@
       "hint": "Nicht angehakte Werte bleiben unverändert.",
       "icon": "Symbol",
       "inactive": "Inaktiv",
+      "invalidBatteryOrder": "Batterienutzung: Es muss gelten Priorität ≤ Puffer ≤ Puffer-Start (0 schaltet Puffer aus).",
+      "invalidGridChargeOrder": "Netzladen: Start muss unter Stopp liegen.",
+      "invalidRange": "{label}: Bitte einen Wert von {min} bis {max} {unit} eingeben.",
+      "invalidStep": "{label}: Nur in {step}-kW-Schritten möglich.",
       "missingValue": "Bitte für jeden angehakten Wert eine Zahl eingeben.",
       "name": "Name",
       "new": "Neues Profil",
@@ -659,7 +663,7 @@
       "takeCurrent": "Aktuelle Werte übernehmen",
       "title": "Profile",
       "unchanged": "nicht ändern",
-      "valueCount": "{count} Werte",
+      "valueCount": "{count} Wert | {count} Werte",
       "yes": "Ja"
     },
     "lmshedguard": {
@@ -1108,7 +1112,7 @@
       "followBufferHelp": "So weit bleibt die Grenze unter der Monatsspitze, 0–5 kW. Beispiel 0,5 kW: Spitze 10 kW → Grenze 9,5 kW.",
       "followBufferInvalid": "Der Puffer muss zwischen 0 und 5 kW liegen, in Schritten von 0,1 kW.",
       "followBufferLabel": "Puffer",
-      "followHelp": "Liegt die höchste Viertelstunde des Monats schon über deiner Peak-Grenze, steigt die Grenze auf diese Spitze. Zum Monatsbeginn gilt wieder deine Grenze.",
+      "followHelp": "Liegt die höchste Viertelstunde des Monats um mehr als den Puffer über deiner Peak-Grenze, steigt die Grenze auf diese Spitze minus Puffer. Zum Monatsbeginn gilt wieder deine Grenze.",
       "followLabel": "Follow the Peak: Grenze folgt der Monatsspitze",
       "manualEntityHelp": "Omnibattery-Schalter. evcc schaltet ihn nur beim Netzladen ein.",
       "manualEntityLabel": "Schalter manuelle Steuerung",
@@ -1805,6 +1809,7 @@
     "events": "Letzte Ereignisse",
     "loads": "Verbraucher nach Priorität · dimmen/abschalten von unten nach oben",
     "menu": "Lastmanagement (Peak)",
+    "menuOff": "aus",
     "noEvents": "Noch keine Ereignisse seit dem Start.",
     "noLoads": "Keine Verbraucher im Lastmanagement.",
     "overall": {
@@ -1820,9 +1825,7 @@
     "peakReserve": "Reserve aktiv · Soll {setpoint}",
     "protected": "Abwurfschutz",
     "state": {
-      "blocked": "Gesperrt",
       "off": "Aus",
-      "paused": "Pausiert",
       "running": "Läuft"
     },
     "stateDetail": {

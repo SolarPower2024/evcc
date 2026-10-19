@@ -23,7 +23,9 @@
 				<ProfileIcon :icon="p.icon" />
 				<strong class="flex-grow-1">{{ p.name }}</strong>
 				<span class="small evcc-gray me-2">
-					{{ $t("config.lmprofiles.valueCount", { count: valueCount(p) }) }}
+					{{
+						$t("config.lmprofiles.valueCount", { count: valueCount(p) }, valueCount(p))
+					}}
 				</span>
 				<button type="button" class="btn btn-sm btn-outline-secondary" @click="edit(p)">
 					{{ $t("config.lmprofiles.edit") }}
@@ -183,13 +185,14 @@ import GenericModal from "../Helper/GenericModal.vue";
 import ProfileIcon, { PROFILE_ICONS } from "../Battery/ProfileIcon.vue";
 import store from "@/store";
 import api from "@/api";
+import { profileProblem } from "@/utils/lmProfile";
 
 const MAX_PROFILES = 10;
 
 // Custom extension: battery profiles, see core/site_lm_profiles.go. Every value
 // has a checkbox: values not ticked are left as they are when the profile is
-// applied. The inputs have no min, max or step, the server checks the ranges and
-// the dialog shows its message.
+// applied. The inputs have no min, max or step: profileProblem() checks the
+// ranges before sending (rules as in the server, which still checks too).
 export default {
 	name: "LmProfilesModal",
 	components: { GenericModal, ProfileIcon },
@@ -368,6 +371,29 @@ export default {
 				this.form.use[key] = true;
 			});
 		},
+		// ranges and orders of the ticked values, throws the localized message
+		checkValues() {
+			const values = {};
+			this.fieldKeys.forEach((key) => {
+				if (this.form.use[key]) values[key] = this.form.values[key];
+			});
+			const problem = profileProblem(values);
+			if (!problem) return;
+			const field = this.groups.flatMap((g) => g.fields).find((f) => f.key === problem.key);
+			const fmt = (n) => new Intl.NumberFormat(this.$i18n.locale).format(n);
+			throw new Error(
+				this.$t(
+					`config.lmprofiles.invalid${problem.code[0].toUpperCase()}${problem.code.slice(1)}`,
+					{
+						label: field?.label,
+						unit: field?.unit,
+						min: fmt(problem.min),
+						max: fmt(problem.max),
+						step: fmt(problem.step),
+					}
+				)
+			);
+		},
 		// form → profile: only ticked values, W for the peak limit
 		profile() {
 			const p = { id: this.form.id, name: this.form.name, icon: this.form.icon };
@@ -389,6 +415,7 @@ export default {
 			}
 
 			if (Object.keys(solarShare).length) p.solarShare = solarShare;
+			this.checkValues();
 			return p;
 		},
 		async save() {

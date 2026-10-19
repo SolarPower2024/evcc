@@ -2,6 +2,10 @@
 // or changing state types: add a JSDoc description and run `npm run openapi` to
 // regenerate server/openapi.state.yaml and server/mcp/openapi.json.
 
+// custom: this fork's types, see evcc-lm.ts
+import type { LmConfigLoadpoint, LmState } from "./evcc-lm";
+export type * from "./evcc-lm";
+
 // react-native-webview
 interface WebView {
   postMessage: (message: string) => void;
@@ -29,10 +33,6 @@ declare global {
 }
 
 /** Status of configured vehicle authentication providers, keyed by provider name. */
-// custom: this fork's types, see evcc-lm.ts
-import type { LmConfigLoadpoint, LmState } from "./evcc-lm";
-export type * from "./evcc-lm";
-
 export type AuthProviders = Record<string, { id: string; authenticated: boolean }>;
 
 export type DeviceColors = Record<string, string>;

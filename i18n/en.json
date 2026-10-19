@@ -649,6 +649,10 @@
       "hint": "Values not ticked stay as they are.",
       "icon": "Icon",
       "inactive": "Inactive",
+      "invalidBatteryOrder": "Battery use: priority ≤ buffer ≤ buffer start must hold (0 turns the buffer off).",
+      "invalidGridChargeOrder": "Grid charging: start must be below stop.",
+      "invalidRange": "{label}: enter a value from {min} to {max} {unit}.",
+      "invalidStep": "{label}: only possible in {step} kW steps.",
       "missingValue": "Enter a number for every ticked value.",
       "name": "Name",
       "new": "New profile",
@@ -1108,7 +1112,7 @@
       "followBufferHelp": "How far the limit stays below the month's peak, 0–5 kW. Example 0.5 kW: peak 10 kW → limit 9.5 kW.",
       "followBufferInvalid": "The buffer must be between 0 and 5 kW, in steps of 0.1 kW.",
       "followBufferLabel": "Buffer",
-      "followHelp": "Once the month's highest quarter hour is above your peak limit, the limit rises to that peak. A new month starts with your limit again.",
+      "followHelp": "Once the month's highest quarter hour is more than the buffer above your peak limit, the limit rises to that peak minus the buffer. A new month starts with your limit again.",
       "followLabel": "Follow the peak: limit follows the month's peak",
       "manualEntityHelp": "Omnibattery switch. evcc turns it on only while grid charging.",
       "manualEntityLabel": "Manual control switch",
@@ -1805,6 +1809,7 @@
     "events": "Recent events",
     "loads": "Loads by priority · throttled/switched off from the bottom up",
     "menu": "Load management (peak)",
+    "menuOff": "off",
     "noEvents": "No events since the start.",
     "noLoads": "No loads in load management.",
     "overall": {
@@ -1820,9 +1825,7 @@
     "peakReserve": "Reserve active · setpoint {setpoint}",
     "protected": "Shed guard",
     "state": {
-      "blocked": "Blocked",
       "off": "Off",
-      "paused": "Paused",
       "running": "Running"
     },
     "stateDetail": {
