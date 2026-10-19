@@ -53,6 +53,11 @@ describe("cards on the battery page", () => {
     expect(socCardVisible(undefined)).toBe(true);
     expect(socCardVisible("soc")).toBe(true);
     expect(socCardVisible("price")).toBe(false);
+    expect(socCardVisible("price", false)).toBe(false);
+  });
+  test("soc card stays for price while the soc switch is on", () => {
+    expect(socCardVisible("price", true)).toBe(true);
+    expect(socCardVisible("soc", true)).toBe(true);
   });
   test("once card of its own only for price only", () => {
     expect(onceCardVisible("price")).toBe(true);

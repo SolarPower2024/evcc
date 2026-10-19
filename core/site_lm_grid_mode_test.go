@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/core/lm/profile"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,4 +91,39 @@ func TestBatteryGridChargeModeFresh(t *testing.T) {
 
 	assert.Equal(t, gridModeBoth, site.GetBatteryGridChargeMode())
 	assert.Empty(t, buf.String())
+}
+
+// TestProfileGridChargeInPriceMode: a profile does not switch the soc grid charging
+// on while grid charging goes by price, and says so; switching off still applies
+func TestProfileGridChargeInPriceMode(t *testing.T) {
+	noSettingsDB(t)
+	site := newScenario(t).site
+	require.NoError(t, site.SetBatteryGridChargeMode(gridModePrice))
+	require.False(t, site.GetBatterySocGridCharge())
+
+	on := true
+	var errs []error
+	add := func(_ string, err error) {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	site.applyProfileGridCharge(profile.Profile{GridCharge: &on}, add)
+	assert.False(t, site.GetBatterySocGridCharge(), "stays off")
+	require.Len(t, errs, 1)
+	assert.Contains(t, errs[0].Error(), "goes by price")
+
+	// both: applies as before
+	require.NoError(t, site.SetBatteryGridChargeMode(gridModeBoth))
+	errs = nil
+	site.applyProfileGridCharge(profile.Profile{GridCharge: &on}, add)
+	assert.True(t, site.GetBatterySocGridCharge())
+	assert.Empty(t, errs)
+
+	// off applies in price mode
+	require.NoError(t, site.SetBatteryGridChargeMode(gridModePrice))
+	off := false
+	require.NoError(t, site.SetBatterySocGridCharge(true))
+	site.applyProfileGridCharge(profile.Profile{GridCharge: &off}, add)
+	assert.False(t, site.GetBatterySocGridCharge())
 }

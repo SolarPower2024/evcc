@@ -200,7 +200,7 @@ export default defineComponent({
 			return !!this.state.batterySocGridCharge;
 		},
 		socCardShown(): boolean {
-			return socCardVisible(this.state.batteryGridChargeMode);
+			return socCardVisible(this.state.batteryGridChargeMode, this.socGridChargeEnabled);
 		},
 		onceCardShown(): boolean {
 			return onceCardVisible(this.state.batteryGridChargeMode);

@@ -25,9 +25,10 @@ export function priceCardVisible(evccVisible: boolean, raw?: string | null): boo
   return evccVisible && gridChargeMode(raw) !== "soc";
 }
 
-// the card of the soc thresholds is hidden for price only
-export function socCardVisible(raw?: string | null): boolean {
-  return gridChargeMode(raw) !== "price";
+// the card of the soc thresholds is hidden for price only, unless the switch is on
+// (set through the api): it stays visible so it can be turned off
+export function socCardVisible(raw?: string | null, socEnabled = false): boolean {
+  return gridChargeMode(raw) !== "price" || socEnabled;
 }
 
 // price only: one-time charging stays reachable as a card of its own, otherwise

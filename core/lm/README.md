@@ -360,6 +360,7 @@ On the battery page the choice shows the matching cards: evcc's price card
 only for `price` and `both` (and only with a dynamic tariff or a limit set, as
 before), the soc card only for `soc` and `both`. For `price` the card *Einmalig
 laden* stands alone, otherwise it is part of the soc card; it is never hidden.
+The soc card also stays for `price` while the soc switch is on (set through the api), so it can be turned off; an applied profile with grid charging on does not switch it on in `price` and reports that.
 `assets/js/utils/gridChargeMode.ts` holds the rules, `BatteryGridChargeOnceCard`
 the card.
 
