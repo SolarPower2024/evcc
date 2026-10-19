@@ -414,6 +414,7 @@ func (site *Site) SetLmExportForecast(entity string) error {
 	// a changed entity gets the forecast on the next run, with a new connection
 	f := site.exportFc()
 	f.mu.Lock()
+	wrote := f.last != nil && f.last.entity == old
 	f.last, f.lastWrite, f.conn = nil, time.Time{}, nil
 	f.mu.Unlock()
 
@@ -423,8 +424,9 @@ func (site *Site) SetLmExportForecast(entity string) error {
 
 	site.publishLmAdvanced()
 
-	// the reading instance would keep the old list until it is stale
-	if old != "" && old != entity {
+	// the reading instance would keep the old list until it is stale; an entity
+	// evcc never wrote to may be a foreign sensor and is left alone
+	if wrote && old != entity {
 		f.wg.Add(1)
 		go site.exportForecastOff(old)
 	}

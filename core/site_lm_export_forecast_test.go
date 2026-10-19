@@ -572,6 +572,7 @@ func TestSetLmExportForecastTurnsOldOff(t *testing.T) {
 	t.Run("turned off", func(t *testing.T) {
 		ha := new(haRecorder)
 		site := exportSite(t, ha, "sensor.a")
+		site.exportFc().last = &exportWrite{entity: "sensor.a"} // written before
 
 		require.NoError(t, site.SetLmExportForecast(""))
 		site.exportFc().wg.Wait()
@@ -583,6 +584,7 @@ func TestSetLmExportForecastTurnsOldOff(t *testing.T) {
 	t.Run("changed", func(t *testing.T) {
 		ha := new(haRecorder)
 		site := exportSite(t, ha, "sensor.a")
+		site.exportFc().last = &exportWrite{entity: "sensor.a"} // written before
 
 		require.NoError(t, site.SetLmExportForecast("sensor.b"))
 		site.exportFc().wg.Wait()
@@ -594,6 +596,17 @@ func TestSetLmExportForecastTurnsOldOff(t *testing.T) {
 		require.NoError(t, site.SetLmExportForecast("sensor.b"))
 		site.exportFc().wg.Wait()
 		assert.Equal(t, 1, ha.count())
+	})
+
+	t.Run("never written", func(t *testing.T) {
+		ha := new(haRecorder)
+		site := exportSite(t, ha, "sensor.a")
+
+		// the entity may be a foreign sensor, evcc has not written to it
+		require.NoError(t, site.SetLmExportForecast("sensor.b"))
+		require.NoError(t, site.SetLmExportForecast(""))
+		site.exportFc().wg.Wait()
+		assert.Equal(t, 0, ha.count())
 	})
 
 	t.Run("set with none before", func(t *testing.T) {
