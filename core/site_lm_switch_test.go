@@ -435,3 +435,40 @@ func TestLmCircuitDeletedAtStart(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, v)
 }
+
+// The setters run on API goroutines and must not publish the circuits: that
+// reads the values updateCircuits writes without a lock. The cycle publishes
+// them, up to one cycle later. The race part only tells under -race (CI).
+func TestCircuitLimitSettersDoNotPublish(t *testing.T) {
+	site, main, _ := lmSwitchCircuits(t, 6000)
+	site.circuit = main
+
+	ch := make(chan util.Param, 1000)
+	site.valueChan = ch
+
+	require.NoError(t, site.SetLmEnabled(false))
+	require.NoError(t, site.SetLmEnabled(true))
+
+	close(ch)
+	var lmOff bool
+	for p := range ch {
+		assert.NotEqual(t, keys.Circuits, p.Key, "a setter published the circuits")
+		lmOff = lmOff || p.Key == keys.LmOff
+	}
+	assert.True(t, lmOff, "the switch itself is still published")
+
+	// cycle against setters
+	site.valueChan = nil
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 200 {
+			site.updateCircuits()
+		}
+	}()
+	for i := range 200 {
+		_ = site.SetLmEnabled(i%2 == 0)
+		_ = site.SetPeakShavingLimit(float64(5000 + i))
+	}
+	<-done
+}
