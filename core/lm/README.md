@@ -715,7 +715,8 @@ counter of the EEG export (kWh, Wh or MWh).
 
 The energy page shows the split in its grid card: EEG as its own lighter
 export bar, both amounts in the legend, and the revenue of the regular feed-in
-and of EEG as separate tiles, also without a grid price. The counter is not
+and of EEG as separate tiles, also without a grid price; a tile whose revenue
+rounds to 0 is hidden (without a price its hint stays). The counter is not
 listed again among the additional meters (its collector is titled `feedin-eeg`).
 See `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`.
 

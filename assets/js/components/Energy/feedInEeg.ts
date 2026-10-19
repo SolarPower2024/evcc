@@ -151,7 +151,7 @@ export function feedInEegStats(
     energy > 0 && !priced
       ? { key, label, empty }
       : { ...money(key, label, amount, priced), accent: "text-accent1" };
-  return [
+  const stats: StatItem[] = [
     cost
       ? money("gridImport", t("energy.grid.cost"), cost.import, cost.importEnergy)
       : { key: "gridImport", label: t("energy.grid.cost"), empty },
@@ -170,6 +170,10 @@ export function feedInEegStats(
       totals.eegPriced
     ),
   ];
+  // a revenue of 0 (rounded to the cent) is not shown; without a price the hint stays
+  return stats.filter(
+    (s) => s.key === "gridImport" || !!s.empty || Math.round((s.number || 0) * 100) !== 0
+  );
 }
 
 // The grid legend with the export entry replaced by the standard tariff's part and
