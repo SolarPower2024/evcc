@@ -5,7 +5,9 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -410,6 +412,74 @@ func TestForkHookCounts(t *testing.T) {
 	for _, h := range forkHookCounts {
 		t.Run(h.file+" "+h.fn+" "+h.name, func(t *testing.T) {
 			assert.GreaterOrEqual(t, referencedCount(t, h.file, h.fn)[h.name], h.min, "%s refers to %s too rarely", h.fn, h.name)
+		})
+	}
+}
+
+// touchPointFiles returns the files of the first column of the table "Upstream touch
+// points" in core/lm/README.md. A file named without a directory ("Mode.vue") stands
+// in the directory of the one before it.
+func touchPointFiles(t *testing.T) []string {
+	t.Helper()
+
+	b, err := os.ReadFile("lm/README.md")
+	require.NoError(t, err)
+
+	text := string(b)
+	_, table, ok := strings.Cut(text, "\n## Upstream touch points\n")
+	require.True(t, ok, "no section Upstream touch points")
+	table, _, ok = strings.Cut(table, "\n## Own files\n")
+	require.True(t, ok, "no section Own files after the table")
+
+	quoted := regexp.MustCompile("`([^`]+)`")
+
+	var res []string
+	for _, line := range strings.Split(table, "\n") {
+		if !strings.HasPrefix(line, "| `") {
+			continue
+		}
+
+		cell := strings.SplitN(line, "|", 3)[1]
+
+		dir := ""
+		for _, m := range quoted.FindAllStringSubmatch(cell, -1) {
+			name := m[1]
+			if strings.Contains(name, "/") {
+				dir = path.Dir(name)
+			} else {
+				name = path.Join(dir, name)
+			}
+			res = append(res, name)
+		}
+	}
+
+	require.NotEmpty(t, res)
+	return res
+}
+
+// touchPointNoMarker lists the files of the table that cannot carry a marker comment
+var touchPointNoMarker = map[string]bool{
+	"i18n/de.json": true, // json has no comments, the texts are added only
+	"i18n/en.json": true,
+}
+
+// hasMarker reports whether a file has a "custom" marker in a comment
+var markerRegexp = regexp.MustCompile(`(?i)(//|#|/\*|<!--)[^\n]*custom`)
+
+// TestTouchPointTable fails when the table of the touch points in evcc's files and
+// the files differ: a file of the table that is gone (renamed in a merge), or one
+// without any marker. The other way round, an evcc file changed but not in the
+// table, is checked monthly by the skill wartung against the evcc tag: the
+// checkout of the tests is shallow.
+func TestTouchPointTable(t *testing.T) {
+	for _, file := range touchPointFiles(t) {
+		t.Run(file, func(t *testing.T) {
+			b, err := os.ReadFile(filepath.Join("..", filepath.FromSlash(file)))
+			require.NoError(t, err, "%s is in the table of the touch points, but not a file", file)
+
+			if !touchPointNoMarker[file] {
+				assert.Regexp(t, markerRegexp, string(b), "%s is in the table of the touch points, but has no custom marker", file)
+			}
 		})
 	}
 }

@@ -1114,6 +1114,10 @@ unused:
   hook from the table above is still there (Go: in the right function; ui: the
   mount). A hook lost in a merge fails here, while all other tests would stay
   green. A new hook gets a line in its table.
+- `TestTouchPointTable` reads the table above: every file named in it exists and carries a
+  `custom` marker in a comment (json files excepted). The other way round, an evcc file changed
+  but missing in the table, the monthly skill `wartung` checks against the evcc tag (the
+  checkout of the tests is shallow).
 - `TestForkDeferHooks`: the hook in `restoreSettings` is a deferred call of the
   function body, with no return of evcc before it. A call at the end would be
   skipped by the first failing restore step, and the fork would start without its
