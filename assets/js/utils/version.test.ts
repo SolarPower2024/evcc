@@ -41,6 +41,10 @@ describe("getShortVersion", () => {
     expect(getShortVersion(NIGHTLY)).toBe("v0.304.0-dev.1712345678");
     expect(getShortVersion(STABLE)).toBe("v0.303.1");
   });
+
+  test("a version that carries its v already gets no second one (custom)", () => {
+    expect(getShortVersion("v0.317.0-lm4")).toBe("v0.317.0-lm4");
+  });
 });
 
 describe("isNewVersionAvailable", () => {

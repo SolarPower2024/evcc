@@ -15,7 +15,7 @@ export function getReleaseName(version: string): string {
 
 export function getShortVersion(version: string): string {
   if (isDevelopment(version)) return "dev build";
-  return `v${version}`;
+  return `v${version.replace(/^v/, "")}`; // custom: the tags of the fork carry a v
 }
 
 export function isNewVersionAvailable(installed?: string, available?: string): boolean {
