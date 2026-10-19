@@ -1,14 +1,22 @@
 package core
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/core/circuit"
 	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/config"
 	optimizer "github.com/evcc-io/optimizer/client"
+	jww "github.com/spf13/jwalterweatherman"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -291,6 +299,19 @@ func TestLmOptimizerPasses(t *testing.T) {
 		first(t, req, res)
 	})
 
+	t.Run("short result", func(t *testing.T) {
+		client, calls := fakeOptimizer(t, http.StatusOK, covered)
+		req, res, plan := floorCase()
+		res.Batteries[0].StateOfCharge = res.Batteries[0].StateOfCharge[:3]
+		res.Batteries[0].ChargingPower = res.Batteries[0].ChargingPower[:3]
+		site := &Site{log: util.NewLogger("test")}
+		site.lms().plan = &plan
+		require.NotPanics(t, func() { site.lmOptimizerPasses(client, req, details, res) })
+		assert.Zero(t, calls.Load())
+		want, _, _ := floorCase()
+		assert.Equal(t, want.Batteries[0], req.Batteries[0], "request unchanged")
+	})
+
 	t.Run("two home batteries", func(t *testing.T) {
 		client, calls := fakeOptimizer(t, http.StatusOK, covered)
 		two := requestDetails{BatteryDetails: []batteryDetail{{Type: batteryTypeBattery}, {Type: batteryTypeBattery}}}
@@ -299,8 +320,11 @@ func TestLmOptimizerPasses(t *testing.T) {
 		res.Batteries = append(res.Batteries, res.Batteries[0])
 		site := &Site{log: util.NewLogger("test")}
 		site.lms().plan = &plan
+		logger, out := captureLog()
+		site.log = logger
 		site.lmOptimizerPasses(client, req, two, res)
 		assert.Zero(t, calls.Load())
+		assert.Contains(t, out.String(), "passes skipped, 2 home batteries")
 	})
 }
 
@@ -323,4 +347,295 @@ func TestLmPlanCoarse(t *testing.T) {
 	// slots 3-6 merged into one hour: the goal of slot 6 ends in it
 	coarse := []int{600, 900, 900, 3600, 900}
 	assert.Equal(t, []lmGridGoal{{slot: 2, level: 1000}, {slot: 3, level: 2000}}, plan.coarse(coarse).grid)
+}
+
+// The plan charges with the efficiency the request carries, not the
+// identified one, so the floor does not run ahead of the optimizer's result.
+func TestLmPlanEtaFollowsRequest(t *testing.T) {
+	site := &Site{
+		log: util.NewLogger("test"),
+		batteryMeters: []config.Device[api.Meter]{
+			config.NewStaticDevice[api.Meter](config.Named{Name: "batt"}, &mockMeter{}),
+		},
+	}
+	s := site.lms()
+	s.ident = []batteryIdentResult{{Name: "batt", Capacity: 10, Efficiency: 0.9025, Valid: true}}
+	s.identUse = true
+	require.InDelta(t, 0.95, site.identChargeEta(), 1e-6)
+
+	req, res, _ := floorCase()
+	bat := &req.Batteries[0]
+	site.applyLmBatteryInputs(bat, req, true, 2000, 35, 1)
+
+	plan := site.lmPlanInputs()
+	require.NotNil(t, plan)
+	assert.Equal(t, float32(0.9), plan.etaC)
+	assert.InDelta(t, 5000*0.25*0.9, plan.gridCharge(req.TimeSeries, *bat, 6, nil), 0.1, "slot energy with the request's efficiency")
+
+	// the passes with a running identification: no endless follow-up solves
+	client, calls := fakeOptimizer(t, http.StatusOK, res)
+	site.lmOptimizerPasses(client, req, requestDetails{BatteryDetails: []batteryDetail{{Type: batteryTypeBattery}}}, res)
+	assert.LessOrEqual(t, calls.Load(), int32(2), "second pass and at most one recheck")
+}
+
+// Home batteries share the grid charge power and the room below the limit by
+// their capacity.
+func TestLmPlanGridChargeShare(t *testing.T) {
+	ts := optimizer.TimeSeries{Dt: []int{900}, Gt: []float32{500}, Ft: []float32{0}} // 2000 W
+	bat := optimizer.BatteryConfig{CMax: 10000}
+
+	p := lmPlan{power: 8000, etaC: 1}
+	assert.InDelta(t, 2000, p.gridCharge(ts, bat, 0, nil), 0.1, "one battery: all")
+
+	p.share = 0.5
+	assert.InDelta(t, 1000, p.gridCharge(ts, bat, 0, nil), 0.1, "half")
+	p.share = 0.25
+	assert.InDelta(t, 500, p.gridCharge(ts, bat, 0, nil), 0.1, "1:3")
+
+	// the room below the limit: 5000 - 2000 = 3000 W, a share of it
+	p = lmPlan{power: 8000, etaC: 1, controlled: true, limit: 5000, share: 0.5}
+	assert.InDelta(t, 3000*0.5*0.25, p.gridCharge(ts, bat, 0, nil), 0.1, "half of the room")
+	p.share = 1
+	assert.InDelta(t, 3000*0.25, p.gridCharge(ts, bat, 0, nil), 0.1, "all of the room")
+
+	// the peak rule stays
+	p.share = 0.5
+	p.limit = 1500
+	assert.Zero(t, p.gridCharge(ts, bat, 0, nil), "no room")
+}
+
+// Two home batteries take their part of the power, so together they reach the
+// stop soc no earlier than one battery with the sum of both.
+func TestLmOptimizerInputsTwoBatteries(t *testing.T) {
+	config.Reset()
+	t.Cleanup(config.Reset)
+
+	newReq := func() *optimizer.OptimizationInput {
+		req := &optimizer.OptimizationInput{EtaC: 0.9, EtaD: 0.9}
+		for range 96 {
+			req.TimeSeries.Dt = append(req.TimeSeries.Dt, 900)
+			req.TimeSeries.Gt = append(req.TimeSeries.Gt, 0)
+			req.TimeSeries.Ft = append(req.TimeSeries.Ft, 0)
+		}
+		return req
+	}
+	bat := func(capacity, power float32) optimizerBattery {
+		return optimizerBattery{
+			cfg:    optimizer.BatteryConfig{SCapacity: capacity, SMax: capacity, SInitial: capacity / 10, CMax: power, DMax: power, ChargeFromGrid: true},
+			detail: batteryDetail{Type: batteryTypeBattery},
+		}
+	}
+	goalSlot := func(b optimizerBattery) int {
+		for i, g := range b.cfg.SGoal {
+			if g >= b.cfg.SCapacity*0.8-1 {
+				return i
+			}
+		}
+		return -1
+	}
+
+	run := func(batteries []optimizerBattery) *Site {
+		site := &Site{log: util.NewLogger("test")}
+		s := site.lms()
+		s.socChargeEnabled, s.socChargeStart, s.socChargeStop, s.socChargeRunning = true, 20, 80, true
+		site.applyLmOptimizerInputs(newReq(), batteries)
+		return site
+	}
+
+	single := []optimizerBattery{bat(10000, 4000)}
+	run(single)
+
+	two := []optimizerBattery{bat(5000, 2000), bat(5000, 2000)}
+	site := run(two)
+
+	require.NotEqual(t, -1, goalSlot(single[0]))
+	for _, b := range two {
+		assert.GreaterOrEqual(t, goalSlot(b), goalSlot(single[0]))
+	}
+	assert.Equal(t, float32(0.5), site.lmPlanInputs().share)
+}
+
+// captureLog returns a logger that writes into a buffer
+func captureLog() (*util.Logger, *bytes.Buffer) {
+	var out bytes.Buffer
+	return &util.Logger{
+		Notepad:  jww.NewNotepad(jww.LevelTrace, jww.LevelTrace, io.Discard, &out, "", 0),
+		Redactor: new(util.Redactor),
+	}, &out
+}
+
+// A failed further solve reports what the optimizer says about it.
+func TestLmSolveError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(optimizer.Error{Message: "invalid input", Details: map[string]string{"batteries.0.s_max": "too small"}})
+	}))
+	t.Cleanup(srv.Close)
+
+	client, err := optimizer.NewClientWithResponses(srv.URL)
+	require.NoError(t, err)
+
+	req, _, _ := floorCase()
+	res, err := lmSolve(context.Background(), client, *req)
+	assert.Nil(t, res)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid input")
+	assert.Contains(t, err.Error(), "batteries.0.s_max: too small")
+}
+
+// The passes share one time budget: a solve that takes longer ends them, the
+// plan before stays and no further solve starts.
+func TestLmOptimizerPassesTimeBudget(t *testing.T) {
+	prev := lmPassesTimeout
+	lmPassesTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { lmPassesTimeout = prev })
+
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	client, err := optimizer.NewClientWithResponses(srv.URL)
+	require.NoError(t, err)
+
+	req, res, plan := floorCase()
+	site := &Site{log: util.NewLogger("test")}
+	site.lms().plan = &plan
+	site.lms().socChargeEnabled, site.lms().socChargeStart, site.lms().socChargeStop = true, 20, 80
+
+	start := time.Now()
+	site.lmOptimizerPasses(client, req, requestDetails{BatteryDetails: []batteryDetail{{Type: batteryTypeBattery}}}, res)
+
+	assert.Less(t, time.Since(start), 2*time.Second, "returns within the budget")
+	assert.EqualValues(t, 1, calls.Load(), "the soc pass does not solve any more")
+	want, wantRes, _ := floorCase()
+	assert.Equal(t, want.Batteries[0], req.Batteries[0], "request unchanged")
+	assert.Equal(t, wantRes.Batteries[0], res.Batteries[0], "plan unchanged")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	assert.True(t, site.lmBudgetUsed(ctx))
+	assert.False(t, site.lmBudgetUsed(context.Background()))
+}
+
+// The soc pass replaces the rest of the plan with one that charges to the stop
+// soc, and keeps the first plan when the second is worse.
+func TestLmSocChargePass(t *testing.T) {
+	// the second pass covers slots 1-7, the battery has reached the start soc in slot 0
+	second := func() *optimizer.OptimizationResult {
+		return &optimizer.OptimizationResult{Status: optimizer.Optimal, Batteries: []optimizer.BatteryResult{{
+			StateOfCharge:    []float32{4625, 5750, 6000, 6000, 6000, 6000, 6000},
+			ChargingPower:    []float32{5000, 5000, 1000, 0, 0, 0, 0},
+			DischargingPower: make([]float32, 7),
+		}}, GridImport: []float32{4000, 4000, 1000, 0, 0, 0, 0}, GridExport: make([]float32, 7)}
+	}
+
+	run := func(t *testing.T, client *optimizer.ClientWithResponses, mod func(*optimizer.OptimizationInput, *optimizer.OptimizationResult)) (*optimizer.OptimizationInput, *optimizer.OptimizationResult) {
+		req, res, plan := floorCase()
+		plan.limit, plan.controlled = 0, false
+		req.Batteries[0].SMin = 0
+		res.GridImportOvershoot = nil
+		if mod != nil {
+			mod(req, res)
+		}
+		site := &Site{log: util.NewLogger("test")}
+		s := site.lms()
+		s.socChargeEnabled, s.socChargeStart, s.socChargeStop = true, 36, 60
+		site.lmSocChargePass(context.Background(), client, req, 0, plan, nil, res)
+		return req, res
+	}
+
+	_, before := run(t, func() *optimizer.ClientWithResponses {
+		c, _ := fakeOptimizer(t, http.StatusInternalServerError, nil)
+		return c
+	}(), nil)
+
+	t.Run("success", func(t *testing.T) {
+		client, calls := fakeOptimizer(t, http.StatusOK, second())
+		req, res := run(t, client, nil)
+		assert.EqualValues(t, 1, calls.Load())
+		assert.Equal(t, []float32{3583, 4625, 5750, 6000, 6000, 6000, 6000, 6000}, res.Batteries[0].StateOfCharge, "joined")
+		assert.Len(t, req.Batteries[0].SGoal, 8, "goals in the request")
+		assert.Contains(t, req.Batteries[0].SGoal, float32(6000), "the stop soc")
+	})
+
+	t.Run("error", func(t *testing.T) {
+		client, _ := fakeOptimizer(t, http.StatusInternalServerError, nil)
+		_, res := run(t, client, nil)
+		assert.Equal(t, before.Batteries[0].StateOfCharge, res.Batteries[0].StateOfCharge)
+	})
+
+	t.Run("invalid plan", func(t *testing.T) {
+		bad := second()
+		bad.Batteries[0].StateOfCharge = []float32{50000, 50000, 50000, 50000, 50000, 50000, 50000}
+		client, _ := fakeOptimizer(t, http.StatusOK, bad)
+		_, res := run(t, client, nil)
+		assert.Equal(t, before.Batteries[0].StateOfCharge, res.Batteries[0].StateOfCharge)
+	})
+
+	t.Run("more over the limit in the rest", func(t *testing.T) {
+		worse := second()
+		worse.GridImportOvershoot = []float32{0, 900, 0, 0, 0, 0, 0}
+		client, _ := fakeOptimizer(t, http.StatusOK, worse)
+		_, res := run(t, client, nil)
+		assert.Equal(t, before.Batteries[0].StateOfCharge, res.Batteries[0].StateOfCharge)
+	})
+
+	t.Run("overshoot before the start does not count", func(t *testing.T) {
+		withHead := second()
+		withHead.GridImportOvershoot = make([]float32, 7)
+		client, _ := fakeOptimizer(t, http.StatusOK, withHead)
+		_, res := run(t, client, func(_ *optimizer.OptimizationInput, res *optimizer.OptimizationResult) {
+			res.GridImportOvershoot = []float32{500, 0, 0, 0, 0, 0, 0, 0}
+		})
+		assert.Equal(t, float32(4625), res.Batteries[0].StateOfCharge[1], "joined")
+	})
+
+	t.Run("no overshoot field", func(t *testing.T) {
+		worse := second()
+		worse.GridImportOvershoot = nil
+		client, _ := fakeOptimizer(t, http.StatusOK, worse)
+		require.NotPanics(t, func() {
+			_, res := run(t, client, nil)
+			assert.Equal(t, float32(4625), res.Batteries[0].StateOfCharge[1])
+		})
+	})
+}
+
+func TestTailSum(t *testing.T) {
+	assert.Equal(t, float32(5), tailSum([]float32{1, 2, 3}, 1))
+	assert.Zero(t, tailSum([]float32{1, 2, 3}, 3))
+	assert.Zero(t, tailSum(nil, 2))
+	assert.Equal(t, float32(6), tailSum([]float32{1, 2, 3}, -1))
+}
+
+// Grid charging is refused without a known charge power on a circuit and while
+// the shed hold-off runs.
+func TestLmGridChargeBlocked(t *testing.T) {
+	config.Reset()
+	t.Cleanup(config.Reset)
+
+	site := &Site{log: util.NewLogger("test")}
+	assert.False(t, site.lmGridChargeBlocked(), "no circuit")
+
+	root, err := circuit.New(util.NewLogger("test"), "main", 0, 22000, nil, 0)
+	require.NoError(t, err)
+	require.NoError(t, config.Circuits().Add(config.NewStaticDevice(config.Named{Name: "main"}, api.Circuit(root))))
+	require.NoError(t, site.SetPeakShavingCircuit("main"))
+	assert.True(t, site.lmGridChargeBlocked(), "unknown charge power")
+
+	site.peak().chargePower = 5000
+	assert.False(t, site.lmGridChargeBlocked(), "known charge power")
+
+	site.lms().batteryShedUntil = time.Now().Add(time.Hour)
+	assert.True(t, site.lmGridChargeBlocked(), "shed hold-off")
+
+	site.lms().batteryShedUntil = time.Now().Add(-time.Minute)
+	assert.False(t, site.lmGridChargeBlocked(), "hold-off over")
 }

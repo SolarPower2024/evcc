@@ -15,9 +15,9 @@ package core
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/evcc-io/evcc/tariff"
 	"github.com/evcc-io/evcc/util/sponsor"
@@ -41,12 +41,17 @@ type lmPlan struct {
 	controlled bool    // grid charge power set through an entity, trimmed to the room below the limit
 	etaC, etaD float32 // efficiencies
 	grid       []lmGridGoal
+	share      float32 // part of the grid charge power and room this battery takes, 0 is all
 }
 
-func (site *Site) newLmPlan(bat optimizer.BatteryConfig) lmPlan {
+func (site *Site) newLmPlan(bat optimizer.BatteryConfig, share float32) lmPlan {
 	power, _ := site.lmBatteryChargePower()
 	if power <= 0 {
+		// the battery's own maximum is no plant-wide power: it is scaled by share
 		power = float64(bat.CMax)
+		if share > 0 {
+			power /= float64(share)
+		}
 	}
 	return lmPlan{
 		devMin:     bat.SMin,
@@ -54,6 +59,7 @@ func (site *Site) newLmPlan(bat optimizer.BatteryConfig) lmPlan {
 		controlled: site.chargePowerControlled(),
 		etaC:       float32(site.identChargeEta()),
 		etaD:       eta,
+		share:      share,
 	}
 }
 
@@ -77,7 +83,12 @@ func at(v []float32, i int) float32 {
 // what the vehicles charge), not at all while the demand exceeds it
 func (p lmPlan) gridCharge(ts optimizer.TimeSeries, bat optimizer.BatteryConfig, i int, ev []float32) float32 {
 	h := float32(ts.Dt[i]) / 3600
-	power := p.power
+	share := p.share
+	if share <= 0 {
+		share = 1
+	}
+
+	power := p.power * share
 	if bat.CMax > 0 {
 		power = min(power, bat.CMax)
 	}
@@ -86,7 +97,7 @@ func (p lmPlan) gridCharge(ts optimizer.TimeSeries, bat optimizer.BatteryConfig,
 		net := (at(ts.Gt, i) - at(ts.Ft, i) + at(ev, i)) / h
 		switch {
 		case p.controlled:
-			if power = min(power, max(0, p.limit-max(0, net))); power < minGridChargePower {
+			if power = min(power, max(0, p.limit-max(0, net))*share); power < minGridChargePower {
 				power = 0
 			}
 		case net > p.limit:
@@ -262,8 +273,8 @@ func (p lmPlan) floor(req *optimizer.OptimizationInput, home int, res *optimizer
 }
 
 // lmSolve runs a further pass
-func lmSolve(client *optimizer.ClientWithResponses, req optimizer.OptimizationInput) (*optimizer.OptimizationResult, error) {
-	resp, err := client.PostOptimizeChargeScheduleWithResponse(context.TODO(), req, func(_ context.Context, r *http.Request) error {
+func lmSolve(ctx context.Context, client *optimizer.ClientWithResponses, req optimizer.OptimizationInput) (*optimizer.OptimizationResult, error) {
+	resp, err := client.PostOptimizeChargeScheduleWithResponse(ctx, req, func(_ context.Context, r *http.Request) error {
 		if sponsor.IsAuthorizedForApi() {
 			r.Header.Set("Authorization", "Bearer "+sponsor.Token)
 		}
@@ -273,7 +284,7 @@ func lmSolve(client *optimizer.ClientWithResponses, req optimizer.OptimizationIn
 		return nil, err
 	}
 	if resp.StatusCode() != http.StatusOK || resp.JSON200 == nil {
-		return nil, errors.New(resp.Status())
+		return nil, apiError(resp)
 	}
 	return resp.JSON200, nil
 }
@@ -281,7 +292,7 @@ func lmSolve(client *optimizer.ClientWithResponses, req optimizer.OptimizationIn
 // lmPlanValid reports whether a pass's plan is usable: solved, complete, and
 // the home battery within its bounds
 func lmPlanValid(req optimizer.OptimizationInput, home int, res *optimizer.OptimizationResult) bool {
-	if res == nil || (res.Status != optimizer.Optimal && res.Status != optimizer.Feasible) || len(res.Batteries) != len(req.Batteries) {
+	if !usableResult(res) || len(res.Batteries) != len(req.Batteries) {
 		return false
 	}
 	n := len(req.TimeSeries.Dt)
@@ -304,12 +315,31 @@ func lmPlanValid(req optimizer.OptimizationInput, home int, res *optimizer.Optim
 	return true
 }
 
+// tailSum is the sum of v from index from on, 0 where it is shorter
+func tailSum(v []float32, from int) float32 {
+	if from >= len(v) {
+		return 0
+	}
+	return sumOf(v[max(from, 0):])
+}
+
 func sumOf(v []float32) float32 {
 	var res float32
 	for _, x := range v {
 		res += x
 	}
 	return res
+}
+
+// lmHomeBatteries is the number of home batteries in the request
+func lmHomeBatteries(details requestDetails) int {
+	var n int
+	for _, d := range details.BatteryDetails {
+		if d.Type == batteryTypeBattery {
+			n++
+		}
+	}
+	return n
 }
 
 // lmHomeBattery is the index of the only home battery, -1 without exactly one
@@ -344,7 +374,7 @@ func withFloor(req optimizer.OptimizationInput, home int, plan lmPlan, floor, go
 
 // lmReservePass solves the plan again with the floor as the fork holds it,
 // see above. It returns the floor used, nil if the first plan stays.
-func (site *Site) lmReservePass(client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, home int, plan lmPlan, res *optimizer.OptimizationResult) []float32 {
+func (site *Site) lmReservePass(ctx context.Context, client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, home int, plan lmPlan, res *optimizer.OptimizationResult) []float32 {
 	if plan.target <= plan.devMin+1 {
 		return nil
 	}
@@ -354,9 +384,13 @@ func (site *Site) lmReservePass(client *optimizer.ClientWithResponses, req *opti
 		return nil
 	}
 
+	if site.lmBudgetUsed(ctx) {
+		return nil
+	}
+
 	goals := slices.Clone(req.Batteries[home].SGoal)
 	req2 := withFloor(*req, home, plan, floor, goals)
-	res2, err := lmSolve(client, req2)
+	res2, err := lmSolve(ctx, client, req2)
 	if err != nil || !lmPlanValid(req2, home, res2) {
 		site.log.DEBUG.Printf("optimizer: reserve pass: %v", passErr(err, res2))
 		return nil
@@ -373,9 +407,9 @@ func (site *Site) lmReservePass(client *optimizer.ClientWithResponses, req *opti
 	// one, once more with the floor it implies
 	if floor2 := plan.floor(&req2, home, res2); floor2 != nil {
 		s2 := res2.Batteries[home].StateOfCharge
-		if drifted(floor2, s2) {
+		if drifted(floor2, s2) && !site.lmBudgetUsed(ctx) {
 			req3 := withFloor(*req, home, plan, floor2, goals)
-			if res3, err := lmSolve(client, req3); err == nil && lmPlanValid(req3, home, res3) && sumOf(res3.GridImportOvershoot) <= over2+1 {
+			if res3, err := lmSolve(ctx, client, req3); err == nil && lmPlanValid(req3, home, res3) && sumOf(res3.GridImportOvershoot) <= over2+1 {
 				req2, res2, floor = req3, res3, floor2
 			} else {
 				site.log.DEBUG.Printf("optimizer: reserve pass recheck: %v", passErr(err, res3))
@@ -447,6 +481,19 @@ func usableResult(res *optimizer.OptimizationResult) bool {
 	return res != nil && (res.Status == optimizer.Optimal || res.Status == optimizer.Feasible)
 }
 
+// lmPassesTimeout is the time all passes together may take, each further solve
+// would otherwise wait up to the client timeout while the optimizer is locked
+var lmPassesTimeout = 2 * time.Minute
+
+// lmBudgetUsed reports whether the time for the passes is used up
+func (site *Site) lmBudgetUsed(ctx context.Context) bool {
+	if ctx.Err() == nil {
+		return false
+	}
+	site.log.DEBUG.Println("optimizer: pass skipped, time budget used")
+	return true
+}
+
 // lmOptimizerPasses runs the passes after the first solve: the reserve as
 // the fork holds it, then soc-based grid charging
 func (site *Site) lmOptimizerPasses(client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, details requestDetails, res *optimizer.OptimizationResult) {
@@ -456,13 +503,26 @@ func (site *Site) lmOptimizerPasses(client *optimizer.ClientWithResponses, req *
 
 	plan := site.lmPlanInputs()
 	home := lmHomeBattery(details, req, res)
-	if plan == nil || home < 0 {
+	if plan == nil {
+		return
+	}
+	if home < 0 {
+		site.log.DEBUG.Printf("optimizer: passes skipped, %d home batteries", lmHomeBatteries(details))
+		return
+	}
+
+	// the passes index the result by step: a short or odd first result ends them
+	if !lmPlanValid(*req, home, res) {
+		site.log.DEBUG.Println("optimizer: passes skipped, first result is not a usable plan")
 		return
 	}
 
 	p := plan.coarse(req.TimeSeries.Dt)
-	floor := site.lmReservePass(client, req, home, p, res)
-	site.lmSocChargePass(client, req, home, p, floor, res)
+	ctx, cancel := context.WithTimeout(context.Background(), lmPassesTimeout)
+	defer cancel()
+
+	floor := site.lmReservePass(ctx, client, req, home, p, res)
+	site.lmSocChargePass(ctx, client, req, home, p, floor, res)
 }
 
 // coarse maps the grid goals onto the slots of the request: the plan is made on

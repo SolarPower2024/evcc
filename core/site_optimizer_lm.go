@@ -15,8 +15,8 @@ package core
 //     room below the limit; where it starts later see site_optimizer_soc_pass.go
 //   - grid charging the load management currently refuses is not offered
 //     (charge_from_grid off)
-//   - load management: a loadpoint plans with at most its circuits' power, and
-//     the priorities rank the batteries (c_priority)
+//   - load management: a loadpoint plans with at most its circuits' power and
+//     current, and the priorities rank the batteries (c_priority)
 //   - snow on pv: no solar yield, see site_snow.go
 //   - a price tariff set as planner tariff is the grid price the optimizer
 //     plans with, statistics keep the grid tariff
@@ -57,7 +57,8 @@ func optimizerPriority(prio int) int {
 }
 
 // optimizerGridTariff returns the tariff the optimizer plans the grid price
-// with: a price tariff set as planner tariff, else the grid tariff as upstream.
+// with: a price tariff set as planner tariff that has rates, else the grid
+// tariff as upstream.
 // Lets a fixed planning price above the real one make discharging pay where the
 // real prices are too close to the feed-in price.
 func (site *Site) optimizerGridTariff() api.Tariff {
@@ -71,7 +72,11 @@ func (site *Site) optimizerGridTariff() api.Tariff {
 	if t := site.tariffs.Planner; t != nil {
 		switch t.Type() {
 		case api.TariffTypePriceStatic, api.TariffTypePriceDynamic, api.TariffTypePriceForecast:
-			return t
+			// without rates the optimizer would fail on too few slots
+			if len(currentRates(t)) > 0 {
+				return t
+			}
+			site.log.DEBUG.Println("optimizer: planner tariff has no rates, using the grid tariff")
 		}
 	}
 
@@ -95,13 +100,25 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 		req.Grid.PMaxImp = float32(limit)
 	}
 
+	// several home batteries share the grid charge power by capacity
+	var total float32
+	for i := range batteries {
+		if b := &batteries[i]; b.detail.Type == batteryTypeBattery {
+			site.applyBatteryIdent(&b.cfg, &b.detail)
+			total += max(b.cfg.SCapacity, 0)
+		}
+	}
+
 	for i := range batteries {
 		b := &batteries[i]
 
 		switch b.detail.Type {
 		case batteryTypeBattery:
-			site.applyBatteryIdent(&b.cfg, &b.detail)
-			site.applyLmBatteryInputs(&b.cfg, req, peakOn, limit, reserve)
+			share := float32(1)
+			if total > 0 && b.cfg.SCapacity > 0 {
+				share = b.cfg.SCapacity / total
+			}
+			site.applyLmBatteryInputs(&b.cfg, req, peakOn, limit, reserve, share)
 
 			if lmActive && site.lmBatteryCircuit() != nil {
 				b.cfg.CPriority = optimizerPriority(site.lmm().Priority(site.lmBattery()))
@@ -117,8 +134,13 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 				continue
 			}
 
-			if power := circuitPower(lp.GetCircuit()); power > 0 && float32(power) < b.cfg.CMax && float32(power) >= b.cfg.CMin {
-				b.cfg.CMax = float32(power)
+			if power := circuitPower(lp.GetCircuit(), lp.MaxActivePhases()); power > 0 && float32(power) < b.cfg.CMax {
+				// below the minimum the circuit cannot charge it at all
+				if float32(power) < b.cfg.CMin {
+					b.cfg.CMin, b.cfg.CMax = 0, 0
+				} else {
+					b.cfg.CMax = float32(power)
+				}
 			}
 
 			b.cfg.CPriority = optimizerPriority(site.lmm().Priority(lp))
@@ -127,19 +149,26 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 }
 
 // circuitPower returns the lowest power limit of a circuit and its parents, 0
-// without any
-func circuitPower(c api.Circuit) float64 {
+// without any. A current limit counts with the phases the loadpoint charges on.
+func circuitPower(c api.Circuit, phases int) float64 {
 	var res float64
 	for ; c != nil; c = c.GetParent() {
-		if p := c.GetMaxPower(); p > 0 && (res == 0 || p < res) {
+		p := c.GetMaxPower()
+		if i := c.GetMaxCurrent(); i > 0 && phases > 0 && Voltage > 0 {
+			if pi := currentToPower(i, phases); p <= 0 || pi < p {
+				p = pi
+			}
+		}
+		if p > 0 && (res == 0 || p < res) {
 			res = p
 		}
 	}
 	return res
 }
 
-// applyLmBatteryInputs sets the home battery's minimum soc and grid charge goals
-func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimizer.OptimizationInput, peakOn bool, limit, reserve float64) {
+// applyLmBatteryInputs sets the home battery's minimum soc and grid charge goals,
+// share is its part of the capacity of all home batteries
+func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimizer.OptimizationInput, peakOn bool, limit, reserve float64, share float32) {
 	if bat.SCapacity <= 0 {
 		return
 	}
@@ -149,7 +178,10 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 
 	wh := func(soc float64) float32 { return bat.SCapacity * float32(soc) / 100 }
 
-	plan := site.newLmPlan(*bat)
+	plan := site.newLmPlan(*bat, share)
+	if req.EtaC > 0 {
+		plan.etaC = req.EtaC
+	}
 	if req.EtaD > 0 {
 		plan.etaD = req.EtaD
 	}
@@ -214,7 +246,7 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 				d = site.onceRequiredDuration(o.Target, float64(bat.SInitial/bat.SCapacity*100))
 				// unknown grid charge power: the battery's maximum charge power
 				if d <= 0 && bat.CMax > 0 {
-					d = time.Duration(float64(goal-bat.SInitial) / (float64(bat.CMax) * site.identChargeEta()) * float64(time.Hour))
+					d = time.Duration(float64(goal-bat.SInitial) / (float64(bat.CMax) * float64(plan.etaC)) * float64(time.Hour))
 				}
 			}
 			i := max(slotAfter(dt, max(d, 0)), firstGoalStep)

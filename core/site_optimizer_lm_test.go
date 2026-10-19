@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -258,6 +259,12 @@ type co2Tariff struct{}
 func (co2Tariff) Rates() (api.Rates, error) { return nil, nil }
 func (co2Tariff) Type() api.TariffType      { return api.TariffTypeCo2 }
 
+// noRatesTariff is a planner price tariff that has no rates
+type noRatesTariff struct{ err error }
+
+func (t noRatesTariff) Rates() (api.Rates, error) { return nil, t.err }
+func (noRatesTariff) Type() api.TariffType        { return api.TariffTypePriceDynamic }
+
 // A price tariff set as planner tariff is the optimizer's grid price, anything
 // else leaves the grid tariff.
 func TestLmOptimizerGridTariff(t *testing.T) {
@@ -281,6 +288,11 @@ func TestLmOptimizerGridTariff(t *testing.T) {
 
 	site.tariffs.Planner = co2Tariff{}
 	assert.Equal(t, 0.10, price(site), "co2 planner: grid")
+
+	for _, err := range []error{nil, errors.New("fail")} {
+		site.tariffs.Planner = noRatesTariff{err}
+		assert.Equal(t, 0.10, price(site), "planner without rates: grid")
+	}
 
 	assert.Nil(t, (&Site{}).optimizerGridTariff())
 }
@@ -316,7 +328,7 @@ func TestLmBatteryInputsSocChargeSwitch(t *testing.T) {
 
 	// switched off: no goal, no floor from it
 	req, bat := newReq()
-	site.applyLmBatteryInputs(bat, req, false, 0, 0)
+	site.applyLmBatteryInputs(bat, req, false, 0, 0, 1)
 	assert.Empty(t, bat.SGoal)
 	assert.Zero(t, bat.SMin)
 
@@ -324,7 +336,7 @@ func TestLmBatteryInputsSocChargeSwitch(t *testing.T) {
 	// by the second pass
 	s.socChargeEnabled = true
 	req, bat = newReq()
-	site.applyLmBatteryInputs(bat, req, false, 0, 0)
+	site.applyLmBatteryInputs(bat, req, false, 0, 0, 1)
 	assert.Equal(t, float32(2500), bat.SMin)
 	assert.Empty(t, bat.SGoal)
 
@@ -333,21 +345,21 @@ func TestLmBatteryInputsSocChargeSwitch(t *testing.T) {
 	s.socChargeRunning = true
 	req, bat = newReq()
 	bat.SInitial = 2500
-	site.applyLmBatteryInputs(bat, req, false, 0, 0)
+	site.applyLmBatteryInputs(bat, req, false, 0, 0, 1)
 	require.Len(t, bat.SGoal, 96)
 	assert.Equal(t, float32(4000), bat.SGoal[1])
 	s.socChargeRunning = false
 
 	// peak shaving reserve 50 % above the stop soc: hard minimum, nothing planned
 	req, bat = newReq()
-	site.applyLmBatteryInputs(bat, req, true, 10000, 50)
+	site.applyLmBatteryInputs(bat, req, true, 10000, 50, 1)
 	assert.Equal(t, float32(5000), bat.SMin)
 	assert.Empty(t, bat.SGoal)
 
 	// grid charging not allowed from the grid: no goal
 	req, bat = newReq()
 	bat.ChargeFromGrid = false
-	site.applyLmBatteryInputs(bat, req, false, 0, 0)
+	site.applyLmBatteryInputs(bat, req, false, 0, 0, 1)
 	assert.Empty(t, bat.SGoal)
 }
 
@@ -388,9 +400,22 @@ func TestSocPass(t *testing.T) {
 		{StateOfCharge: []float32{4000, 3500, 3000}, ChargingPower: []float32{1500, 0, 0}, DischargingPower: []float32{0, 500, 500}},
 		{StateOfCharge: []float32{23000, 23000, 23000}, ChargingPower: make([]float32, 3), DischargingPower: make([]float32, 3)},
 	}, GridImport: []float32{2000, 1, 1}}
-	socPassJoin(res, res2, k)
+	// prices: the head counts once, the rest comes from the second solve
+	req.TimeSeries.PN = []float32{0.3, 0.3, 0.3, 1, 1, 1}
+	req.TimeSeries.PE = []float32{0.1, 0.1, 0.1, 0, 0, 0}
+	res.GridImport = []float32{10, 0, 20, 9, 9, 9}
+	res.GridExport = []float32{4, 0, 0, 0, 0, 0}
+	res.ObjectiveValue = -100
+	res2.ObjectiveValue = -30
+	// battery value (soc after slot k minus start, times price) and overshoot in the head
+	req.Batteries[0].PA = 0.0002 // (2500-9000)*0.0002 = -1.3
+	req.Batteries[1].PA = 0.0001 // (23000-20000)*0.0001 = 0.3
+	req.Grid.PMaxImp = 5000
+	res.GridImportOvershoot = []float32{0, 0, 5, 0, 0, 0} // 0.3*5 = 1.5
+	socPassJoin(res, res2, *req, k)
 	assert.Equal(t, []float32{7000, 5000, 2500, 4000, 3500, 3000}, res.Batteries[0].StateOfCharge)
-	assert.Equal(t, []float32{0, 0, 0, 2000, 1, 1}, res.GridImport)
+	assert.Equal(t, []float32{10, 0, 20, 2000, 1, 1}, res.GridImport)
+	assert.InDelta(t, -8.6-1.5-1.3+0.3-30, res.ObjectiveValue, 1e-3)
 	assert.Len(t, res.Batteries[1].ChargingPower, 6)
 
 	// not reached, running, switched off, reserve above the start soc
@@ -468,4 +493,57 @@ func TestLmOptimizerGoalNotInStepZero(t *testing.T) {
 		assert.NotPanics(t, func() { site.applyLmOptimizerInputs(&req, batteries) })
 		assert.Empty(t, batteries[0].cfg.SGoal)
 	})
+}
+
+// A circuit's current limit counts like a power limit, with the phases the
+// loadpoint charges on; below the minimum power the loadpoint plans no charging.
+func TestLmOptimizerInputsCircuitCurrent(t *testing.T) {
+	config.Reset()
+	t.Cleanup(config.Reset)
+
+	prev := Voltage
+	Voltage = 230
+	t.Cleanup(func() { Voltage = prev })
+
+	log := util.NewLogger("test")
+	root, err := circuit.New(log, "main", 16, 0, nil, 0)
+	require.NoError(t, err)
+	require.NoError(t, config.Circuits().Add(config.NewStaticDevice(config.Named{Name: "main"}, api.Circuit(root))))
+	subPower, err := circuit.NewConfigurableFromConfig(context.TODO(), map[string]any{"title": "garage", "maxPower": 7000, "parent": "main"})
+	require.NoError(t, err)
+	subCurrent, err := circuit.New(log, "carport", 16, 0, nil, 0)
+	require.NoError(t, err)
+	subLow, err := circuit.New(log, "low", 0, 1000, nil, 0)
+	require.NoError(t, err)
+	none, err := circuit.New(log, "none", 0, 0, nil, 0)
+	require.NoError(t, err)
+
+	cmax := func(c api.Circuit) (float32, float32) {
+		lp := &Loadpoint{log: log, circuit: c, phases: 3}
+		site := &Site{log: log, loadpoints: []*Loadpoint{lp}}
+		id := 0
+		batteries := []optimizerBattery{{
+			cfg:    optimizer.BatteryConfig{CMin: 1400, CMax: 22000},
+			detail: batteryDetail{Type: batteryTypeLoadpoint, loadpoint: &id},
+		}}
+		req := optimizer.OptimizationInput{TimeSeries: optimizer.TimeSeries{Dt: quarterHours(4)}}
+		site.applyLmOptimizerInputs(&req, batteries)
+		return batteries[0].cfg.CMin, batteries[0].cfg.CMax
+	}
+
+	_, got := cmax(subCurrent)
+	assert.Equal(t, float32(11040), got, "16 A on 3 phases")
+
+	_, got = cmax(subPower)
+	assert.Equal(t, float32(7000), got, "sub circuit power below the parent's 16 A")
+
+	cmin, got := cmax(subLow)
+	assert.Zero(t, cmin, "below the minimum power")
+	assert.Zero(t, got)
+
+	_, got = cmax(none)
+	assert.Equal(t, float32(22000), got, "no limit unchanged")
+
+	assert.Equal(t, 11040.0, circuitPower(subCurrent, 3))
+	assert.Zero(t, circuitPower(subCurrent, 0), "unknown phases: current not counted")
 }

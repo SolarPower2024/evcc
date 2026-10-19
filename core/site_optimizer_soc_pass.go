@@ -17,6 +17,8 @@ package core
 // is up to the optimizer. Only the plan changes, nothing is switched.
 
 import (
+	"context"
+
 	optimizer "github.com/evcc-io/optimizer/client"
 )
 
@@ -98,7 +100,7 @@ func socPassRequest(req optimizer.OptimizationInput, res *optimizer.Optimization
 }
 
 // socPassJoin joins the plan of the second pass onto the first after slot k
-func socPassJoin(res *optimizer.OptimizationResult, res2 optimizer.OptimizationResult, k int) {
+func socPassJoin(res *optimizer.OptimizationResult, res2 optimizer.OptimizationResult, req optimizer.OptimizationInput, k int) {
 	join := func(a, b []float32) []float32 {
 		if len(a) <= k || len(b) == 0 {
 			return a
@@ -121,7 +123,25 @@ func socPassJoin(res *optimizer.OptimizationResult, res2 optimizer.OptimizationR
 		res.FlowDirection = append(res.FlowDirection[:k+1:k+1], res2.FlowDirection...)
 	}
 
-	res.ObjectiveValue += res2.ObjectiveValue
+	// the head of the first plan once, the rest from the second, which starts at
+	// the soc after slot k: grid, import beyond the limit and the change of each
+	// battery's value up to slot k. An approximation: only the demand rate and
+	// the penalty terms enter the second solve alone.
+	ts := req.TimeSeries
+	var head float32
+	for i := 0; i <= k; i++ {
+		head += at(ts.PE, i)*at(res.GridExport, i) - at(ts.PN, i)*at(res.GridImport, i)
+		if req.Grid.PMaxImp > 0 {
+			head -= at(ts.PN, i) * at(res.GridImportOvershoot, i)
+		}
+	}
+	for j, b := range req.Batteries {
+		// a result with fewer batteries than the request adds nothing here instead of panicking
+		if j < len(res.Batteries) {
+			head += (at(res.Batteries[j].StateOfCharge, k) - b.SInitial) * b.PA
+		}
+	}
+	res.ObjectiveValue = head + res2.ObjectiveValue
 	res.LimitViolations.GridImportLimitExceeded = res.LimitViolations.GridImportLimitExceeded || res2.LimitViolations.GridImportLimitExceeded
 	res.LimitViolations.GridExportLimitHit = res.LimitViolations.GridExportLimitHit || res2.LimitViolations.GridExportLimitHit
 	if res2.Status != optimizer.Optimal {
@@ -157,9 +177,9 @@ func socPassGoals(goals []float32, k, g int, stop float32, levels, floor []float
 // reaches the start soc of soc-based grid charging and joins both plans. The
 // goals are added to the request, so the published request shows them. On any
 // error the plan before stays.
-func (site *Site) lmSocChargePass(client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, home int, plan lmPlan, floor []float32, res *optimizer.OptimizationResult) {
+func (site *Site) lmSocChargePass(ctx context.Context, client *optimizer.ClientWithResponses, req *optimizer.OptimizationInput, home int, plan lmPlan, floor []float32, res *optimizer.OptimizationResult) {
 	k, stop := site.socPassStart(req, home, res)
-	if k < 0 {
+	if k < 0 || site.lmBudgetUsed(ctx) {
 		return
 	}
 
@@ -182,13 +202,19 @@ func (site *Site) lmSocChargePass(client *optimizer.ClientWithResponses, req *op
 	}
 	b.SGoal = socPassGoals(b.SGoal, k, g, stop, levels, floor, plan.target)
 
-	res2, err := lmSolve(client, req2)
+	res2, err := lmSolve(ctx, client, req2)
 	if err != nil || !lmPlanValid(req2, home, res2) {
 		site.log.DEBUG.Printf("optimizer: soc grid charge pass: %v", passErr(err, res2))
 		return
 	}
 
-	socPassJoin(res, *res2, k)
+	// not more over the limit than the plan it replaces after slot k
+	if over, over2 := tailSum(res.GridImportOvershoot, k+1), sumOf(res2.GridImportOvershoot); over2 > over+1 {
+		site.log.DEBUG.Printf("optimizer: soc grid charge pass: more over the limit (%.0f Wh, first pass %.0f Wh)", over2, over)
+		return
+	}
+
+	socPassJoin(res, *res2, *req, k)
 
 	// the goals as part of the request, for the optimizer page
 	rb := &req.Batteries[home]
