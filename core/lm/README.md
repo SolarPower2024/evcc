@@ -1036,7 +1036,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
 | `charger/switchsocket.go` | `RatedPower` config field |
 | `util/log.go` | `newLogger` writes to `logstash.Output` instead of `logstash.DefaultHandler`, which passes every line on to it and to the log file |
-| `cmd/root.go` | `logstash.CloseFile()` at the end of `runRoot`, after the shutdown functions |
+| `cmd/root.go` | `logstash.CloseFile()` at the end of `runRoot`, after the shutdown functions; `forkUpdateCheck()` (always false, `cmd/root_custom.go`) in the condition of the update check: no "new version" hint in the fork, updates come with the add-on |
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `server/http_config_helper.go` | `customTestResults` in `testInstance`: the config page shows the switch of each stage of a heater in stages (`server/http_config_custom.go`) |
@@ -1068,6 +1068,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | grid charging | `core/site_lm_once.go` (soc-based in `core/site_lm.go`) |
 | peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_omni.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
+| update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
 | EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |

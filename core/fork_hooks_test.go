@@ -63,7 +63,7 @@ var forkHooks = []struct {
 	{"api/globalconfig/types.go", "TariffRefs.Used", []string{"FeedInEeg"}},
 	{"charger/switchsocket.go", "NewSwitchSocketFromConfig", []string{"RatedPower"}},
 	{"util/log.go", "newLogger", []string{"Output"}},
-	{"cmd/root.go", "runRoot", []string{"CloseFile"}},
+	{"cmd/root.go", "runRoot", []string{"CloseFile", "forkUpdateCheck"}},
 }
 
 // forkDeferHooks lists the hooks that have to run on every way out of an evcc

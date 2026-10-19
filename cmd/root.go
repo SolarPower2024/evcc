@@ -512,7 +512,7 @@ func runRoot(cmd *cobra.Command, args []string) {
 	}, viper.ConfigFileUsed(), remoteAccess)
 
 	// skip update check for dev and nightly builds, reduces api load
-	if util.Version != util.DevVersion && !strings.Contains(util.Version, "-dev.") {
+	if util.Version != util.DevVersion && !strings.Contains(util.Version, "-dev.") && forkUpdateCheck() { // custom: no update hint in the fork, see cmd/root_custom.go
 		go updater.Run(log, httpd, valueChan)
 	}
 
