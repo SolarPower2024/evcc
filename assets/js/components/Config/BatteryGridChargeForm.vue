@@ -179,7 +179,13 @@ export default {
 			this.error = "";
 
 			try {
-				// the power first: the entity can be rejected, the power cannot
+				// the mode first, so a rejected entity does not leave it unsaved
+				if (this.mode !== this.initialMode) {
+					await api.post(`batterygridchargemode/${this.mode}`);
+					this.initialMode = this.mode;
+				}
+
+				// the power next: the entity can be rejected, the power cannot
 				if (this.normalizedChargePower !== this.initialChargePower) {
 					await api.post(
 						`peakshavingchargepower/${encodeURIComponent(this.normalizedChargePower)}`
@@ -195,11 +201,6 @@ export default {
 						await api.delete("peakshavingchargeentity");
 					}
 					this.initialEntity = entity;
-				}
-
-				if (this.mode !== this.initialMode) {
-					await api.post(`batterygridchargemode/${this.mode}`);
-					this.initialMode = this.mode;
 				}
 
 				this.$emit("changed");
