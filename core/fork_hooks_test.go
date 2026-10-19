@@ -318,3 +318,58 @@ func TestForkUpdateOrder(t *testing.T) {
 		assert.False(t, callsMethod(body, n), "Site.update calls evcc's %s again", n)
 	}
 }
+
+// mentions reports whether a node contains the identifier (a field name of a
+// literal, a selector's field, a variable)
+func mentions(n ast.Node, name string) bool {
+	found := false
+
+	ast.Inspect(n, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && id.Name == name {
+			found = true
+		}
+		return !found
+	})
+
+	return found
+}
+
+// TestForkOptimizerRequestOrder fails when applyLmOptimizerInputs moved inside
+// optimizerRequest: it reads the series evcc built (Ft per slot, the circuit's
+// PMaxImp) and changes them, and it hands the batteries over before evcc moves
+// them into the request. No test runs optimizerRequest (it needs tariffs, home
+// profile, loadpoints and meters), so the order is checked in the syntax tree.
+func TestForkOptimizerRequestOrder(t *testing.T) {
+	body := funcBody(t, "core/site_optimizer.go", "Site.optimizerRequest")
+
+	build, limit, hook, move := -1, -1, -1, -1
+	for i, st := range body.List {
+		switch s := st.(type) {
+		case *ast.AssignStmt:
+			if mentions(s, "OptimizationInput") && mentions(s, "Ft") {
+				build = i
+			}
+		case *ast.IfStmt:
+			if mentions(s.Cond, "circuit") && mentions(s.Body, "PMaxImp") {
+				limit = i
+			}
+		case *ast.ExprStmt:
+			if callsMethod(s, "applyLmOptimizerInputs") {
+				hook = i
+			}
+		case *ast.RangeStmt:
+			if mentions(s.Body, "Batteries") && mentions(s.Body, "append") {
+				move = i
+			}
+		}
+	}
+
+	require.GreaterOrEqual(t, build, 0, "the request literal with Ft is no statement of the function level")
+	require.GreaterOrEqual(t, limit, 0, "the circuit's PMaxImp is no statement of the function level")
+	require.GreaterOrEqual(t, hook, 0, "applyLmOptimizerInputs is no statement of the function level")
+	require.GreaterOrEqual(t, move, 0, "the loop moving the batteries into the request is no statement of the function level")
+
+	assert.Greater(t, hook, build, "applyLmOptimizerInputs has to follow the request literal")
+	assert.Greater(t, hook, limit, "applyLmOptimizerInputs has to follow the circuit's PMaxImp")
+	assert.Less(t, hook, move, "applyLmOptimizerInputs has to precede the loop moving the batteries")
+}
