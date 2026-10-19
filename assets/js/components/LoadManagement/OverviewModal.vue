@@ -81,7 +81,7 @@
 					<tbody>
 						<tr v-for="l in loads" :key="l.name" :data-testid="`lm-load-${l.name}`">
 							<td>
-								<span class="d-inline-flex align-items-center text-nowrap">
+								<span class="d-inline-flex align-items-center text-break">
 									{{ l.battery ? $t("lmoverview.battery") : l.title || l.name }}
 									<shopicon-regular-lock
 										v-if="l.protected && l.state === 'shed'"
@@ -386,6 +386,11 @@ export default {
 	padding: 0.15rem 0.6rem;
 	border-radius: 1rem;
 	white-space: nowrap;
+}
+@media (max-width: 575.98px) {
+	.pill {
+		white-space: normal;
+	}
 }
 .pill-success {
 	color: var(--bs-success-text-emphasis);
