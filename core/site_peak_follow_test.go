@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
+	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -71,4 +73,45 @@ func TestPeakFollow(t *testing.T) {
 	assert.Equal(t, 8000.0, site.GetPeakShavingLimit())
 	site.updatePeakFollow()
 	assert.Equal(t, 8000.0, site.GetPeakShavingLimit(), "off: no longer follows")
+}
+
+// The stored limit is written under the peak lock, so that follow the peak and
+// switching it off cannot leave an older value behind. The assertion over the
+// interleaving holds under -race (CI) only.
+func TestPeakFollowPersistsUnderLock(t *testing.T) {
+	noSettingsDB(t)
+	keepSettings(t)
+
+	clk := clock.NewMock()
+	clk.Set(time.Date(2026, 9, 20, 12, 0, 0, 0, time.Local))
+
+	site := &Site{log: util.NewLogger("test")}
+	s := site.peak()
+	s.clock = clk
+	setPeakShaving(site, 10000, 20)
+	s.followBuffer = defaultPeakFollowBuffer
+	s.months = []peakMonth{{Month: "2026-09", Peak: 12345}}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 300 {
+			s.mu.Lock()
+			s.months[0].Peak = 11000 + float64(i%5)*1000
+			s.mu.Unlock()
+			site.updatePeakFollow()
+		}
+	}()
+	for i := range 300 {
+		require.NoError(t, site.SetPeakFollow(i%2 == 0))
+	}
+	<-done
+
+	require.NoError(t, site.SetPeakFollow(false))
+	site.updatePeakFollow() // off: no effect
+
+	stored, err := settings.Float(keys.PeakShavingLimit)
+	require.NoError(t, err)
+	assert.Equal(t, site.GetPeakShavingLimit(), stored)
+	assert.Equal(t, 10000.0, stored, "back to the base")
 }

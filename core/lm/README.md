@@ -330,6 +330,9 @@ unknown, but an order more than 2 h past its time is ended, also after a
 restart). Cancelled when the battery is removed. A switch in front of the
 sentence starts and stops it; the last chosen soc is stored and preset for the
 next start. See `core/site_lm_once.go`.
+The cycle writes a change to the order (active, reached, expired) only while the
+order still is the one it read (`updateGridChargeOnce`), so a cancel or a new
+order by the user is never overwritten.
 
 Both pass the same gate as price-based grid charging: the circuit
 ([2](#2-battery-in-load-management)) and a running peak

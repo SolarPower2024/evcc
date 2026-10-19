@@ -185,3 +185,45 @@ func TestGridChargeOnceExpired(t *testing.T) {
 	assert.False(t, site.batteryGridChargeOnceActive())
 	assert.Zero(t, site.gridChargeOnce().Target)
 }
+
+// A cycle that read the order before the user cancelled it does not bring it
+// back with its write.
+func TestGridChargeOnceCycleDoesNotRevive(t *testing.T) {
+	noSettingsDB(t)
+	site := onceSite(t, 40)
+	require.NoError(t, site.SetBatteryGridChargeOnce(80, time.Now().Add(6*time.Hour)))
+
+	snapshot := site.gridChargeOnce()
+	require.NoError(t, site.CancelBatteryGridChargeOnce())
+
+	next := snapshot
+	next.Active = !snapshot.Active
+	assert.False(t, site.updateGridChargeOnce(snapshot, next), "changed meanwhile")
+	assert.Zero(t, site.gridChargeOnce().Target, "stays cancelled")
+
+	var stored gridChargeOnce
+	require.NoError(t, settings.Json(keys.BatteryGridChargeOnce, &stored))
+	assert.Zero(t, stored.Target)
+
+	// a new order with the same target is not the old one: the time differs
+	require.NoError(t, site.SetBatteryGridChargeOnce(80, time.Now().Add(7*time.Hour)))
+	assert.False(t, site.updateGridChargeOnce(snapshot, gridChargeOnce{}))
+	assert.Equal(t, 80.0, site.gridChargeOnce().Target)
+}
+
+// The normal case: nothing changed, the cycle's write goes through.
+func TestGridChargeOnceCycleWritesWhenUnchanged(t *testing.T) {
+	noSettingsDB(t)
+	site := onceSite(t, 40)
+	require.NoError(t, site.SetBatteryGridChargeOnce(80, time.Now().Add(6*time.Hour)))
+
+	snapshot := site.gridChargeOnce()
+	next := snapshot
+	next.Active = !snapshot.Active
+	assert.True(t, site.updateGridChargeOnce(snapshot, next))
+	assert.Equal(t, next.Active, site.gridChargeOnce().Active)
+
+	assert.True(t, site.updateGridChargeOnce(site.gridChargeOnce(), gridChargeOnce{}))
+	assert.Zero(t, site.gridChargeOnce().Target)
+	assert.Equal(t, 80.0, site.gridChargeOnce().Last, "the last target stays")
+}

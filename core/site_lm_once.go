@@ -90,6 +90,32 @@ func (site *Site) setGridChargeOnce(o gridChargeOnce) {
 	site.publishGridChargeOnce(o)
 }
 
+// updateGridChargeOnce is setGridChargeOnce for the cycle: it writes next only
+// while the order still is prev (target, time and active), so that a change by
+// the user between the cycle's read and its write is not overwritten
+func (site *Site) updateGridChargeOnce(prev, next gridChargeOnce) bool {
+	s := site.lms()
+
+	s.mu.Lock()
+	cur := s.gridOnce
+	if cur.Target != prev.Target || !cur.Until.Equal(prev.Until) || cur.Active != prev.Active {
+		s.mu.Unlock()
+		return false
+	}
+	if next.Last == 0 {
+		next.Last = cur.Last
+	}
+	s.gridOnce = next
+	s.mu.Unlock()
+
+	if err := settings.SetJson(keys.BatteryGridChargeOnce, next); err != nil {
+		site.log.ERROR.Printf("battery grid charge once: %v", err)
+	}
+	site.publishGridChargeOnce(next)
+
+	return true
+}
+
 // restoreGridChargeOnce continues a one-time grid charge across a restart
 func (site *Site) restoreGridChargeOnce() {
 	var o gridChargeOnce
@@ -100,7 +126,7 @@ func (site *Site) restoreGridChargeOnce() {
 		s.mu.Unlock()
 
 		if onceExpired(o, time.Now()) {
-			site.endExpiredGridChargeOnce()
+			site.endExpiredGridChargeOnce(o)
 		}
 	}
 
@@ -109,9 +135,10 @@ func (site *Site) restoreGridChargeOnce() {
 
 // endExpiredGridChargeOnce ends an order whose time is long past, so that it does
 // not charge right away much later
-func (site *Site) endExpiredGridChargeOnce() {
-	site.log.INFO.Println("battery grid charge once: time passed, cancelled")
-	site.setGridChargeOnce(gridChargeOnce{})
+func (site *Site) endExpiredGridChargeOnce(prev gridChargeOnce) {
+	if site.updateGridChargeOnce(prev, gridChargeOnce{}) {
+		site.log.INFO.Println("battery grid charge once: time passed, cancelled")
+	}
 }
 
 // validOnceTarget checks the target soc of an order. Stored, 0 stands for no
@@ -177,12 +204,12 @@ func (site *Site) batteryGridChargeOnceActive() bool {
 	// without a battery the soc stays 0 and the target is never reached
 	if !site.batteryConfigured() {
 		site.log.INFO.Println("battery grid charge once: no battery, cancelled")
-		site.setGridChargeOnce(gridChargeOnce{})
+		site.updateGridChargeOnce(o, gridChargeOnce{})
 		return false
 	}
 
 	if onceExpired(o, time.Now()) {
-		site.endExpiredGridChargeOnce()
+		site.endExpiredGridChargeOnce(o)
 		return false
 	}
 
@@ -194,15 +221,16 @@ func (site *Site) batteryGridChargeOnceActive() bool {
 
 	if soc >= o.Target {
 		site.log.INFO.Printf("battery grid charge once: %.0f%% reached", o.Target)
-		site.setGridChargeOnce(gridChargeOnce{})
+		site.updateGridChargeOnce(o, gridChargeOnce{})
 		return false
 	}
 
 	active := o.Until.IsZero() || !time.Now().Before(o.Until) || site.onceSlotActive(o, soc)
 
 	if active != o.Active {
-		o.Active = active
-		site.setGridChargeOnce(o)
+		next := o
+		next.Active = active
+		site.updateGridChargeOnce(o, next)
 	}
 
 	return active

@@ -84,6 +84,10 @@ func (site *Site) updatePeakFollow() {
 	limit := peakFollowLimit(s.followBase, monthPeak, s.followBuffer)
 	previous := s.limit
 	s.limit = limit
+	if limit != previous {
+		// stored under the lock, so that a setter between does not leave an older value behind
+		settings.SetFloat(keys.PeakShavingLimit, limit)
+	}
 	s.mu.Unlock()
 
 	if limit == previous {
@@ -96,7 +100,6 @@ func (site *Site) updatePeakFollow() {
 		site.log.INFO.Printf("follow the peak: limit back to %.1f kW", limit/1e3)
 	}
 
-	settings.SetFloat(keys.PeakShavingLimit, limit)
 	site.publish(keys.PeakShavingLimit, limit)
 	site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 }
@@ -160,11 +163,13 @@ func (site *Site) SetPeakFollow(val bool) error {
 		s.mu.Lock()
 		changed := s.limit != base
 		s.limit = base
+		if changed {
+			settings.SetFloat(keys.PeakShavingLimit, base) // under the lock, see updatePeakFollow
+		}
 		s.mu.Unlock()
 
 		if changed {
 			site.log.INFO.Printf("follow the peak: off, limit back to %.1f kW", base/1e3)
-			settings.SetFloat(keys.PeakShavingLimit, base)
 			site.publish(keys.PeakShavingLimit, base)
 			site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 		}
