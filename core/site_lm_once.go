@@ -82,12 +82,13 @@ func (site *Site) setGridChargeOnce(o gridChargeOnce) {
 		o.Last = s.gridOnce.Last
 	}
 	s.gridOnce = o
-	s.mu.Unlock()
-
+	// stored under the lock, so an older state cannot overwrite a newer one
 	if err := settings.SetJson(keys.BatteryGridChargeOnce, o); err != nil {
 		site.log.ERROR.Printf("battery grid charge once: %v", err)
 	}
-	site.publishGridChargeOnce(o)
+	s.mu.Unlock()
+
+	site.publishGridChargeOnce(site.gridChargeOnce())
 }
 
 // updateGridChargeOnce is setGridChargeOnce for the cycle: it writes next only
@@ -106,12 +107,12 @@ func (site *Site) updateGridChargeOnce(prev, next gridChargeOnce) bool {
 		next.Last = cur.Last
 	}
 	s.gridOnce = next
-	s.mu.Unlock()
-
 	if err := settings.SetJson(keys.BatteryGridChargeOnce, next); err != nil {
 		site.log.ERROR.Printf("battery grid charge once: %v", err)
 	}
-	site.publishGridChargeOnce(next)
+	s.mu.Unlock()
+
+	site.publishGridChargeOnce(site.gridChargeOnce())
 
 	return true
 }
