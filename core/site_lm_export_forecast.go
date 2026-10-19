@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/tariff"
@@ -42,22 +43,15 @@ const (
 
 var exportForecastEntityRe = regexp.MustCompile(`^sensor\.[a-z0-9_]+$`)
 
-// exportRate is one entry of the exported forecast, value is the mean power in W
-type exportRate struct {
-	Start time.Time `json:"start"`
-	End   time.Time `json:"end"`
-	Value float64   `json:"value"`
-}
-
 // exportWrite is a list for an entity
 type exportWrite struct {
 	entity string
-	rates  []exportRate
+	rates  []api.Rate
 }
 
 // same reports whether both are the same list for the same entity
 func (w *exportWrite) same(o *exportWrite) bool {
-	return w != nil && o != nil && w.entity == o.entity && slices.EqualFunc(w.rates, o.rates, func(a, b exportRate) bool {
+	return w != nil && o != nil && w.entity == o.entity && slices.EqualFunc(w.rates, o.rates, func(a, b api.Rate) bool {
 		return a.Start.Equal(b.Start) && a.End.Equal(b.End) && a.Value == b.Value
 	})
 }
@@ -89,13 +83,13 @@ func (site *Site) exportFc() *exportForecastState {
 // the reader can then divide it onto its own slots. Steps with export, and
 // partial hours at either end of the horizon, stay as they are. A result that
 // does not fit the request gives nil.
-func exportForecast(details requestDetails, req optimizer.OptimizationInput, res optimizer.OptimizationResult) []exportRate {
+func exportForecast(details requestDetails, req optimizer.OptimizationInput, res optimizer.OptimizationResult) []api.Rate {
 	n := len(res.GridExport)
 	if n == 0 || len(details.Timestamps) != n || len(req.TimeSeries.Dt) != n {
 		return nil
 	}
 
-	steps := make([]exportRate, 0, n)
+	steps := make([]api.Rate, 0, n)
 	for i, wh := range res.GridExport {
 		dt := time.Duration(req.TimeSeries.Dt[i]) * time.Second
 		if dt <= 0 {
@@ -114,13 +108,13 @@ func exportForecast(details requestDetails, req optimizer.OptimizationInput, res
 			start = q
 		}
 
-		steps = append(steps, exportRate{Start: start, End: end, Value: w})
+		steps = append(steps, api.Rate{Start: start, End: end, Value: w})
 	}
 
-	res2 := make([]exportRate, 0, n)
+	res2 := make([]api.Rate, 0, n)
 	for i := 0; i < len(steps); {
 		if j := zeroHourEnd(steps, i); j > i+1 {
-			res2 = append(res2, exportRate{Start: steps[i].Start, End: steps[j-1].End})
+			res2 = append(res2, api.Rate{Start: steps[i].Start, End: steps[j-1].End})
 			i = j
 			continue
 		}
@@ -134,7 +128,7 @@ func exportForecast(details requestDetails, req optimizer.OptimizationInput, res
 
 // zeroHourEnd returns the index after the steps from i that make up a full hour
 // at 0 W, i if they are not
-func zeroHourEnd(steps []exportRate, i int) int {
+func zeroHourEnd(steps []api.Rate, i int) int {
 	start := steps[i].Start
 	if start.Minute() != 0 || start.Second() != 0 || start.Nanosecond() != 0 {
 		return i
@@ -159,7 +153,7 @@ func zeroHourEnd(steps []exportRate, i int) int {
 }
 
 // exportCurrent is the power of the step covering now, 0 if none does
-func exportCurrent(rates []exportRate, now time.Time) float64 {
+func exportCurrent(rates []api.Rate, now time.Time) float64 {
 	for _, r := range rates {
 		if !now.Before(r.Start) && now.Before(r.End) {
 			return r.Value
@@ -199,7 +193,17 @@ func (site *Site) publishExportForecast(details requestDetails, req optimizer.Op
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.inflight.same(w) || s.pending == nil && s.last.same(w) && time.Since(s.lastWrite) < exportForecastRefresh {
+	// compared with the newest list that is queued or written, not with the last one
+	// written: Z written, A running, Z again must not be dropped as unchanged. A list
+	// equal to the one written is sent again after exportForecastRefresh only.
+	latest := s.pending
+	if latest == nil {
+		latest = s.inflight
+	}
+	if latest == nil {
+		latest = s.last
+	}
+	if latest.same(w) && (latest != s.last || time.Since(s.lastWrite) < exportForecastRefresh) {
 		return
 	}
 

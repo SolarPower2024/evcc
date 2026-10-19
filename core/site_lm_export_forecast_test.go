@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util"
@@ -39,14 +40,14 @@ func TestExportForecastPower(t *testing.T) {
 	// 15 min steps: 250 Wh in 900 s are 1000 W
 	got := exportForecast(exportCase(start, 900, 250, 125.4, 62.5))
 	require.Len(t, got, 3)
-	assert.Equal(t, exportRate{start, start.Add(15 * time.Minute), 1000}, got[0])
+	assert.Equal(t, api.Rate{Start: start, End: start.Add(15 * time.Minute), Value: 1000}, got[0])
 	assert.Equal(t, 502.0, got[1].Value, "rounded to whole W")
 	assert.Equal(t, 250.0, got[2].Value)
 
 	// hourly steps: 1000 Wh in 3600 s are 1000 W
 	got = exportForecast(exportCase(start, 3600, 1000, 2000))
 	require.Len(t, got, 2)
-	assert.Equal(t, exportRate{start, start.Add(time.Hour), 1000}, got[0])
+	assert.Equal(t, api.Rate{Start: start, End: start.Add(time.Hour), Value: 1000}, got[0])
 	assert.Equal(t, 2000.0, got[1].Value)
 
 	// a shortened first step: the power of its own length, listed from the quarter hour it is in
@@ -92,26 +93,26 @@ func TestExportForecastZeroHours(t *testing.T) {
 	details, req, res := exportCase(at(20, 30), 900, steps...)
 	got := exportForecast(details, req, res)
 	require.Len(t, got, 4)
-	assert.Equal(t, exportRate{at(20, 30), at(20, 45), 0}, got[0])
-	assert.Equal(t, exportRate{at(20, 45), at(21, 0), 0}, got[1])
-	assert.Equal(t, exportRate{at(21, 0), at(22, 0), 0}, got[2])
-	assert.Equal(t, exportRate{at(22, 0), at(23, 0), 0}, got[3])
+	assert.Equal(t, api.Rate{Start: at(20, 30), End: at(20, 45), Value: 0}, got[0])
+	assert.Equal(t, api.Rate{Start: at(20, 45), End: at(21, 0), Value: 0}, got[1])
+	assert.Equal(t, api.Rate{Start: at(21, 0), End: at(22, 0), Value: 0}, got[2])
+	assert.Equal(t, api.Rate{Start: at(22, 0), End: at(23, 0), Value: 0}, got[3])
 
 	// one step with export keeps the whole hour in steps
 	steps = []float32{0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0}
 	details, req, res = exportCase(at(21, 0), 900, steps...)
 	got = exportForecast(details, req, res)
 	require.Len(t, got, 1+4+1) // hour 21, the four steps of 22, hour 23
-	assert.Equal(t, exportRate{at(21, 0), at(22, 0), 0}, got[0])
+	assert.Equal(t, api.Rate{Start: at(21, 0), End: at(22, 0), Value: 0}, got[0])
 	assert.Equal(t, 20.0, got[3].Value)
 	assert.Equal(t, at(22, 30), got[3].Start)
-	assert.Equal(t, exportRate{at(23, 0), at(24, 0), 0}, got[len(got)-1], "the last full hour of zeros")
+	assert.Equal(t, api.Rate{Start: at(23, 0), End: at(24, 0), Value: 0}, got[len(got)-1], "the last full hour of zeros")
 
 	// a partial hour at the end of the horizon stays in steps
 	details, req, res = exportCase(at(21, 0), 900, 0, 0, 0, 0, 0, 0)
 	got = exportForecast(details, req, res)
 	require.Len(t, got, 3)
-	assert.Equal(t, exportRate{at(21, 0), at(22, 0), 0}, got[0])
+	assert.Equal(t, api.Rate{Start: at(21, 0), End: at(22, 0), Value: 0}, got[0])
 	assert.Equal(t, at(22, 0), got[1].Start)
 	assert.Equal(t, at(22, 15), got[1].End)
 
@@ -308,9 +309,9 @@ func TestPublishExportForecast(t *testing.T) {
 
 	t.Run("state is the power of the current step", func(t *testing.T) {
 		now := time.Now()
-		cur := []exportRate{
-			{now.Add(-time.Hour), now.Add(-time.Minute), 100},
-			{now.Add(-time.Minute), now.Add(10 * time.Minute), 700},
+		cur := []api.Rate{
+			{Start: now.Add(-time.Hour), End: now.Add(-time.Minute), Value: 100},
+			{Start: now.Add(-time.Minute), End: now.Add(10 * time.Minute), Value: 700},
 		}
 		assert.Equal(t, 700.0, exportCurrent(cur, now))
 		assert.Equal(t, 0.0, exportCurrent(cur, now.Add(time.Hour)))
@@ -514,4 +515,40 @@ func TestLmOptimizerResultExport(t *testing.T) {
 		site.lmOptimizerResult(nil, new(optimizer.OptimizationInput), requestDetails{}, nil)
 		assert.Equal(t, 0, ha.count())
 	})
+}
+
+// Z written, A running, Z again: Z is not dropped as unchanged against the last
+// written list, Home Assistant ends with Z and not with A until the next run.
+func TestPublishExportForecastKeepsOrder(t *testing.T) {
+	noSettingsDB(t)
+	keepSettings(t)
+
+	start := time.Now().Truncate(time.Hour)
+	list := func(v float32) (requestDetails, optimizer.OptimizationInput, optimizer.OptimizationResult) {
+		return exportCase(start, 900, v, 125)
+	}
+
+	ha := new(haRecorder)
+	site := exportSite(t, ha, "sensor.evcc_einspeiseprognose")
+
+	site.publishExportForecast(list(250))
+	site.exportFc().wg.Wait()
+	require.Equal(t, 1, ha.count(), "Z")
+
+	ha.mu.Lock()
+	ha.gate = make(chan struct{})
+	gate := ha.gate
+	ha.mu.Unlock()
+
+	site.publishExportForecast(list(300))
+	require.Eventually(t, func() bool { return ha.count() == 2 }, 5*time.Second, 10*time.Millisecond, "A runs")
+
+	site.publishExportForecast(list(250))
+	close(gate)
+	site.exportFc().wg.Wait()
+
+	require.Equal(t, 3, ha.count(), "Z, A, Z")
+	_, body := ha.call(2)
+	fc := body["attributes"].(map[string]any)["forecast"].([]any)
+	assert.Equal(t, 1000.0, fc[0].(map[string]any)["value"], "250 Wh in 15 min, Z")
 }

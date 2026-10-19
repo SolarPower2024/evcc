@@ -27,7 +27,7 @@ import (
 // exportDay is a run of the optimizer from now on: export in the middle of the
 // day, zeros before and after, first step shortened as a run in the middle of a
 // quarter hour has it
-func exportDay(t *testing.T) ([]exportRate, []exportRate, []float64) {
+func exportDay(t *testing.T) ([]api.Rate, []api.Rate, []float64) {
 	t.Helper()
 
 	// the run is a little into the current quarter hour, its first step ends on the
@@ -51,13 +51,13 @@ func exportDay(t *testing.T) ([]exportRate, []exportRate, []float64) {
 	merged := exportForecast(details, req, res)
 
 	// the same plan as individual steps
-	single := make([]exportRate, n)
+	single := make([]api.Rate, n)
 	want := make([]float64, n)
 	for i := range single {
 		dt := float64(req.TimeSeries.Dt[i])
 		want[i] = math.Round(float64(wh[i]) * 3600 / dt)
 		start := now.Add(time.Duration(i) * 15 * time.Minute)
-		single[i] = exportRate{start, start.Add(15 * time.Minute), want[i]}
+		single[i] = api.Rate{Start: start, End: start.Add(15 * time.Minute), Value: want[i]}
 	}
 
 	require.Less(t, len(merged), len(single), "hours of zeros are merged")
@@ -66,12 +66,12 @@ func exportDay(t *testing.T) ([]exportRate, []exportRate, []float64) {
 
 // haServing makes a tariff of this type read the list from a test server, its
 // times written in the given zone
-func haServing(t *testing.T, list []exportRate, zone *time.Location) api.Tariff {
+func haServing(t *testing.T, list []api.Rate, zone *time.Location) api.Tariff {
 	t.Helper()
 
-	inZone := make([]exportRate, len(list))
+	inZone := make([]api.Rate, len(list))
 	for i, r := range list {
-		inZone[i] = exportRate{r.Start.In(zone), r.End.In(zone), r.Value}
+		inZone[i] = api.Rate{Start: r.Start.In(zone), End: r.End.In(zone), Value: r.Value}
 	}
 
 	b, err := json.Marshal(inZone)
