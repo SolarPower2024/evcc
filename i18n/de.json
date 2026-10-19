@@ -1432,7 +1432,7 @@
         "ident": "Vermessung"
       },
       "gridChargeMode": "Netzladen nach",
-      "gridChargeModeHelp": "SoC: lädt zwischen Start- und Stopp-SoC. Preis: lädt unter dem Preis-Limit (dynamischer Tarif). Umstellen löscht das jeweils andere.",
+      "gridChargeModeHelp": "SoC: lädt zwischen Start- und Stopp-SoC. Preis: lädt unter dem Preis-Limit (dynamischer Tarif). SoC löscht das Preis-Limit, Preis schaltet das SoC-Netzladen aus (Schwellen bleiben).",
       "mode": {
         "both": "beides",
         "soc": "SoC",

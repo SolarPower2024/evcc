@@ -1432,7 +1432,7 @@
         "ident": "Identification"
       },
       "gridChargeMode": "Grid charging by",
-      "gridChargeModeHelp": "SoC: charges between the start and stop soc. Price: charges below the price limit (dynamic tariff). Switching clears the other one.",
+      "gridChargeModeHelp": "SoC: charges between the start and stop soc. Price: charges below the price limit (dynamic tariff). SoC clears the price limit, price turns soc grid charging off (thresholds stay).",
       "mode": {
         "both": "both",
         "soc": "SoC",
