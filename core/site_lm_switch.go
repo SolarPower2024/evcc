@@ -189,8 +189,8 @@ func (site *Site) applyCircuitLimits() {
 	s.mu.Unlock()
 
 	if changed {
+		// the circuits are published by the cycle only, see updateCircuits
 		site.publish(keys.LmOff, res)
-		site.publishCircuits()
 		site.Optimize() // custom: the optimizer's import limit may change, see core/site_optimizer_lm.go
 	}
 }
