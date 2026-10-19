@@ -1133,6 +1133,9 @@ unused:
   `TestGetLoadpointDynamicConfigPhaseSwitch` (`getLoadpointDynamicConfig`),
   `TestTariffRefsFeedInEeg` and `TestCleanupTariffRefFeedInEeg` (`FeedInEeg`); the min and max power
   use of the per phase limits is in `forkHooks` and `TestEffectiveCurrent1p`.
+- `TestSwitchTemplateRatedPower`: the template *Home Assistant Switch* renders `ratedpower`
+  only when given, and the rendered config reaches `SwitchSocket` (the template carries
+  `skiptest`, so evcc's template tests do not render it).
 - `TestForkInertWhenUnused`, `TestEqualPrioritiesAreUpstream`,
   `TestCurrents1pInertWhenUnused`, `TestLmSMaxFromUpstream`: without
   configuration the fork changes nothing.
