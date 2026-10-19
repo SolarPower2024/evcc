@@ -101,6 +101,7 @@ var forkUiHooks = []struct {
 	{"assets/js/components/Energy/GroupChart.vue", []string{"s.returnColor ||"}},
 	{"assets/js/components/Energy/GridStats.vue", []string{"feedInEegStats(this.feedInEeg"}},
 	{"assets/js/utils/version.ts", []string{"version.replace(/^v/, \"\")"}},
+	{"assets/js/components/AboutModal.vue", []string{"<!-- custom: the fork's tags carry a v", "{{ getShortVersion(installed) }}"}},
 	{"assets/js/types/evcc.ts", []string{"extends LmState", "extends LmConfigLoadpoint", `export type * from "./evcc-lm"`}},
 }
 

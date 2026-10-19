@@ -1055,7 +1055,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/components/Config/TariffCard.vue`, `TariffModal.vue` | EEG counter in the EEG card, price templates for `feedInEeg`, planner price hint |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label (`batteryChargeLabelKey` in `utils/lmEnergyflow.ts`) |
 | `assets/js/views/Energy.vue`, `assets/js/components/Energy/GroupChart.vue`, `GridStats.vue` | EEG split of the grid card: series, legend, `returnColor`, revenue tiles, meters without the EEG counter; the logic (`feedInEegStats`, `splitLegends`, `loadFeedInSplit`) is in `feedInEeg.ts`, the files only call it |
-| `assets/js/utils/version.ts` | `getShortVersion` drops a leading `v` before it sets one: the fork's tags (`v0.317.1-lm2`) carry it and the more menu showed `vv0.317.1-lm2` |
+| `assets/js/utils/version.ts`, `assets/js/components/AboutModal.vue` | `getShortVersion` drops a leading `v` before it sets one: the fork's tags (`v0.317.1-lm2`) carry it and the more menu and the about dialog showed `vv0.317.1-lm2`; the dialog shows the version as text, the evcc release page of the fork's tag does not exist (nightly keeps its commit link) |
 | `assets/js/types/evcc.ts` | `State`/`ConfigLoadpoint` extend the types in `evcc-lm.ts`; `feedInEeg` tariff type |
 | `i18n/de.json`, `i18n/en.json` | added texts only |
 
