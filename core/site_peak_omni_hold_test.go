@@ -163,6 +163,22 @@ func TestOmniHoldInertWithoutAutomatic(t *testing.T) {
 	assert.Zero(t, heldSoc(t))
 }
 
+// Another soc threshold entity during the hold: the old one gets its value back
+// first.
+func TestOmniHoldRestoreOnEntityChange(t *testing.T) {
+	sc, ha := omniHold(t)
+	ha.set(haProtSoc, "30")
+	sc.cycle(50, 3000, 0)
+	require.Equal(t, "100", ha.get(haProtSoc))
+
+	ha.mu.Lock()
+	ha.states["number.other_soc"] = &haEntity{"20", map[string]any{"min": 20.0, "max": 100.0, "step": 1.0}}
+	ha.mu.Unlock()
+	require.NoError(t, sc.site.SetPeakShavingProtSoc("number.other_soc"))
+	assert.Equal(t, "30", ha.get(haProtSoc))
+	assert.Zero(t, heldSoc(t))
+}
+
 // A peak covered during the hold is recorded like one below the reserve.
 func TestOmniHoldRecordsPeak(t *testing.T) {
 	sc, _ := omniHold(t)

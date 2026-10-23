@@ -886,6 +886,12 @@ func (site *Site) setProtNumber(entity, key string, name *string, set *func(floa
 		s.out.Unlock()
 		return errHandBack
 	}
+	// a threshold the optimizer's hold raised goes back on the old entity, see
+	// site_peak_omni_hold.go
+	if set != nil && !site.restoreOmniThreshold() {
+		s.out.Unlock()
+		return errHandBack
+	}
 	s.mu.Lock()
 	*name = entity
 	if set != nil {
