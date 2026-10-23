@@ -86,6 +86,14 @@
 			</form>
 		</div>
 
+		<p
+			v-if="optimizerAutomatic"
+			class="small text-muted mt-2 mb-0"
+			data-testid="battery-grid-charge-once-optimizer"
+		>
+			{{ $t("battery.gridChargeOnce.optimizer") }}
+		</p>
+
 		<p v-if="error" class="text-danger small mt-2 mb-0">{{ error }}</p>
 	</div>
 </template>
@@ -95,6 +103,7 @@ import { defineComponent } from "vue";
 import formatter from "@/mixins/formatter";
 import api from "@/api";
 import store from "@/store";
+import { optimizerAutomaticOn } from "@/utils/optimizerAutomatic";
 import CustomSelect from "../Helper/CustomSelect.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
 
@@ -117,6 +126,10 @@ export default defineComponent({
 		return { choice: 0, when: "now", busy: false, error: "" };
 	},
 	computed: {
+		// the optimizer plans the charging in automatic mode, see core/site_optimizer_gate.go
+		optimizerAutomatic(): boolean {
+			return optimizerAutomaticOn(store.state?.optimizerAutomatic);
+		},
 		once(): GridChargeOnce {
 			return store.state?.batteryGridChargeOnce || { target: 0 };
 		},

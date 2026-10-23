@@ -142,6 +142,8 @@ export interface LmLoadStatus {
   allowed?: number;
   /** Shed or paused until. */
   until?: string;
+  /** The optimizer decides this load, load management limits it. */
+  optimizer?: boolean;
 }
 
 export interface LmEvent {

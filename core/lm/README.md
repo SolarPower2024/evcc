@@ -302,6 +302,15 @@ events. Published as `lmStatus` at the end of every cycle
 (`core/site_lm_status.go`, records in `core/lm/status.go`); it never feeds back
 into decisions.
 
+In the optimizer's automatic mode the battery and the loadpoints it controls
+carry the badge *Optimizer* (`optimizer` in the status, `TestLmStatusOptimizer`)
+and a line says that the optimizer decides and load management limits. The
+battery shows as grid charging while an optimizer charge request has passed the
+gate (`TestLmStatusBatteryOptimizerCharge`). The notes on the battery page
+(soc charging, one-time charging, peak shaving), in *Konfiguration → Batterie*
+(price or both) and in the profile dialog show only in automatic mode
+(`assets/js/utils/optimizerAutomatic.ts`).
+
 ## 9. Phase switching: 1p currents and delays
 
 A loadpoint with phase switching can have its own min and max current for 1p
@@ -1211,7 +1220,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
-| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
+| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/utils/optimizerAutomatic.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
 | build | `.github/workflows/custom-image.yml` |
 | start page | `.github/README.md` (GitHub shows it instead of the evcc `README.md`; its feature list follows part 1) |
 

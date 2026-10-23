@@ -191,7 +191,7 @@
 import GenericModal from "../Helper/GenericModal.vue";
 import ProfileIcon, { PROFILE_ICONS } from "../Battery/ProfileIcon.vue";
 import store from "@/store";
-import { OPTIMIZER_AUTOMATIC } from "@/types/evcc";
+import { optimizerAutomaticOn } from "@/utils/optimizerAutomatic";
 import api from "@/api";
 import { profileProblem } from "@/utils/lmProfile";
 
@@ -218,8 +218,7 @@ export default {
 		},
 		// the optimizer in automatic mode decides the discharge control, see core/site_lm_profiles.go
 		optimizerAutomatic() {
-			const level = store.state?.optimizerAutomatic;
-			return !!level && level !== OPTIMIZER_AUTOMATIC.OFF;
+			return optimizerAutomaticOn(store.state?.optimizerAutomatic);
 		},
 		wallboxes() {
 			return store.state?.lmProfileWallboxes || [];
