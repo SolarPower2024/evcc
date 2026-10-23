@@ -632,6 +632,10 @@ func (site *Site) updatePeakShaving(state siteState) {
 
 	case shaving:
 		value = peak.Setpoint(state.gridPower, state.battery.Power, allowed)
+
+	// the optimizer withholds discharging: only a peak is covered, see site_optimizer_gate.go
+	case site.optimizerHolds():
+		value = peak.Setpoint(state.gridPower, state.battery.Power, allowed)
 	}
 
 	// log the start of a peak, not every cycle of it
@@ -1116,9 +1120,14 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 
 	site.peakCheckMeters()
 
-	if gridCharge || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown {
+	if gridCharge || site.optimizerCharges() || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)
 		return
+	}
+
+	// the optimizer's requests pass the gate only on the path above
+	if site.optimizerInControl() {
+		site.releaseGridCharge()
 	}
 
 	if site.GetBatteryMode() == api.BatteryNormal {

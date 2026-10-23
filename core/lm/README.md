@@ -799,8 +799,60 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   forced run arriving during a run follows right after it.
 
 Without circuits, peak shaving, soc or one-time grid charging and snow on pv the
-request is unchanged. The optimizer's automatic mode (evcc PR 32881) needs a gate at
-execution, prepared separately on top of these inputs.
+request is unchanged.
+
+### Optimizer automatic mode
+
+In the optimizer's automatic mode (evcc PR 32881) it also sets the battery mode
+(level battery) and the loadpoints (level full). The
+optimizer decides, the fork sets hard limits at execution
+(`core/site_optimizer_gate.go`, one hook behind evcc's `requiredBatteryMode`).
+Without automatic mode the gate returns evcc's decision unchanged
+(`TestLmGateInertWithoutAutomatic`).
+
+With a current result (a battery suggestion younger than `suggestionMaxAge`,
+30 minutes):
+
+- **charge** passes the same gate as the fork's own grid charging
+  (`gridChargeGate`): a running peak pauses it, the circuit needs room, and the
+  charge power setpoint is written (the battery type Marstek is told through it
+  as with the fork's own charging, `omniWant`). A refused request becomes
+  **hold** (`TestLmGateOptimizerCharge`, `TestLmGateOptimizerChargeRefused`).
+- **hold** releases the fork's grid charging (setpoint 0, circuit reservation
+  gone, `releaseGridCharge`). While the demand is above the grid power allowed
+  the mode becomes **normal**, the battery covers the peak. With peak shaving
+  the discharge setpoint is then only what covers the peak instead of the free
+  value (`optimizerHolds` in `updatePeakShaving`); below the reserve the
+  battery stays in normal mode as before, the setpoint covers peaks only
+  (`TestLmGateOptimizerHold`, `TestLmGatePeakShavingActive`).
+- **normal** and **discharge**: the fork's grid charging is released, peak
+  shaving as usual.
+- Soc-based and one-time grid charging do not switch the battery themselves,
+  they are inputs of the optimizer (start soc as minimum, stop soc as goal,
+  one-time target and time). `batteryGridChargeRequested` is false, so nothing
+  is charged twice and no circuit power is reserved for charging the optimizer
+  does not do (`TestLmGateNoOwnGridCharge`). The price limit is ignored by evcc
+  in automatic mode and applies again after it.
+- evcc's own cases stay: charging an unmodelled loadpoint holds, §14a dimming
+  turns charge into hold (checked after the gate, `TestLmGateHemsDimmed`), a mode
+  set through the api goes first (`TestLmGateExternalModeFirst`).
+
+Without a result, or one older than 30 minutes (also after a restart until the
+first solve), the fork's soc-based and one-time grid charging run as without
+automatic mode, evcc alone would only set normal
+(`TestLmGateOptimizerStale`, `TestLmGateRestartWithoutResult`).
+
+Battery type Marstek: a charge request passes the gate and writes the setpoint
+as the fork's own charging does, so Omnibattery is told to charge. This type is
+not written a discharge power (Omnibattery regulates itself, see 11), so a hold
+acts only through the battery mode of the evcc battery: its mode script, if it
+lists hold, otherwise evcc applies normal. A battery without battery control
+is not controlled by the optimizer at all.
+
+Loadpoints already go through the fork's limits: the optimizer's charging uses
+`setLimit`, `fastCharging` and `minCharging`, so circuit, priorities and the
+phase delay apply (`TestLmGateOptimizerChargingCircuit`); heaters and switch
+sockets the optimizer never controls (`TestLmGateLoadpointsByStage`).
 
 ### Export forecast
 
@@ -1106,6 +1158,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | File | Change |
 | --- | --- |
 | `core/site.go` | `custom` field; `meteredPower` in `updateLoadpoints` (an assumed heater power stays in the home consumption); `restoreCustom` deferred at the start of `restoreSettings` (after the guard for tests, so it also runs when an evcc restore step returns an error); `updateCustom` after `updatePower`; `setPeakGridEnergy` in `updateGridMeter` (with `powerRead`: whether the grid power was read, evcc keeps the old value for a meter that is not available); `setPeakMeterRead` in `collectMeters` (the result of each power read: evcc leaves a failed read at 0 W without a mark); `batteryGridChargeRequested` and `updateBatteryModePeakAware` in place of evcc's calls |
+| `core/site_battery.go` | `lmGateBatteryMode` in `updateBatteryMode` right after evcc decided the mode, before its §14a check (optimizer automatic mode; returns the mode unchanged without it) |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerResult` after the solve, `lmForecastLowest` for the forecast, `lmOptimizeLater`/`lmOptimizeAgain` in `optimizerUpdateAsync` |
@@ -1156,7 +1209,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
 | log file | `util/logstash/file_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
-| optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
+| optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
 | ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
 | build | `.github/workflows/custom-image.yml` |
@@ -1232,6 +1285,10 @@ unused:
 - `TestSetLimitUsesLmCircuit`, `TestPeakReserveKeepsExternalMode`,
   `TestLoadpointUsesSiteLoadManagement`, `TestMergeRoutesKeepsUpstream`: the
   hooks act on evcc's real control path.
+- `TestLmGateInertWithoutAutomatic`, `TestLmGateHemsDimmed`: the hook in
+  `updateBatteryMode` changes nothing without automatic mode and leaves evcc's
+  checks after it in place; `TestLmGateOptimizerChargeRefused` shows a refused
+  charge arriving as hold at the battery.
 - `TestRestoreCustomAfterRestart`: every fork setting survives a restart.
 - `TestGridChargeOnceSurvivesRestartOnDisk`: the one-time order stored by its setter comes back from a database file after reopening it.
 - `TestLmOptimizerResultExport`: the hook in `optimizerUpdate` passes a usable
