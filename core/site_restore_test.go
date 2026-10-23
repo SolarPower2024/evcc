@@ -16,6 +16,8 @@ import (
 func restoreTestSite(t *testing.T) (*Site, *bytes.Buffer) {
 	t.Helper()
 	noSettingsDB(t)
+	// keys other tests left behind (e.g. a battery circuit) would log errors
+	freshSettings(t)
 	site := newScenario(t).site
 	// other tests leave follow the peak on, which would move the limit
 	for _, key := range []string{keys.PeakFollow, keys.PeakFollowBase, keys.PeakFollowBuffer} {

@@ -15,6 +15,7 @@ func omniHold(t *testing.T) (*scenario, *fakeHA) {
 	t.Helper()
 
 	sc, ha := newOmni(t)
+	keepSettings(t)
 	holdOptimizer(t, sc.site)
 	enableAutomatic(t)
 	sc.suggest(api.BatteryHold.String())
@@ -122,6 +123,7 @@ func TestOmniHoldRestoreOnShutdown(t *testing.T) {
 // also with peak shaving off by then.
 func TestOmniHoldRestoreAfterRestart(t *testing.T) {
 	sc, ha := newOmni(t)
+	keepSettings(t)
 	ha.set(haProtSoc, "100")
 
 	settings.SetString(keys.PeakShavingBatteryType, batteryTypeMarstek)
