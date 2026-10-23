@@ -676,7 +676,7 @@ battery usage (priority, buffer and buffer start soc, discharge lock), peak
 shaving (on/off, reserve, limit) and each wallbox's solar share; values not
 ticked are left alone. Applied through the regular setters; priority, buffer
 and buffer start soc are checked together and set bottom up, as evcc checks
-each against the other two. A disabled loadpoint has no instance: its solar share is refused with an error, the other values still apply. Type in `core/lm/profile`, the rest in
+each against the other two. A disabled loadpoint has no instance: its solar share is refused with an error, the other values still apply. In the optimizer's automatic mode the discharge lock is skipped (the optimizer decides it, evcc refuses the setter, `ErrOptimizerAutomatic`), DEBUG line in the log; the other values apply and the profile counts as active (`TestLmProfileDischargeControlAutomatic`). Without automatic mode the value applies again; the profile dialog says so next to the field. Type in `core/lm/profile`, the rest in
 `core/site_lm_profiles.go`.
 
 ```

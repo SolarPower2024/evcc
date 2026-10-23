@@ -658,6 +658,7 @@
       "none": "None",
       "off": "Off",
       "on": "On",
+      "optimizerSkipped": "Automatic: skipped, the optimizer handles it.",
       "takeCurrent": "Take current values",
       "title": "Profiles",
       "unchanged": "unchanged",

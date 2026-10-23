@@ -120,3 +120,37 @@ func TestLmProfileDisabledLoadpoint(t *testing.T) {
 	assert.Equal(t, 25.0, site.GetPrioritySoc(), "the other values are applied")
 	assert.Equal(t, 35.0, site.GetBufferSoc())
 }
+
+// TestLmProfileDischargeControlAutomatic: the optimizer decides the discharge
+// control in automatic mode, so the profile skips that one value and applies the
+// others, without an error; without automatic mode the value applies
+func TestLmProfileDischargeControlAutomatic(t *testing.T) {
+	noSettingsDB(t)
+	sc := newScenario(t)
+	site := sc.site
+	settings.SetJson(keys.LmProfiles, []profile.Profile{})
+	site.peak().set = func(float64) error { return nil }
+
+	p, err := site.SaveLmProfile(profile.Profile{
+		Name: "Netz", Icon: "sun", DischargeControl: bp(true),
+		PrioritySoc: fp(20), BufferSoc: fp(30), BufferStartSoc: fp(40),
+	})
+	require.NoError(t, err)
+
+	t.Run("automatic", func(t *testing.T) {
+		enableAutomatic(t)
+
+		require.NoError(t, site.ApplyLmProfile(p.ID))
+		assert.False(t, site.GetBatteryDischargeControl(), "skipped")
+		assert.Equal(t, 20.0, site.GetPrioritySoc(), "the other values are applied")
+		assert.Equal(t, 40.0, site.GetBufferStartSoc())
+
+		active, _ := settings.String(keys.LmProfileActive)
+		assert.Equal(t, p.ID, active, "the profile counts as active")
+	})
+
+	t.Run("without automatic", func(t *testing.T) {
+		require.NoError(t, site.ApplyLmProfile(p.ID))
+		assert.True(t, site.GetBatteryDischargeControl())
+	})
+}
