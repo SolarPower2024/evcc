@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/benbjohnson/clock"
 	"testing"
+	"time"
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/circuit"
@@ -156,9 +157,14 @@ func TestLmGateOptimizerHold(t *testing.T) {
 	assert.Equal(t, api.BatteryNormal, sc.mode(), "the battery covers the peak")
 	assert.Equal(t, 3000.0, val(sc.peak), "the peak setpoint")
 
+	// a demand around the limit does not switch the mode every cycle
+	assert.False(t, sc.cycle(50, 3000, 0), "peak over, within the hold-off")
+	assert.Equal(t, api.BatteryNormal, sc.mode())
+	assert.Equal(t, 0.0, val(sc.peak))
+
+	sc.clearHoldOffs()
 	assert.False(t, sc.cycle(50, 3000, 0), "peak over")
 	assert.Equal(t, api.BatteryHold, sc.mode())
-	assert.Equal(t, 0.0, val(sc.peak))
 
 	assert.Equal(t, []api.BatteryMode{api.BatteryHold, api.BatteryNormal, api.BatteryHold}, sc.applied())
 }
@@ -376,4 +382,18 @@ func TestLmGateOptimizerChargingCircuit(t *testing.T) {
 	assert.True(t, ok)
 	assert.LessOrEqual(t, charger.current, int64(7), "limited to what the circuit leaves")
 	assert.GreaterOrEqual(t, charger.current, int64(6))
+}
+
+// Without meter values the demand is unknown: the optimizer's hold gives way, the
+// battery covers.
+func TestLmGatePeakNeedsBatteryMetersStale(t *testing.T) {
+	sc := gateScenario(t, api.BatteryHold.String())
+	sc.cycle(50, 3000, 0)
+	require.False(t, sc.site.peakNeedsBattery())
+
+	s := sc.site.peak()
+	s.mu.Lock()
+	s.updated = s.clock.Now().Add(-time.Hour)
+	s.mu.Unlock()
+	assert.True(t, sc.site.peakNeedsBattery())
 }

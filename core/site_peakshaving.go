@@ -101,8 +101,9 @@ type peakState struct {
 
 	conn *homeassistant.Connection // shared, built on first use
 
-	demand      float64   // grid demand without the battery in W, from the last cycle
-	chargePause time.Time // grid charging gives way to peak shaving until then
+	demand        float64   // grid demand without the battery in W, from the last cycle
+	chargePause   time.Time // grid charging gives way to peak shaving until then
+	batteryNeeded time.Time // the optimizer's hold gives way to a peak until then, see peakNeedsBattery
 
 	updated    time.Time    // last cycle with meter values, see peakCheckMeters
 	metersLost bool         // the meters failed for longer than peak.MaxGap

@@ -10,7 +10,10 @@ package core
 // applies as without the optimizer. Without automatic mode the battery follows
 // upstream.
 
-import "github.com/evcc-io/evcc/api"
+import (
+	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/core/peak"
+)
 
 // optimizerInControl reports whether the optimizer in automatic mode decides
 // the battery mode right now: automatic mode with a current result
@@ -41,14 +44,39 @@ func (site *Site) optimizerHolds() bool {
 }
 
 // peakNeedsBattery reports whether the demand exceeds what may be drawn from
-// the grid right now, so the battery has to discharge
+// the grid right now, so the battery has to discharge. Like the pause of grid
+// charging it stays for the hold-off after the demand fell below, so a demand
+// around the limit does not switch the battery mode every cycle, and without
+// meter values the demand is unknown, so the battery covers.
 func (site *Site) peakNeedsBattery() bool {
+	holdOff := site.lmHoldOff()
+
 	s := site.peak()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.enabled && s.set != nil && s.demand > s.window.Allowed
+	if !s.enabled || !s.configured() {
+		return false
+	}
+
+	now := s.clock.Now()
+	if s.metersStale(now) {
+		return true
+	}
+
+	// the allowed power of the running window only, see applyOmniProtection
+	allowed := s.limit
+	if s.window.Start.Equal(now.Truncate(peak.Window)) {
+		allowed = s.window.Allowed
+	}
+
+	if s.demand > allowed {
+		s.batteryNeeded = now.Add(holdOff)
+		return true
+	}
+
+	return now.Before(s.batteryNeeded)
 }
 
 // lmGateBatteryMode passes the battery mode upstream decided in automatic mode:
