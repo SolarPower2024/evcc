@@ -162,3 +162,11 @@ func TestOmniHoldInertWithoutAutomatic(t *testing.T) {
 	assert.Equal(t, "30", ha.get(haProtSoc))
 	assert.Zero(t, heldSoc(t))
 }
+
+// A peak covered during the hold is recorded like one below the reserve.
+func TestOmniHoldRecordsPeak(t *testing.T) {
+	sc, _ := omniHold(t)
+
+	sc.cycle(50, 8000, 0)
+	assert.True(t, sc.site.peak().covering, "peak covered")
+}

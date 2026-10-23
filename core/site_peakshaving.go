@@ -629,6 +629,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 	s.mu.Unlock()
 
 	value := site.peakFreeValue()
+	hold := site.optimizerHolds()
 
 	switch {
 	// no discharging while the battery charges from the grid. A peak pauses the
@@ -641,13 +642,13 @@ func (site *Site) updatePeakShaving(state siteState) {
 		value = peak.Setpoint(state.gridPower, state.battery.Power, allowed)
 
 	// the optimizer withholds discharging: only a peak is covered, see site_optimizer_gate.go
-	case site.optimizerHolds():
+	case hold:
 		value = peak.Setpoint(state.gridPower, state.battery.Power, allowed)
 	}
 
 	// log the start of a peak, not every cycle of it
 	s.mu.Lock()
-	covering := shaving && value > 0
+	covering := (shaving || hold) && value > 0
 	started := covering && !s.covering
 	s.covering = covering
 	if started {

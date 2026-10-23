@@ -833,7 +833,8 @@ With a current result (a battery suggestion younger than `suggestionMaxAge`,
   gone, `releaseGridCharge`). While the demand is above the grid power allowed
   in the running window, and for the hold-off after it (`peakNeedsBattery`, so
   a demand around the limit does not switch the mode every cycle; without meter
-  values as well), the mode becomes **normal**, the battery covers the peak. With peak shaving
+  values as well), the mode becomes **normal**, the battery covers the peak and
+  it counts as a peak covered. With peak shaving
   the discharge setpoint is then only what covers the peak instead of the free
   value (`optimizerHolds` in `updatePeakShaving`); below the reserve the
   battery stays in normal mode as before, the setpoint covers peaks only
