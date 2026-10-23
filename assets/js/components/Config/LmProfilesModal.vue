@@ -135,7 +135,9 @@
 					</div>
 				</div>
 				<p
-					v-if="optimizerAutomatic && group.fields.at(-1)?.key === 'dischargeControl'"
+					v-if="
+						optimizerAutomatic && group.fields.some((f) => f.key === 'dischargeControl')
+					"
 					class="small text-muted mb-1"
 					data-testid="lmprofile-optimizer"
 				>
