@@ -84,6 +84,11 @@ func (site *Site) lmGateBatteryMode(mode api.BatteryMode, gridCharge bool) api.B
 	switch target {
 	case api.BatteryCharge:
 		if !site.gridChargeGate() {
+			// a running peak needs the battery, see the hold below
+			if site.peakNeedsBattery() {
+				site.log.DEBUG.Println("battery mode: optimizer charge refused, covering a peak")
+				return change(api.BatteryNormal)
+			}
 			site.log.DEBUG.Println("battery mode: optimizer charge refused by load management or peak shaving, holding")
 			return change(api.BatteryHold)
 		}

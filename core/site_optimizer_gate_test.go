@@ -92,7 +92,8 @@ func TestLmGateOptimizerCharge(t *testing.T) {
 }
 
 // A charge request is refused during a running peak and without room on the
-// circuit, the battery then holds and the setpoint is 0.
+// circuit, the setpoint is 0. During the peak the battery covers it (normal),
+// without room on the circuit it holds.
 func TestLmGateOptimizerChargeRefused(t *testing.T) {
 	t.Run("peak", func(t *testing.T) {
 		sc := gateScenario(t, api.BatteryCharge.String())
@@ -100,8 +101,8 @@ func TestLmGateOptimizerChargeRefused(t *testing.T) {
 
 		sc.cycle(50, 9000, 0)
 
-		assert.Equal(t, api.BatteryHold, sc.mode())
-		assert.Equal(t, []api.BatteryMode{api.BatteryHold}, sc.applied(), "the hold arrives at the battery")
+		assert.Equal(t, api.BatteryNormal, sc.mode(), "the battery covers the peak")
+		assert.NotContains(t, sc.applied(), api.BatteryHold)
 		assert.Equal(t, 0.0, val(sc.charge), "no setpoint")
 		charge, _ := sc.site.omniWant()
 		assert.False(t, charge)
@@ -132,7 +133,7 @@ func TestLmGateOptimizerChargeRefused(t *testing.T) {
 		sc := gateScenario(t, api.BatteryCharge.String())
 
 		sc.cycle(50, 9000, 0)
-		require.Equal(t, api.BatteryHold, sc.mode())
+		require.Equal(t, api.BatteryNormal, sc.mode())
 
 		sc.clearHoldOffs()
 		sc.cycle(50, 3000, 0)
@@ -313,7 +314,7 @@ func TestLmGatePeakShavingActive(t *testing.T) {
 		sc.withDynamicCharge()
 
 		sc.cycle(25, 8000, 0)
-		assert.Equal(t, api.BatteryHold, sc.mode(), "refused")
+		assert.Equal(t, api.BatteryNormal, sc.mode(), "refused, the battery covers the peak")
 		assert.Equal(t, 0.0, val(sc.charge))
 	})
 

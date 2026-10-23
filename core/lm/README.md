@@ -827,7 +827,8 @@ With a current result (a battery suggestion younger than `suggestionMaxAge`,
   (`gridChargeGate`): a running peak pauses it, the circuit needs room, and the
   charge power setpoint is written (the battery type Marstek is told through it
   as with the fork's own charging, `omniWant`). A refused request becomes
-  **hold** (`TestLmGateOptimizerCharge`, `TestLmGateOptimizerChargeRefused`).
+  **hold**, during a peak **normal**, the battery covers it
+  (`TestLmGateOptimizerCharge`, `TestLmGateOptimizerChargeRefused`).
 - **hold** releases the fork's grid charging (setpoint 0, circuit reservation
   gone, `releaseGridCharge`). While the demand is above the grid power allowed
   the mode becomes **normal**, the battery covers the peak. With peak shaving

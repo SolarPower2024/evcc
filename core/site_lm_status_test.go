@@ -122,9 +122,9 @@ func TestLmStatusBatteryOptimizerCharge(t *testing.T) {
 	assert.Equal(t, lmStateRunning, st.State, "charging from the grid")
 	assert.Equal(t, 2000.0, st.Allowed, "the setpoint")
 
-	// a running peak refuses the request: hold, nothing charges
+	// a running peak refuses the request: the battery covers it, nothing charges
 	sc.cycle(50, 9000, 0)
-	require.Equal(t, api.BatteryHold, sc.mode())
+	require.Equal(t, api.BatteryNormal, sc.mode())
 
 	st = sc.site.lmBatteryStatus(now, false)
 	assert.True(t, st.Optimizer)
