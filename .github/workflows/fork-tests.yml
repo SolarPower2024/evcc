@@ -76,9 +76,11 @@ jobs:
           # tariff: the same for evcc's tariff tests, only the fork's TestHAForecast*.
           # core: evcc's enableAutomatic (optimizer_automatic_test.go) writes sponsor.Subject while an
           # optimizer run started by an earlier evcc test still reads it; evcc runs no race detector.
-          # The skip list is built from the sources (every test calling enableAutomatic), so new evcc
-          # tests of this kind need no change here.
-          evccRace="^($(awk '/^func Test/{n=$2; sub(/\(.*/,"",n)} /enableAutomatic\(t\)/{print n}' core/*_test.go | sort -u | paste -sd'|'))\$"
+          # The skip list is built from the sources (every test calling enableAutomatic, directly or
+          # through a helper that calls it, e.g. the fork's gateScenario), so new tests of this kind
+          # need no change here.
+          autos="enableAutomatic|$(awk '/^func /{n=$2; sub(/\(.*/,"",n)} /enableAutomatic\(t\)/{if(n!~/^Test/)print n}' core/*_test.go | sort -u | paste -sd'|')"
+          evccRace="^($(awk -v re="($autos)[(]t[,)]" '/^func Test/{n=$2; sub(/\(.*/,"",n)} $0 ~ re {print n}' core/*_test.go | sort -u | paste -sd'|'))\$"
           echo "skipped for race (evcc enableAutomatic): $evccRace"
           {
             go test -race -count=1 ./core/lm/... ./core/peak/ ./server/ ./util/logstash/ ./core/metrics/ ./core/circuit/ ./core/loadpoint/ &&

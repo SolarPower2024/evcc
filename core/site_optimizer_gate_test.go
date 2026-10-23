@@ -23,9 +23,10 @@ import (
 // 6250 W.
 func gateScenario(t *testing.T, action string) *scenario {
 	t.Helper()
-	enableAutomatic(t)
 
 	sc := newScenario(t)
+	holdOptimizer(t, sc.site)
+	enableAutomatic(t)
 	if action != "" {
 		sc.suggest(action)
 	}
@@ -184,14 +185,25 @@ func TestLmGateOptimizerHoldWithoutPeakShaving(t *testing.T) {
 	assert.Equal(t, api.BatteryNormal, site.lmGateBatteryMode(api.BatteryHold, false), "covering a peak")
 }
 
+// holdOptimizer keeps the optimizer from running for the duration of the test:
+// with automatic mode on, a setter calling Optimize would otherwise start a real
+// run in the background that reads and changes the site while the test does
+func holdOptimizer(t *testing.T, site *Site) {
+	t.Helper()
+	site.optimizerMu.Lock()
+	t.Cleanup(site.optimizerMu.Unlock)
+}
+
 func automaticSite(t *testing.T, action string) *Site {
 	t.Helper()
-	enableAutomatic(t)
 
 	site := &Site{
 		log:           util.NewLogger("test"),
 		batteryMeters: []config.Device[api.Meter]{config.NewStaticDevice(config.Named{Name: "bat"}, api.Meter(&scenarioBattery{}))},
 	}
+	holdOptimizer(t, site)
+	enableAutomatic(t)
+
 	if action != "" {
 		site.setSuggestions(map[string]types.Suggestion{batteryKey("bat"): {Action: action}})
 	}

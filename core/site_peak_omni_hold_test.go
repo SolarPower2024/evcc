@@ -15,6 +15,7 @@ func omniHold(t *testing.T) (*scenario, *fakeHA) {
 	t.Helper()
 
 	sc, ha := newOmni(t)
+	holdOptimizer(t, sc.site)
 	enableAutomatic(t)
 	sc.suggest(api.BatteryHold.String())
 
