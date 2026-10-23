@@ -355,6 +355,32 @@ func TestSnowAutoWhileOn(t *testing.T) {
 	assert.False(t, site.GetSnowCover())
 }
 
+// TestSnowAutoHandOff: turning the detection on takes snow set by hand off, so
+// the choice automatic does not keep it; snow found by the detection stays
+func TestSnowAutoHandOff(t *testing.T) {
+	keepSettings(t)
+	snowAutoDB(t, snowTariff("open-meteo"))
+
+	var status atomic.Int32
+	data := readSnowTirol(t)
+	site, _, _ := snowAutoSite(t, func() []byte { return data }, &status)
+
+	// on by hand, then automatic: off until the weather says otherwise
+	require.NoError(t, site.SetSnowCover(true))
+	require.NoError(t, site.SetSnowAuto(true))
+	assert.False(t, site.GetSnowCover())
+	v, err := settings.Bool(keys.SnowCover)
+	require.NoError(t, err)
+	assert.False(t, v)
+
+	// found by the detection, automatic off and on again: it stays
+	site.snowAutoRun(snowAt(25, 8, 0))
+	assert.True(t, site.GetSnowCover())
+	require.NoError(t, site.SetSnowAuto(false))
+	require.NoError(t, site.SetSnowAuto(true))
+	assert.True(t, site.GetSnowCover())
+}
+
 // TestSnowAutoWithoutLocation: without an Open-Meteo solar forecast nothing is
 // fetched and the detection is not offered
 func TestSnowAutoWithoutLocation(t *testing.T) {

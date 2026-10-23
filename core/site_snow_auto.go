@@ -209,6 +209,8 @@ func (site *Site) SetSnowAuto(val bool) error {
 	s.auto = val
 	// the weather is fetched at the next cycle
 	s.fetchAt = time.Time{}
+	// snow set by hand goes off: from now on the detection decides
+	byHand := changed && val && s.cover && !s.byAuto
 	s.mu.Unlock()
 
 	if !changed {
@@ -218,6 +220,10 @@ func (site *Site) SetSnowAuto(val bool) error {
 	site.log.DEBUG.Println("set snow detection:", val)
 	settings.SetBool(keys.SnowAuto, val)
 	site.publish(keys.SnowAuto, val)
+
+	if byHand {
+		site.setSnowCover(false, false)
+	}
 
 	return nil
 }
