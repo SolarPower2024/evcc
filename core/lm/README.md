@@ -1040,7 +1040,9 @@ is fetched.
   (`snow detection: weather data not available`), the next attempts after 30
   minutes are logged at DEBUG, INFO when the data is back. The fetch runs in the
   background, the control cycle does not wait for it.
-- Turning the setting on or off fetches at the next cycle at once.
+- Turning the setting on or off fetches at the next cycle at once. Turning it on
+  takes a switch set by hand off (choice *liegt* → *automatisch*): from then on
+  the detection decides; a switch it turned on stays.
 
 ```
 POST /api/snowauto/{true|false}
