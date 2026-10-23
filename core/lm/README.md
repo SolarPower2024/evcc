@@ -605,7 +605,8 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
   on into the next one for the 2 minutes until the meters count as lost; from
   the first cycle in the new window the peak limit applies
   (`TestOmniWindowEnded`).
-- **Soc threshold:** the reserve, at least 20 % (the lowest value of the entity),
+- **Soc threshold:** the reserve (100 % while the optimizer's automatic mode
+  holds the battery, see 16), at least 20 % (the lowest value of the entity),
   rounded up to the step (`TestOmniProtectionThreshold`), every change written:
   the write tolerance is in W and does not apply
   (`TestOmniProtectionThresholdIgnoresWriteTolerance`). The soc selects offer
@@ -853,7 +854,14 @@ automatic mode, evcc alone would only set normal
 
 Battery type Marstek: a charge request passes the gate and writes the setpoint
 as the fork's own charging does, so Omnibattery is told to charge. This type is
-not written a discharge power (Omnibattery regulates itself, see 11), so a hold
+not written a discharge power (Omnibattery regulates itself, see 11). With
+peak shaving on, a hold raises the soc threshold of Omnibattery's peak shaving
+to 100 % (`core/site_peak_omni_hold.go`): Omnibattery then only discharges for
+a peak above the limit and still charges from pv surplus. The value before is
+kept (`peakShavingHoldSoc`, persisted) and written back when peak shaving is
+released (switched off, type or entity changed, shutdown, or the next start
+after a crash); while peak shaving stays on, the end of the hold writes the
+reserve as every cycle does (`TestOmniHold…`). Without peak shaving a hold
 acts only through the battery mode of the evcc battery: its mode script, if it
 lists hold, otherwise evcc applies normal. A battery without battery control
 is not controlled by the optimizer at all.
@@ -1210,7 +1218,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
-| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_omni.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_omni.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |

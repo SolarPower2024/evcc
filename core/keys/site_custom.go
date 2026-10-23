@@ -25,6 +25,7 @@ const (
 	PeakShavingProtLimit            = "peakShavingProtLimit"    // number entity of its limit
 	PeakShavingProtSoc              = "peakShavingProtSoc"      // number entity of its soc threshold
 	PeakShavingProtOwned            = "peakShavingProtOwned"    // evcc turned its peak shaving on, not published
+	PeakShavingHoldSoc              = "peakShavingHoldSoc"      // its soc threshold before the optimizer's hold raised it, not published
 	PeakShavingActive               = "peakShavingActive"
 	PeakShavingChargePower          = "peakShavingChargePower"
 	PeakShavingChargePowerEffective = "peakShavingChargePowerEffective"

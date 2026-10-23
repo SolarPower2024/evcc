@@ -96,6 +96,7 @@ type peakState struct {
 	protSoc    string              // number entity of its soc threshold
 	protSocSet func(float64) error // resolved from protSoc
 	protOwned  bool                // evcc turned the switch on, persisted like owned
+	holdSoc    float64             // threshold before the optimizer's hold raised it, 0 = not raised, persisted, see site_peak_omni_hold.go
 	omniWarned bool                // grid charging without manual control logged, until it is set up again
 
 	conn *homeassistant.Connection // shared, built on first use
@@ -231,6 +232,11 @@ func (site *Site) restorePeakSettings() {
 	if v, err := settings.Bool(keys.PeakShavingProtOwned); err == nil {
 		s.mu.Lock()
 		s.protOwned = v
+		s.mu.Unlock()
+	}
+	if v, err := settings.Float(keys.PeakShavingHoldSoc); err == nil {
+		s.mu.Lock()
+		s.holdSoc = v
 		s.mu.Unlock()
 	}
 
