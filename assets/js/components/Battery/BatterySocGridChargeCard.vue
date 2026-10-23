@@ -44,7 +44,8 @@
 			</i18n-t>
 		</div>
 		<!-- custom: one-time grid charging, see core/site_lm_once.go -->
-		<BatteryGridChargeOnce />
+		<!-- one note for the card: the soc note below covers the one-time charging -->
+		<BatteryGridChargeOnce :optimizer-note="false" />
 		<p
 			v-if="optimizerAutomatic"
 			class="small text-muted mt-3 mb-0"

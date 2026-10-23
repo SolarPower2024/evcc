@@ -87,7 +87,7 @@
 		</div>
 
 		<p
-			v-if="optimizerAutomatic"
+			v-if="optimizerNote && optimizerAutomatic"
 			class="small text-muted mt-2 mb-0"
 			data-testid="battery-grid-charge-once-optimizer"
 		>
@@ -120,6 +120,10 @@ export default defineComponent({
 	name: "BatteryGridChargeOnce",
 	components: { CustomSelect, InlineSocSelect },
 	mixins: [formatter],
+	props: {
+		// off inside the soc grid charging card, which has its own note
+		optimizerNote: { type: Boolean, default: true },
+	},
 	data() {
 		// when: "now" or a time of day HH:MM
 		// choice: soc picked here, 0 = the last target from the server, else 80
