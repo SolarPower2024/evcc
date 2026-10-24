@@ -118,7 +118,7 @@ func finish(req *optimizer.OptimizationInput, batteries []optimizerBattery) {
 type capacityMeter struct{ kWh float64 }
 
 func (m capacityMeter) CurrentPower() (float64, error) { return 0, nil }
-func (m capacityMeter) Capacity() (float64, error)      { return m.kWh, nil }
+func (m capacityMeter) Capacity() (float64, error)     { return m.kWh, nil }
 
 // scenarioSettings are the fork's settings of a scenario
 type scenarioSettings struct {
