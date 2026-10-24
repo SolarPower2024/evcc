@@ -88,12 +88,14 @@
       "noMarstekEntities": "Spitzenlastkappung, Kappungs-Limit oder SOC-Schwelle fehlt (Konfiguration → Lastmanagement-Details → Peak Shaving).",
       "normal": "Eigenverbrauch, Reserve unberührt",
       "off": "Inaktiv",
+      "optimizer": "Automatik: Spitzen deckt die Batterie immer, auch wenn der Optimizer sie hält.",
       "shaving": "Reserve aktiv, kappt Lastspitzen"
     },
     "socGridCharge": {
       "active": "Netzladen läuft",
       "enable": "Hausbatterie abhängig vom Ladestand aus dem Netz laden.",
       "off": "Inaktiv",
+      "optimizer": "Automatik: Der Optimizer plant das Laden. Unter den Start-Ladestand fällt der Akku nicht, bis zum Stopp-Ladestand lädt er zur günstigsten Zeit.",
       "range": "Laden startet bei {start} oder darunter und stoppt bei {stop}.",
       "waiting": "Wartet auf den Startladestand"
     },
@@ -108,7 +110,8 @@
       "cancel": "Abbrechen",
       "running": "Lädt bis {soc}",
       "active": "lädt",
-      "waiting": "wartet auf die günstigste Zeit"
+      "waiting": "wartet auf die günstigste Zeit",
+      "optimizer": "Automatik: Der Optimizer lädt bis zum Ziel, zur gewählten Zeit oder so bald wie möglich."
     }
   },
   "batterySettings": {
@@ -658,6 +661,7 @@
       "none": "Keine",
       "off": "Aus",
       "on": "Ein",
+      "optimizerSkipped": "Automatik: wird übersprungen, das regelt der Optimizer.",
       "takeCurrent": "Aktuelle Werte übernehmen",
       "title": "Profile",
       "unchanged": "nicht ändern",
@@ -1433,6 +1437,7 @@
       },
       "gridChargeMode": "Netzladen nach",
       "gridChargeModeHelp": "SoC: lädt zwischen Start- und Stopp-SoC. Preis: lädt unter dem Preis-Limit (dynamischer Tarif). SoC löscht das Preis-Limit, Preis schaltet das SoC-Netzladen aus (Schwellen bleiben).",
+      "gridChargeModeOptimizer": "Automatik: Nach Preis entscheidet der Optimizer, das Preislimit gilt nicht.",
       "mode": {
         "both": "beides",
         "soc": "SoC",
@@ -1849,7 +1854,9 @@
     "title": "Lastmanagement (Peak)",
     "enabledHelpCircuit": "Die Leistungsgrenze von „{circuit}“ drosselt Wallbox, Heizstäbe und Batterie-Netzladen.",
     "disabledHelpCircuit": "Aus: Die Leistungsgrenze von „{circuit}“ gilt nicht, nichts wird dafür gedrosselt. Andere Stromkreise, Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv.",
-    "peakFollow": "Follow the Peak: Grenze diesen Monat angehoben, eingestellt {limit}"
+    "peakFollow": "Follow the Peak: Grenze diesen Monat angehoben, eingestellt {limit}",
+    "optimizer": "Optimizer",
+    "optimizerHint": "Der Optimizer entscheidet, das Lastmanagement begrenzt."
   },
   "log": {
     "areaLabel": "Nach Bereich filtern",

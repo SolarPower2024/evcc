@@ -75,6 +75,9 @@
 			</div>
 
 			<h6 class="small evcc-gray mb-2">{{ $t("lmoverview.loads") }}</h6>
+			<p v-if="optimizerLoads" class="small evcc-gray mb-2" data-testid="lm-optimizer-hint">
+				{{ $t("lmoverview.optimizerHint") }}
+			</p>
 			<p v-if="!loads.length" class="text-muted">{{ $t("lmoverview.noLoads") }}</p>
 			<div v-else class="table-responsive mb-4">
 				<table class="table table-sm align-middle mb-0">
@@ -89,6 +92,13 @@
 										class="evcc-gray lock"
 										:title="$t('lmoverview.protected')"
 									></shopicon-regular-lock>
+									<!-- custom: the optimizer decides, load management limits, see core/site_lm_status.go -->
+									<span
+										v-if="l.optimizer"
+										class="badge rounded-pill text-bg-light ms-1"
+										data-testid="lm-optimizer-badge"
+										>{{ $t("lmoverview.optimizer") }}</span
+									>
 								</span>
 							</td>
 							<td class="text-end text-nowrap">{{ fmtW(l.power) }}</td>
@@ -229,6 +239,10 @@ export default {
 				allowed,
 				follow,
 			};
+		},
+		// the optimizer decides some of the loads, load management limits them
+		optimizerLoads() {
+			return this.loads.some((l) => l.optimizer);
 		},
 		loads() {
 			return [...(this.status?.loads || [])].sort((a, b) => b.priority - a.priority);

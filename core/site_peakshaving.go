@@ -96,12 +96,14 @@ type peakState struct {
 	protSoc    string              // number entity of its soc threshold
 	protSocSet func(float64) error // resolved from protSoc
 	protOwned  bool                // evcc turned the switch on, persisted like owned
+	holdSoc    float64             // threshold before the optimizer's hold raised it, 0 = not raised, persisted, see site_peak_omni_hold.go
 	omniWarned bool                // grid charging without manual control logged, until it is set up again
 
 	conn *homeassistant.Connection // shared, built on first use
 
-	demand      float64   // grid demand without the battery in W, from the last cycle
-	chargePause time.Time // grid charging gives way to peak shaving until then
+	demand        float64   // grid demand without the battery in W, from the last cycle
+	chargePause   time.Time // grid charging gives way to peak shaving until then
+	batteryNeeded time.Time // the optimizer's hold gives way to a peak until then, see peakNeedsBattery
 
 	updated    time.Time    // last cycle with meter values, see peakCheckMeters
 	metersLost bool         // the meters failed for longer than peak.MaxGap
@@ -231,6 +233,11 @@ func (site *Site) restorePeakSettings() {
 	if v, err := settings.Bool(keys.PeakShavingProtOwned); err == nil {
 		s.mu.Lock()
 		s.protOwned = v
+		s.mu.Unlock()
+	}
+	if v, err := settings.Float(keys.PeakShavingHoldSoc); err == nil {
+		s.mu.Lock()
+		s.holdSoc = v
 		s.mu.Unlock()
 	}
 
@@ -622,6 +629,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 	s.mu.Unlock()
 
 	value := site.peakFreeValue()
+	hold := site.optimizerHolds()
 
 	switch {
 	// no discharging while the battery charges from the grid. A peak pauses the
@@ -632,11 +640,15 @@ func (site *Site) updatePeakShaving(state siteState) {
 
 	case shaving:
 		value = peak.Setpoint(state.gridPower, state.battery.Power, allowed)
+
+	// the optimizer withholds discharging: only a peak is covered, see site_optimizer_gate.go
+	case hold:
+		value = peak.Setpoint(state.gridPower, state.battery.Power, allowed)
 	}
 
 	// log the start of a peak, not every cycle of it
 	s.mu.Lock()
-	covering := shaving && value > 0
+	covering := (shaving || hold) && value > 0
 	started := covering && !s.covering
 	s.covering = covering
 	if started {
@@ -1116,9 +1128,14 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 
 	site.peakCheckMeters()
 
-	if gridCharge || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown {
+	if gridCharge || site.optimizerCharges() || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)
 		return
+	}
+
+	// the optimizer's requests pass the gate only on the path above
+	if site.optimizerInControl() {
+		site.releaseGridCharge()
 	}
 
 	if site.GetBatteryMode() == api.BatteryNormal {

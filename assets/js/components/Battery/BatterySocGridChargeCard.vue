@@ -44,7 +44,15 @@
 			</i18n-t>
 		</div>
 		<!-- custom: one-time grid charging, see core/site_lm_once.go -->
-		<BatteryGridChargeOnce />
+		<!-- one note for the card: the soc note below covers the one-time charging -->
+		<BatteryGridChargeOnce :optimizer-note="false" />
+		<p
+			v-if="optimizerAutomatic"
+			class="small text-muted mt-3 mb-0"
+			data-testid="battery-soc-grid-charge-optimizer"
+		>
+			{{ $t("battery.socGridCharge.optimizer") }}
+		</p>
 		<div
 			v-if="error"
 			class="alert alert-danger mt-3 mb-0 py-2 small"
@@ -62,6 +70,7 @@ import formatter from "@/mixins/formatter";
 import api from "@/api";
 import store from "@/store";
 import { socSteps } from "@/utils/socSteps";
+import { optimizerAutomaticOn } from "@/utils/optimizerAutomatic";
 import Card from "../Helper/Card.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
 import BatteryGridChargeOnce from "./BatteryGridChargeOnce.vue";
@@ -86,6 +95,10 @@ export default defineComponent({
 		};
 	},
 	computed: {
+		// the optimizer plans the charging in automatic mode, see core/site_optimizer_gate.go
+		optimizerAutomatic(): boolean {
+			return optimizerAutomaticOn(store.state?.optimizerAutomatic);
+		},
 		subtitle(): string {
 			const key = this.active ? "active" : this.enabled ? "waiting" : "off";
 			return this.$t(`battery.socGridCharge.${key}`);

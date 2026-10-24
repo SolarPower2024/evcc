@@ -145,6 +145,7 @@ func (sc *scenario) cycle(soc, grid, battery float64) bool {
 func (sc *scenario) clearHoldOffs() {
 	sc.site.lms().batteryShedUntil = time.Time{}
 	sc.site.peak().chargePause = time.Time{}
+	sc.site.peak().batteryNeeded = time.Time{}
 }
 
 func (sc *scenario) mode() api.BatteryMode { return sc.site.GetBatteryMode() }

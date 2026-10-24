@@ -56,7 +56,7 @@
     },
     {
       "name": "Marstek über Omnibattery (Netzladen, Spitzenlastkappung)",
-      "files": ["core/site_peak_omni.go"],
+      "files": ["core/site_peak_omni.go", "core/site_peak_omni_hold.go"],
       "keywords": ["Omnibattery", "omnibattery", "Spitzenlastkappung", "capacity protection"]
     },
     {
@@ -120,11 +120,12 @@
       "name": "Optimizer: Automatikmodus und Planer",
       "files": [
         "core/site_optimizer_lm.go",
+        "core/site_optimizer_gate.go",
         "core/site_optimizer_reserve_pass.go",
         "core/site_optimizer_soc_pass.go"
       ],
       "prs": [32881, 34044],
-      "keywords": ["automatic", "ledger"],
+      "keywords": ["automatic", "ledger", "requiredBatteryMode", "batterySuggestionMode", "suggestionMaxAge"],
       "paths": ["core/site_optimizer.go", "core/planner/"]
     },
     {

@@ -242,7 +242,7 @@ func (site *Site) applyOmniProtection() {
 
 	s.mu.Lock()
 	want := s.batteryType == batteryTypeMarstek && s.enabled && s.configured() && site.batteryConfigured()
-	owned, sw, limitEntity, socSet := s.protOwned, s.protSwitch, s.protLimit, s.protSocSet
+	owned, raised, sw, limitEntity, socSet := s.protOwned, s.holdSoc > 0, s.protSwitch, s.protLimit, s.protSocSet
 	threshold := s.effectiveReserve()
 
 	// the window of the allowed power is the running one: it is renewed by a cycle
@@ -256,16 +256,25 @@ func (site *Site) applyOmniProtection() {
 	s.mu.Unlock()
 
 	if !want {
-		if owned {
+		if owned || raised {
 			site.releaseProt()
 		}
 
 		return
 	}
 
+	// the maximum while the optimizer holds, see site_peak_omni_hold.go
+	threshold, hold, ok := site.omniThreshold(threshold)
+	if !ok {
+		return
+	}
+
 	// threshold and limit first, so the peak shaving never starts with old values
 	if !site.omniWriteNumber("peak shaving soc threshold", "%", socSet, threshold) {
 		return
+	}
+	if !hold {
+		site.setHoldSoc(0)
 	}
 	conn, err := site.haConnection()
 	if !site.logWrite("marstek connect", "connect", err) {
@@ -366,8 +375,13 @@ func (site *Site) setProtOwned(owned bool) {
 }
 
 // releaseProt turns Omnibattery's peak shaving off, if evcc turned it on, and
-// reports whether it is released. Limit and threshold stay. Called with s.out held.
+// reports whether it is released. Limit and threshold stay, only a threshold the
+// optimizer's hold raised goes back first. Called with s.out held.
 func (site *Site) releaseProt() bool {
+	if !site.restoreOmniThreshold() {
+		return false
+	}
+
 	s := site.peak()
 
 	s.mu.Lock()
@@ -869,6 +883,12 @@ func (site *Site) setProtNumber(entity, key string, name *string, set *func(floa
 	// is still known
 	s.out.Lock()
 	if entity == "" && !site.releaseProt() {
+		s.out.Unlock()
+		return errHandBack
+	}
+	// a threshold the optimizer's hold raised goes back on the old entity, see
+	// site_peak_omni_hold.go
+	if set != nil && !site.restoreOmniThreshold() {
 		s.out.Unlock()
 		return errHandBack
 	}

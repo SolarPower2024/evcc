@@ -97,6 +97,8 @@ func (site *Site) releasePeak() {
 			site.log.INFO.Println("peak shaving: the manual control stays on, released with the next start")
 		}
 
+		site.restoreOmniThreshold()
+
 		if protOwned && limitEntity != "" {
 			if conn, err := site.haConnection(); err == nil {
 				site.omniWriteLimit(conn, limitEntity, limit, omniLimitBasis(false, limit))

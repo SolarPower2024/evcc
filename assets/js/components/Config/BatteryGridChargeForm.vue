@@ -20,6 +20,9 @@
 				</option>
 			</select>
 		</FormRow>
+		<p v-if="priceIgnored" class="small text-muted" data-testid="gridcharge-optimizer">
+			{{ $t("config.batterysettings.gridChargeModeOptimizer") }}
+		</p>
 
 		<FormRow
 			id="gridChargeEntity"
@@ -97,6 +100,7 @@ import store from "@/store";
 import api from "@/api";
 import formatter from "@/mixins/formatter";
 import { gridChargeMode, gridChargeModeOptions } from "@/utils/gridChargeMode";
+import { priceLimitIgnored } from "@/utils/optimizerAutomatic";
 
 // How the home battery charges from the grid: with a charge power entity evcc
 // sizes the power to the peak limit and the circuit, without one charging is
@@ -133,6 +137,10 @@ export default {
 		// price needs a dynamic tariff; a stored price stays selectable
 		modeOptions() {
 			return gridChargeModeOptions(!!store.state?.smartCostAvailable, this.initialMode);
+		},
+		// evcc ignores the price limit in automatic mode, see core/site_optimizer_gate.go
+		priceIgnored() {
+			return priceLimitIgnored(store.state?.optimizerAutomatic, this.mode);
 		},
 		marstek() {
 			return store.state?.peakShavingBatteryType === "marstek";

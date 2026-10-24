@@ -88,12 +88,14 @@
       "noMarstekEntities": "Peak shaving switch, peak shaving limit or SOC threshold missing (Configuration → Load management details → Peak Shaving).",
       "normal": "Self-consumption, reserve untouched",
       "off": "Inactive",
+      "optimizer": "Automatic: the battery always covers peaks, even when the optimizer holds it.",
       "shaving": "Reserve active, capping peaks"
     },
     "socGridCharge": {
       "active": "Grid charging is running",
       "enable": "Charge the home battery from the grid based on its state of charge.",
       "off": "Inactive",
+      "optimizer": "Automatic: the optimizer plans charging. The battery stays above the start soc and charges to the stop soc at the cheapest time.",
       "range": "Charging starts at {start} or below and stops at {stop}.",
       "waiting": "Waiting for the start state of charge"
     },
@@ -108,7 +110,8 @@
       "cancel": "Cancel",
       "running": "Charging up to {soc}",
       "active": "charging",
-      "waiting": "waiting for the cheapest time"
+      "waiting": "waiting for the cheapest time",
+      "optimizer": "Automatic: the optimizer charges to the target by the chosen time or as soon as possible."
     }
   },
   "batterySettings": {
@@ -658,6 +661,7 @@
       "none": "None",
       "off": "Off",
       "on": "On",
+      "optimizerSkipped": "Automatic: skipped, the optimizer handles it.",
       "takeCurrent": "Take current values",
       "title": "Profiles",
       "unchanged": "unchanged",
@@ -1433,6 +1437,7 @@
       },
       "gridChargeMode": "Grid charging by",
       "gridChargeModeHelp": "SoC: charges between the start and stop soc. Price: charges below the price limit (dynamic tariff). SoC clears the price limit, price turns soc grid charging off (thresholds stay).",
+      "gridChargeModeOptimizer": "Automatic: the optimizer decides by price, the price limit does not apply.",
       "mode": {
         "both": "both",
         "soc": "SoC",
@@ -1849,7 +1854,9 @@
     "title": "Load management (peak)",
     "enabledHelpCircuit": "The power limit of \"{circuit}\" throttles wallboxes, heaters and battery grid charging.",
     "disabledHelpCircuit": "Off: the power limit of \"{circuit}\" does not apply, nothing is throttled for it. Other circuits, fuses (current limits), §14a and battery peak shaving stay active.",
-    "peakFollow": "Follow the peak: limit raised this month, set {limit}"
+    "peakFollow": "Follow the peak: limit raised this month, set {limit}",
+    "optimizer": "Optimizer",
+    "optimizerHint": "The optimizer decides, load management limits."
   },
   "log": {
     "areaLabel": "Filter by area",

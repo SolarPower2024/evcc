@@ -44,6 +44,14 @@
 			</i18n-t>
 		</div>
 
+		<p
+			v-if="optimizerAutomatic"
+			class="small text-muted mt-3 mb-0"
+			data-testid="battery-peak-shaving-optimizer"
+		>
+			{{ $t("battery.peakShaving.optimizer") }}
+		</p>
+
 		<div v-if="error" class="alert alert-danger mt-3 mb-0 py-2 small">{{ error }}</div>
 
 		<div
@@ -71,6 +79,7 @@ import api from "@/api";
 import store from "@/store";
 import { socSteps, MARSTEK_MIN_RESERVE } from "@/utils/socSteps";
 import { peakShavingSetUp } from "@/utils/peakShaving";
+import { optimizerAutomaticOn } from "@/utils/optimizerAutomatic";
 import Card from "../Helper/Card.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
 
@@ -109,6 +118,10 @@ export default defineComponent({
 		};
 	},
 	computed: {
+		// the battery covers peaks even when the optimizer holds it, see core/site_optimizer_gate.go
+		optimizerAutomatic(): boolean {
+			return optimizerAutomaticOn(store.state?.optimizerAutomatic);
+		},
 		subtitle(): string {
 			if (!this.enabled) return this.$t("battery.peakShaving.off");
 			return this.$t(
