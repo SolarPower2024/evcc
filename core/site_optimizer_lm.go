@@ -25,11 +25,11 @@ package core
 // unchanged.
 
 import (
-	"github.com/evcc-io/evcc/util/grid"
 	"time"
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/util/config"
+	"github.com/evcc-io/evcc/util/grid"
 	optimizer "github.com/evcc-io/optimizer/client"
 )
 

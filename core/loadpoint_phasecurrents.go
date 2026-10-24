@@ -21,11 +21,11 @@ package core
 import (
 	"cmp"
 	"errors"
-	"github.com/evcc-io/evcc/util/grid"
 	"sync/atomic"
 	"time"
 
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/util/grid"
 )
 
 // phaseSwitchSettings holds the phase switching settings, embedded in Loadpoint

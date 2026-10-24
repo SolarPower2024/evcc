@@ -1624,7 +1624,7 @@ func (lp *Loadpoint) pvScalePhases(sitePower, minCurrent, maxCurrent float64, ma
 		useful := !lp.enabled || !lp.charging() || !mayDisable || grid.PowerToCurrent(availablePower, 1) >= min1pCurrent || lp.vehicleClimateActive()
 		disable = insufficient && !useful
 		if disable {
-			lp.log.DEBUG.Printf("available power %.0fW < %.0fW min 1p threshold, disabling instead of scaling down", availablePower, grid.Voltage*min1pCurrent)
+			lp.log.DEBUG.Printf("available power %.0fW < %.0fW min 1p threshold, disabling instead of scaling down", availablePower, grid.CurrentToPower(min1pCurrent, 1))
 		}
 
 		// scaling down also frees load management headroom for min power on activePhases
@@ -1673,7 +1673,7 @@ func (lp *Loadpoint) pvScalePhases(sitePower, minCurrent, maxCurrent float64, ma
 
 	// scale up phases
 	if targetCurrent := grid.PowerToCurrent(availablePower, maxPhases); targetCurrent >= minCurrentMaxPhases && scalable {
-		lp.log.DEBUG.Printf("available power %.0fW > %.0fW min %dp threshold", availablePower, grid.Factor(maxPhases)*grid.Voltage*minCurrentMaxPhases, maxPhases)
+		lp.log.DEBUG.Printf("available power %.0fW > %.0fW min %dp threshold", availablePower, grid.CurrentToPower(minCurrentMaxPhases, maxPhases), maxPhases)
 
 		if lp.phaseTimerElapsed(lp.phaseScaleDelay(3), phaseScale3p) { // custom: phase delay
 			if err := lp.scalePhases(3); err != nil {
@@ -1759,8 +1759,8 @@ func (lp *Loadpoint) boostPower(batteryPower float64) float64 {
 		if activePhases, maxPhases := lp.ActivePhases(), lp.MaxActivePhases(); activePhases < maxPhases &&
 			lp.circuitAllowsPhases(maxPhases, lp.effectiveMinCurrentFor(maxPhases)) { // custom: limits per phases
 			// max power actually achievable on the active phases
-			activeMaxPower := min(lp.EffectiveMaxPower(), grid.Voltage*lp.effectiveMaxCurrent()*grid.Factor(activePhases))
-			delta += max(0, grid.Voltage*lp.effectiveMinCurrentFor(maxPhases)*grid.Factor(maxPhases)-activeMaxPower)
+			activeMaxPower := min(lp.EffectiveMaxPower(), grid.CurrentToPower(lp.effectiveMaxCurrent(), activePhases))
+			delta += max(0, grid.CurrentToPower(lp.effectiveMinCurrentFor(maxPhases), maxPhases)-activeMaxPower)
 		}
 	}
 

@@ -1,7 +1,6 @@
 package core
 
 import (
-	"github.com/evcc-io/evcc/util/grid"
 	"testing"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/evcc-io/evcc/core/circuit"
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/grid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
