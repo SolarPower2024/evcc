@@ -947,7 +947,6 @@ export default {
 				this.values = deepClone(res.data);
 				emptyUnsetPhaseSwitch(this.values); // custom: 0 = unset, shown empty
 				this.thresholdsExpanded = this.thresholdsSet;
-				this.updateSolarMode();
 				this.updatePhases();
 				this.rebaseline();
 			} catch (e) {
