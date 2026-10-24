@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ type capacityBattery struct {
 	kWh float64
 }
 
-func (b *capacityBattery) Capacity() float64 { return b.kWh }
+func (b *capacityBattery) Capacity() (float64, error) { return b.kWh, nil }
 
 // newOnceSite is a site with a battery at soc and the charge power set, the
 // stored order is left as it is
@@ -277,4 +278,23 @@ func TestGridChargeOnceSurvivesRestartOnDisk(t *testing.T) {
 	restarted.restoreGridChargeOnce()
 	assert.Equal(t, 80.0, restarted.gridChargeOnce().Target)
 	assert.False(t, restarted.gridChargeOnce().Until.IsZero())
+}
+
+// a failed read of a battery limit or capacity keeps the last good value instead of counting as 0
+func TestKeepRead(t *testing.T) {
+	site := &Site{}
+
+	_, ok := site.keepRead("cap:bat", 0, errors.New("timeout"))
+	assert.False(t, ok, "never read")
+
+	v, ok := site.keepRead("cap:bat", 10, nil)
+	assert.True(t, ok)
+	assert.Equal(t, 10.0, v)
+
+	v, ok = site.keepRead("cap:bat", 0, errors.New("timeout"))
+	assert.True(t, ok)
+	assert.Equal(t, 10.0, v, "last good read")
+
+	_, ok = site.keepRead("charge:bat", 0, errors.New("timeout"))
+	assert.False(t, ok, "keys are separate")
 }

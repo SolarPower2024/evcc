@@ -10,6 +10,7 @@
 		:on-template-change="handleTemplateChange"
 		:currency="currency"
 		:preserve-on-template-change="preserveFields"
+		:default-template="defaultTemplate"
 		@added="handleAdded"
 		@updated="handleUpdated"
 		@removed="handleRemoved"
@@ -47,6 +48,7 @@
 				v-if="hasDeviceTitle"
 				id="tariffParamDeviceTitle"
 				:label="$t('config.general.title')"
+				:example="$t('config.tariff.solar.titleExample')"
 			>
 				<PropertyField
 					id="tariffParamDeviceTitle"
@@ -118,6 +120,10 @@ export default defineComponent({
 		},
 		tariffType(): TariffType | null {
 			return this.type || this.selectedType;
+		},
+		// a fixed price is the common case for grid import and export
+		defaultTemplate(): string | undefined {
+			return this.tariffType === "grid" || this.tariffType === "feedIn" ? "fixed" : undefined;
 		},
 		modalTitle(): string {
 			if (this.isNew) {

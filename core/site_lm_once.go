@@ -287,10 +287,15 @@ func (site *Site) batteryCapacityKWh() float64 {
 		}
 
 		m, ok := api.Cap[api.BatteryCapacity](dev.Instance())
-		if !ok || m.Capacity() <= 0 {
+		if !ok {
 			return 0
 		}
-		res += m.Capacity()
+		c, err := m.Capacity()
+		c, known := site.keepRead("cap:"+dev.Config().Name, c, err)
+		if !known || c <= 0 {
+			return 0
+		}
+		res += c
 	}
 	return res
 }

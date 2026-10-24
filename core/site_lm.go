@@ -30,6 +30,7 @@ import (
 	"github.com/evcc-io/evcc/core/types"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/config"
+	"github.com/evcc-io/evcc/util/grid"
 )
 
 const (
@@ -45,6 +46,9 @@ type lmState struct {
 	orphanWarn sync.Once   // battery circuit gone, see batteryCircuitOrphan
 	phasesWarn sync.Once   // battery phases missing, see batteryPhasesMissing
 	mu         sync.Mutex
+
+	readMu   sync.Mutex
+	lastRead map[string]float64 // last good battery limit and capacity reads, see keepRead
 
 	socChargeEnabled bool    // soc-based grid charging switch
 	socChargeStart   float64 // start grid charging at or below this soc
@@ -245,7 +249,7 @@ func (b *batteryLoad) GetChargePower() float64 {
 }
 
 func (b *batteryLoad) GetMaxPhaseCurrent() float64 {
-	return powerToCurrent(b.GetChargePower(), b.site.lmBatteryPhases())
+	return grid.PowerToCurrent(b.GetChargePower(), b.site.lmBatteryPhases())
 }
 
 // lmBattery returns the battery's load management participant
@@ -314,6 +318,26 @@ const (
 	chargePowerSourceUnknown = "unknown" // nothing to go by
 )
 
+// keepRead returns v, or the last good value of key when the read failed. evcc reads
+// battery limits and capacity from the device on every call, a single failed read
+// must not count as 0. Without any good read before the bool is false.
+func (site *Site) keepRead(key string, v float64, err error) (float64, bool) {
+	s := site.lms()
+	s.readMu.Lock()
+	defer s.readMu.Unlock()
+
+	if err == nil {
+		if s.lastRead == nil {
+			s.lastRead = make(map[string]float64)
+		}
+		s.lastRead[key] = v
+		return v, true
+	}
+
+	last, ok := s.lastRead[key]
+	return last, ok
+}
+
 // lmBatteryChargePower returns the power the battery is expected to draw while
 // grid charging, and where that number came from.
 //
@@ -332,7 +356,8 @@ func (site *Site) lmBatteryChargePower() (float64, string) {
 	var res float64
 	for _, dev := range site.batteryMeters {
 		if m, ok := api.Cap[api.BatteryPowerLimiter](dev.Instance()); ok {
-			charge, _ := m.GetPowerLimits()
+			charge, _, err := m.GetPowerLimits()
+			charge, _ = site.keepRead("charge:"+dev.Config().Name, charge, err)
 			res += charge
 		}
 	}
@@ -424,9 +449,9 @@ func (site *Site) batteryCircuitBudget(c api.Circuit, want float64) float64 {
 
 	// converted back only when capped, the round trip would otherwise shave off
 	// a fraction of a watt and fail the full power check of on/off charging
-	wantCurrent := powerToCurrent(want, phases)
+	wantCurrent := grid.PowerToCurrent(want, phases)
 	if current := site.lmm().ValidateCurrent(bat, c, bat.GetMaxPhaseCurrent(), wantCurrent); current < wantCurrent {
-		allowed = min(allowed, currentToPower(current, phases))
+		allowed = min(allowed, grid.CurrentToPower(current, phases))
 	}
 
 	return allowed

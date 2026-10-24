@@ -65,7 +65,6 @@ type scenario struct {
 // expected grid charge power of 6250 W
 func newScenario(t *testing.T) *scenario {
 	t.Helper()
-	Voltage = 230
 	keepSettings(t)
 
 	sc := &scenario{t: t}

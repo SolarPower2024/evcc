@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/util/grid"
 )
 
 // phaseSwitchSettings holds the phase switching settings, embedded in Loadpoint
@@ -172,7 +173,7 @@ func (lp *Loadpoint) projectPhaseSwitch1p(sitePower, minCurrent float64) (float6
 	sitePower, phases := lp.projectPhaseSwitch(sitePower, minCurrent)
 	if lp.hasPhaseSwitching() && !lp.phaseTimer.IsZero() {
 		if min1p := lp.effectiveMinCurrentFor(1); min1p != minCurrent {
-			sitePower -= Voltage * (minCurrent - min1p)
+			sitePower -= grid.Voltage * (minCurrent - min1p)
 			minCurrent = min1p
 		}
 	}

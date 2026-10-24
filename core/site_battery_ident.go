@@ -202,7 +202,8 @@ func (site *Site) updateBatteryIdent() {
 
 		var configured float64
 		if m, ok := api.Cap[api.BatteryCapacity](dev.Instance()); ok {
-			configured = m.Capacity()
+			capacity, err := m.Capacity()
+			configured, _ = site.keepRead("cap:"+ref, capacity, err)
 		}
 
 		slots, err := c.Slots(time.Now().AddDate(0, 0, -identDays))

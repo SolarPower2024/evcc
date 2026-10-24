@@ -29,6 +29,7 @@ import (
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/util/config"
+	"github.com/evcc-io/evcc/util/grid"
 	optimizer "github.com/evcc-io/optimizer/client"
 )
 
@@ -154,8 +155,8 @@ func circuitPower(c api.Circuit, phases int) float64 {
 	var res float64
 	for ; c != nil; c = c.GetParent() {
 		p := c.GetMaxPower()
-		if i := c.GetMaxCurrent(); i > 0 && phases > 0 && Voltage > 0 {
-			if pi := currentToPower(i, phases); p <= 0 || pi < p {
+		if i := c.GetMaxCurrent(); i > 0 && phases > 0 && grid.Voltage > 0 {
+			if pi := grid.CurrentToPower(i, phases); p <= 0 || pi < p {
 				p = pi
 			}
 		}

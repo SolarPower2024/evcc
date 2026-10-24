@@ -42,7 +42,7 @@
 
 					<!-- custom: soc grid charging and peak shaving, see core/lm/README.md -->
 					<BatterySocGridChargeCard
-						v-if="batteryControllable && socCardShown"
+						v-if="(chargeSupported || socGridChargeEnabled) && socCardShown"
 						class="box-pull-out mt-4"
 						:enabled="socGridChargeEnabled"
 						:active="socGridChargeEnabled && !!state.batteryGridChargeActive"
@@ -52,7 +52,7 @@
 
 					<!-- custom: grid charging by price only keeps one-time charging, see core/site_lm_grid_mode.go -->
 					<BatteryGridChargeOnceCard
-						v-if="batteryControllable && onceCardShown"
+						v-if="chargeSupported && onceCardShown"
 						class="box-pull-out mt-4"
 					/>
 
@@ -92,7 +92,7 @@ import { defineComponent } from "vue";
 import store from "@/store";
 import settings from "@/settings";
 import api from "@/api";
-import { CURRENCY, OPTIMIZER_AUTOMATIC, type BatteryMeter } from "@/types/evcc";
+import { BATTERY_MODE, CURRENCY, OPTIMIZER_AUTOMATIC, type BatteryMeter } from "@/types/evcc";
 import Header from "../components/Top/Header.vue";
 import Card from "../components/Helper/Card.vue";
 import SmartCostLimit from "../components/Tariff/SmartCostLimit.vue";
@@ -186,11 +186,12 @@ export default defineComponent({
 				forecastToSeries(this.evopt, this.now.getTime())
 			);
 		},
-		batteryControllable(): boolean {
-			return this.devices.some(({ controllable }) => controllable);
+		// custom: ladeunterstützung der Fork-Karten
+		chargeSupported(): boolean {
+			return this.supportsMode(BATTERY_MODE.CHARGE);
 		},
 		gridChargePossible(): boolean {
-			return this.batteryControllable && !!this.state.smartCostAvailable;
+			return this.supportsMode(BATTERY_MODE.CHARGE) && !!this.state.smartCostAvailable;
 		},
 		gridChargeLimit(): number | null {
 			return this.state.batteryGridChargeLimit ?? null;
@@ -231,7 +232,10 @@ export default defineComponent({
 		},
 		// needs a dynamic feed-in tariff, the grid price is irrelevant here
 		gridDischargePossible(): boolean {
-			return this.batteryControllable && !!this.state.smartFeedInPriorityAvailable;
+			return (
+				this.supportsMode(BATTERY_MODE.DISCHARGE) &&
+				!!this.state.smartFeedInPriorityAvailable
+			);
 		},
 		// requires opt-in; a set limit stays visible so it can be removed
 		gridDischargeVisible(): boolean {
@@ -267,6 +271,9 @@ export default defineComponent({
 		},
 	},
 	methods: {
+		supportsMode(mode: BATTERY_MODE): boolean {
+			return this.devices.some((d) => d.modes?.includes(mode));
+		},
 		onRangeStart(start: Date) {
 			this.rangeStart = start;
 		},
