@@ -42,7 +42,7 @@
 
 					<!-- custom: soc grid charging and peak shaving, see core/lm/README.md -->
 					<BatterySocGridChargeCard
-						v-if="supportsMode(BATTERY_MODE.CHARGE) && socCardShown"
+						v-if="chargeSupported && socCardShown"
 						class="box-pull-out mt-4"
 						:enabled="socGridChargeEnabled"
 						:active="socGridChargeEnabled && !!state.batteryGridChargeActive"
@@ -52,7 +52,7 @@
 
 					<!-- custom: grid charging by price only keeps one-time charging, see core/site_lm_grid_mode.go -->
 					<BatteryGridChargeOnceCard
-						v-if="supportsMode(BATTERY_MODE.CHARGE) && onceCardShown"
+						v-if="chargeSupported && onceCardShown"
 						class="box-pull-out mt-4"
 					/>
 
@@ -185,6 +185,10 @@ export default defineComponent({
 				historyToSeries(this.rawSeries),
 				forecastToSeries(this.evopt, this.now.getTime())
 			);
+		},
+		// custom
+		chargeSupported(): boolean {
+			return this.supportsMode(BATTERY_MODE.CHARGE);
 		},
 		gridChargePossible(): boolean {
 			return this.supportsMode(BATTERY_MODE.CHARGE) && !!this.state.smartCostAvailable;
