@@ -186,7 +186,7 @@ export default defineComponent({
 				forecastToSeries(this.evopt, this.now.getTime())
 			);
 		},
-		// custom
+		// custom: ladeunterstützung der Fork-Karten
 		chargeSupported(): boolean {
 			return this.supportsMode(BATTERY_MODE.CHARGE);
 		},
