@@ -42,7 +42,7 @@
 
 					<!-- custom: soc grid charging and peak shaving, see core/lm/README.md -->
 					<BatterySocGridChargeCard
-						v-if="batteryControllable && socCardShown"
+						v-if="supportsMode(BATTERY_MODE.CHARGE) && socCardShown"
 						class="box-pull-out mt-4"
 						:enabled="socGridChargeEnabled"
 						:active="socGridChargeEnabled && !!state.batteryGridChargeActive"
@@ -52,7 +52,7 @@
 
 					<!-- custom: grid charging by price only keeps one-time charging, see core/site_lm_grid_mode.go -->
 					<BatteryGridChargeOnceCard
-						v-if="batteryControllable && onceCardShown"
+						v-if="supportsMode(BATTERY_MODE.CHARGE) && onceCardShown"
 						class="box-pull-out mt-4"
 					/>
 

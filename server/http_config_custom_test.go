@@ -53,6 +53,8 @@ func (phaseSwitchLoadpoint) GetPlanEnergy() (time.Time, float64) { return time.T
 func (phaseSwitchLoadpoint) GetPlanStrategy() api.PlanStrategy   { return api.PlanStrategy{} }
 func (phaseSwitchLoadpoint) GetSocConfig() loadpoint.SocConfig   { return loadpoint.SocConfig{} }
 func (phaseSwitchLoadpoint) GetUI() loadpoint.UIConfig           { return loadpoint.UIConfig{} }
+func (phaseSwitchLoadpoint) GetMinSoc() int                      { return 0 }
+func (phaseSwitchLoadpoint) GetDefaultVehicleRef() string        { return "" }
 func (phaseSwitchLoadpoint) GetThresholds() loadpoint.ThresholdsConfig {
 	return loadpoint.ThresholdsConfig{}
 }

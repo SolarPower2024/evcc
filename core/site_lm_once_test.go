@@ -21,7 +21,7 @@ type capacityBattery struct {
 	kWh float64
 }
 
-func (b *capacityBattery) Capacity() float64 { return b.kWh }
+func (b *capacityBattery) Capacity() (float64, error) { return b.kWh, nil }
 
 // newOnceSite is a site with a battery at soc and the charge power set, the
 // stored order is left as it is
