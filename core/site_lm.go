@@ -16,7 +16,6 @@ package core
 
 import (
 	"fmt"
-	"github.com/evcc-io/evcc/util/grid"
 	"maps"
 	"math"
 	"slices"
@@ -31,6 +30,7 @@ import (
 	"github.com/evcc-io/evcc/core/types"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/config"
+	"github.com/evcc-io/evcc/util/grid"
 )
 
 const (

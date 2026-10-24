@@ -4,12 +4,12 @@ package core
 // core/site_lm.go.
 
 import (
-	"github.com/evcc-io/evcc/util/grid"
 	"sync"
 	"time"
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/lm"
+	"github.com/evcc-io/evcc/util/grid"
 )
 
 var _ lm.Load = (*Loadpoint)(nil)
