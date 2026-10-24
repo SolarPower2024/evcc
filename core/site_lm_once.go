@@ -291,7 +291,8 @@ func (site *Site) batteryCapacityKWh() float64 {
 			return 0
 		}
 		c, err := m.Capacity()
-		if err != nil || c <= 0 {
+		c, known := site.keepRead("cap:"+dev.Config().Name, c, err)
+		if !known || c <= 0 {
 			return 0
 		}
 		res += c

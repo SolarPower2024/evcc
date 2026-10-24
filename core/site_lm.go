@@ -47,6 +47,9 @@ type lmState struct {
 	phasesWarn sync.Once   // battery phases missing, see batteryPhasesMissing
 	mu         sync.Mutex
 
+	readMu   sync.Mutex
+	lastRead map[string]float64 // last good battery limit and capacity reads, see keepRead
+
 	socChargeEnabled bool    // soc-based grid charging switch
 	socChargeStart   float64 // start grid charging at or below this soc
 	socChargeStop    float64 // stop grid charging at or above this soc
@@ -315,6 +318,26 @@ const (
 	chargePowerSourceUnknown = "unknown" // nothing to go by
 )
 
+// keepRead returns v, or the last good value of key when the read failed. evcc reads
+// battery limits and capacity from the device on every call, a single failed read
+// must not count as 0. Without any good read before the bool is false.
+func (site *Site) keepRead(key string, v float64, err error) (float64, bool) {
+	s := site.lms()
+	s.readMu.Lock()
+	defer s.readMu.Unlock()
+
+	if err == nil {
+		if s.lastRead == nil {
+			s.lastRead = make(map[string]float64)
+		}
+		s.lastRead[key] = v
+		return v, true
+	}
+
+	last, ok := s.lastRead[key]
+	return last, ok
+}
+
 // lmBatteryChargePower returns the power the battery is expected to draw while
 // grid charging, and where that number came from.
 //
@@ -333,9 +356,9 @@ func (site *Site) lmBatteryChargePower() (float64, string) {
 	var res float64
 	for _, dev := range site.batteryMeters {
 		if m, ok := api.Cap[api.BatteryPowerLimiter](dev.Instance()); ok {
-			if charge, _, err := m.GetPowerLimits(); err == nil {
-				res += charge
-			}
+			charge, _, err := m.GetPowerLimits()
+			charge, _ = site.keepRead("charge:"+dev.Config().Name, charge, err)
+			res += charge
 		}
 	}
 
