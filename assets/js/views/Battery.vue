@@ -42,7 +42,7 @@
 
 					<!-- custom: soc grid charging and peak shaving, see core/lm/README.md -->
 					<BatterySocGridChargeCard
-						v-if="chargeSupported && socCardShown"
+						v-if="(chargeSupported || socGridChargeEnabled) && socCardShown"
 						class="box-pull-out mt-4"
 						:enabled="socGridChargeEnabled"
 						:active="socGridChargeEnabled && !!state.batteryGridChargeActive"
