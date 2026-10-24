@@ -75,6 +75,9 @@ func (site *Site) publishCircuits() {
 
 	for _, c := range cc {
 		instance := c.Instance()
+		if instance == nil {
+			continue
+		}
 		props := deviceProperties(c)
 
 		// config reference instead of instance: an updated device keeps its name but gets a new instance
@@ -158,7 +161,9 @@ func (site *Site) curtailables() []curtailable {
 	}
 
 	for _, dev := range site.curtailers {
-		res = append(res, curtailable{deviceTitleOrName(dev), dev.Instance()})
+		if dev.Instance() != nil {
+			res = append(res, curtailable{deviceTitleOrName(dev), dev.Instance()})
+		}
 	}
 
 	return res

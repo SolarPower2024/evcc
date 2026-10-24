@@ -501,10 +501,6 @@ func TestLmOptimizerInputsCircuitCurrent(t *testing.T) {
 	config.Reset()
 	t.Cleanup(config.Reset)
 
-	prev := Voltage
-	Voltage = 230
-	t.Cleanup(func() { Voltage = prev })
-
 	log := util.NewLogger("test")
 	root, err := circuit.New(log, "main", 16, 0, nil, 0)
 	require.NoError(t, err)

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/evcc-io/evcc/util/grid"
 	"testing"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 // and the given 1p limits
 func phaseCurrentsLoadpoint(t *testing.T, phases int, min1p, max1p float64) *Loadpoint {
 	t.Helper()
-	Voltage = 230
 	ctrl := gomock.NewController(t)
 
 	plainCharger := api.NewMockCharger(ctrl)
@@ -146,7 +146,7 @@ func TestPvScalePhasesCurrents1p(t *testing.T) {
 
 			// charging at the minimum of the active phases, the rest is grid
 			// export (negative) or import (positive)
-			lp.chargePower = currentToPower(lp.effectiveMinCurrent(), tc.phases)
+			lp.chargePower = grid.CurrentToPower(lp.effectiveMinCurrent(), tc.phases)
 			sitePower := lp.chargePower - tc.available
 
 			// as pvMaxCurrent passes them: the limits of the active phases
@@ -298,7 +298,7 @@ func TestPvScalePhasesDelays(t *testing.T) {
 
 	scale := func(available float64) int {
 		t.Helper()
-		lp.chargePower = currentToPower(lp.effectiveMinCurrent(), lp.ActivePhases())
+		lp.chargePower = grid.CurrentToPower(lp.effectiveMinCurrent(), lp.ActivePhases())
 		return lp.pvScalePhases(lp.chargePower-available, lp.effectiveMinCurrent(), lp.effectiveMaxCurrent(), true)
 	}
 
@@ -445,7 +445,7 @@ func TestBoostPowerBridgesWith3pMin(t *testing.T) {
 func TestPvMaxCurrentUsesLimitsOfNewPhases(t *testing.T) {
 	lp := phaseCurrentsLoadpoint(t, 1, 6, 10)
 	lp.site = &mockSite{}
-	lp.chargePower = currentToPower(10, 1)
+	lp.chargePower = grid.CurrentToPower(10, 1)
 
 	// 9kW available: the 1p maximum (10A) is used up, the 3p minimum (8A) reached
 	current := lp.pvMaxCurrent(lp.chargePower-9000, 0, false, false)

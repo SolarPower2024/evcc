@@ -4,6 +4,7 @@ package core
 // core/site_lm.go.
 
 import (
+	"github.com/evcc-io/evcc/util/grid"
 	"sync"
 	"time"
 
@@ -138,8 +139,8 @@ func (c *lmCircuit) ValidateCurrent(old, new float64) float64 {
 
 	// what the switch draws, not the nominal current offered to it
 	phases := c.lp.ActivePhases()
-	old = powerToCurrent(c.lp.chargePower, phases)
-	need := powerToCurrent(c.lp.lmSwitchPower(), phases)
+	old = grid.PowerToCurrent(c.lp.chargePower, phases)
+	need := grid.PowerToCurrent(c.lp.lmSwitchPower(), phases)
 
 	if allowed := c.lp.lmm().ValidateCurrent(c.lp, c.Circuit, old, need); allowed < need {
 		if c.lp.enabled {
@@ -187,7 +188,7 @@ func (c *lmCircuit) ValidatePower(old, new float64) float64 {
 	case !c.switchDevice:
 		c.requested = new
 		phases := c.lp.ActivePhases()
-		c.allowedPower = c.lp.lmm().RequestPower(c.lp, c.Circuit, old, new, c.demand(new, old, currentToPower(c.lp.effectiveMinCurrent(), phases), c.unusedOffer(powerToCurrent(old, phases))))
+		c.allowedPower = c.lp.lmm().RequestPower(c.lp, c.Circuit, old, new, c.demand(new, old, grid.CurrentToPower(c.lp.effectiveMinCurrent(), phases), c.unusedOffer(grid.PowerToCurrent(old, phases))))
 		return c.allowedPower
 
 	case new <= 0:
@@ -224,7 +225,7 @@ func (c *lmCircuit) done(current, limited float64) {
 	if c.switchDevice {
 		shed = current > 0 && limited == 0
 	} else {
-		allowed = min(allowed, currentToPower(c.allowedCurrent, lp.ActivePhases()))
+		allowed = min(allowed, grid.CurrentToPower(c.allowedCurrent, lp.ActivePhases()))
 		minCurrent := lp.effectiveMinCurrent()
 		shed = current >= minCurrent && limited < minCurrent
 	}
@@ -272,5 +273,5 @@ func (lp *Loadpoint) lmSwitchPower() float64 {
 		return p
 	}
 
-	return currentToPower(lp.effectiveMaxCurrent(), lp.ActivePhases())
+	return grid.CurrentToPower(lp.effectiveMaxCurrent(), lp.ActivePhases())
 }

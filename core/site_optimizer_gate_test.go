@@ -371,7 +371,6 @@ func TestLmGateLoadpointsByStage(t *testing.T) {
 // The optimizer's charging goes through setLimit, so the circuit limits it as
 // any other charging.
 func TestLmGateOptimizerChargingCircuit(t *testing.T) {
-	Voltage = 230
 	enableAutomatic(t)
 
 	m := &lmMeter{power: 5000} // 5 kW of 10 kW taken by the rest

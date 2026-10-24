@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/evcc-io/evcc/util/grid"
 	"testing"
 	"time"
 
@@ -30,7 +31,6 @@ func (m *lmMeter) CurrentPower() (float64, error) { return m.power, nil }
 // the given grid power
 func newSwitchLoadpoint(t *testing.T, rated, grid float64) (*Loadpoint, *lmMeter, api.Circuit) {
 	t.Helper()
-	Voltage = 230
 
 	m := &lmMeter{power: grid}
 	c, err := circuit.New(util.NewLogger("test"), "main", 0, 10000, m, 0)
@@ -81,7 +81,7 @@ func TestSwitchAllOrNothing(t *testing.T) {
 // lmPhaseMeter is a circuit meter with phase currents
 type lmPhaseMeter struct{ current float64 }
 
-func (m *lmPhaseMeter) CurrentPower() (float64, error) { return 3 * Voltage * m.current, nil }
+func (m *lmPhaseMeter) CurrentPower() (float64, error) { return 3 * grid.Voltage * m.current, nil }
 func (m *lmPhaseMeter) Currents() (float64, float64, float64, error) {
 	return m.current, m.current, m.current, nil
 }
@@ -103,7 +103,6 @@ func TestSwitchCurrentLimit(t *testing.T) {
 		{"running into an over current", 4, 3000, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			Voltage = 230
 
 			m := &lmPhaseMeter{current: tc.grid + tc.charging/230}
 			c, err := circuit.New(util.NewLogger("test"), "fuse", 16, 0, m, 0)
@@ -356,8 +355,8 @@ func (lp *Loadpoint) lmLimit(current float64) float64 {
 
 	currentLimit := circuit.ValidateCurrent(lp.actualMaxChargeCurrent(), current)
 	activePhases := lp.ActivePhases()
-	powerLimit := circuit.ValidatePower(lp.chargePower, currentToPower(current, activePhases))
-	limited := lp.roundedCurrent(min(currentLimit, powerToCurrent(powerLimit, activePhases)))
+	powerLimit := circuit.ValidatePower(lp.chargePower, grid.CurrentToPower(current, activePhases))
+	limited := lp.roundedCurrent(min(currentLimit, grid.PowerToCurrent(powerLimit, activePhases)))
 
 	circuit.done(current, limited)
 	return limited
@@ -396,7 +395,6 @@ func TestSetLimitUsesLmCircuit(t *testing.T) {
 		{"wallbox throttled to what fits", &fakeCharger{}, 3, 1000, true, 13},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			Voltage = 230
 
 			m := &lmMeter{power: tc.grid}
 			c, err := circuit.New(util.NewLogger("test"), "main", 0, 10000, m, 0)
@@ -456,7 +454,6 @@ type lmIdleSetup struct {
 
 func newIdleSetup(t *testing.T, limit, base float64) *lmIdleSetup {
 	t.Helper()
-	Voltage = 230
 
 	m := &lmMeter{}
 	c, err := circuit.New(util.NewLogger("test"), "main", 0, limit, m, 0)
@@ -484,7 +481,7 @@ func newIdleSetup(t *testing.T, limit, base float64) *lmIdleSetup {
 
 	// the low one charges with its maximum
 	s.low.offeredCurrent = 16
-	s.low.chargePower = currentToPower(16, 3)
+	s.low.chargePower = grid.CurrentToPower(16, 3)
 
 	return s
 }
@@ -506,7 +503,7 @@ func (s *lmIdleSetup) visit(lp *Loadpoint) float64 {
 	lp.enabled = limited > 0
 
 	if lp == s.low || s.highDraws {
-		lp.chargePower = currentToPower(limited, 3)
+		lp.chargePower = grid.CurrentToPower(limited, 3)
 	}
 
 	if lp == s.high && s.highDraws {
@@ -570,7 +567,7 @@ func TestIdleLoadpointDemandEnds(t *testing.T) {
 
 	// the car charges: the high one draws what it is offered and takes its share
 	s.high.status = api.StatusC
-	s.high.chargePower = currentToPower(s.high.offeredCurrent, 3)
+	s.high.chargePower = grid.CurrentToPower(s.high.offeredCurrent, 3)
 
 	s.visit(s.high)
 	assert.Equal(t, 0.0, s.visit(s.low), "the low one gives way to a charging load")
@@ -585,12 +582,12 @@ func TestHigherLoadpointStartsOnWhatCanBeFreed(t *testing.T) {
 	s.highDraws = true
 
 	s.low.offeredCurrent = 13
-	s.low.chargePower = currentToPower(13, 3)
+	s.low.chargePower = grid.CurrentToPower(13, 3)
 	s.high.enabled = false
 
 	s.run(8)
 
-	assert.GreaterOrEqual(t, s.high.chargePower, currentToPower(6, 3), "the high one runs")
+	assert.GreaterOrEqual(t, s.high.chargePower, grid.CurrentToPower(6, 3), "the high one runs")
 	assert.Zero(t, s.low.chargePower, "the low one gives way, its minimum does not fit next to it")
 }
 
@@ -600,7 +597,7 @@ func TestHigherLoadpointStartsOnWhatCanBeFreed(t *testing.T) {
 // what it is offered is not regulated, more headroom does not make it draw more.
 func TestLoadpointDemand(t *testing.T) {
 	s := newIdleSetup(t, 22000, 2000)
-	min := currentToPower(6, 3)
+	min := grid.CurrentToPower(6, 3)
 
 	d := s.high.lmCircuit().demand(11040, 0, min, false)
 	assert.Equal(t, lm.Demand{Regulated: true, Min: min, Standing: min}, d, "idle")
@@ -658,7 +655,7 @@ func TestLoadpointBelowItsOfferDoesNotShedLowerLoad(t *testing.T) {
 
 			s.high.status = api.StatusC
 			s.high.offeredCurrent = tc.offered
-			s.high.chargePower = currentToPower(tc.drawn, 3)
+			s.high.chargePower = grid.CurrentToPower(tc.drawn, 3)
 
 			s.low.charger = &lmSwitch{rated: 3000}
 			s.low.chargePower = 3000

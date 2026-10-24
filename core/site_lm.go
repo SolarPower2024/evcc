@@ -16,6 +16,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/evcc-io/evcc/util/grid"
 	"maps"
 	"math"
 	"slices"
@@ -245,7 +246,7 @@ func (b *batteryLoad) GetChargePower() float64 {
 }
 
 func (b *batteryLoad) GetMaxPhaseCurrent() float64 {
-	return powerToCurrent(b.GetChargePower(), b.site.lmBatteryPhases())
+	return grid.PowerToCurrent(b.GetChargePower(), b.site.lmBatteryPhases())
 }
 
 // lmBattery returns the battery's load management participant
@@ -332,8 +333,9 @@ func (site *Site) lmBatteryChargePower() (float64, string) {
 	var res float64
 	for _, dev := range site.batteryMeters {
 		if m, ok := api.Cap[api.BatteryPowerLimiter](dev.Instance()); ok {
-			charge, _ := m.GetPowerLimits()
-			res += charge
+			if charge, _, err := m.GetPowerLimits(); err == nil {
+				res += charge
+			}
 		}
 	}
 
@@ -424,9 +426,9 @@ func (site *Site) batteryCircuitBudget(c api.Circuit, want float64) float64 {
 
 	// converted back only when capped, the round trip would otherwise shave off
 	// a fraction of a watt and fail the full power check of on/off charging
-	wantCurrent := powerToCurrent(want, phases)
+	wantCurrent := grid.PowerToCurrent(want, phases)
 	if current := site.lmm().ValidateCurrent(bat, c, bat.GetMaxPhaseCurrent(), wantCurrent); current < wantCurrent {
-		allowed = min(allowed, currentToPower(current, phases))
+		allowed = min(allowed, grid.CurrentToPower(current, phases))
 	}
 
 	return allowed

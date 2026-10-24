@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/evcc-io/evcc/util/grid"
 	"testing"
 	"time"
 
@@ -19,7 +20,6 @@ import (
 // 10 kW circuit, with switches kept in a js vm
 func newStagesLoadpoint(t *testing.T, vm string) (*Loadpoint, api.Charger, *lmMeter) {
 	t.Helper()
-	Voltage = 230
 
 	var stages []any
 	for _, s := range []string{"s1", "s2", "s3"} {
@@ -115,7 +115,7 @@ func TestStagesPvSurplus(t *testing.T) {
 		{9200, 9000},
 		{5900, 3000},
 	} {
-		require.NoError(t, lp.setLimit(powerToCurrent(tc.surplus, 3)))
+		require.NoError(t, lp.setLimit(grid.PowerToCurrent(tc.surplus, 3)))
 		p, err := c.(api.Meter).CurrentPower()
 		require.NoError(t, err)
 		assert.Equal(t, tc.want, p, "%.0fW surplus", tc.surplus)
@@ -151,7 +151,7 @@ func TestStagesGiveWayToHigherPriority(t *testing.T) {
 		heater.chargePower = heaterPower()
 		wallbox.chargePower = 0
 		if wb.enabled {
-			wallbox.chargePower = currentToPower(float64(wb.current), 3)
+			wallbox.chargePower = grid.CurrentToPower(float64(wb.current), 3)
 		}
 		m.power = heater.chargePower + wallbox.chargePower
 		require.NoError(t, heater.circuit.Update(nil))
