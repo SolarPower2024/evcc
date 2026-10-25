@@ -29,6 +29,7 @@ func setBatterySoc(site *Site, soc float64) {
 // a shuffled run; the previous store comes back afterwards
 func freshSettings(t *testing.T) {
 	t.Helper()
+	noSettingsDB(t)
 	before := settings.All()
 	for _, s := range before {
 		_ = settings.Delete(s.Key)
@@ -47,6 +48,8 @@ func freshSettings(t *testing.T) {
 // removed, values it changed are set back
 func keepSettings(t *testing.T) {
 	t.Helper()
+	// a database another test left open would make the restore fail, see noSettingsDB
+	noSettingsDB(t)
 	before := make(map[string]string)
 	for _, s := range settings.All() {
 		before[s.Key] = s.Value

@@ -14,8 +14,9 @@ import (
 func omniHold(t *testing.T) (*scenario, *fakeHA) {
 	t.Helper()
 
+	// a threshold before the hold another test left behind would count as held
+	freshSettings(t)
 	sc, ha := newOmni(t)
-	keepSettings(t)
 	holdOptimizer(t, sc.site)
 	enableAutomatic(t)
 	sc.suggest(api.BatteryHold.String())
