@@ -52,9 +52,11 @@ func TestPeakReleasedOnShutdown(t *testing.T) {
 		assert.Equal(t, []string{
 			"set_value " + haChargeNum + " 0",
 			"turn_off " + haProtSwitch,
+			"set_value " + haProtLimit + " 0",
 		}, ha.take())
 		assert.False(t, sc.site.peakOwned())
 		assert.False(t, sc.site.peak().protOwned)
+		assert.Equal(t, "0", ha.get(haProtLimit), "evcc is gone")
 
 		sc.cycle(20, 1000, 0)
 		sc.cycle(25, 8000, 0)
@@ -66,7 +68,13 @@ func TestPeakReleasedOnShutdown(t *testing.T) {
 		sc.site.releasePeakOnShutdown()
 		assert.Empty(t, ha.take())
 
+		// a BYD says it is gone all the same: the limit 0
 		sc, ha = newByd(t)
+		sc.site.releasePeakOnShutdown()
+		assert.Equal(t, []string{"set_value " + haProtLimit + " 0"}, ha.take())
+
+		sc, ha = newByd(t)
+		sc.site.peak().protLimit = ""
 		sc.site.releasePeakOnShutdown()
 		assert.Empty(t, ha.take())
 	})
@@ -169,6 +177,7 @@ func TestPeakReleasedAfterTimeout(t *testing.T) {
 		assert.Equal(t, []string{
 			"set_value " + haChargeNum + " 0",
 			"turn_off " + haProtSwitch,
+			"set_value " + haProtLimit + " 0",
 		}, ha.take())
 		assert.False(t, sc.site.peakOwned())
 	})

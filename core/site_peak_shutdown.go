@@ -7,7 +7,7 @@ package core
 // the grid charge power and the manual control of a Marstek (it would charge from
 // the grid up to full, with no peak gate and no price check), the limit of
 // Omnibattery's peak shaving at the last value of the window (up to twice the
-// limit), the peak shaving and the charge power of a BYD. The
+// limit), the charge power, the peak shaving and the limit of a BYD. The
 // shutdown function hands it back before evcc exits, see releasePeak.
 //
 // It is best effort: the whole hand back may take peakShutdownBudget, then evcc
@@ -79,7 +79,7 @@ func (site *Site) releasePeakOnShutdown() {
 // releasePeak hands back, safety first: the grid charge power and the manual
 // control of a Marstek, the limit of Omnibattery's peak shaving (it stays on, with
 // the peak limit instead of the allowed power of the window); for a BYD the charge
-// power and the switch of the peak shaving (off), so
+// power, the switch of the peak shaving (off) and the limit 0 (evcc is gone), so
 // the integration lets the battery go. What does not land stays marked as held.
 func (site *Site) releasePeak() {
 	s := site.peak()
@@ -114,4 +114,12 @@ func (site *Site) releasePeak() {
 	}
 
 	site.releaseProt()
+
+	// the limit 0 tells the integration evcc is gone: it lets the battery go at once
+	// rather than after the sign of life ran out
+	if limitEntity != "" {
+		if conn, err := site.haConnection(); err == nil {
+			site.logWrite("byd peak shaving limit", "write 0W", conn.CallNumberService(limitEntity, 0))
+		}
+	}
 }
