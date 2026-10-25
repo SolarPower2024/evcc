@@ -88,8 +88,8 @@ type CustomAPI interface {
 	// capacity tariff, see core/site_peak_tariff.go
 	SetPeakTariff(name string, value float64) error
 
-	GetPeakShavingEntity() string
-	SetPeakShavingEntity(string) error
+	GetPeakShavingRequestEntity() string
+	SetPeakShavingRequestEntity(string) error
 	GetPeakShavingBatteryType() string
 	SetPeakShavingBatteryType(string) error
 	GetPeakShavingManualEntity() string

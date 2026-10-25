@@ -36,16 +36,24 @@ import (
 // the battery would otherwise stay held with nothing left to release it
 var errHandBack = errors.New("could not hand the battery back, see the log")
 
-// configured reports whether peak shaving has what it needs to run: the target
-// of the discharge power, for the battery type Marstek the three entities of
-// Omnibattery's peak shaving. Called with mu held.
+// configured reports whether peak shaving has what it needs to run: the three
+// entities of the external peak control. Called with mu held.
 func (s *peakState) configured() bool {
-	if s.batteryType == batteryTypeMarstek {
-		return s.protSwitch != "" && s.protLimit != "" && s.protSocSet != nil
+	return s.protSwitch != "" && s.protLimit != "" && s.protSocSet != nil
+}
+
+// extName names the battery type in the log
+func (site *Site) extName() string {
+	if site.omniType() {
+		return batteryTypeMarstek
 	}
 
-	return s.set != nil
+	return batteryTypeBYD
 }
+
+// minBydLimit is the lowest limit written to the integration of the battery type
+// BYD: it takes 0 for a limit that ran out, see bydLimitRule
+const minBydLimit = 100.0
 
 // peakConfigured reports whether peak shaving has what it needs to run, see
 // peakState.configured
@@ -58,17 +66,23 @@ func (site *Site) peakConfigured() bool {
 	return s.configured()
 }
 
-// applyOmniProtection brings Omnibattery's peak shaving to what peak shaving
-// wants: while it runs, the soc threshold is the reserve, at least 20 %, the limit
-// the grid power allowed in the running 15 minute window (without meter values the
-// peak limit, following the peak included) and the switch on. Otherwise the switch
-// is turned off, but only if evcc turned it on (protOwned); limit and threshold
-// stay. Called with s.out held.
+// applyOmniProtection brings the external peak control to what peak shaving
+// wants: while it runs, the soc threshold is the reserve (Marstek: at least 20 %),
+// the limit the grid power allowed in the running 15 minute window (without meter
+// values the peak limit, following the peak included) and the switch on.
+// Otherwise the switch is turned off, but only if evcc turned it on (protOwned);
+// limit and threshold stay. The battery type BYD gets the limit also without peak
+// shaving while it steers the battery with a request, see bydLimitRule. Called
+// with s.out held.
 func (site *Site) applyOmniProtection() {
 	s := site.peak()
 
+	// before s.mu, it takes the lock of the site
+	request := site.bydWant()
+
 	s.mu.Lock()
-	want := s.batteryType == batteryTypeMarstek && s.enabled && s.configured() && site.batteryConfigured()
+	want := s.enabled && s.configured() && site.batteryConfigured()
+	keepAlive := !want && request != requestNormal && s.protLimit != ""
 	owned, raised, sw, limitEntity, socSet := s.protOwned, s.holdSoc > 0, s.protSwitch, s.protLimit, s.protSocSet
 	threshold := s.effectiveReserve()
 
@@ -85,6 +99,13 @@ func (site *Site) applyOmniProtection() {
 	if !want {
 		if owned || raised {
 			site.releaseProt()
+		}
+
+		// the integration takes evcc as gone without a limit, see bydLimitRule
+		if keepAlive {
+			if conn, err := site.haConnection(); site.logWrite(site.extName()+" connect", "connect", err) {
+				site.omniWriteLimit(conn, limitEntity, limit, basis)
+			}
 		}
 
 		return
@@ -104,7 +125,7 @@ func (site *Site) applyOmniProtection() {
 		site.setHoldSoc(0)
 	}
 	conn, err := site.haConnection()
-	if !site.logWrite("marstek connect", "connect", err) {
+	if !site.logWrite(site.extName()+" connect", "connect", err) {
 		return
 	}
 
@@ -113,12 +134,12 @@ func (site *Site) applyOmniProtection() {
 	}
 
 	state, _, err := omniRead(conn, sw)
-	if !site.logWrite("marstek peak shaving switch read", "read "+sw, err) {
+	if !site.logWrite(site.extName()+" peak shaving switch read", "read "+sw, err) {
 		return
 	}
 
 	if !strings.EqualFold(state, "on") &&
-		!site.logWrite("marstek peak shaving switch", "switch on", conn.CallSwitchService(sw, true)) {
+		!site.logWrite(site.extName()+" peak shaving switch", "switch on", conn.CallSwitchService(sw, true)) {
 		return
 	}
 
@@ -138,6 +159,8 @@ const minOmniLimitRise = 500.0
 // minOmniLimitRise above it. Below the entity's minimum the minimum is written:
 // Omnibattery takes no lower limit. An entity that cannot be read is not written,
 // its minimum and step are unknown; the step fails and the next cycle tries again.
+// The battery type BYD never gets less than minBydLimit and gets the limit again
+// when the entity shows 0, see bydLimitRule.
 // basis says in the log why the limit is what it is, see omniLimitBasis.
 func (site *Site) omniWriteLimit(conn *homeassistant.Connection, entity string, limit float64, basis string) bool {
 	r, current, err := numberState(conn, entity)
@@ -145,8 +168,10 @@ func (site *Site) omniWriteLimit(conn *homeassistant.Connection, entity string, 
 		return false
 	}
 
-	limit = r.Fit(math.Floor(limit), false)
-	if v, perr := strconv.ParseFloat(current, 64); perr == nil && limit >= v && limit < v+minOmniLimitRise {
+	floor, zero := site.bydLimitRule()
+
+	limit = r.Fit(math.Floor(max(limit, floor)), false)
+	if v, perr := strconv.ParseFloat(current, 64); perr == nil && limit >= v && limit < v+minOmniLimitRise && !(zero && v == 0) {
 		return true
 	}
 
@@ -219,7 +244,7 @@ func (site *Site) releaseProt() bool {
 		return true
 	}
 
-	if sw != "" && !site.omniSwitchOff("marstek peak shaving switch", sw) {
+	if sw != "" && !site.omniSwitchOff(site.extName()+" peak shaving switch", sw) {
 		return false
 	}
 
@@ -237,7 +262,7 @@ func (site *Site) releaseProt() bool {
 // would otherwise never land and block every change of the entities.
 func (site *Site) omniSwitchOff(name, entity string) bool {
 	conn, err := site.haConnection()
-	if !site.logWrite("marstek connect", "connect", err) {
+	if !site.logWrite(site.extName()+" connect", "connect", err) {
 		return false
 	}
 
@@ -307,10 +332,9 @@ func omniRead(conn *homeassistant.Connection, entity string) (string, []string, 
 	return res.State, res.Attributes.Options, err
 }
 
-// errProtMissing and errTargetMissing refuse peak shaving without what it needs
+// errProtMissing refuses peak shaving without what it needs
 var (
-	errProtMissing   = errors.New("no peak shaving switch, limit or soc threshold entity configured")
-	errTargetMissing = errors.New("no target entity configured")
+	errProtMissing = errors.New("no peak shaving switch, limit or soc threshold entity configured")
 )
 
 // GetPeakShavingProtSwitch returns the switch of Omnibattery's peak shaving
@@ -490,10 +514,21 @@ func (site *Site) rebuildProtSetter() error {
 	return nil
 }
 
-// omniProtRemoved turns peak shaving off once the battery type Marstek lost one of
-// the entities of Omnibattery's peak shaving: it cannot do anything without
+// protMissing reports whether one of the three entities of the external peak
+// shaving is missing
+func (site *Site) protMissing() bool {
+	s := site.peak()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.protSwitch == "" || s.protLimit == "" || s.protSoc == ""
+}
+
+// omniProtRemoved turns peak shaving off once it lost one of the entities of the
+// external peak shaving: it cannot do anything without
 func (site *Site) omniProtRemoved(entity string) error {
-	if entity != "" || !site.omniTypeWithoutProt() {
+	if entity != "" || !site.protMissing() {
 		return nil
 	}
 

@@ -7,8 +7,8 @@ package core
 // the grid charge power and the manual control of a Marstek (it would charge from
 // the grid up to full, with no peak gate and no price check), the limit of
 // Omnibattery's peak shaving at the last value of the window (up to twice the
-// limit), the setpoint and the charge power of a BYD. The shutdown function hands
-// it back before evcc exits, see releasePeak.
+// limit), the request, the peak shaving and the charge power of a BYD. The
+// shutdown function hands it back before evcc exits, see releasePeak.
 //
 // It is best effort: the whole hand back may take peakShutdownBudget, then evcc
 // stops anyway, and with a Home Assistant that is stopping itself (the supervisor
@@ -78,8 +78,9 @@ func (site *Site) releasePeakOnShutdown() {
 
 // releasePeak hands back, safety first: the grid charge power and the manual
 // control of a Marstek, the limit of Omnibattery's peak shaving (it stays on, with
-// the peak limit instead of the allowed power of the window), then the charge power
-// and the setpoint of a BYD. What does not land stays marked as held.
+// the peak limit instead of the allowed power of the window); for a BYD the charge
+// power, the request (back to normal) and the switch of the peak shaving (off), so
+// the integration lets the battery go. What does not land stays marked as held.
 func (site *Site) releasePeak() {
 	s := site.peak()
 
@@ -89,7 +90,7 @@ func (site *Site) releasePeak() {
 
 	s.mu.Lock()
 	typ, limit, limitEntity, protOwned := s.batteryType, s.limit, s.protLimit, s.protOwned
-	chargeSet, charging, set := s.chargeSet, s.chargeSetpoint > 0, s.set
+	chargeSet, charging := s.chargeSet, s.chargeSetpoint > 0
 	s.mu.Unlock()
 
 	if typ == batteryTypeMarstek {
@@ -112,7 +113,6 @@ func (site *Site) releasePeak() {
 		site.releaseOutput("grid charge power", chargeSet, 0)
 	}
 
-	if site.peakOwned() && set != nil && site.releaseOutput("peak shaving", set, site.peakFreeValue()) {
-		site.setPeakOwned(false)
-	}
+	site.releaseRequest()
+	site.releaseProt()
 }

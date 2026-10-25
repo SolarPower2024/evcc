@@ -18,8 +18,8 @@ package core
 //     applyOmniProtection. Below the reserve evcc never takes the battery into
 //     manual control.
 //
-// The battery type BYD keeps writing the discharge power alone, see
-// site_peakshaving.go.
+// The battery type BYD works the same way through the integration evcc Peak
+// Fronius, see site_peak_byd.go; what both share is in site_peak_ext.go.
 
 import (
 	"fmt"
@@ -63,7 +63,7 @@ func (site *Site) omniEnabled() bool {
 }
 
 // omniType reports whether the battery type is Marstek, set up or not. For this
-// type evcc never writes a power or the free value without the manual control.
+// type evcc never writes a power without the manual control.
 func (site *Site) omniType() bool {
 	s := site.peak()
 
@@ -76,17 +76,6 @@ func (site *Site) omniType() bool {
 // omniOwned reports whether evcc controls the battery through the manual control
 func (site *Site) omniOwned() bool {
 	return site.omniType() && site.peakOwned()
-}
-
-// omniTypeWithoutProt reports whether the battery type Marstek lacks one of the
-// three entities of Omnibattery's peak shaving
-func (site *Site) omniTypeWithoutProt() bool {
-	s := site.peak()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.batteryType == batteryTypeMarstek && (s.protSwitch == "" || s.protLimit == "" || s.protSoc == "")
 }
 
 // effectiveReserve is the reserve peak shaving works with. For the battery type
@@ -118,8 +107,9 @@ func (site *Site) omniWant() (charge bool, power float64) {
 	return false, 0
 }
 
-// applyOmni brings Omnibattery to what evcc wants, grid charging and peak
-// shaving independent of each other
+// applyOmni brings the external controller to what evcc wants: Omnibattery (grid
+// charging and peak shaving independent of each other) or the integration for BYD
+// (peak shaving, then the request)
 func (site *Site) applyOmni() {
 	s := site.peak()
 
@@ -133,6 +123,7 @@ func (site *Site) applyOmni() {
 
 	site.applyOmniCharge()
 	site.applyOmniProtection()
+	site.applyBydRequest()
 }
 
 // applyOmniCharge brings the battery to grid charging: switch, then mode, then
@@ -250,6 +241,7 @@ func (site *Site) publishOmniSettings() {
 	s.mu.Lock()
 	typ, manual, mode, shown := s.batteryType, s.manualEntity, s.modeEntity, s.omniShown
 	protSwitch, protLimit, protSoc := s.protSwitch, s.protLimit, s.protSoc
+	request := s.requestEntity
 	s.mu.Unlock()
 
 	if typ == "" {
@@ -263,6 +255,7 @@ func (site *Site) publishOmniSettings() {
 	site.publish(keys.PeakShavingProtSwitch, protSwitch)
 	site.publish(keys.PeakShavingProtLimit, protLimit)
 	site.publish(keys.PeakShavingProtSoc, protSoc)
+	site.publish(keys.PeakShavingRequestEntity, request)
 }
 
 //
@@ -283,9 +276,10 @@ func (site *Site) GetPeakShavingBatteryType() string {
 	return s.batteryType
 }
 
-// SetPeakShavingBatteryType sets the battery type: byd writes the discharge power,
-// marstek drives Omnibattery's peak shaving and switches it to manual control
-// while grid charging. What evcc held with the previous type is handed back first.
+// SetPeakShavingBatteryType sets the battery type: marstek drives Omnibattery and
+// switches it to manual control while grid charging, byd drives the integration
+// evcc Peak Fronius and asks it for grid charging with a request. What evcc held
+// with the previous type is handed back first.
 func (site *Site) SetPeakShavingBatteryType(typ string) error {
 	if typ != batteryTypeBYD && typ != batteryTypeMarstek {
 		return fmt.Errorf("unknown battery type: %s", typ)
@@ -298,17 +292,8 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 	s := site.peak()
 
 	// running peak shaving would otherwise stay on without writing anything
-	s.mu.Lock()
-	var missing error
-	switch {
-	case typ == batteryTypeMarstek && s.enabled && (s.protSwitch == "" || s.protLimit == "" || s.protSoc == ""):
-		missing = errProtMissing
-	case typ == batteryTypeBYD && s.enabled && s.set == nil:
-		missing = errTargetMissing
-	}
-	s.mu.Unlock()
-	if missing != nil {
-		return missing
+	if site.GetPeakShaving() && site.protMissing() {
+		return errProtMissing
 	}
 
 	// handed back and swapped in one go, a cycle in between would write for the
@@ -316,7 +301,7 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 	s.out.Lock()
 
 	s.mu.Lock()
-	previous, set := s.batteryType, s.set
+	previous := s.batteryType
 	s.mu.Unlock()
 
 	released := true
@@ -328,17 +313,10 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 		prot := site.releaseProt()
 		released = omni && prot
 
-	case site.peakOwned():
-		// no target: nothing can hand back, owned would block the change for good
-		if set == nil {
-			site.setPeakOwned(false)
-			site.log.WARN.Println(peakFreeNotWritten)
-			break
-		}
-
-		if released = site.releaseOutput("peak shaving", set, site.peakFreeValue()); released {
-			site.setPeakOwned(false)
-		}
+	default:
+		request := site.releaseRequest()
+		prot := site.releaseProt()
+		released = request && prot
 	}
 
 	// what evcc holds would otherwise be left with the previous type
@@ -349,7 +327,6 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 
 	s.mu.Lock()
 	s.batteryType = typ
-	s.handedBack = false
 	reserve := s.effectiveReserve()
 	s.mu.Unlock()
 

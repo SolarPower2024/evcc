@@ -77,21 +77,20 @@ func TestHAGuardOneTimeoutPerCycle(t *testing.T) {
 }
 
 // TestHAGuardOneTimeoutPerCycleBYD is the same for the battery type BYD, which
-// writes the setpoint and the charge power in the middle of the cycle.
+// writes the charge power in the middle of the cycle.
 func TestHAGuardOneTimeoutPerCycleBYD(t *testing.T) {
 	sc, ha := newOmni(t)
 	sc.site.lms().socChargeEnabled = true
 
 	s := sc.site.peak()
 	s.batteryType = batteryTypeBYD
-	require.NoError(t, sc.site.rebuildPeakSetter())
 	require.NoError(t, sc.site.rebuildChargeSetter())
 
 	h := hangHA(sc)
 	h.hang.Store(true)
 
 	require.True(t, sc.cycle(20, 1000, 0))
-	assert.Equal(t, int32(1), h.requests.Load(), "the setpoint and the charge power: one request")
+	assert.Equal(t, int32(1), h.requests.Load(), "the charge power and the peak shaving: one request")
 
 	h.hang.Store(false)
 	sc.cycle(20, 1000, 0)

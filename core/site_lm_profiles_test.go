@@ -23,8 +23,6 @@ func TestApplyLmProfile(t *testing.T) {
 	site := sc.site
 	settings.SetJson(keys.LmProfiles, []profile.Profile{})
 
-	site.peak().set = func(float64) error { return nil }
-
 	summer, err := site.SaveLmProfile(profile.Profile{
 		Name: "Sommer", Icon: "sun",
 		GridCharge:  bp(false),
@@ -100,7 +98,6 @@ func TestLmProfileDisabledLoadpoint(t *testing.T) {
 	sc := newScenario(t)
 	site := sc.site
 	settings.SetJson(keys.LmProfiles, []profile.Profile{})
-	site.peak().set = func(float64) error { return nil }
 
 	require.NoError(t, config.Loadpoints().Add(config.NewStaticDevice(config.Named{Name: "off"}, loadpoint.API(nil))))
 
@@ -129,7 +126,6 @@ func TestLmProfileDischargeControlAutomatic(t *testing.T) {
 	sc := newScenario(t)
 	site := sc.site
 	settings.SetJson(keys.LmProfiles, []profile.Profile{})
-	site.peak().set = func(float64) error { return nil }
 
 	p, err := site.SaveLmProfile(profile.Profile{
 		Name: "Netz", Icon: "sun", DischargeControl: bp(true),

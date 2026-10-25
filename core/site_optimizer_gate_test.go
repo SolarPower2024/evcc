@@ -78,6 +78,7 @@ func TestLmGateOptimizerCharge(t *testing.T) {
 	sc := gateScenario(t, api.BatteryCharge.String())
 	sc.withDynamicCharge()
 	sc.site.peak().batteryType = batteryTypeMarstek
+	sc.site.peak().protSwitch = "" // peak shaving of this type is not set up here
 
 	// soc 50 %: the fork's own soc grid charging would not start
 	assert.False(t, sc.cycle(50, 3000, 0), "the fork's own grid charge flag does not decide")

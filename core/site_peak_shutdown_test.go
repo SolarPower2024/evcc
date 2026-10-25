@@ -23,7 +23,7 @@ func shutdownBudget(t *testing.T, d time.Duration) {
 // TestPeakReleasedOnShutdown verifies that stopping evcc hands back what the fork
 // holds: the grid charge power and the manual control of a Marstek, the limit of
 // Omnibattery's peak shaving (it stays on, with the peak limit instead of the
-// allowed power of the window), the charge power and the setpoint of a BYD. The
+// allowed power of the window), the charge power, the request and the peak shaving of a BYD. The
 // cycle writes nothing any more afterwards.
 func TestPeakReleasedOnShutdown(t *testing.T) {
 	t.Run("marstek", func(t *testing.T) {
@@ -46,24 +46,16 @@ func TestPeakReleasedOnShutdown(t *testing.T) {
 	})
 
 	t.Run("byd", func(t *testing.T) {
-		sc, ha := newOmni(t)
-		sc.site.lms().socChargeEnabled = true
-
-		s := sc.site.peak()
-		s.batteryType = batteryTypeBYD
-		require.NoError(t, sc.site.rebuildPeakSetter())
-		require.NoError(t, sc.site.rebuildChargeSetter())
-
-		require.True(t, sc.cycle(20, 1000, 0))
-		require.True(t, sc.site.peakOwned())
-		ha.take()
+		sc, ha := bydCharging(t)
 
 		sc.site.releasePeakOnShutdown()
 		assert.Equal(t, []string{
 			"set_value " + haChargeNum + " 0",
-			"set_value " + haDischargeNum + " 10000",
+			"select_option " + haRequest + " normal",
+			"turn_off " + haProtSwitch,
 		}, ha.take())
 		assert.False(t, sc.site.peakOwned())
+		assert.False(t, sc.site.peak().protOwned)
 
 		sc.cycle(20, 1000, 0)
 		sc.cycle(25, 8000, 0)
@@ -75,9 +67,7 @@ func TestPeakReleasedOnShutdown(t *testing.T) {
 		sc.site.releasePeakOnShutdown()
 		assert.Empty(t, ha.take())
 
-		sc, ha = newOmni(t)
-		sc.site.peak().batteryType = batteryTypeBYD
-		require.NoError(t, sc.site.rebuildPeakSetter())
+		sc, ha = newByd(t)
 		sc.site.releasePeakOnShutdown()
 		assert.Empty(t, ha.take())
 	})
@@ -172,24 +162,15 @@ func TestPeakReleasedAfterTimeout(t *testing.T) {
 	})
 
 	t.Run("byd", func(t *testing.T) {
-		sc, ha := newOmni(t)
-		sc.site.lms().socChargeEnabled = true
-
-		s := sc.site.peak()
-		s.batteryType = batteryTypeBYD
-		require.NoError(t, sc.site.rebuildPeakSetter())
-		require.NoError(t, sc.site.rebuildChargeSetter())
-
-		require.True(t, sc.cycle(20, 1000, 0))
-		require.True(t, sc.site.peakOwned())
-		ha.take()
+		sc, ha := bydCharging(t)
 
 		timedOut(t, sc)
 
 		sc.site.releasePeakOnShutdown()
 		assert.Equal(t, []string{
 			"set_value " + haChargeNum + " 0",
-			"set_value " + haDischargeNum + " 10000",
+			"select_option " + haRequest + " normal",
+			"turn_off " + haProtSwitch,
 		}, ha.take())
 		assert.False(t, sc.site.peakOwned())
 	})

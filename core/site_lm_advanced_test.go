@@ -16,7 +16,6 @@ func TestLmAdvancedSettings(t *testing.T) {
 
 	// defaults
 	assert.Equal(t, peak.DefaultHysteresis, site.peakHysteresis())
-	assert.Equal(t, peak.DefaultFreeValue, site.peakFreeValue())
 	assert.Equal(t, lm.DefaultHoldOff, site.lmHoldOff())
 	assert.Equal(t, lm.DefaultTimeout, site.lmTimeout())
 	assert.Equal(t, lm.DefaultPhases, site.lmBatteryPhases())
@@ -26,7 +25,6 @@ func TestLmAdvancedSettings(t *testing.T) {
 
 	// set in the ui
 	require.NoError(t, site.SetLmAdvanced("hysteresis", 0))
-	require.NoError(t, site.SetLmAdvanced("freeValue", 12000))
 	require.NoError(t, site.SetLmAdvanced("holdOff", 10))
 	require.NoError(t, site.SetLmAdvanced("timeout", 3))
 	require.NoError(t, site.SetLmAdvanced("phases", 1))
@@ -35,7 +33,6 @@ func TestLmAdvancedSettings(t *testing.T) {
 	require.NoError(t, site.SetLmAdvanced("writeTolerance", 50))
 
 	assert.Equal(t, 0.0, site.peakHysteresis(), "0 is a valid value, not unset")
-	assert.Equal(t, 12000.0, site.peakFreeValue())
 	assert.Equal(t, 10*time.Minute, site.lmHoldOff())
 	assert.Equal(t, 3*time.Minute, site.lmTimeout())
 	assert.Equal(t, 1, site.lmBatteryPhases())
@@ -43,13 +40,9 @@ func TestLmAdvancedSettings(t *testing.T) {
 	assert.Equal(t, 1.5, site.peakCap())
 	assert.Equal(t, 50.0, site.peakWriteTolerance())
 
-	// the free value is what peak shaving writes while off
-	var written []float64
-	s := site.peak()
-	s.set = func(v float64) error { written = append(written, v); return nil }
-	s.owned = true
-	site.handBackPeak()
-	assert.Equal(t, []float64{12000}, written)
+	// the free value is no setting any more: accepted, without effect
+	require.NoError(t, site.SetLmAdvanced("freeValue", 12000))
+	assert.Nil(t, site.advanced().FreeValue)
 
 	for _, tc := range []struct {
 		name  string
@@ -78,5 +71,5 @@ func TestLmAdvancedSettings(t *testing.T) {
 	}
 
 	// rejected values leave the setting alone
-	assert.Equal(t, 12000.0, site.peakFreeValue())
+	assert.Equal(t, 10*time.Minute, site.lmHoldOff())
 }
