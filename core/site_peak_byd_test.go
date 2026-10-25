@@ -225,6 +225,8 @@ func TestBydRelease(t *testing.T) {
 	})
 
 	t.Run("after a restart", func(t *testing.T) {
+		// the restart reads every stored key: none another test left behind
+		freshSettings(t)
 		sc, ha := bydCharging(t)
 		sc.site.lms().socChargeEnabled = false
 
