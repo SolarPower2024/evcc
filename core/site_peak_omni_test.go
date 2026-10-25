@@ -1,7 +1,6 @@
 package core
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -196,12 +195,10 @@ func newOmni(t *testing.T) (*scenario, *fakeHA) {
 	s.batteryType = batteryTypeMarstek
 	s.manualEntity = haSwitch
 	s.modeEntity = haSelect
-	s.entity = haDischargeNum
 	s.chargeEntity = haChargeNum
 	s.protSwitch = haProtSwitch
 	s.protLimit = haProtLimit
 	s.protSoc = haProtSoc
-	require.NoError(t, sc.site.rebuildPeakSetter())
 	require.NoError(t, sc.site.rebuildChargeSetter())
 	require.NoError(t, sc.site.rebuildProtSetter())
 
@@ -888,12 +885,12 @@ func TestOmniTypeNeedsEntitiesWhileOn(t *testing.T) {
 		require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek))
 	})
 
-	t.Run("byd without the discharge entity", func(t *testing.T) {
+	t.Run("byd without the peak shaving entities", func(t *testing.T) {
 		sc, _ := newOmni(t)
 		s := sc.site.peak()
-		s.entity, s.set = "", nil
+		s.protSwitch = ""
 
-		require.ErrorIs(t, sc.site.SetPeakShavingBatteryType(batteryTypeBYD), errTargetMissing)
+		require.ErrorIs(t, sc.site.SetPeakShavingBatteryType(batteryTypeBYD), errProtMissing)
 		assert.Equal(t, batteryTypeMarstek, sc.site.GetPeakShavingBatteryType())
 
 		require.NoError(t, sc.site.SetPeakShaving(false))
@@ -943,15 +940,15 @@ func TestOmniRelease(t *testing.T) {
 		require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeBYD))
 		assertProtReleased(t, sc, ha)
 
-		// BYD writes the power alone
+		// BYD drives the same peak shaving, through its own integration; the
+		// threshold and the limit are still there
 		sc.cycle(25, 9000, 0)
-		assert.Equal(t, []string{"set_value " + haDischargeNum + " 4000"}, ha.take())
-		assert.True(t, sc.site.peakOwned())
+		assert.Equal(t, []string{"turn_on " + haProtSwitch}, ha.take())
+		assert.False(t, sc.site.peakOwned(), "no request, no manual control")
 
-		// and back: the entity held at the setpoint gets the free value
+		// and back
 		require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek))
-		assert.Equal(t, []string{"set_value " + haDischargeNum + " " + fmt.Sprint(peak.DefaultFreeValue)}, ha.take())
-		assert.False(t, sc.site.peakOwned())
+		assertProtReleased(t, sc, ha)
 
 		sc.cycle(25, 9000, 0)
 		assert.Equal(t, []string{"turn_on " + haProtSwitch}, ha.take())
@@ -1002,14 +999,6 @@ func TestOmniRelease(t *testing.T) {
 		require.NoError(t, sc.site.SetPeakShavingModeEntity(""))
 		assert.Equal(t, []string{"set_value " + haChargeNum + " 0", "turn_off " + haSwitch}, ha.take())
 		assert.True(t, sc.site.GetPeakShaving())
-	})
-
-	t.Run("discharge entity removed", func(t *testing.T) {
-		sc, ha := protecting(t)
-		require.NoError(t, sc.site.SetPeakShavingEntity(""))
-		assert.Empty(t, ha.take())
-		assert.True(t, sc.site.GetPeakShaving(), "Marstek does not need it")
-		assert.True(t, sc.site.peak().protOwned)
 	})
 }
 
@@ -1135,7 +1124,6 @@ func TestOmniNeverTouchesDischarge(t *testing.T) {
 	run(func() { sc.cycle(25, 8000, 0) })
 	run(func() { require.NoError(t, sc.site.SetPeakShaving(false)) })
 	run(func() { sc.cycle(25, 8000, 0) })
-	run(func() { require.NoError(t, sc.site.SetPeakShavingEntity("")) })
 
 	assert.NotEmpty(t, all)
 	for _, call := range all {
@@ -1191,12 +1179,11 @@ func TestOmniEntityChecks(t *testing.T) {
 
 // TestOmniPeakShavingNeedsEntities verifies that peak shaving cannot be turned on
 // for the battery type Marstek without the three entities of Omnibattery's peak
-// shaving, and that the discharge entity is not needed
+// shaving, and that neither the discharge entity nor the manual control is needed
 func TestOmniPeakShavingNeedsEntities(t *testing.T) {
 	sc, _ := newOmni(t)
 	s := sc.site.peak()
 	s.enabled = false
-	s.entity, s.set = "", nil
 	s.manualEntity, s.modeEntity = "", ""
 
 	for _, missing := range []func(){
@@ -1212,33 +1199,11 @@ func TestOmniPeakShavingNeedsEntities(t *testing.T) {
 
 	require.NoError(t, sc.site.SetPeakShaving(true), "neither discharge, switch nor mode")
 
-	// BYD needs the discharge entity
+	// BYD needs the same three entities
 	require.NoError(t, sc.site.SetPeakShaving(false))
 	s.batteryType = batteryTypeBYD
-	require.ErrorIs(t, sc.site.SetPeakShaving(true), errTargetMissing)
-}
-
-// TestOmniInertForBYD verifies that the BYD type writes the discharge power
-// alone, with the Marstek entities set or not
-func TestOmniInertForBYD(t *testing.T) {
-	for _, typ := range []string{"", batteryTypeBYD} {
-		t.Run("type "+typ, func(t *testing.T) {
-			sc, ha := newOmni(t)
-			sc.site.peak().batteryType = typ
-
-			sc.cycle(25, 8000, 0)
-			assert.Equal(t, []string{"set_value " + haDischargeNum + " 3000"}, ha.take())
-			assert.Equal(t, batteryTypeBYD, sc.site.GetPeakShavingBatteryType())
-
-			// the free value above the reserve
-			sc.cycle(50, 8000, 0)
-			assert.Equal(t, []string{"set_value " + haDischargeNum + " " + fmt.Sprint(peak.DefaultFreeValue)}, ha.take())
-
-			assert.Equal(t, "off", ha.get(haProtSwitch))
-			assert.Equal(t, "20000", ha.get(haProtLimit))
-			assert.False(t, sc.site.peak().protOwned)
-		})
-	}
+	s.protSwitch = ""
+	require.ErrorIs(t, sc.site.SetPeakShaving(true), errProtMissing)
 }
 
 // TestOmniErrorLogged verifies that a rejected write is logged once with the
@@ -1415,26 +1380,6 @@ func (f *fakeHA) forget(entities ...string) {
 	}
 }
 
-// bydHolding returns a scenario of the battery type BYD that holds the battery
-// back through the discharge setpoint
-func bydHolding(t *testing.T) (*scenario, *fakeHA) {
-	t.Helper()
-
-	sc, ha := newOmni(t)
-	sc.site.lms().socChargeEnabled = true
-
-	s := sc.site.peak()
-	s.batteryType = batteryTypeBYD
-	require.NoError(t, sc.site.rebuildPeakSetter())
-	require.NoError(t, sc.site.rebuildChargeSetter())
-
-	require.True(t, sc.cycle(20, 1000, 0))
-	require.True(t, sc.site.peakOwned())
-	ha.take()
-
-	return sc, ha
-}
-
 // TestOmniReleaseEntityGone verifies that a number entity Home Assistant does not
 // know any more (deleted, renamed) counts as handed back, like a switch does: the
 // read answered with 404, nothing is left to write. The manual control would
@@ -1481,31 +1426,6 @@ func TestOmniReleaseEntityGone(t *testing.T) {
 		assert.False(t, sc.site.peakOwned())
 	})
 
-	t.Run("discharge setpoint, stopping", func(t *testing.T) {
-		sc, ha := bydHolding(t)
-		ha.forget(haDischargeNum)
-
-		sc.site.releasePeakOnShutdown()
-		assert.Equal(t, []string{"set_value " + haChargeNum + " 0"}, ha.take())
-		assert.False(t, sc.site.peakOwned())
-	})
-
-	t.Run("discharge setpoint, battery type changed", func(t *testing.T) {
-		sc, ha := bydHolding(t)
-		ha.forget(haDischargeNum)
-
-		require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek))
-		assert.Equal(t, batteryTypeMarstek, sc.site.GetPeakShavingBatteryType())
-		assert.False(t, sc.site.peakOwned())
-	})
-
-	t.Run("discharge setpoint, entity removed", func(t *testing.T) {
-		sc, ha := bydHolding(t)
-		ha.forget(haDischargeNum)
-
-		require.NoError(t, sc.site.SetPeakShavingEntity(""))
-		assert.False(t, sc.site.peakOwned())
-	})
 }
 
 // TestOmniWindowEnded verifies that the allowed power is that of the running
@@ -1534,55 +1454,4 @@ func TestOmniWindowEnded(t *testing.T) {
 	sc.site.updateBatteryModePeakAware(false, false, sc.rate)
 	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000"}, ha.take())
 	assert.Equal(t, "5000", ha.get(haProtLimit))
-}
-
-// byd is the scenario with the battery type BYD, holding the battery through the entity
-func byd(t *testing.T) (*scenario, *fakeHA, *bytes.Buffer) {
-	t.Helper()
-
-	sc, ha := newOmni(t)
-	keepSettings(t)
-
-	s := sc.site.peak()
-	s.batteryType = batteryTypeBYD
-	require.NoError(t, sc.site.rebuildPeakSetter())
-
-	var buf bytes.Buffer
-	sc.site.log = testLogger(&buf)
-
-	sc.site.setPeakOwned(true)
-
-	return sc, ha, &buf
-}
-
-// TestPeakEntityRemovedHandBackFails verifies that removing the entity does not
-// leave `owned` set when the free value cannot be written: with no target there
-// is nothing to hand back to, and `owned` would block the change to Marstek for
-// good, with an empty log.
-func TestPeakEntityRemovedHandBackFails(t *testing.T) {
-	t.Run("entity removed, release fails", func(t *testing.T) {
-		sc, ha, buf := byd(t)
-		ha.fail["number/set_value"] = http.StatusInternalServerError
-
-		require.NoError(t, sc.site.SetPeakShavingEntity(""))
-		assert.False(t, sc.site.peakOwned())
-		assert.Equal(t, 1, strings.Count(buf.String(), peakFreeNotWritten))
-
-		require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek))
-		assert.Equal(t, batteryTypeMarstek, sc.site.GetPeakShavingBatteryType())
-	})
-
-	t.Run("type change with no target and owned", func(t *testing.T) {
-		sc, _, buf := byd(t)
-
-		s := sc.site.peak()
-		s.mu.Lock()
-		s.set, s.entity = nil, ""
-		s.mu.Unlock()
-
-		require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek))
-		assert.False(t, sc.site.peakOwned())
-		assert.Equal(t, 1, strings.Count(buf.String(), peakFreeNotWritten))
-		assert.Equal(t, batteryTypeMarstek, sc.site.GetPeakShavingBatteryType())
-	})
 }

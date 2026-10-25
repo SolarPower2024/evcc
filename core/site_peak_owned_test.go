@@ -44,19 +44,3 @@ func TestPeakHeldMarksStoredAtOnce(t *testing.T) {
 	require.NoError(t, sc.site.SetPeakShaving(false))
 	assert.Equal(t, "false", stored(t, keys.PeakShavingProtOwned))
 }
-
-// TestPeakHeldMarkStoredBYD is the same for the setpoint of the battery type BYD
-func TestPeakHeldMarkStoredBYD(t *testing.T) {
-	sc, _ := newOmni(t)
-	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
-	t.Cleanup(func() { db.Instance = nil })
-
-	sc.site.peak().batteryType = batteryTypeBYD
-	require.NoError(t, sc.site.rebuildPeakSetter())
-
-	sc.cycle(25, 9000, 0)
-	assert.Equal(t, "true", stored(t, keys.PeakShavingOwned))
-
-	require.NoError(t, sc.site.SetPeakShaving(false))
-	assert.Equal(t, "false", stored(t, keys.PeakShavingOwned))
-}

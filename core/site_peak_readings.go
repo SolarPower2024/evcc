@@ -15,8 +15,8 @@ package core
 //     the battery power back, jumps between the value with and without it, see
 //     setPeakMeterRead.
 //
-// All three count as a meter outage: the cycle keeps the setpoint, and once peak.MaxGap
-// has passed without good values peakCheckMeters writes the free value and grid
+// All three count as a meter outage: the cycle keeps the limit, and once peak.MaxGap
+// has passed without good values peakCheckMeters ends the reserve and grid
 // charging pauses, as for a meter failing with an error.
 
 import (

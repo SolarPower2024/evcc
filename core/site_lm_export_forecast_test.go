@@ -186,16 +186,16 @@ func TestExportForecastEntityRestore(t *testing.T) {
 	t.Setenv(homeassistant.SupervisorToken, "token")
 
 	a := &Site{log: util.NewLogger("test")}
-	require.NoError(t, a.SetLmAdvanced("hysteresis", 3))
+	require.NoError(t, a.SetLmAdvanced("holdOff", 7))
 	require.NoError(t, a.SetLmExportForecast("sensor.evcc_einspeiseprognose"))
 
 	b := &Site{log: util.NewLogger("test")}
 	b.restoreLmAdvanced()
 	assert.Equal(t, "sensor.evcc_einspeiseprognose", b.GetLmExportForecast())
-	assert.Equal(t, 3.0, b.peakHysteresis(), "the other settings stay")
+	assert.Equal(t, 7*time.Minute, b.lmHoldOff(), "the other settings stay")
 
 	// stored before the setting existed
-	require.NoError(t, settings.SetJson(keys.LmAdvanced, map[string]float64{"hysteresis": 3}))
+	require.NoError(t, settings.SetJson(keys.LmAdvanced, map[string]float64{"holdOff": 7}))
 	c := &Site{log: util.NewLogger("test")}
 	c.restoreLmAdvanced()
 	assert.Empty(t, c.GetLmExportForecast())

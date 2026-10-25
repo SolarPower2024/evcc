@@ -13,8 +13,10 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/circuit"
+	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/config"
+	"github.com/evcc-io/evcc/util/homeassistant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,7 +57,10 @@ type scenario struct {
 	site    *Site
 	circuit api.Circuit
 	loads   []api.CircuitLoad
-	peak    *float64 // last discharge setpoint written
+	peak    *float64  // last discharge setpoint computed (published, written nowhere)
+	peaks   []float64 // every one of them
+	ha      *fakeHA   // the Home Assistant of the external peak control
+	values  chan util.Param
 	charge  *float64 // last charge power written
 	rate    api.Rate
 }
@@ -82,7 +87,20 @@ func newScenario(t *testing.T) *scenario {
 	s.clock = clock.NewMock() // stands still at the start of a window, so its allowed power is the limit
 	s.enabled = true
 	s.chargePower = 6250
-	s.set = func(v float64) error { sc.peak = &v; return nil }
+
+	// the external peak control against a fake Home Assistant, as the battery types use it
+	conn, err := homeassistant.NewConnection(util.NewLogger("test"), homeassistant.SupervisorURI, "", false)
+	require.NoError(t, err)
+	sc.ha = newFakeHA()
+	conn.Client.Transport = sc.ha
+	guardHA(conn, util.NewLogger("test"))
+	s.conn = conn
+	s.protSwitch, s.protLimit, s.protSoc = haProtSwitch, haProtLimit, haProtSoc
+	require.NoError(t, site.rebuildProtSetter())
+
+	// the setpoint is published, see updatePeakShaving
+	sc.values = make(chan util.Param, 1<<16)
+	site.valueChan = sc.values
 
 	site.lmm().SetPriorityLookup(site.lmPriorityLookup)
 	site.lmm().SetFollowCycles(site.lmFollowCycles)
@@ -134,10 +152,26 @@ func (sc *scenario) cycle(soc, grid, battery float64) bool {
 	}
 
 	site.updatePeakShaving(site.state())
+	sc.drain()
 	charge := site.batteryGridChargeRequested(sc.rate)
 	site.updateBatteryModePeakAware(charge, false, sc.rate)
 
 	return charge
+}
+
+// drain takes the setpoint published so far
+func (sc *scenario) drain() {
+	for {
+		select {
+		case p := <-sc.values:
+			if v, ok := p.Val.(float64); ok && p.Key == keys.PeakShavingPower {
+				sc.peak = &v
+				sc.peaks = append(sc.peaks, v)
+			}
+		default:
+			return
+		}
+	}
 }
 
 // clearHoldOffs lets time pass beyond both hold-offs
@@ -216,14 +250,15 @@ func TestScenarioPeakShavingOff(t *testing.T) {
 	sc := newScenario(t)
 	sc.site.lms().socChargeEnabled = false
 
-	// shaving with a setpoint in the entity ...
+	// shaving with a setpoint ...
 	sc.cycle(25, 8000, 0)
 	assert.Equal(t, 3000.0, val(sc.peak))
+	assert.Equal(t, "on", sc.ha.get(haProtSwitch))
 
 	// ... switched off: control is handed back and the battery left alone
 	sc.site.peak().enabled = false
 	sc.cycle(25, 8000, 0)
-	assert.Equal(t, 10000.0, val(sc.peak))
+	assert.Equal(t, "off", sc.ha.get(haProtSwitch))
 	assert.False(t, sc.site.peakShavingActive())
 }
 
@@ -530,7 +565,6 @@ func TestScenarioSettingsValidation(t *testing.T) {
 	assert.Error(t, site.SetBatterySocGridChargeStart(-1))
 	assert.Error(t, site.SetBatterySocGridChargeStop(101))
 
-	assert.Error(t, site.SetPeakShavingEntity("sensor.battery"), "wrong domain")
 	assert.Error(t, site.SetPeakShavingChargeEntity("switch.battery"), "wrong domain")
 
 	assert.NoError(t, site.SetLmPriority(lmBatteryName, 0))
@@ -541,8 +575,8 @@ func TestScenarioSettingsValidation(t *testing.T) {
 
 	assert.Error(t, site.SetPeakShavingCircuit("no-such-circuit"))
 
-	// switching on without a target entity is refused
-	site.peak().set = nil
+	// switching on without the peak shaving entities is refused
+	site.peak().protSwitch = ""
 	site.peak().enabled = false
 	assert.Error(t, site.SetPeakShaving(true))
 }

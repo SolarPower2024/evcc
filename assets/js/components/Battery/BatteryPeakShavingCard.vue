@@ -55,17 +55,11 @@
 		<div v-if="error" class="alert alert-danger mt-3 mb-0 py-2 small">{{ error }}</div>
 
 		<div
-			v-if="entityMissing"
+			v-if="entitiesMissing"
 			class="alert alert-warning mt-3 mb-0 py-2 small"
 			data-testid="battery-peak-shaving-missing"
 		>
-			{{
-				$t(
-					marstek
-						? "battery.peakShaving.noMarstekEntities"
-						: "battery.peakShaving.noEntity"
-				)
-			}}
+			{{ $t("battery.peakShaving.noEntities") }}
 		</div>
 	</Card>
 </template>
@@ -106,7 +100,6 @@ export default defineComponent({
 		// reported by the backend, not inferred from power: a setpoint can
 		// legitimately equal the free-discharge value
 		shaving: Boolean,
-		entity: { type: String, default: "" },
 		// follow the peak: { enabled, buffer, base }, see core/site_peak_follow.go
 		follow: { type: Object as PropType<PeakFollow>, default: undefined },
 	},
@@ -131,9 +124,9 @@ export default defineComponent({
 		marstek(): boolean {
 			return store.state?.peakShavingBatteryType === "marstek";
 		},
-		// a Marstek has no discharge entity, Omnibattery's peak shaving takes its place
-		entityMissing(): boolean {
-			return !peakShavingSetUp({ ...store.state, peakShavingEntity: this.entity });
+		// the controller of the battery type needs its three entities
+		entitiesMissing(): boolean {
+			return !peakShavingSetUp(store.state);
 		},
 		followOn(): boolean {
 			return !!this.follow?.enabled;

@@ -15,8 +15,12 @@ import (
 
 // lmAdvanced holds the values set in the ui, nil = not set
 type lmAdvanced struct {
-	Hysteresis *float64 `json:"hysteresis,omitempty"` // peak reserve soc band in %
-	FreeValue  *float64 `json:"freeValue,omitempty"`  // "discharge freely" setpoint in W
+	// peak reserve soc band in %, fixed now (bydHysteresis): only read from the stored
+	// settings, restoreLmAdvanced drops it at start
+	Hysteresis *float64 `json:"hysteresis,omitempty"`
+	// "discharge freely" setpoint in W of the old way of the battery type BYD. Only read
+	// from the stored settings, migratePeakEntity uses and drops it at start.
+	FreeValue  *float64 `json:"freeValue,omitempty"`
 	HoldOff    *float64 `json:"holdOff,omitempty"`    // battery grid charge hold-off in minutes
 	Timeout    *float64 `json:"timeout,omitempty"`    // unserved demand expiry in minutes
 	Phases     *float64 `json:"phases,omitempty"`     // battery phases for current accounting
@@ -52,8 +56,6 @@ const (
 
 // lmAdvancedState is what the ui shows: the values in effect
 type lmAdvancedState struct {
-	Hysteresis           float64 `json:"hysteresis"`
-	FreeValue            float64 `json:"freeValue"`
 	HoldOff              float64 `json:"holdOff"`
 	Timeout              float64 `json:"timeout"`
 	Phases               int     `json:"phases"`
@@ -76,8 +78,8 @@ type lmAdvancedLimit struct {
 }
 
 var lmAdvancedLimits = map[string]lmAdvancedLimit{
-	"hysteresis":       {0, 20, false},
-	"freeValue":        {1, 100000, true},
+	"hysteresis":       {0, 20, false},    // no longer used, still accepted: dropped at start
+	"freeValue":        {1, 100000, true}, // no longer used, still accepted: the stored value is read once, see migratePeakEntity
 	"holdOff":          {1, 60, true},
 	"timeout":          {1, 60, true},
 	"phases":           {1, 3, true},
@@ -98,7 +100,10 @@ func (site *Site) restoreLmAdvanced() {
 	if adv, ok := restoreLmAdvancedValue(site.log); ok {
 		dropped := dropInvalidLmAdvanced(site.log, &adv)
 		moved := moveHomeWeekday(&adv)
-		if dropped || moved {
+		// no setting any more, see bydHysteresis
+		gone := adv.Hysteresis != nil
+		adv.Hysteresis = nil
+		if dropped || moved || gone {
 			_ = settings.SetJson(keys.LmAdvanced, adv)
 		}
 		s.advMu.Lock()
@@ -113,6 +118,22 @@ func (site *Site) restoreLmAdvanced() {
 	site.publishLmHomeProfile()
 }
 
+// dropFreeValue forgets the stored free value, see migratePeakEntity
+func (site *Site) dropFreeValue() {
+	s := site.lms()
+
+	s.advMu.Lock()
+	if s.adv.FreeValue == nil {
+		s.advMu.Unlock()
+		return
+	}
+	s.adv.FreeValue = nil
+	adv := s.adv
+	s.advMu.Unlock()
+
+	_ = settings.SetJson(keys.LmAdvanced, adv)
+}
+
 // advanced returns a copy of the values set in the ui
 func (site *Site) advanced() lmAdvanced {
 	s := site.lms()
@@ -125,8 +146,6 @@ func (site *Site) advanced() lmAdvanced {
 
 func (site *Site) publishLmAdvanced() {
 	site.publish(keys.LmAdvanced, lmAdvancedState{
-		Hysteresis:           site.peakHysteresisSetting(),
-		FreeValue:            site.peakFreeValue(),
 		HoldOff:              site.lmHoldOff().Minutes(),
 		Timeout:              site.lmTimeout().Minutes(),
 		Phases:               site.lmBatteryPhases(),
@@ -185,10 +204,6 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 	s.advMu.Lock()
 	v := value
 	switch name {
-	case "hysteresis":
-		s.adv.Hysteresis = &v
-	case "freeValue":
-		s.adv.FreeValue = &v
 	case "holdOff":
 		s.adv.HoldOff = &v
 	case "timeout":

@@ -1,12 +1,12 @@
 package core
 
-// Custom extension: the optimizer's hold on a Marstek.
+// Custom extension: the optimizer's hold on a Marstek or BYD battery.
 //
-// evcc writes no discharge power to a Marstek, Omnibattery regulates it. While
+// evcc writes no discharge power, the external controller regulates it. While
 // the optimizer in automatic mode holds the battery (see site_optimizer_gate.go)
-// and peak shaving is on, the soc threshold of Omnibattery's peak shaving goes to
-// its maximum: below the threshold Omnibattery only discharges for a peak above
-// the limit and still charges from pv surplus. The value before is kept,
+// and peak shaving is on, the soc threshold of the external peak shaving goes to
+// its maximum: below the threshold it only discharges for a peak above the limit
+// (Omnibattery also still charges from pv surplus). The value before is kept,
 // persisted, and written back when peak shaving is released (switched off, type
 // or entity changed, shutdown, or at the next start after a crash). While peak
 // shaving stays on, the end of the hold writes the reserve as every cycle does.
@@ -39,7 +39,7 @@ func (site *Site) omniThreshold(reserve float64) (threshold float64, hold, ok bo
 
 	if !raised {
 		conn, err := site.haConnection()
-		if !site.logWrite("marstek connect", "connect", err) {
+		if !site.logWrite(site.extName()+" connect", "connect", err) {
 			return 0, true, false
 		}
 

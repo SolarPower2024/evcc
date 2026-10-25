@@ -7,6 +7,7 @@ import (
 
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm/profile"
+	"github.com/evcc-io/evcc/core/peak"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -241,7 +242,7 @@ func TestRestoreLiveValuesUnchanged(t *testing.T) {
 	assert.Equal(t, 1800.0, site.GetPeakShavingChargePower())
 	assert.Equal(t, 15.0, site.GetBatterySocGridChargeStart())
 	assert.Equal(t, 20.0, site.GetBatterySocGridChargeStop())
-	assert.Equal(t, 1800.0, site.peakFreeValue())
+	assert.Equal(t, peak.DefaultFreeValue, site.peakFreeValue(), "the free value is no setting any more, the start drops it")
 	assert.Equal(t, 1, site.lmBatteryPhases())
 	assert.Equal(t, 50.0, site.peakWriteTolerance())
 

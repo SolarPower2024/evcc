@@ -133,8 +133,6 @@ var customRouteSamples = map[string]string{
 	"peakfollowbuffer":              "/peakfollowbuffer/1000",
 	"peaktariff":                    "/peaktariff/price/40",
 	"peakshavingreserve":            "/peakshavingreserve/40",
-	"peakshavingentity":             "/peakshavingentity/input_number.peak",
-	"peakshavingentitydelete":       "/peakshavingentity",
 	"peakshavingbatterytype":        "/peakshavingbatterytype/marstek",
 	"peakshavingmanualentity":       "/peakshavingmanualentity/switch.marstek_manual",
 	"peakshavingmanualentitydelete": "/peakshavingmanualentity",

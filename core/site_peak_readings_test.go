@@ -107,19 +107,18 @@ func TestPeakGridHookReportsRead(t *testing.T) {
 
 // peakOutageSite sets up a scenario below the reserve on a mock clock, and
 // returns a step of 30s as a cycle runs it: the hooks of updateGridMeter and
-// collectMeters, then the peak shaving cycle with the given values. Writes to the entity are
-// recorded in writes.
+// collectMeters, then the peak shaving cycle with the given values. The setpoints
+// computed are recorded in writes.
 func peakOutageSite(t *testing.T) (sc *scenario, s *peakState, step func(gridRead, batteryRead bool, grid, battery float64) bool, writes *[]float64) {
 	t.Helper()
 
 	sc = newScenario(t)
 	clk := clock.NewMock()
 
-	writes = new([]float64)
+	writes = &sc.peaks
 
 	s = sc.site.peak()
 	s.clock = clk
-	s.set = func(v float64) error { *writes = append(*writes, v); return nil }
 
 	step = func(gridRead, batteryRead bool, grid, battery float64) bool {
 		clk.Add(30 * time.Second)
@@ -134,7 +133,7 @@ func peakOutageSite(t *testing.T) (sc *scenario, s *peakState, step func(gridRea
 // TestPeakGridUnreadIsAnOutage: a grid meter that has no power (a Home Assistant
 // sensor unavailable) is no failure for evcc, which keeps the last value. For
 // peak shaving it is an outage like a failing meter: the setpoint stays, after
-// peak.MaxGap the free value is written once and grid charging pauses.
+// peak.MaxGap the reserve ends and grid charging pauses.
 func TestPeakGridUnreadIsAnOutage(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -163,10 +162,10 @@ func TestPeakGridUnreadIsAnOutage(t *testing.T) {
 			assert.Equal(t, start, s.window, "the stale value is not metered")
 			assert.True(t, sc.site.peakShavingActive())
 
-			// beyond it: free value once, no grid charging
+			// beyond it: no reserve, no grid charging
 			assert.False(t, step(false, true, tc.grid, tc.setpoint))
 			assert.False(t, step(false, true, tc.grid, tc.setpoint))
-			assert.Equal(t, []float64{peak.DefaultFreeValue}, *writes)
+			assert.Empty(t, *writes, "no setpoint without meter values")
 			assert.False(t, sc.site.peakShavingActive())
 			assert.True(t, s.metersLost)
 
@@ -212,11 +211,11 @@ func TestPeakGridFrozenIsAnOutage(t *testing.T) {
 	assert.Greater(t, battery, 3000.0, "the setpoint grows while the value is trusted")
 	assert.True(t, sc.site.peakShavingActive())
 
-	// over peak.MaxGap it counts as an outage: free value at once, as it began
+	// over peak.MaxGap it counts as an outage: no reserve at once, as it began
 	// with the standstill
 	*writes = nil
 	assert.False(t, step(true, true, 6000, battery))
-	assert.Equal(t, []float64{peak.DefaultFreeValue}, *writes)
+	assert.Empty(t, *writes, "no setpoint without meter values")
 	assert.False(t, sc.site.peakShavingActive())
 	assert.True(t, s.metersLost)
 
@@ -364,7 +363,7 @@ func TestPeakMeterHookRecordsBatteryReads(t *testing.T) {
 // TestPeakBatteryUnreadIsAnOutage: a battery power that cannot be read stays 0 in
 // evcc, and the setpoint, which adds the battery power back, jumps between the
 // value with and without it (3000, 0, 3107, 0 ...). It counts as an outage: the
-// setpoint stays, after peak.MaxGap the free value is written and grid charging
+// setpoint stays, after peak.MaxGap the reserve ends and grid charging
 // pauses.
 func TestPeakBatteryUnreadIsAnOutage(t *testing.T) {
 	sc, s, step, writes := peakOutageSite(t)
@@ -381,10 +380,10 @@ func TestPeakBatteryUnreadIsAnOutage(t *testing.T) {
 	assert.Empty(t, *writes, "the setpoint stays")
 	assert.True(t, sc.site.peakShavingActive())
 
-	// beyond peak.MaxGap: free value once
+	// beyond peak.MaxGap: no reserve
 	step(true, false, 5000, 0)
 	step(true, false, 5000, 0)
-	assert.Equal(t, []float64{peak.DefaultFreeValue}, *writes)
+	assert.Empty(t, *writes, "no setpoint without meter values")
 	assert.False(t, sc.site.peakShavingActive())
 	assert.True(t, s.metersLost)
 	assert.True(t, sc.site.peakPausesGridCharge())

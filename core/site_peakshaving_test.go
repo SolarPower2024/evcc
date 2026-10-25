@@ -14,7 +14,6 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/peak"
-	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/request"
 	jww "github.com/spf13/jwalterweatherman"
@@ -30,7 +29,7 @@ func TestPeakPausesGridCharge(t *testing.T) {
 
 	s := site.peak()
 	s.limit = 5000
-	s.set = func(float64) error { return nil }
+	externalControl(s)
 
 	// peak shaving off: nothing to give way to
 	s.demand = 8000
@@ -53,132 +52,6 @@ func TestPeakPausesGridCharge(t *testing.T) {
 	// once the hold-off has run out, charging may resume
 	s.chargePause = time.Now().Add(-time.Second)
 	assert.False(t, site.peakPausesGridCharge())
-}
-
-// TestPeakHandsBackWhenOff verifies that the free value is written once when
-// peak shaving is switched off after it held the battery back, retried after a
-// failed write, and written once more after peak shaving ran again
-func TestPeakHandsBackWhenOff(t *testing.T) {
-	sc := newScenario(t)
-
-	var writes []float64
-	fail := false
-
-	s := sc.site.peak()
-	s.enabled = false
-	s.set = func(v float64) error {
-		writes = append(writes, v)
-		if fail {
-			fail = false
-			return errors.New("home assistant restarting")
-		}
-		return nil
-	}
-
-	// never controlled: nothing to hand back
-	sc.cycle(50, 1000, 0)
-	sc.cycle(50, 1000, 0)
-	assert.Empty(t, writes)
-
-	// peak shaving runs below the reserve and writes its setpoint every cycle
-	require.NoError(t, sc.site.SetPeakShaving(true))
-	sc.cycle(20, 7000, 0)
-	sc.cycle(20, 7000, 0)
-	assert.Equal(t, []float64{2000, 2000}, writes)
-	assert.True(t, sc.site.peakOwned())
-
-	// switching off hands back right away, the first write fails and is retried,
-	// then nothing more is sent
-	writes = nil
-	fail = true
-	require.NoError(t, sc.site.SetPeakShaving(false))
-	assert.True(t, sc.site.peakOwned())
-	sc.cycle(20, 7000, 0)
-	sc.cycle(20, 7000, 0)
-	sc.cycle(20, 7000, 0)
-	assert.Equal(t, []float64{peak.DefaultFreeValue, peak.DefaultFreeValue}, writes)
-	assert.False(t, sc.site.peakOwned())
-
-	// and once more after peak shaving ran again
-	writes = nil
-	require.NoError(t, sc.site.SetPeakShaving(true))
-	sc.cycle(20, 7000, 0)
-	require.NoError(t, sc.site.SetPeakShaving(false))
-	assert.Equal(t, []float64{2000, peak.DefaultFreeValue}, writes)
-}
-
-// TestPeakNoHandBackWithoutOwned verifies that an entity evcc never controlled is
-// not written to: peak shaving off at the start, entity removed, the meters
-// failing
-func TestPeakNoHandBackWithoutOwned(t *testing.T) {
-	sc := newScenario(t)
-	clk := clock.NewMock()
-
-	var writes []float64
-
-	s := sc.site.peak()
-	s.clock = clk
-	s.enabled = false
-	s.entity = "number.discharge"
-	s.set = func(v float64) error { writes = append(writes, v); return nil }
-
-	for range 5 {
-		sc.cycle(20, 7000, 0)
-		sc.cycle(50, 1000, 0)
-	}
-	require.NoError(t, sc.site.SetPeakShaving(false))
-	assert.Empty(t, writes)
-
-	// removed while off
-	require.NoError(t, sc.site.SetPeakShavingEntity(""))
-	assert.Empty(t, writes)
-
-	// enabled but above the reserve and the meters failing: not controlled either
-	s.set = func(v float64) error { writes = append(writes, v); return nil }
-	s.enabled = true
-	s.updated = clk.Now()
-	clk.Add(10 * time.Minute)
-	sc.site.peakCheckMeters()
-	assert.True(t, s.metersLost)
-	assert.Empty(t, writes)
-	assert.False(t, sc.site.peakOwned())
-}
-
-// TestPeakHandBackAfterRestartWhenOwned verifies that a restart in the middle of
-// a control still hands back: owned is stored, the free value is written once,
-// and owned is cleared afterwards
-func TestPeakHandBackAfterRestartWhenOwned(t *testing.T) {
-	sc := newScenario(t)
-
-	settings.SetBool(keys.PeakShavingOwned, true)
-	sc.site.restorePeakSettings()
-	assert.True(t, sc.site.peakOwned())
-
-	var writes []float64
-
-	s := sc.site.peak()
-	s.enabled = false
-	s.set = func(v float64) error { writes = append(writes, v); return nil }
-
-	for range 3 {
-		sc.cycle(50, 1000, 0)
-	}
-
-	assert.Equal(t, []float64{peak.DefaultFreeValue}, writes)
-	assert.False(t, sc.site.peakOwned())
-
-	stored, err := settings.Bool(keys.PeakShavingOwned)
-	require.NoError(t, err)
-	assert.False(t, stored)
-
-	// the control after the hand back is owned again, and kept in the settings
-	s.enabled = true
-	sc.cycle(20, 7000, 0)
-	assert.True(t, sc.site.peakOwned())
-
-	stored, err = settings.Bool(keys.PeakShavingOwned)
-	require.NoError(t, err)
-	assert.True(t, stored)
 }
 
 // testLogger returns a logger writing every line to w
@@ -276,25 +149,19 @@ func TestPeakWriteErrorBody(t *testing.T) {
 	assert.Equal(t, "boom", writeErrorText(errors.New("boom")))
 }
 
-// TestPeakEntityRemovedHandsBack verifies that removing the entities while peak
-// shaving and grid charging run leaves neither on its last setpoint: the
-// discharge entity gets the free value, the charge power entity zero
+// TestPeakEntityRemovedHandsBack verifies that removing the charge power entity
+// while grid charging runs does not leave it on its last setpoint
 func TestPeakEntityRemovedHandsBack(t *testing.T) {
 	sc := newScenario(t)
 	sc.withDynamicCharge()
 
 	s := sc.site.peak()
-	s.entity = "number.discharge"
 	s.chargeEntity = "number.charge"
 
 	// below the reserve and grid charging
 	assert.True(t, sc.cycle(20, 1000, 0))
 	assert.Equal(t, 0.0, val(sc.peak))
 	assert.Equal(t, 4000.0, val(sc.charge))
-
-	require.NoError(t, sc.site.SetPeakShavingEntity(""))
-	assert.Equal(t, peak.DefaultFreeValue, val(sc.peak))
-	assert.False(t, sc.site.GetPeakShaving())
 
 	require.NoError(t, sc.site.SetPeakShavingChargeEntity(""))
 	assert.Equal(t, 0.0, val(sc.charge))
@@ -311,7 +178,7 @@ func TestBatteryChargeSetpoint(t *testing.T) {
 	s := site.peak()
 	s.limit = 5000
 	s.chargePower = 6250
-	s.set = func(float64) error { return nil }
+	externalControl(s)
 
 	tc := []struct {
 		name    string
@@ -365,42 +232,38 @@ func TestChargeValueWrittenEveryCycle(t *testing.T) {
 
 // TestPeakValueWrittenEveryCycle replays the log of a peak shaving run with
 // constant values: 8160W grid, 6250W battery, soc below the reserve. The
-// unchanged setpoints have to be written in every cycle, so a value changed in
-// Home Assistant does not stick.
+// setpoint is computed in every cycle (shown, not written), the unchanged charge
+// power has to be written in every cycle, so a value changed in Home Assistant
+// does not stick.
 func TestPeakValueWrittenEveryCycle(t *testing.T) {
 	sc := newScenario(t)
 
-	var writes, charges []float64
+	var charges []float64
 
 	s := sc.site.peak()
 	s.limit = 10000
-	s.set = func(v float64) error { writes = append(writes, v); return nil }
 	s.chargeSet = func(v float64) error { charges = append(charges, v); return nil }
 
 	for range 3 {
 		sc.cycle(20, 8160, 6250)
 	}
 
-	assert.Equal(t, []float64{4410, 4410, 4410}, writes)
+	assert.Equal(t, []float64{4410, 4410, 4410}, sc.peaks)
 	assert.Equal(t, []float64{0, 0, 0}, charges, "the peak pauses grid charging")
 }
 
-// TestPeakMetersLost verifies that a setpoint does not stay in the entity while
-// the meters fail: after peak.MaxGap the free value is written once and grid
-// charging pauses, until the meters are back
+// TestPeakMetersLost verifies that the meters failing end the reserve after
+// peak.MaxGap and pause grid charging, until the meters are back
 func TestPeakMetersLost(t *testing.T) {
 	sc := newScenario(t)
 	clk := clock.NewMock()
 
-	var writes []float64
-
 	s := sc.site.peak()
 	s.clock = clk
-	s.set = func(v float64) error { writes = append(writes, v); return nil }
 
 	// below the reserve, no peak: no discharge, soc-based grid charging runs
 	assert.True(t, sc.cycle(20, 3000, 0))
-	assert.Equal(t, []float64{0}, writes)
+	assert.Equal(t, []float64{0}, sc.peaks)
 
 	// the meters fail: updatePeakShaving no longer runs, the rest of the cycle does
 	failed := func() bool {
@@ -411,24 +274,23 @@ func TestPeakMetersLost(t *testing.T) {
 	}
 
 	// up to peak.MaxGap nothing changes
-	writes = nil
 	for range 4 {
 		assert.True(t, failed())
 	}
-	assert.Empty(t, writes)
 	assert.True(t, sc.site.peakShavingActive())
+	assert.False(t, s.metersLost)
 
-	// beyond it: free value once, no grid charging
+	// beyond it: no reserve, no grid charging
 	assert.False(t, failed())
 	assert.False(t, failed())
-	assert.Equal(t, []float64{peak.DefaultFreeValue}, writes)
 	assert.False(t, sc.site.peakShavingActive())
+	assert.True(t, s.metersLost)
+	assert.Equal(t, []float64{0}, sc.peaks, "no setpoint without meters")
 
 	// meters back: the setpoint again
-	writes = nil
 	clk.Add(30 * time.Second)
 	sc.cycle(20, 3000, 0)
-	assert.Equal(t, []float64{0}, writes)
+	assert.Equal(t, []float64{0, 0}, sc.peaks)
 	assert.False(t, s.metersLost)
 	assert.True(t, sc.site.peakShavingActive())
 }
@@ -638,7 +500,7 @@ func TestChargeSetpointWindowBudget(t *testing.T) {
 	s.enabled = true
 	s.limit = 3500
 	s.chargePower = 1800
-	s.set = func(float64) error { return nil }
+	externalControl(s)
 
 	spikeThenHouse(site, clk)
 	s.demand = 500
@@ -668,7 +530,7 @@ func TestChargeSetpointWindowBudgetAboveLimit(t *testing.T) {
 	s.enabled = true
 	s.limit = 3500
 	s.chargePower = 6250
-	s.set = func(float64) error { return nil }
+	externalControl(s)
 
 	site.setPeakGridEnergy(nil, true)
 	site.updatePeakWindow(500, 0) // the first sample of the window
@@ -694,7 +556,7 @@ func TestChargeSetpointWindowStale(t *testing.T) {
 	s.enabled = true
 	s.limit = 3500
 	s.chargePower = 1800
-	s.set = func(float64) error { return nil }
+	externalControl(s)
 
 	spikeThenHouse(site, clk)
 	s.demand = 500
@@ -731,19 +593,13 @@ func TestPeakShavingOffWithoutBattery(t *testing.T) {
 	assert.ErrorIs(t, site.SetBatterySocGridCharge(true), ErrBatteryControlNotAvailable)
 
 	// clearing the entities ends up in SetPeakShaving(false)
-	s.entity = "number.target"
-	require.NoError(t, site.SetPeakShavingEntity(""))
-
 	s.batteryType = batteryTypeMarstek
 	s.protSwitch, s.protSoc = "switch.prot", "number.soc"
 	require.NoError(t, site.SetPeakShavingProtSwitch(""))
 	s.protSoc = "number.soc"
 	require.NoError(t, site.setProtNumber("", keys.PeakShavingProtSoc, &s.protSoc, &s.protSocSet))
 
-	assert.NotPanics(t, func() {
-		site.handBackPeak()
-		site.applyOmni()
-	})
+	assert.NotPanics(t, site.applyOmni)
 }
 
 // TestPeakReserveClearsExternalTimer: an external mode that lapsed leaves its timer

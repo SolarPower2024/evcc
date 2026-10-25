@@ -42,7 +42,7 @@ func homeBattery() optimizerBattery {
 func setPeakShaving(site *Site, limit, reserve float64) {
 	s := site.peak()
 	s.enabled, s.limit, s.reserve = true, limit, reserve
-	s.set = func(float64) error { return nil }
+	externalControl(s)
 }
 
 // Without circuits, peak shaving and soc-based grid charging the request stays
