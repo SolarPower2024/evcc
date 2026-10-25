@@ -462,3 +462,63 @@ func TestBydMigratePeakEntity(t *testing.T) {
 		assert.True(t, sc.site.peakOwned(), "the request mark of this version")
 	})
 }
+
+// TestBydHysteresisFixed verifies the reserve band of the battery type BYD: 2 %
+// as in the integration, whatever an old stored setting says
+func TestBydHysteresisFixed(t *testing.T) {
+	sc, ha := newByd(t)
+	sc.site.lms().socChargeEnabled = false
+	old := 10.0
+	sc.site.lms().adv.Hysteresis = &old
+
+	for _, c := range []struct {
+		soc    float64
+		active bool
+	}{
+		{29, true},   // below the reserve of 30 %
+		{31, true},   // within the band
+		{32, false},  // 2 % above: free
+		{31, false},  // stays free above the reserve
+		{29.9, true}, // below again
+	} {
+		sc.cycle(c.soc, 1000, 0)
+		assert.Equal(t, c.active, sc.site.peakShavingActive(), "soc %.1f", c.soc)
+	}
+	ha.take()
+}
+
+// TestBydNeverWritesRequest verifies that evcc leaves the request of the
+// integration to the scripts of the battery modes, in every battery mode
+func TestBydNeverWritesRequest(t *testing.T) {
+	sc, ha := newByd(t)
+	sc.site.lms().socChargeEnabled = false
+
+	for _, m := range []api.BatteryMode{api.BatteryNormal, api.BatteryHold, api.BatteryCharge} {
+		sc.site.SetBatteryMode(m)
+		sc.cycle(25, 8000, 0)
+		sc.cycle(80, 1000, 0)
+		for _, c := range ha.take() {
+			assert.NotContains(t, c, "select_option", m.String())
+		}
+	}
+}
+
+// TestBydLimitWithoutMeters verifies the limit while the meters are lost: the peak
+// limit instead of the allowed power of the window, and still the sign of life
+func TestBydLimitWithoutMeters(t *testing.T) {
+	sc, ha := newByd(t)
+	sc.site.lms().socChargeEnabled = false
+
+	sc.cycle(25, 8000, 0)
+	ha.take()
+
+	s := sc.site.peak()
+	s.mu.Lock()
+	s.metersLost = true
+	s.window.Allowed = 7000
+	s.mu.Unlock()
+
+	ha.set(haProtLimit, "0")
+	sc.site.applyOmni()
+	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000"}, ha.take())
+}
