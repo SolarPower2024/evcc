@@ -1096,7 +1096,7 @@
       }
     },
     "peakshaving": {
-      "batteryTypeHelp": "Home Assistant regulates the battery, evcc sets the values. Marstek: Omnibattery. BYD: evcc Peak Fronius.",
+      "batteryTypeHelp": "Marstek: Omnibattery. BYD: evcc Peak Fronius.",
       "batteryTypeLabel": "Battery type",
       "circuitDescription": "Only with a circuit does the home battery take part in load management.",
       "circuitHelp": "Grid charging and shedding of the battery follow its power limit.",
@@ -1104,7 +1104,8 @@
       "circuitLabel": "Battery circuit",
       "circuitNone": "None — battery outside load management",
       "circuitNoneConfigured": "No circuits are configured.",
-      "description": "evcc tells Home Assistant what peak shaving needs. How depends on the battery type.",
+      "controlTitle": "Peak control in Home Assistant",
+      "description": "Home Assistant regulates the battery, evcc sets the values.",
       "energyEntityHelp": "Grid import counter in kWh or Wh. Only needed when the grid meter in evcc has no energy counter. Template sensors must report unavailable on failure, not 0. Fine counters (0.01 kWh) keep the limit exact, coarse ones delay the cut.",
       "energyEntityLabel": "Grid import energy counter",
       "entityInvalid": "Could not set the entity.",
@@ -1114,6 +1115,7 @@
       "followBufferLabel": "Buffer",
       "followHelp": "Once the month's highest quarter hour is more than the buffer above your peak limit, the limit rises to that peak minus the buffer. A new month starts with your limit again.",
       "followLabel": "Follow the peak: limit follows the month's peak",
+      "gridChargeTitle": "Grid charging (Marstek only)",
       "manualEntityHelp": "Omnibattery switch. evcc turns it on only while grid charging.",
       "manualEntityLabel": "Manual control switch",
       "modeEntityHelp": "Select with None, Charge and Discharge.",

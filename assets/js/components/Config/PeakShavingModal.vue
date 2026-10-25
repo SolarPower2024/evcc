@@ -12,6 +12,9 @@
 
 		<form ref="form" class="container mx-0 px-0" @submit.prevent="save">
 			<!-- custom: battery types Marstek (Omnibattery) and BYD (evcc Peak Fronius), see core/site_peak_ext.go -->
+			<h6 class="mb-3" data-testid="peakshaving-control-title">
+				{{ $t("config.peakshaving.controlTitle") }}
+			</h6>
 			<FormRow
 				id="peakShavingBatteryType"
 				:label="$t('config.peakshaving.batteryTypeLabel')"
@@ -27,38 +30,6 @@
 					<option value="byd">BYD (evcc Peak Fronius)</option>
 				</select>
 			</FormRow>
-
-			<template v-if="batteryType === 'marstek'">
-				<FormRow
-					id="peakShavingManualEntity"
-					:label="$t('config.peakshaving.manualEntityLabel')"
-					:help="$t('config.peakshaving.manualEntityHelp')"
-				>
-					<input
-						id="peakShavingManualEntity"
-						v-model="manualEntity"
-						type="text"
-						class="form-control"
-						placeholder="switch.marstek_venus_battery_manual_mode"
-						data-testid="peakshaving-manual-entity"
-					/>
-				</FormRow>
-
-				<FormRow
-					id="peakShavingModeEntity"
-					:label="$t('config.peakshaving.modeEntityLabel')"
-					:help="$t('config.peakshaving.modeEntityHelp')"
-				>
-					<input
-						id="peakShavingModeEntity"
-						v-model="modeEntity"
-						type="text"
-						class="form-control"
-						placeholder="select.marstek_venus_1_betriebsmodus_erzwingen"
-						data-testid="peakshaving-mode-entity"
-					/>
-				</FormRow>
-			</template>
 
 			<FormRow
 				id="peakShavingProtSwitch"
@@ -104,6 +75,42 @@
 					data-testid="peakshaving-prot-soc"
 				/>
 			</FormRow>
+
+			<!-- grid charging of a Marstek: the manual control and the mode, see core/site_peak_omni.go -->
+			<template v-if="batteryType === 'marstek'">
+				<h6 class="mt-4 mb-3" data-testid="peakshaving-gridcharge-title">
+					{{ $t("config.peakshaving.gridChargeTitle") }}
+				</h6>
+				<FormRow
+					id="peakShavingManualEntity"
+					:label="$t('config.peakshaving.manualEntityLabel')"
+					:help="$t('config.peakshaving.manualEntityHelp')"
+				>
+					<input
+						id="peakShavingManualEntity"
+						v-model="manualEntity"
+						type="text"
+						class="form-control"
+						placeholder="switch.marstek_venus_battery_manual_mode"
+						data-testid="peakshaving-manual-entity"
+					/>
+				</FormRow>
+
+				<FormRow
+					id="peakShavingModeEntity"
+					:label="$t('config.peakshaving.modeEntityLabel')"
+					:help="$t('config.peakshaving.modeEntityHelp')"
+				>
+					<input
+						id="peakShavingModeEntity"
+						v-model="modeEntity"
+						type="text"
+						class="form-control"
+						placeholder="select.marstek_venus_1_betriebsmodus_erzwingen"
+						data-testid="peakshaving-mode-entity"
+					/>
+				</FormRow>
+			</template>
 
 			<!-- custom: skip writes below this change, see numberSetter in core/site_peakshaving.go -->
 			<FormRow

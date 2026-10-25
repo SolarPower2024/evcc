@@ -395,8 +395,12 @@ DELETE /api/batterygridchargeonce
 A capacity tariff bills the month's highest 15 minute average. The battery's
 lower soc range is held back as a reserve for such peaks. Set on the battery
 page (*Lastspitzenkappung*: on/off, limit, reserve) and under
-*Lastmanagement-Details → Peak Shaving* (battery type, the entities of the
-controller in Home Assistant, energy counter, follow the peak).
+*Lastmanagement-Details → Peak Shaving*: one area *Peak-Regelung in Home Assistant*
+for both battery types (the type, then the switch, the limit and the soc threshold
+of the controller, one short help each; the type only sets placeholders and
+limits: soc steps, the 20 % floor of a Marstek, the hysteresis), below it, for a
+Marstek only, *Netzladen (nur Marstek)* with the manual control and the mode; then
+energy counter and follow the peak.
 
 evcc does not regulate the discharge itself. A controller in Home Assistant
 does, within seconds: Omnibattery for a Marstek, the integration evcc Peak
@@ -568,7 +572,8 @@ from the pv surplus. evcc is the input of that peak shaving:
 - the *limit* and the *soc threshold* (`number.` or `input_number.` each).
 
 Peak shaving cannot be turned on without these three
-(`TestOmniPeakShavingNeedsEntities`). Grid charging additionally needs the
+(`TestOmniPeakShavingNeedsEntities`). Grid charging additionally needs, in the
+section *Netzladen (nur Marstek)*, the
 *manual control switch* (`switch.` or `input_boolean.`) and the *force mode*
 select (`select.` or `input_select.`, offering `None`, `Charge` and `Discharge`
 exactly so; checked when set, `TestOmniEntityChecks`), next to the charge power
