@@ -109,7 +109,7 @@ func (site *Site) omniWant() (charge bool, power float64) {
 
 // applyOmni brings the external controller to what evcc wants: Omnibattery (grid
 // charging and peak shaving independent of each other) or the integration for BYD
-// (peak shaving, then the request)
+// (peak shaving)
 func (site *Site) applyOmni() {
 	s := site.peak()
 
@@ -123,7 +123,6 @@ func (site *Site) applyOmni() {
 
 	site.applyOmniCharge()
 	site.applyOmniProtection()
-	site.applyBydRequest()
 }
 
 // applyOmniCharge brings the battery to grid charging: switch, then mode, then
@@ -241,7 +240,6 @@ func (site *Site) publishOmniSettings() {
 	s.mu.Lock()
 	typ, manual, mode, shown := s.batteryType, s.manualEntity, s.modeEntity, s.omniShown
 	protSwitch, protLimit, protSoc := s.protSwitch, s.protLimit, s.protSoc
-	request := s.requestEntity
 	s.mu.Unlock()
 
 	if typ == "" {
@@ -255,7 +253,6 @@ func (site *Site) publishOmniSettings() {
 	site.publish(keys.PeakShavingProtSwitch, protSwitch)
 	site.publish(keys.PeakShavingProtLimit, protLimit)
 	site.publish(keys.PeakShavingProtSoc, protSoc)
-	site.publish(keys.PeakShavingRequestEntity, request)
 }
 
 //
@@ -314,9 +311,7 @@ func (site *Site) SetPeakShavingBatteryType(typ string) error {
 		released = omni && prot
 
 	default:
-		request := site.releaseRequest()
-		prot := site.releaseProt()
-		released = request && prot
+		released = site.releaseProt()
 	}
 
 	// what evcc holds would otherwise be left with the previous type

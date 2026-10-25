@@ -1125,8 +1125,6 @@
       "protSocLabel": "SOC-Schwelle",
       "protSwitchHelp": "Schalter des Peak Shaving. evcc schaltet ihn mit Peak Shaving ein.",
       "protSwitchLabel": "Spitzenlastkappung",
-      "requestEntityHelp": "Select mit normal, grid_charge und hold. evcc setzt sie aus dem Batteriemodus. Die Entität der Ladeleistung steht beim Netzladen der Batterie.",
-      "requestEntityLabel": "Anforderung",
       "source": {
         "entity": "Energiezähler aus Home Assistant",
         "meter": "Energiezähler des Netzzählers",

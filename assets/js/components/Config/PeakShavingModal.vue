@@ -105,23 +105,6 @@
 				/>
 			</FormRow>
 
-			<!-- BYD: the request of the integration, grid charging and holding -->
-			<FormRow
-				v-if="batteryType === 'byd'"
-				id="peakShavingRequestEntity"
-				:label="$t('config.peakshaving.requestEntityLabel')"
-				:help="$t('config.peakshaving.requestEntityHelp')"
-			>
-				<input
-					id="peakShavingRequestEntity"
-					v-model="requestEntity"
-					type="text"
-					class="form-control"
-					:placeholder="placeholder.request"
-					data-testid="peakshaving-request-entity"
-				/>
-			</FormRow>
-
 			<!-- custom: skip writes below this change, see numberSetter in core/site_peakshaving.go -->
 			<FormRow
 				id="peakShavingWriteTolerance"
@@ -233,8 +216,7 @@ import api from "@/api";
 // Switch, limit and soc threshold of the peak shaving controller in Home Assistant
 // (Omnibattery for a Marstek, evcc Peak Fronius for a BYD) and the energy sensor
 // metering the 15 minute window; for the battery type Marstek also the switch of
-// the manual control and the select of the forced mode (grid charging), for BYD the
-// select of the request. The switch, the peak limit and the reserve soc are
+// the manual control and the select of the forced mode (grid charging). The switch, the peak limit and the reserve soc are
 // operating controls and live on the battery page.
 export default {
 	name: "PeakShavingModal",
@@ -256,8 +238,6 @@ export default {
 			initialProtLimit: "",
 			protSoc: "",
 			initialProtSoc: "",
-			requestEntity: "",
-			initialRequestEntity: "",
 			energyEntity: "",
 			initialEnergyEntity: "",
 			follow: false,
@@ -287,27 +267,18 @@ export default {
 				this.protSoc.trim() !== this.initialProtSoc
 			);
 		},
-		// the request is for a BYD only
-		requestChanged() {
-			return (
-				this.batteryType === "byd" &&
-				this.requestEntity.trim() !== this.initialRequestEntity
-			);
-		},
 		placeholder() {
 			if (this.batteryType === "marstek") {
 				return {
 					protSwitch: "switch.marstek_venus_system_spitzenlastkappung",
 					protLimit: "number.marstek_venus_system_spitzenlastkappung_limit",
 					protSoc: "number.marstek_venus_system_spitzenlastkappung_soc_schwelle",
-					request: "",
 				};
 			}
 			return {
 				protSwitch: "switch.evcc_peak_fronius_peak_shaving",
 				protLimit: "number.evcc_peak_fronius_limit",
 				protSoc: "number.evcc_peak_fronius_soc_threshold",
-				request: "select.evcc_peak_fronius_request",
 			};
 		},
 		energyEntityChanged() {
@@ -327,7 +298,6 @@ export default {
 				this.batteryTypeChanged ||
 				this.marstekChanged ||
 				this.protChanged ||
-				this.requestChanged ||
 				this.energyEntityChanged ||
 				this.followChanged ||
 				this.bufferChanged ||
@@ -341,7 +311,6 @@ export default {
 	},
 	methods: {
 		reset() {
-			const requestEntity = store?.state?.peakShavingRequestEntity || "";
 			const energyEntity = store?.state?.peakShavingEnergyEntity || "";
 			const manualEntity = store?.state?.peakShavingManualEntity || "";
 			const modeEntity = store?.state?.peakShavingModeEntity || "";
@@ -363,8 +332,6 @@ export default {
 			this.initialProtLimit = protLimit;
 			this.protSoc = protSoc;
 			this.initialProtSoc = protSoc;
-			this.requestEntity = requestEntity;
-			this.initialRequestEntity = requestEntity;
 			this.energyEntity = energyEntity;
 			this.initialEnergyEntity = energyEntity;
 			const follow = store?.state?.peakFollow;
@@ -410,7 +377,7 @@ export default {
 			}
 
 			// peak shaving cannot run without the three entities of the controller; the
-			// manual switch and mode (Marstek) and the request (BYD) are for grid charging
+			// manual switch and mode (Marstek) are for grid charging
 			if (
 				store?.state?.peakShaving &&
 				(!this.protSwitch.trim() || !this.protLimit.trim() || !this.protSoc.trim())
@@ -441,12 +408,6 @@ export default {
 				if (protSoc !== this.initialProtSoc) {
 					await this.postEntity("peakshavingprotsoc", protSoc);
 					this.initialProtSoc = protSoc;
-				}
-
-				const requestEntity = this.requestEntity.trim();
-				if (this.requestChanged) {
-					await this.postEntity("peakshavingrequestentity", requestEntity);
-					this.initialRequestEntity = requestEntity;
 				}
 
 				if (this.batteryType === "marstek") {

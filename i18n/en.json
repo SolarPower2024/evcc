@@ -1125,8 +1125,6 @@
       "protSocLabel": "SOC threshold",
       "protSwitchHelp": "Switch of the peak shaving. evcc turns it on with peak shaving.",
       "protSwitchLabel": "Peak shaving switch",
-      "requestEntityHelp": "Select with normal, grid_charge and hold. evcc sets it from the battery mode. The charge power entity is set under battery grid charging.",
-      "requestEntityLabel": "Request",
       "source": {
         "entity": "energy counter from Home Assistant",
         "meter": "energy counter of the grid meter",

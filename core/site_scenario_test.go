@@ -565,7 +565,6 @@ func TestScenarioSettingsValidation(t *testing.T) {
 	assert.Error(t, site.SetBatterySocGridChargeStart(-1))
 	assert.Error(t, site.SetBatterySocGridChargeStop(101))
 
-	assert.Error(t, site.SetPeakShavingRequestEntity("sensor.battery"), "wrong domain")
 	assert.Error(t, site.SetPeakShavingChargeEntity("switch.battery"), "wrong domain")
 
 	assert.NoError(t, site.SetLmPriority(lmBatteryName, 0))

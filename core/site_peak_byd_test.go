@@ -3,7 +3,6 @@ package core
 import (
 	"bytes"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/evcc-io/evcc/api"
@@ -36,7 +35,6 @@ func newByd(t *testing.T) (*scenario, *fakeHA) {
 	s := sc.site.peak()
 	s.batteryType = batteryTypeBYD
 	s.manualEntity, s.modeEntity = "", ""
-	s.requestEntity = haRequest
 
 	return sc, ha
 }
@@ -47,7 +45,7 @@ func bydOn(soc, limit string) []string {
 }
 
 // bydCharging runs the first cycle of grid charging: charge power, then the
-// peak shaving, then the request
+// peak shaving; the request is the scripts' of the battery mode
 func bydCharging(t *testing.T) (*scenario, *fakeHA) {
 	t.Helper()
 
@@ -55,9 +53,8 @@ func bydCharging(t *testing.T) (*scenario, *fakeHA) {
 	sc.site.lms().socChargeEnabled = true
 
 	require.True(t, sc.cycle(20, 1000, 0))
-	require.Equal(t, append(append([]string{"set_value " + haChargeNum + " 4000"}, bydOn("30", "5000")...),
-		"select_option "+haRequest+" grid_charge"), ha.take())
-	require.True(t, sc.site.peakOwned())
+	require.Equal(t, append([]string{"set_value " + haChargeNum + " 4000"}, bydOn("30", "5000")...), ha.take())
+	require.False(t, sc.site.peakOwned(), "no manual control, no request: evcc holds nothing else")
 	require.True(t, sc.site.peak().protOwned)
 
 	return sc, ha
@@ -134,92 +131,6 @@ func TestBydLimitSignOfLife(t *testing.T) {
 	assert.Empty(t, ha.take())
 }
 
-// TestBydRequest verifies the request: written from the battery mode, held while
-// it is not normal, back to normal once
-func TestBydRequest(t *testing.T) {
-	sc, ha := bydCharging(t)
-	assert.Equal(t, "grid_charge", ha.get(haRequest))
-
-	stored, err := settings.Bool(keys.PeakShavingOwned)
-	require.NoError(t, err)
-	assert.True(t, stored)
-
-	// written once
-	sc.cycle(20, 1000, 0)
-	assert.Empty(t, ha.take())
-
-	// the charge ends: the charge power to 0, the request normal
-	require.False(t, sc.cycle(90, 1000, 0))
-	assert.Equal(t, []string{"set_value " + haChargeNum + " 0", "select_option " + haRequest + " normal"}, ha.take())
-	assert.False(t, sc.site.peakOwned())
-	assert.Equal(t, "normal", ha.get(haRequest))
-
-	// and not again
-	sc.cycle(90, 1000, 0)
-	assert.Empty(t, ha.take())
-}
-
-// TestBydRequestHold verifies hold as request, and that a request set by hand is
-// left alone while evcc holds nothing
-func TestBydRequestHold(t *testing.T) {
-	sc, ha := newByd(t)
-	sc.site.lms().socChargeEnabled = false
-	sc.site.peak().enabled = false
-
-	ha.set(haRequest, "hold")
-	sc.cycle(50, 1000, 0)
-	assert.Empty(t, ha.take(), "set by hand, evcc asks for normal and holds nothing")
-	assert.Equal(t, "hold", ha.get(haRequest))
-
-	sc.site.SetBatteryMode(api.BatteryHold)
-	ha.set(haRequest, "normal")
-	sc.site.applyOmni()
-	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000", "select_option " + haRequest + " hold"}, ha.take())
-	assert.True(t, sc.site.peakOwned())
-
-	// changed by hand while held: corrected
-	ha.set(haRequest, "grid_charge")
-	sc.site.applyOmni()
-	assert.Equal(t, []string{"select_option " + haRequest + " hold"}, ha.take())
-
-	sc.site.SetBatteryMode(api.BatteryNormal)
-	sc.site.applyOmni()
-	assert.Equal(t, []string{"select_option " + haRequest + " normal"}, ha.take())
-	assert.False(t, sc.site.peakOwned())
-}
-
-// TestBydLimitWithoutPeakShaving verifies that evcc goes on writing the limit while
-// it steers the battery with a request, peak shaving off: the integration takes
-// evcc as gone otherwise
-func TestBydLimitWithoutPeakShaving(t *testing.T) {
-	sc, ha := newByd(t)
-	sc.site.lms().socChargeEnabled = false
-	require.NoError(t, sc.site.SetPeakShaving(false))
-	ha.take()
-
-	// nothing requested: nothing written
-	sc.cycle(50, 1000, 0)
-	assert.Empty(t, ha.take())
-
-	sc.site.SetBatteryMode(api.BatteryCharge)
-	sc.site.applyOmni()
-	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000", "select_option " + haRequest + " grid_charge"}, ha.take(), "limit, no switch, no threshold")
-	assert.Equal(t, "off", ha.get(haProtSwitch))
-
-	// the quarter hour began
-	ha.set(haProtLimit, "0")
-	sc.site.applyOmni()
-	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000"}, ha.take())
-
-	// back to normal: the request goes, the limit stops
-	sc.site.SetBatteryMode(api.BatteryNormal)
-	sc.site.applyOmni()
-	assert.Equal(t, []string{"select_option " + haRequest + " normal"}, ha.take())
-	ha.set(haProtLimit, "0")
-	sc.site.applyOmni()
-	assert.Empty(t, ha.take())
-}
-
 // TestBydPeakShavingOffReleasesSwitch verifies that switching peak shaving off
 // turns the integration's switch off, limit and threshold stay
 func TestBydPeakShavingOffReleasesSwitch(t *testing.T) {
@@ -236,112 +147,6 @@ func TestBydPeakShavingOffReleasesSwitch(t *testing.T) {
 	assert.Equal(t, "5000", ha.get(haProtLimit))
 }
 
-// TestBydWithoutRequestEntity verifies that grid charging and holding without the
-// request entity only warn, once
-func TestBydWithoutRequestEntity(t *testing.T) {
-	sc, ha := newByd(t)
-	sc.site.peak().requestEntity = ""
-
-	var buf bytes.Buffer
-	sc.site.log = testLogger(&buf)
-
-	sc.site.SetBatteryMode(api.BatteryCharge)
-	sc.site.applyOmni()
-	sc.site.applyOmni()
-	assert.NotContains(t, strings.Join(ha.take(), " "), "select_option")
-	assert.Equal(t, 1, strings.Count(buf.String(), "request entity"))
-	assert.False(t, sc.site.peakOwned())
-}
-
-// TestBydRequestEntityChecks verifies the entity: its domain and the options as
-// written, and that a request evcc holds is set back before the entity changes
-func TestBydRequestEntityChecks(t *testing.T) {
-	sc, ha := newByd(t)
-	s := sc.site.peak()
-	s.requestEntity = ""
-
-	require.ErrorContains(t, sc.site.SetPeakShavingRequestEntity("sensor.request"), "select or input_select")
-
-	ha.mu.Lock()
-	ha.states["select.bad"] = &haEntity{"normal", map[string]any{"options": []string{"normal", "hold"}}}
-	ha.states["select.upper"] = &haEntity{"Normal", map[string]any{"options": []string{"Normal", "Grid_charge", "Hold"}}}
-	ha.mu.Unlock()
-
-	require.ErrorContains(t, sc.site.SetPeakShavingRequestEntity("select.bad"), "grid_charge")
-	require.Error(t, sc.site.SetPeakShavingRequestEntity("select.upper"), "the exact spelling")
-	require.Error(t, sc.site.SetPeakShavingRequestEntity("select.missing"))
-	assert.Empty(t, sc.site.GetPeakShavingRequestEntity())
-
-	require.NoError(t, sc.site.SetPeakShavingRequestEntity(haRequest))
-	assert.Equal(t, haRequest, sc.site.GetPeakShavingRequestEntity())
-	assert.Equal(t, haRequest, stored2(t, keys.PeakShavingRequestEntity))
-}
-
-// stored2 returns a stored string setting
-func stored2(t *testing.T, key string) string {
-	t.Helper()
-
-	v, err := settings.String(key)
-	require.NoError(t, err)
-
-	return v
-}
-
-// TestBydRequestEntityChangeReleases verifies that the request goes back to normal
-// before the entity is replaced or removed, and that a change is refused while that
-// fails
-func TestBydRequestEntityChangeReleases(t *testing.T) {
-	t.Run("removed", func(t *testing.T) {
-		sc, ha := bydCharging(t)
-
-		require.NoError(t, sc.site.SetPeakShavingRequestEntity(""))
-		assert.Equal(t, []string{"select_option " + haRequest + " normal"}, ha.take())
-		assert.False(t, sc.site.peakOwned())
-		assert.Empty(t, sc.site.GetPeakShavingRequestEntity())
-	})
-
-	t.Run("replaced", func(t *testing.T) {
-		sc, ha := bydCharging(t)
-		ha.mu.Lock()
-		ha.states["select.other"] = &haEntity{"normal", map[string]any{"options": []string{"normal", "grid_charge", "hold"}}}
-		ha.mu.Unlock()
-
-		require.NoError(t, sc.site.SetPeakShavingRequestEntity("select.other"))
-		assert.Equal(t, []string{"select_option " + haRequest + " normal"}, ha.take())
-		assert.False(t, sc.site.peakOwned())
-	})
-
-	t.Run("refused while it fails", func(t *testing.T) {
-		sc, ha := bydCharging(t)
-		ha.fail["select/select_option"] = http.StatusInternalServerError
-
-		require.ErrorIs(t, sc.site.SetPeakShavingRequestEntity(""), errHandBack)
-		assert.Equal(t, haRequest, sc.site.GetPeakShavingRequestEntity())
-		assert.True(t, sc.site.peakOwned())
-
-		delete(ha.fail, "select/select_option")
-		require.NoError(t, sc.site.SetPeakShavingRequestEntity(""))
-		assert.False(t, sc.site.peakOwned())
-	})
-
-	t.Run("entity gone", func(t *testing.T) {
-		sc, ha := bydCharging(t)
-		ha.forget(haRequest)
-
-		require.NoError(t, sc.site.SetPeakShavingRequestEntity(""))
-		assert.False(t, sc.site.peakOwned())
-	})
-
-	t.Run("not available keeps the hold", func(t *testing.T) {
-		sc, ha := bydCharging(t)
-		ha.set(haRequest, "unavailable")
-
-		require.ErrorIs(t, sc.site.SetPeakShavingRequestEntity(""), errHandBack)
-		assert.True(t, sc.site.peakOwned())
-		assert.Empty(t, ha.take(), "nothing written to an entity that is not available")
-	})
-}
-
 // TestBydRelease verifies that the three parts are released when they are not
 // needed any more
 func TestBydRelease(t *testing.T) {
@@ -350,20 +155,18 @@ func TestBydRelease(t *testing.T) {
 		require.NoError(t, sc.site.SetPeakShavingProtLimit(""))
 		assert.Equal(t, []string{"turn_off " + haProtSwitch}, ha.take())
 		assert.False(t, sc.site.GetPeakShaving(), "it cannot run without")
-		assert.True(t, sc.site.peakOwned(), "the request is not part of it")
 	})
 
 	t.Run("battery type changed", func(t *testing.T) {
 		sc, ha := bydCharging(t)
 		require.NoError(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek))
-		assert.Equal(t, []string{"select_option " + haRequest + " normal", "turn_off " + haProtSwitch}, ha.take())
-		assert.False(t, sc.site.peakOwned())
+		assert.Equal(t, []string{"turn_off " + haProtSwitch}, ha.take())
 		assert.False(t, sc.site.peak().protOwned)
 	})
 
 	t.Run("battery type change refused", func(t *testing.T) {
 		sc, ha := bydCharging(t)
-		ha.fail["select/select_option"] = http.StatusInternalServerError
+		ha.fail["switch/turn_off"] = http.StatusInternalServerError
 
 		require.ErrorIs(t, sc.site.SetPeakShavingBatteryType(batteryTypeMarstek), errHandBack)
 		assert.Equal(t, batteryTypeBYD, sc.site.GetPeakShavingBatteryType())
@@ -378,16 +181,16 @@ func TestBydRelease(t *testing.T) {
 		again.site.custom.peak.conn = sc.site.peak().conn
 		again.site.restorePeakSettings()
 		s := again.site.peak()
-		s.batteryType, s.requestEntity = batteryTypeBYD, haRequest
+		s.batteryType = batteryTypeBYD
 		s.enabled = false
 		require.NoError(t, again.site.rebuildChargeSetter())
 
-		assert.True(t, again.site.peakOwned())
+		assert.True(t, s.protOwned)
 		for range 3 {
 			again.cycle(50, 1000, 0)
 		}
-		assert.Equal(t, []string{"turn_off " + haProtSwitch, "select_option " + haRequest + " normal"}, ha.take())
-		assert.False(t, again.site.peakOwned())
+		assert.Equal(t, []string{"turn_off " + haProtSwitch}, ha.take())
+		assert.False(t, s.protOwned)
 	})
 }
 
@@ -409,8 +212,7 @@ func TestBydNeedsEntities(t *testing.T) {
 		require.NoError(t, sc.site.rebuildProtSetter())
 	}
 
-	s.requestEntity = ""
-	require.NoError(t, sc.site.SetPeakShaving(true), "the request is not needed")
+	require.NoError(t, sc.site.SetPeakShaving(true))
 }
 
 // TestBydOptimizerHold verifies that the optimizer's hold raises the threshold for
@@ -427,45 +229,15 @@ func TestBydOptimizerHold(t *testing.T) {
 	assert.Equal(t, "100", ha.get(haProtSoc))
 	assert.Equal(t, 30.0, sc.site.peak().holdSoc)
 
-	// the battery mode is hold, the request stays normal: the threshold holds the
-	// battery and a peak is still covered at once
-	assert.Equal(t, api.BatteryHold, sc.mode())
-	assert.Equal(t, requestNormal, sc.site.bydWant())
-	assert.Equal(t, "normal", ha.get(haRequest))
-	assert.False(t, sc.site.peakOwned())
-
-	// without peak shaving the hold is a hold
-	require.NoError(t, sc.site.SetPeakShaving(false))
-	sc.cycle(50, 3000, 0)
-	assert.Equal(t, requestHold, sc.site.bydWant())
-	assert.Equal(t, "hold", ha.get(haRequest))
-	require.NoError(t, sc.site.SetPeakShaving(true))
-	sc.cycle(50, 3000, 0)
-	assert.Equal(t, "normal", ha.get(haRequest))
-
 	sc.suggest(api.BatteryNormal.String())
 	sc.cycle(50, 3000, 0)
 	assert.Equal(t, "30", ha.get(haProtSoc))
 	assert.Zero(t, sc.site.peak().holdSoc)
 }
 
-// TestBydMarstekHasNoRequest verifies that the request is never written for the
-// battery type Marstek
-func TestBydMarstekHasNoRequest(t *testing.T) {
-	sc, ha := newOmni(t)
-	sc.site.peak().requestEntity = haRequest
-	sc.site.lms().socChargeEnabled = true
-
-	sc.cycle(20, 1000, 0)
-	sc.cycle(90, 1000, 0)
-	for _, c := range ha.take() {
-		assert.NotContains(t, c, haRequest)
-	}
-	assert.Equal(t, "normal", ha.get(haRequest))
-}
-
-// TestBydHeldMarkStored verifies that the request mark is in the database right
-// away: a crash within the minute would lose it
+// TestBydHeldMarkStored verifies that the mark of the switch is in the database right
+// away: a crash within the minute would lose it. The mark of the manual control
+// (peakShavingOwned) is never set for this type.
 func TestBydHeldMarkStored(t *testing.T) {
 	sc, _ := newByd(t)
 	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
@@ -474,27 +246,14 @@ func TestBydHeldMarkStored(t *testing.T) {
 	sc.site.lms().socChargeEnabled = true
 
 	require.True(t, sc.cycle(20, 1000, 0))
-	assert.Equal(t, "true", stored(t, keys.PeakShavingOwned), "request")
+	assert.Empty(t, stored(t, keys.PeakShavingOwned), "no manual control")
 	assert.Equal(t, "true", stored(t, keys.PeakShavingProtOwned), "peak shaving")
 
 	require.False(t, sc.cycle(90, 1000, 0))
-	assert.Equal(t, "false", stored(t, keys.PeakShavingOwned))
+	assert.Empty(t, stored(t, keys.PeakShavingOwned))
 
 	require.NoError(t, sc.site.SetPeakShaving(false))
 	assert.Equal(t, "false", stored(t, keys.PeakShavingProtOwned))
-}
-
-// TestBydRestoresRequestEntity verifies that the request entity survives a restart
-func TestBydRestoresRequestEntity(t *testing.T) {
-	sc, _ := newByd(t)
-	sc.site.peak().requestEntity = ""
-	require.NoError(t, sc.site.SetPeakShavingRequestEntity(haRequest))
-
-	again := newScenario(t)
-	again.site.custom.peak.conn = sc.site.peak().conn
-	again.site.restorePeakSettings()
-
-	assert.Equal(t, haRequest, again.site.GetPeakShavingRequestEntity())
 }
 
 // TestBydMigratePeakEntity verifies the end of the old way: the discharge setpoint

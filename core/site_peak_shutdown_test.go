@@ -23,7 +23,7 @@ func shutdownBudget(t *testing.T, d time.Duration) {
 // TestPeakReleasedOnShutdown verifies that stopping evcc hands back what the fork
 // holds: the grid charge power and the manual control of a Marstek, the limit of
 // Omnibattery's peak shaving (it stays on, with the peak limit instead of the
-// allowed power of the window), the charge power, the request and the peak shaving of a BYD. The
+// allowed power of the window), the charge power and the peak shaving of a BYD. The
 // cycle writes nothing any more afterwards.
 func TestPeakReleasedOnShutdown(t *testing.T) {
 	t.Run("marstek", func(t *testing.T) {
@@ -51,7 +51,6 @@ func TestPeakReleasedOnShutdown(t *testing.T) {
 		sc.site.releasePeakOnShutdown()
 		assert.Equal(t, []string{
 			"set_value " + haChargeNum + " 0",
-			"select_option " + haRequest + " normal",
 			"turn_off " + haProtSwitch,
 		}, ha.take())
 		assert.False(t, sc.site.peakOwned())
@@ -169,7 +168,6 @@ func TestPeakReleasedAfterTimeout(t *testing.T) {
 		sc.site.releasePeakOnShutdown()
 		assert.Equal(t, []string{
 			"set_value " + haChargeNum + " 0",
-			"select_option " + haRequest + " normal",
 			"turn_off " + haProtSwitch,
 		}, ha.take())
 		assert.False(t, sc.site.peakOwned())

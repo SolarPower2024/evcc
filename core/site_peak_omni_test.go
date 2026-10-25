@@ -31,7 +31,6 @@ const (
 	haProtSwitch   = "switch.prot"
 	haProtLimit    = "number.prot_limit"
 	haProtSoc      = "number.prot_soc"
-	haRequest      = "select.request"
 )
 
 // fakeHA is a Home Assistant answering state reads and service calls, and
@@ -67,8 +66,6 @@ func newFakeHA() *fakeHA {
 			haProtSwitch: {"off", map[string]any{}},
 			haProtLimit:  number("20000", 500, 20000, 100),
 			haProtSoc:    number("20", 20, 100, 1),
-			// the request of the integration for the battery type BYD
-			haRequest: {"normal", map[string]any{"options": []string{"normal", "grid_charge", "hold"}}},
 		},
 	}
 }
@@ -1127,7 +1124,6 @@ func TestOmniNeverTouchesDischarge(t *testing.T) {
 	run(func() { sc.cycle(25, 8000, 0) })
 	run(func() { require.NoError(t, sc.site.SetPeakShaving(false)) })
 	run(func() { sc.cycle(25, 8000, 0) })
-	run(func() { require.NoError(t, sc.site.SetPeakShavingRequestEntity("")) })
 
 	assert.NotEmpty(t, all)
 	for _, call := range all {

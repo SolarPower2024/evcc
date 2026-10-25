@@ -100,9 +100,6 @@ type peakState struct {
 	holdSoc    float64             // threshold before the optimizer's hold raised it, 0 = not raised, persisted, see site_peak_omni_hold.go
 	omniWarned bool                // grid charging without manual control logged, until it is set up again
 
-	requestEntity string // select of the request of the integration (BYD)
-	requestWarned bool   // grid charging without the request entity logged, until it is set up again
-
 	conn *homeassistant.Connection // shared, built on first use
 
 	demand        float64   // grid demand without the battery in W, from the last cycle
@@ -230,11 +227,6 @@ func (site *Site) restorePeakSettings() {
 	if v, err := settings.Bool(keys.PeakShavingProtOwned); err == nil {
 		s.mu.Lock()
 		s.protOwned = v
-		s.mu.Unlock()
-	}
-	if v, err := settings.String(keys.PeakShavingRequestEntity); err == nil {
-		s.mu.Lock()
-		s.requestEntity = v
 		s.mu.Unlock()
 	}
 	if v, err := settings.Float(keys.PeakShavingHoldSoc); err == nil {
@@ -1133,7 +1125,7 @@ func (site *Site) SetPeakShavingChargeEntity(entity string) error {
 		return nil
 	}
 
-	// swapped and handed back in one go, see SetPeakShavingRequestEntity
+	// swapped and handed back in one go, see SetPeakShavingChargeEntity
 	s.out.Lock()
 	s.mu.Lock()
 	previousSet := s.chargeSet

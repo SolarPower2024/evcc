@@ -199,7 +199,7 @@ export interface LmState {
   peakShavingPower?: number;
   /** Circuit the battery draws from, links it into load management. */
   peakShavingCircuit?: string;
-  /** Battery type: marstek drives Omnibattery and switches it to manual control while grid charging, byd drives the integration evcc Peak Fronius and asks it with a request. */
+  /** Battery type: marstek drives Omnibattery and switches it to manual control while grid charging, byd drives the integration evcc Peak Fronius. Its scripts of the battery modes set the request of the integration. */
   peakShavingBatteryType?: "byd" | "marstek";
   /** Home Assistant switch of the manual control (marstek). */
   peakShavingManualEntity?: string;
@@ -211,8 +211,6 @@ export interface LmState {
   peakShavingProtLimit?: string;
   /** Home Assistant number entity of its soc threshold, receives the reserve. */
   peakShavingProtSoc?: string;
-  /** Home Assistant select of the request normal, grid_charge, hold (byd). */
-  peakShavingRequestEntity?: string;
   /** Forced mode evcc holds on a marstek battery, empty = not controlling. */
   peakShavingManual?: "" | "None" | "Charge" | "Discharge";
   /** Average grid power in W of the running 15 minute metering window. */

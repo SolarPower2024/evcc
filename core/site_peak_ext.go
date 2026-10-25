@@ -71,18 +71,12 @@ func (site *Site) peakConfigured() bool {
 // the limit the grid power allowed in the running 15 minute window (without meter
 // values the peak limit, following the peak included) and the switch on.
 // Otherwise the switch is turned off, but only if evcc turned it on (protOwned);
-// limit and threshold stay. The battery type BYD gets the limit also without peak
-// shaving while it steers the battery with a request, see bydLimitRule. Called
-// with s.out held.
+// limit and threshold stay. Called with s.out held.
 func (site *Site) applyOmniProtection() {
 	s := site.peak()
 
-	// before s.mu, it takes the lock of the site
-	request := site.bydWant()
-
 	s.mu.Lock()
 	want := s.enabled && s.configured() && site.batteryConfigured()
-	keepAlive := !want && request != requestNormal && s.protLimit != ""
 	owned, raised, sw, limitEntity, socSet := s.protOwned, s.holdSoc > 0, s.protSwitch, s.protLimit, s.protSocSet
 	threshold := s.effectiveReserve()
 
@@ -99,13 +93,6 @@ func (site *Site) applyOmniProtection() {
 	if !want {
 		if owned || raised {
 			site.releaseProt()
-		}
-
-		// the integration takes evcc as gone without a limit, see bydLimitRule
-		if keepAlive {
-			if conn, err := site.haConnection(); site.logWrite(site.extName()+" connect", "connect", err) {
-				site.omniWriteLimit(conn, limitEntity, limit, basis)
-			}
 		}
 
 		return

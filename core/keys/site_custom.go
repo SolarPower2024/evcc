@@ -15,18 +15,17 @@ const (
 	PeakShaving                     = "peakShaving"
 	PeakShavingLimit                = "peakShavingLimit"
 	PeakShavingReserve              = "peakShavingReserve"
-	PeakShavingEntity               = "peakShavingEntity"        // removed: the discharge setpoint target of the old battery type BYD, only read to be deleted at start, see core/site_peak_byd.go
-	PeakShavingOwned                = "peakShavingOwned"         // evcc holds the battery: the manual control (marstek) or a request other than normal (byd), not published
-	PeakShavingBatteryType          = "peakShavingBatteryType"   // byd or marstek, see core/site_peak_omni.go
-	PeakShavingManualEntity         = "peakShavingManualEntity"  // Home Assistant switch of the manual control (marstek)
-	PeakShavingModeEntity           = "peakShavingModeEntity"    // Home Assistant select of the forced mode (marstek)
-	PeakShavingManual               = "peakShavingManual"        // published: the forced mode evcc holds, empty = not controlling
-	PeakShavingProtSwitch           = "peakShavingProtSwitch"    // Home Assistant switch of the external peak shaving (marstek: Omnibattery, byd: evcc Peak Fronius)
-	PeakShavingProtLimit            = "peakShavingProtLimit"     // number entity of its limit
-	PeakShavingProtSoc              = "peakShavingProtSoc"       // number entity of its soc threshold
-	PeakShavingProtOwned            = "peakShavingProtOwned"     // evcc turned its peak shaving on, not published
-	PeakShavingRequestEntity        = "peakShavingRequestEntity" // Home Assistant select of the request: normal, grid_charge, hold (byd)
-	PeakShavingHoldSoc              = "peakShavingHoldSoc"       // its soc threshold before the optimizer's hold raised it, not published
+	PeakShavingEntity               = "peakShavingEntity"       // removed: the discharge setpoint target of the old battery type BYD, only read to be deleted at start, see core/site_peak_byd.go
+	PeakShavingOwned                = "peakShavingOwned"        // evcc holds the battery: the manual control (marstek), not published
+	PeakShavingBatteryType          = "peakShavingBatteryType"  // byd or marstek, see core/site_peak_omni.go
+	PeakShavingManualEntity         = "peakShavingManualEntity" // Home Assistant switch of the manual control (marstek)
+	PeakShavingModeEntity           = "peakShavingModeEntity"   // Home Assistant select of the forced mode (marstek)
+	PeakShavingManual               = "peakShavingManual"       // published: the forced mode evcc holds, empty = not controlling
+	PeakShavingProtSwitch           = "peakShavingProtSwitch"   // Home Assistant switch of the external peak shaving (marstek: Omnibattery, byd: evcc Peak Fronius)
+	PeakShavingProtLimit            = "peakShavingProtLimit"    // number entity of its limit
+	PeakShavingProtSoc              = "peakShavingProtSoc"      // number entity of its soc threshold
+	PeakShavingProtOwned            = "peakShavingProtOwned"    // evcc turned its peak shaving on, not published
+	PeakShavingHoldSoc              = "peakShavingHoldSoc"      // its soc threshold before the optimizer's hold raised it, not published
 	PeakShavingActive               = "peakShavingActive"
 	PeakShavingChargePower          = "peakShavingChargePower"
 	PeakShavingChargePowerEffective = "peakShavingChargePowerEffective"
