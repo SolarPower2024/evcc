@@ -564,8 +564,6 @@
       "followCyclesLabel": "Limit ignored after",
       "holdOffHelp": "Battery grid charging stays off this long after a peak or the circuit stopped it.",
       "holdOffLabel": "Hold-off after battery grid charging stopped",
-      "hysteresisHelp": "Below the reserve the battery discharges for peaks only. It is free for the house again once the soc is this far above the reserve. Prevents constant switching. BYD only.",
-      "hysteresisLabel": "Peak shaving reserve hysteresis",
       "invalid": "{label}: enter a value from {min} to {max}.",
       "peakCapHelp": "The peak shaving budget (grid draw allowed until the quarter hour ends) rises to at most this multiple of the peak limit.",
       "peakCapLabel": "Cap on the peak shaving budget",

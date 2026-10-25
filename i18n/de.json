@@ -564,8 +564,6 @@
       "followCyclesLabel": "Vorgabe ignoriert nach",
       "holdOffHelp": "So lange bleibt das Batterie-Netzladen aus, nachdem eine Spitze oder der Stromkreis es gestoppt hat.",
       "holdOffLabel": "Wartezeit nach Abbruch Batterie-Netzladen",
-      "hysteresisHelp": "Unter der Reserve entlädt die Batterie nur noch für Spitzen. Für den Hausverbrauch ist sie erst wieder frei, wenn der Ladestand so weit über der Reserve liegt. Verhindert ständiges Umschalten. Nur BYD.",
-      "hysteresisLabel": "Hysterese der Peak-Shaving-Reserve",
       "invalid": "{label}: bitte einen Wert von {min} bis {max} eingeben.",
       "peakCapHelp": "Das Peak-Shaving-Budget (erlaubter Netzbezug bis Ende der Viertelstunde) steigt höchstens auf dieses Vielfache der Peak-Grenze.",
       "peakCapLabel": "Obergrenze Peak-Shaving-Budget",

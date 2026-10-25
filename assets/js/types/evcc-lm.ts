@@ -26,8 +26,6 @@ export interface LmHomeProfile {
 }
 
 export interface LmAdvanced {
-  /** Peak reserve soc band in %. */
-  hysteresis: number;
   /** Battery grid charge hold-off in minutes. */
   holdOff: number;
   /** Unserved demand expiry in minutes. */

@@ -415,9 +415,9 @@ down, so it stays within the limits (`TestRangeFit`). A value the entity already
 holds, within the write tolerance (0 W = every change; min and max always land),
 is not written again, as a device may store each write (`TestNumberWrite`). A
 charge power entity removed or replaced gets 0 W
-(`TestPeakEntityRemovedHandsBack`). A 2 % hysteresis keeps evcc's state of the
-reserve from flapping across it (BYD only: the battery type Marstek uses none,
-see below).
+(`TestPeakEntityRemovedHandsBack`). A fixed 2 % hysteresis keeps evcc's state of the
+reserve from flapping across it (BYD only, the band of the integration; the
+battery type Marstek uses none, see below).
 
 evcc only hands back what it held. It remembers what it turned on:
 `peakShavingProtOwned` the switch of the peak shaving, `peakShavingOwned` the
@@ -612,8 +612,7 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
   which has no such floor
   (`TestOmniEffectiveReserve`). There is no reserve hysteresis for
   Marstek (`TestOmniNoHysteresis`): evcc's state of the reserve changes exactly
-  at the reserve, as Omnibattery's threshold does; the setting `hysteresis`
-  (17) is BYD only.
+  at the reserve, as Omnibattery's threshold does.
 - **Order:** threshold, limit, switch; a failing step stops the rest of that
   cycle and the next cycle starts again (`TestOmniProtectionOrder`). Each is
   written only if Home Assistant shows something else, so a change by hand is
@@ -715,8 +714,9 @@ field *Entladeregler* with it). evcc is the input, as for a Marstek:
   Peak shaving that was on is turned off (stored, published, warning in the log)
   while one of the three entities of the integration is missing, as it cannot
   run without them.
-- The reserve steps are 5 % for this type, the hysteresis 2 % (setting
-  `hysteresis`, 17). Code in `core/site_peak_byd.go`; no new hook.
+- The reserve steps are 5 % for this type, the hysteresis a fixed 2 %, the band of the
+  integration (`bydHysteresis`; the former setting `hysteresis` is still
+  accepted and dropped at start, `TestLmAdvancedSettings`). Code in `core/site_peak_byd.go`; no new hook.
 
 As a Marstek does not go below 11 % soc, the soc selects of *Netzladen nach SoC*
 offer 15 % down to 11 % in 1 % steps for this type and nothing lower; the peak
@@ -1035,7 +1035,7 @@ values are not stored, so a changed default applies.
 
 | Name | Setting | Default | Range |
 | --- | --- | --- | --- |
-| `hysteresis` | soc band of the peak reserve, BYD only | 2 % | 0-20 |
+| `hysteresis` | no longer used (fixed 2 % like the integration): still accepted, without effect, and dropped at start | – | 0-20 |
 | `freeValue` | no longer used (the free value of the old BYD way): still accepted, without effect, and dropped at start | – | 1-100000 |
 | `writeTolerance` | smallest change written to the grid charge power entity, set in the *Peak Shaving* dialog | 0 W | 0-1000 |
 | `holdOff` | wait after battery grid charging was stopped | 5 min | 1-60 |
@@ -1054,7 +1054,7 @@ and evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
 
 The dialog shows the settings in four closed groups, so it stays short on a
 phone: *Lastmanagement* (circuit, `circuitFromPeak`, `timeout`, `followCycles`), *Peak Shaving*
-(`hysteresis`, `peakFreeze`, `peakCap`), *Batterie-Netzladen*
+(`peakFreeze`, `peakCap`), *Batterie-Netzladen*
 (`holdOff`, `gridChargeWindow`) and *Optimizer* (`homeForecast`, load
 profile, `profilePercentile`, `exportForecastEntity`). A rejected value opens its group.
 

@@ -4,8 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/peak"
+	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +17,6 @@ func TestLmAdvancedSettings(t *testing.T) {
 	site := &Site{log: util.NewLogger("test")}
 
 	// defaults
-	assert.Equal(t, peak.DefaultHysteresis, site.peakHysteresis())
 	assert.Equal(t, lm.DefaultHoldOff, site.lmHoldOff())
 	assert.Equal(t, lm.DefaultTimeout, site.lmTimeout())
 	assert.Equal(t, lm.DefaultPhases, site.lmBatteryPhases())
@@ -24,7 +25,7 @@ func TestLmAdvancedSettings(t *testing.T) {
 	assert.Equal(t, 0.0, site.peakWriteTolerance())
 
 	// set in the ui
-	require.NoError(t, site.SetLmAdvanced("hysteresis", 0))
+	require.NoError(t, site.SetLmAdvanced("hysteresis", 0)) // accepted, without effect
 	require.NoError(t, site.SetLmAdvanced("holdOff", 10))
 	require.NoError(t, site.SetLmAdvanced("timeout", 3))
 	require.NoError(t, site.SetLmAdvanced("phases", 1))
@@ -32,7 +33,8 @@ func TestLmAdvancedSettings(t *testing.T) {
 	require.NoError(t, site.SetLmAdvanced("peakCap", 1.5))
 	require.NoError(t, site.SetLmAdvanced("writeTolerance", 50))
 
-	assert.Equal(t, 0.0, site.peakHysteresis(), "0 is a valid value, not unset")
+	assert.Nil(t, site.advanced().Hysteresis, "no setting any more")
+	assert.Equal(t, peak.DefaultHysteresis, site.peakHysteresis(), "the band of the integration")
 	assert.Equal(t, 10*time.Minute, site.lmHoldOff())
 	assert.Equal(t, 3*time.Minute, site.lmTimeout())
 	assert.Equal(t, 1, site.lmBatteryPhases())
@@ -72,4 +74,24 @@ func TestLmAdvancedSettings(t *testing.T) {
 
 	// rejected values leave the setting alone
 	assert.Equal(t, 10*time.Minute, site.lmHoldOff())
+}
+
+// TestLmAdvancedHysteresisDropped verifies that a stored hysteresis is accepted and
+// dropped at start: the band is fixed, see bydHysteresis
+func TestLmAdvancedHysteresisDropped(t *testing.T) {
+	noSettingsDB(t)
+	keepSettings(t)
+
+	require.NoError(t, settings.SetJson(keys.LmAdvanced, map[string]float64{"hysteresis": 5, "holdOff": 7}))
+
+	site := &Site{log: util.NewLogger("test")}
+	site.restoreLmAdvanced()
+
+	assert.Equal(t, peak.DefaultHysteresis, site.peakHysteresis())
+	assert.Equal(t, 7*time.Minute, site.lmHoldOff(), "the other settings stay")
+
+	var stored map[string]float64
+	require.NoError(t, settings.Json(keys.LmAdvanced, &stored))
+	assert.NotContains(t, stored, "hysteresis")
+	assert.Contains(t, stored, "holdOff")
 }

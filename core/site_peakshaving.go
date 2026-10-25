@@ -502,21 +502,14 @@ func (site *Site) peakCap() float64 {
 
 // peakHysteresis returns the soc band of the reserve. The battery type Marstek
 // has none: Omnibattery switches exactly at the threshold, and evcc's state of
-// the reserve has to change there as well.
+// the reserve has to change there as well. The battery type BYD has the fixed band
+// of the integration, see bydHysteresis.
 func (site *Site) peakHysteresis() float64 {
 	if site.omniType() {
 		return 0
 	}
 
-	return site.peakHysteresisSetting()
-}
-
-// peakHysteresisSetting returns the soc band as set, used by the battery type BYD
-func (site *Site) peakHysteresisSetting() float64 {
-	if v := site.advanced().Hysteresis; v != nil {
-		return *v
-	}
-	return peak.DefaultHysteresis
+	return bydHysteresis
 }
 
 // peakShavingActive reports whether the battery is currently held back for peaks.

@@ -33,6 +33,7 @@ import (
 
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/core/peak"
 	"github.com/evcc-io/evcc/db/settings"
 )
 
@@ -45,6 +46,12 @@ const (
 
 // bydRequests are the options the select has to offer
 var bydRequests = []string{requestNormal, requestGridCharge, requestHold}
+
+// bydHysteresis is the soc band in % above the threshold in which the integration
+// goes on holding the battery back. It is fixed there, so evcc's state of the
+// reserve (battery mode, display) has to use the same band to change where the
+// integration does; it was a setting until the integration took over.
+const bydHysteresis = peak.DefaultHysteresis
 
 // bydLimitRule returns what the limit written to the integration has to fulfil:
 // at least minBydLimit, as 0 means expired there, and written again when the
