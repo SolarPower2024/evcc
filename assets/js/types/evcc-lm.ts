@@ -28,8 +28,6 @@ export interface LmHomeProfile {
 export interface LmAdvanced {
   /** Peak reserve soc band in %. */
   hysteresis: number;
-  /** Setpoint signalling free discharge in W. */
-  freeValue: number;
   /** Battery grid charge hold-off in minutes. */
   holdOff: number;
   /** Unserved demand expiry in minutes. */
@@ -203,20 +201,20 @@ export interface LmState {
   peakShavingPower?: number;
   /** Circuit the battery draws from, links it into load management. */
   peakShavingCircuit?: string;
-  /** Home Assistant number entity receiving the peak shaving setpoint. */
-  peakShavingEntity?: string;
-  /** Battery type: byd writes the discharge power, marstek drives Omnibattery's peak shaving and switches it to manual control while grid charging. */
+  /** Battery type: marstek drives Omnibattery and switches it to manual control while grid charging, byd drives the integration evcc Peak Fronius and asks it with a request. */
   peakShavingBatteryType?: "byd" | "marstek";
   /** Home Assistant switch of the manual control (marstek). */
   peakShavingManualEntity?: string;
   /** Home Assistant select of the forced mode None, Charge, Discharge (marstek). */
   peakShavingModeEntity?: string;
-  /** Home Assistant switch of Omnibattery's peak shaving (marstek). */
+  /** Home Assistant switch of the peak shaving controller (Omnibattery, evcc Peak Fronius). */
   peakShavingProtSwitch?: string;
-  /** Home Assistant number entity of its limit, receives the allowed grid power (marstek). */
+  /** Home Assistant number entity of its limit, receives the allowed grid power. */
   peakShavingProtLimit?: string;
-  /** Home Assistant number entity of its soc threshold, receives the reserve (marstek). */
+  /** Home Assistant number entity of its soc threshold, receives the reserve. */
   peakShavingProtSoc?: string;
+  /** Home Assistant select of the request normal, grid_charge, hold (byd). */
+  peakShavingRequestEntity?: string;
   /** Forced mode evcc holds on a marstek battery, empty = not controlling. */
   peakShavingManual?: "" | "None" | "Charge" | "Discharge";
   /** Average grid power in W of the running 15 minute metering window. */

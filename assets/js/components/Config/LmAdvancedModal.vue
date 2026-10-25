@@ -261,15 +261,6 @@ const FIELDS = [
 		default: 3,
 	},
 	{ name: "hysteresis", group: "peak", unit: "%", min: 0, max: 20, integer: false, default: 2 },
-	{
-		name: "freeValue",
-		group: "peak",
-		unit: "W",
-		min: 1,
-		max: 100000,
-		integer: true,
-		default: 10000,
-	},
 	{ name: "peakFreeze", group: "peak", unit: "min", min: 1, max: 14, integer: true, default: 12 },
 	{ name: "peakCap", group: "peak", unit: "×", min: 1, max: 10, integer: false, default: 2 },
 	{

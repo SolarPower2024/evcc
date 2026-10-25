@@ -11,7 +11,7 @@
 		<p v-if="error" class="text-danger">{{ error }}</p>
 
 		<form ref="form" class="container mx-0 px-0" @submit.prevent="save">
-			<!-- custom: battery type Marstek (Omnibattery), see core/site_peak_omni.go -->
+			<!-- custom: battery types Marstek (Omnibattery) and BYD (evcc Peak Fronius), see core/site_peak_ext.go -->
 			<FormRow
 				id="peakShavingBatteryType"
 				:label="$t('config.peakshaving.batteryTypeLabel')"
@@ -24,7 +24,7 @@
 					data-testid="peakshaving-battery-type"
 				>
 					<option value="marstek">Marstek (Omnibattery)</option>
-					<option value="byd">BYD</option>
+					<option value="byd">BYD (evcc Peak Fronius)</option>
 				</select>
 			</FormRow>
 
@@ -58,67 +58,67 @@
 						data-testid="peakshaving-mode-entity"
 					/>
 				</FormRow>
-
-				<FormRow
-					id="peakShavingProtSwitch"
-					:label="$t('config.peakshaving.protSwitchLabel')"
-					:help="$t('config.peakshaving.protSwitchHelp')"
-				>
-					<input
-						id="peakShavingProtSwitch"
-						v-model="protSwitch"
-						type="text"
-						class="form-control"
-						placeholder="switch.marstek_venus_system_spitzenlastkappung"
-						data-testid="peakshaving-prot-switch"
-					/>
-				</FormRow>
-
-				<FormRow
-					id="peakShavingProtLimit"
-					:label="$t('config.peakshaving.protLimitLabel')"
-					:help="$t('config.peakshaving.protLimitHelp')"
-				>
-					<input
-						id="peakShavingProtLimit"
-						v-model="protLimit"
-						type="text"
-						class="form-control"
-						placeholder="number.marstek_venus_system_spitzenlastkappung_limit"
-						data-testid="peakshaving-prot-limit"
-					/>
-				</FormRow>
-
-				<FormRow
-					id="peakShavingProtSoc"
-					:label="$t('config.peakshaving.protSocLabel')"
-					:help="$t('config.peakshaving.protSocHelp')"
-				>
-					<input
-						id="peakShavingProtSoc"
-						v-model="protSoc"
-						type="text"
-						class="form-control"
-						placeholder="number.marstek_venus_system_spitzenlastkappung_soc_schwelle"
-						data-testid="peakshaving-prot-soc"
-					/>
-				</FormRow>
 			</template>
 
-			<!-- Marstek: not written, Omnibattery's peak shaving gets the limit instead -->
 			<FormRow
-				v-if="batteryType !== 'marstek'"
-				id="peakShavingEntity"
-				:label="$t('config.peakshaving.entityLabel')"
-				:help="$t('config.peakshaving.entityHelp')"
+				id="peakShavingProtSwitch"
+				:label="$t('config.peakshaving.protSwitchLabel')"
+				:help="$t('config.peakshaving.protSwitchHelp')"
 			>
 				<input
-					id="peakShavingEntity"
-					v-model="entity"
+					id="peakShavingProtSwitch"
+					v-model="protSwitch"
 					type="text"
 					class="form-control"
-					placeholder="input_number.battery_peak_power"
-					data-testid="peakshaving-entity"
+					:placeholder="placeholder.protSwitch"
+					data-testid="peakshaving-prot-switch"
+				/>
+			</FormRow>
+
+			<FormRow
+				id="peakShavingProtLimit"
+				:label="$t('config.peakshaving.protLimitLabel')"
+				:help="$t('config.peakshaving.protLimitHelp')"
+			>
+				<input
+					id="peakShavingProtLimit"
+					v-model="protLimit"
+					type="text"
+					class="form-control"
+					:placeholder="placeholder.protLimit"
+					data-testid="peakshaving-prot-limit"
+				/>
+			</FormRow>
+
+			<FormRow
+				id="peakShavingProtSoc"
+				:label="$t('config.peakshaving.protSocLabel')"
+				:help="$t('config.peakshaving.protSocHelp')"
+			>
+				<input
+					id="peakShavingProtSoc"
+					v-model="protSoc"
+					type="text"
+					class="form-control"
+					:placeholder="placeholder.protSoc"
+					data-testid="peakshaving-prot-soc"
+				/>
+			</FormRow>
+
+			<!-- BYD: the request of the integration, grid charging and holding -->
+			<FormRow
+				v-if="batteryType === 'byd'"
+				id="peakShavingRequestEntity"
+				:label="$t('config.peakshaving.requestEntityLabel')"
+				:help="$t('config.peakshaving.requestEntityHelp')"
+			>
+				<input
+					id="peakShavingRequestEntity"
+					v-model="requestEntity"
+					type="text"
+					class="form-control"
+					:placeholder="placeholder.request"
+					data-testid="peakshaving-request-entity"
 				/>
 			</FormRow>
 
@@ -230,11 +230,12 @@ import FormRow from "./FormRow.vue";
 import store from "@/store";
 import api from "@/api";
 
-// Target entity for the peak shaving discharge setpoint and the energy sensor
+// Switch, limit and soc threshold of the peak shaving controller in Home Assistant
+// (Omnibattery for a Marstek, evcc Peak Fronius for a BYD) and the energy sensor
 // metering the 15 minute window; for the battery type Marstek also the switch of
-// the manual control and the select of the forced mode (grid charging) and the
-// switch, limit and soc threshold of Omnibattery's peak shaving. The switch, the peak
-// limit and the reserve soc are operating controls and live on the battery page.
+// the manual control and the select of the forced mode (grid charging), for BYD the
+// select of the request. The switch, the peak limit and the reserve soc are
+// operating controls and live on the battery page.
 export default {
 	name: "PeakShavingModal",
 	components: { FormRow, GenericModal },
@@ -255,8 +256,8 @@ export default {
 			initialProtLimit: "",
 			protSoc: "",
 			initialProtSoc: "",
-			entity: "",
-			initialEntity: "",
+			requestEntity: "",
+			initialRequestEntity: "",
 			energyEntity: "",
 			initialEnergyEntity: "",
 			follow: false,
@@ -271,19 +272,43 @@ export default {
 		batteryTypeChanged() {
 			return this.batteryType !== this.initialBatteryType;
 		},
+		// the manual control and the mode are for a Marstek only, so not saved otherwise
 		marstekChanged() {
 			return (
 				this.batteryType === "marstek" &&
 				(this.manualEntity.trim() !== this.initialManualEntity ||
-					this.modeEntity.trim() !== this.initialModeEntity ||
-					this.protSwitch.trim() !== this.initialProtSwitch ||
-					this.protLimit.trim() !== this.initialProtLimit ||
-					this.protSoc.trim() !== this.initialProtSoc)
+					this.modeEntity.trim() !== this.initialModeEntity)
 			);
 		},
-		// hidden for a Marstek, so not saved then
-		entityChanged() {
-			return this.batteryType !== "marstek" && this.entity.trim() !== this.initialEntity;
+		protChanged() {
+			return (
+				this.protSwitch.trim() !== this.initialProtSwitch ||
+				this.protLimit.trim() !== this.initialProtLimit ||
+				this.protSoc.trim() !== this.initialProtSoc
+			);
+		},
+		// the request is for a BYD only
+		requestChanged() {
+			return (
+				this.batteryType === "byd" &&
+				this.requestEntity.trim() !== this.initialRequestEntity
+			);
+		},
+		placeholder() {
+			if (this.batteryType === "marstek") {
+				return {
+					protSwitch: "switch.marstek_venus_system_spitzenlastkappung",
+					protLimit: "number.marstek_venus_system_spitzenlastkappung_limit",
+					protSoc: "number.marstek_venus_system_spitzenlastkappung_soc_schwelle",
+					request: "",
+				};
+			}
+			return {
+				protSwitch: "switch.evcc_peak_fronius_peak_shaving",
+				protLimit: "number.evcc_peak_fronius_limit",
+				protSoc: "number.evcc_peak_fronius_soc_threshold",
+				request: "select.evcc_peak_fronius_request",
+			};
 		},
 		energyEntityChanged() {
 			return this.energyEntity.trim() !== this.initialEnergyEntity;
@@ -301,7 +326,8 @@ export default {
 			return (
 				this.batteryTypeChanged ||
 				this.marstekChanged ||
-				this.entityChanged ||
+				this.protChanged ||
+				this.requestChanged ||
 				this.energyEntityChanged ||
 				this.followChanged ||
 				this.bufferChanged ||
@@ -315,7 +341,7 @@ export default {
 	},
 	methods: {
 		reset() {
-			const entity = store?.state?.peakShavingEntity || "";
+			const requestEntity = store?.state?.peakShavingRequestEntity || "";
 			const energyEntity = store?.state?.peakShavingEnergyEntity || "";
 			const manualEntity = store?.state?.peakShavingManualEntity || "";
 			const modeEntity = store?.state?.peakShavingModeEntity || "";
@@ -337,8 +363,8 @@ export default {
 			this.initialProtLimit = protLimit;
 			this.protSoc = protSoc;
 			this.initialProtSoc = protSoc;
-			this.entity = entity;
-			this.initialEntity = entity;
+			this.requestEntity = requestEntity;
+			this.initialRequestEntity = requestEntity;
 			this.energyEntity = energyEntity;
 			this.initialEnergyEntity = energyEntity;
 			const follow = store?.state?.peakFollow;
@@ -383,14 +409,13 @@ export default {
 				return;
 			}
 
-			// the battery type Marstek cannot shave peaks without Omnibattery's peak
-			// shaving; the manual switch and mode are only for grid charging
+			// peak shaving cannot run without the three entities of the controller; the
+			// manual switch and mode (Marstek) and the request (BYD) are for grid charging
 			if (
-				this.batteryType === "marstek" &&
 				store?.state?.peakShaving &&
 				(!this.protSwitch.trim() || !this.protLimit.trim() || !this.protSoc.trim())
 			) {
-				this.error = this.$t("config.peakshaving.marstekRequired");
+				this.error = this.$t("config.peakshaving.protRequired");
 				return;
 			}
 
@@ -399,12 +424,29 @@ export default {
 
 			try {
 				// the entities first, the backend checks them; the type only changes
-				// once they are accepted (BYD with peak shaving on needs the discharge
-				// entity before the type)
-				const entity = this.entity.trim();
-				if (this.entityChanged) {
-					await this.postEntity("peakshavingentity", entity);
-					this.initialEntity = entity;
+				// once they are accepted
+				const protSwitch = this.protSwitch.trim();
+				if (protSwitch !== this.initialProtSwitch) {
+					await this.postEntity("peakshavingprotswitch", protSwitch);
+					this.initialProtSwitch = protSwitch;
+				}
+
+				const protLimit = this.protLimit.trim();
+				if (protLimit !== this.initialProtLimit) {
+					await this.postEntity("peakshavingprotlimit", protLimit);
+					this.initialProtLimit = protLimit;
+				}
+
+				const protSoc = this.protSoc.trim();
+				if (protSoc !== this.initialProtSoc) {
+					await this.postEntity("peakshavingprotsoc", protSoc);
+					this.initialProtSoc = protSoc;
+				}
+
+				const requestEntity = this.requestEntity.trim();
+				if (this.requestChanged) {
+					await this.postEntity("peakshavingrequestentity", requestEntity);
+					this.initialRequestEntity = requestEntity;
 				}
 
 				if (this.batteryType === "marstek") {
@@ -418,24 +460,6 @@ export default {
 					if (modeEntity !== this.initialModeEntity) {
 						await this.postEntity("peakshavingmodeentity", modeEntity);
 						this.initialModeEntity = modeEntity;
-					}
-
-					const protSwitch = this.protSwitch.trim();
-					if (protSwitch !== this.initialProtSwitch) {
-						await this.postEntity("peakshavingprotswitch", protSwitch);
-						this.initialProtSwitch = protSwitch;
-					}
-
-					const protLimit = this.protLimit.trim();
-					if (protLimit !== this.initialProtLimit) {
-						await this.postEntity("peakshavingprotlimit", protLimit);
-						this.initialProtLimit = protLimit;
-					}
-
-					const protSoc = this.protSoc.trim();
-					if (protSoc !== this.initialProtSoc) {
-						await this.postEntity("peakshavingprotsoc", protSoc);
-						this.initialProtSoc = protSoc;
 					}
 				}
 				if (this.batteryTypeChanged) {

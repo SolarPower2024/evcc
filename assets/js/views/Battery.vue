@@ -63,7 +63,6 @@
 						:limit="state.peakShavingLimit ?? 5000"
 						:reserve="state.peakShavingReserve ?? 30"
 						:shaving="!!state.peakShavingActive"
-						:entity="state.peakShavingEntity ?? ''"
 						:follow="state.peakFollow"
 					/>
 
