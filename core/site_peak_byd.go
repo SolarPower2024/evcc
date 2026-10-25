@@ -247,8 +247,9 @@ func (site *Site) SetPeakShavingRequestEntity(entity string) error {
 // battery back through it (peakShavingOwned), the free value goes there once, a
 // failure is logged and not repeated. Then the entity and the mark are deleted. For
 // the battery type Marstek the mark means the manual control and stays. The stored
-// free value goes with it, see dropFreeValue. Called at the start, after the
-// settings are back.
+// free value goes with it, see dropFreeValue. Peak shaving that was on is turned
+// off while one of the three entities of the integration is missing. Called at the
+// start, after the settings are back.
 func (site *Site) migratePeakEntity() {
 	defer site.dropFreeValue()
 
@@ -261,7 +262,19 @@ func (site *Site) migratePeakEntity() {
 
 	s.mu.Lock()
 	byd, owned := s.batteryType != batteryTypeMarstek, s.owned
+	off := byd && s.enabled && (s.protSwitch == "" || s.protLimit == "" || s.protSoc == "")
+	if off {
+		s.enabled = false
+		s.shaving = false
+	}
 	s.mu.Unlock()
+
+	// peak shaving ran with the old setpoint and has nothing to run with now
+	if off {
+		site.log.WARN.Println("peak shaving: off until the entities of evcc Peak Fronius are set (Lastmanagement-Details → Peak Shaving)")
+		settings.SetBool(keys.PeakShaving, false)
+		site.publish(keys.PeakShaving, false)
+	}
 
 	if byd && owned {
 		if entity != "" {

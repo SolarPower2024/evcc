@@ -600,6 +600,47 @@ func TestBydMigratePeakEntity(t *testing.T) {
 		assert.ErrorIs(t, err, settings.ErrNotFound)
 	})
 
+	t.Run("peak shaving off without the entities", func(t *testing.T) {
+		sc, _ := newByd(t)
+		keepSettings(t)
+		settings.SetString(keys.PeakShavingEntity, entity)
+		settings.SetBool(keys.PeakShaving, true)
+		s := sc.site.peak()
+		s.enabled = true
+		s.protSwitch, s.protLimit, s.protSoc, s.protSocSet = "", "", "", nil
+
+		var buf bytes.Buffer
+		sc.site.log = testLogger(&buf)
+
+		sc.site.migratePeakEntity()
+		assert.False(t, sc.site.GetPeakShaving())
+		on, err := settings.Bool(keys.PeakShaving)
+		require.NoError(t, err)
+		assert.False(t, on, "stored")
+		assert.Contains(t, buf.String(), "off until the entities of evcc Peak Fronius are set")
+	})
+
+	t.Run("peak shaving stays on with the entities", func(t *testing.T) {
+		sc, _ := newByd(t)
+		keepSettings(t)
+		settings.SetString(keys.PeakShavingEntity, entity)
+		sc.site.peak().enabled = true
+
+		sc.site.migratePeakEntity()
+		assert.True(t, sc.site.GetPeakShaving())
+	})
+
+	t.Run("peak shaving without entities, no old key: untouched", func(t *testing.T) {
+		sc, _ := newByd(t)
+		keepSettings(t)
+		s := sc.site.peak()
+		s.enabled = true
+		s.protSwitch = ""
+
+		sc.site.migratePeakEntity()
+		assert.True(t, sc.site.GetPeakShaving())
+	})
+
 	t.Run("no key, nothing to do", func(t *testing.T) {
 		sc, ha := newByd(t)
 		keepSettings(t)

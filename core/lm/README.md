@@ -712,6 +712,9 @@ field *Entladeregler* with it). evcc is the input, as for a Marstek:
   repeated; then the key, the mark and the stored free value are deleted. For a
   Marstek the mark means the manual control and stays (`TestBydMigratePeakEntity`).
   `freeValue` is still accepted by the api and in stored settings, without effect.
+  Peak shaving that was on is turned off (stored, published, warning in the log)
+  while one of the three entities of the integration is missing, as it cannot
+  run without them.
 - The reserve steps are 5 % for this type, the hysteresis 2 % (setting
   `hysteresis`, 17). Code in `core/site_peak_byd.go`; no new hook.
 
