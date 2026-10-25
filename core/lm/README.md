@@ -421,7 +421,7 @@ battery type Marstek uses none, see below).
 
 evcc only hands back what it held. It remembers what it turned on:
 `peakShavingProtOwned` the switch of the peak shaving, `peakShavingOwned` the
-manual control (Marstek) or a request other than normal (BYD). Both are stored at
+manual control (Marstek only, a BYD never sets it). Both are stored at
 once on every change, not with the minute flush of the settings, so a restart or
 a crash in the middle of a control still hands back
 (`TestPeakHeldMarksStoredAtOnce`, `TestBydHeldMarkStored`; a power cut of the
@@ -435,8 +435,9 @@ hint to look into its log (`TestPeakWriteErrorLoggedOnce`,
 Stopping evcc hands back as well, not only evcc's battery mode
 (`TestPeakReleasedOnShutdown`): a Marstek gets the charge power 0 and the manual
 control off, Omnibattery's peak shaving stays on with the peak limit instead of
-the allowed power of the window; a BYD gets the charge power 0, the request
-normal and the switch off, so the integration lets the battery go. The cycle
+the allowed power of the window; a BYD gets the charge power 0, the switch off
+(if evcc turned it on) and the limit 0 ("evcc is gone"), so the integration lets
+the battery go at once. The cycle
 writes nothing any more from then on. It is best effort and
 never holds the stop up (`TestPeakShutdownDoesNotBlock`): stop budget add-on 30 s
 (`timeout` in its manifest), evcc waits `max(interval, 5 s)` for the shutdown
@@ -464,7 +465,7 @@ also while Home Assistant starts and does not know the entities yet
 (`TestOmniReleaseHangs`, `TestOmniEntityNotLoaded`). Only an entity that Home
 Assistant does not know at all (deleted, renamed; 404 when reading it) counts as
 handed back in a release, with a warning in the log: a switch as off, the charge
-power as written, a request as normal. The release would otherwise never land, keep
+power as written. The release would otherwise never land, keep
 the manual control of a Marstek on in the mode Charge and block every change of
 the entities (`TestOmniSwitchGone`, `TestOmniReleaseEntityGone`).
 
@@ -665,46 +666,42 @@ field *Entladeregler* with it). evcc is the input, as for a Marstek:
 - the *switch*, the *limit* and the *soc threshold* of the integration
   (`switch.evcc_peak_fronius_peak_shaving`, `number.evcc_peak_fronius_limit`,
   `number.evcc_peak_fronius_soc_threshold`); peak shaving cannot be turned on
-  without them (`TestBydNeedsEntities`),
-- the *request*, a select of the integration with the options `normal`,
-  `grid_charge` and `hold`, checked as written when set
-  (`TestBydRequestEntityChecks`); the charge power entity of *Batterie →
-  Netzladen* is `number.evcc_peak_fronius_grid_charge_power`.
+  without them (`TestBydNeedsEntities`).
+  The charge power entity of *Batterie → Netzladen* is
+  `number.evcc_peak_fronius_grid_charge_power`.
 
-`applyOmni` writes at the end of each cycle, in this order (`TestBydProtection`,
-`TestBydRequest`):
+`applyOmni` writes at the end of each cycle, in this order (`TestBydProtection`):
 
-| Situation | Soc threshold | Limit | Switch | Request |
-| --- | --- | --- | --- | --- |
-| peak shaving on | the reserve (no floor), 100 % while the optimizer holds | allowed power of the window, at least 100 W | on | from the battery mode |
-| peak shaving off, battery mode charge or hold | stays | as above | off (if evcc turned it on) | `grid_charge` or `hold` |
-| peak shaving off, battery mode normal | stays | stops | off (if evcc turned it on) | `normal` once, then nothing |
+| Situation | Soc threshold | Limit | Switch |
+| --- | --- | --- | --- |
+| peak shaving on | the reserve (no floor), 100 % while the optimizer holds | allowed power of the window, at least 100 W | on |
+| peak shaving off | stays | as above (sign of life) | off (if evcc turned it on) |
 
-- **Request:** the effective battery mode of evcc: charge → `grid_charge`, hold →
-  `hold`, anything else `normal`. It is written only where Home Assistant shows
-  something else; evcc holds it (`peakShavingOwned`) as long as it is not
-  `normal`, a change by hand is corrected meanwhile, one set by hand while evcc
-  holds nothing stays (`TestBydRequestHold`). While peak shaving runs the optimizer's hold
-  is `normal` as well: the soc threshold of 100 % holds the battery and a peak is
-  still covered at once, see 16 (`TestBydOptimizerHold`); a hold without peak shaving
-  is `hold`. Without the request entity grid charging and
-  holding only warn, once (`TestBydWithoutRequestEntity`); the scripts of the
-  evcc battery modes must then not touch the Fronius storage mode, the
-  integration does. The charge power is written as before.
+- **Battery mode:** stays evcc's standard. evcc calls the Home Assistant scripts
+  of the battery modes as before, and these set the *request* of the integration
+  (`select.evcc_peak_fronius_request`: `normal`, `grid_charge`, `hold`) themselves;
+  the fork does not write it. Example: the script of the mode hold sets
+  `select.evcc_peak_fronius_request` to `hold`. The scripts must not touch the
+  Fronius storage mode, the integration does. A `hold` with the peak switch on
+  covers peaks only (the integration decides, `TestBydOptimizerHold` for the
+  threshold of 100 % while the optimizer holds). The charge power is written as
+  before.
 - **Limit as sign of life:** at the start of every quarter hour the integration
   sets the limit to 0, and gives the battery free (storage mode `Auto`) if evcc
   has not written it again 2 minutes later. So evcc never writes less than 100 W
   and writes the limit again when the entity shows 0, which a rise of less than
   500 W would not otherwise (`TestBydLimitSignOfLife`); the Marstek has no such
-  rule. It keeps writing the limit while the request is not `normal`, peak
-  shaving off, as the integration would take evcc as gone otherwise
+  rule. evcc writes it in every cycle as long as the limit entity is set and a
+  battery is configured, peak shaving on or off and whatever the battery mode is,
+  as the integration would take evcc as gone otherwise
   (`TestBydLimitWithoutPeakShaving`).
-- **Release:** switching peak shaving off, a changed type or entity, and stopping
-  evcc set the request back to `normal` and the switch off, the charge power to 0
-  while charging (`TestBydRelease`, `TestBydRequestEntityChangeReleases`,
-  `TestPeakReleasedOnShutdown`). A change that cannot release is refused with
+- **Release:** switching peak shaving off, a changed type or entity turn the
+  switch off (`TestBydRelease`); stopping evcc also sets the charge power to 0
+  while charging and then writes the limit 0, which the integration takes as
+  "evcc is gone" and lets the battery go at once (`TestPeakReleasedOnShutdown`,
+  `TestPeakShutdownDoesNotBlock`). A change that cannot release is refused with
   `errHandBack`. A crash or a kill is covered by the integration (sign of life)
-  and by the stored marks at the next start.
+  and by the stored mark of the switch at the next start.
 - **Migration:** a stored `peakShavingEntity` is released at the start: if
   `peakShavingOwned` was set (the old meaning, the setpoint held), the free value
   (the stored one, else 10000 W) is written to it once, a failure is logged and not
@@ -725,8 +722,6 @@ reserve starts at 20 % (Omnibattery's lowest threshold), in 5 % steps; BYD keeps
 
 ```
 POST   /api/peakshavingbatterytype/{byd|marstek}
-POST   /api/peakshavingrequestentity/{entity}
-DELETE /api/peakshavingrequestentity
 POST   /api/peakshavingmanualentity/{entity}
 DELETE /api/peakshavingmanualentity
 POST   /api/peakshavingmodeentity/{entity}
@@ -919,7 +914,7 @@ automatic mode, evcc alone would only set normal
 
 Battery types Marstek and BYD: a charge request passes the gate and writes the
 setpoint as the fork's own charging does, so Omnibattery is told to charge, the
-integration of a BYD is asked with the request `grid_charge`. These types are
+script of the battery mode of a BYD sets the request `grid_charge`. These types are
 not written a discharge power (the controller regulates itself, see 11). With
 peak shaving on, a hold raises the soc threshold of the peak shaving to 100 %
 (`core/site_peak_omni_hold.go`, `TestBydOptimizerHold`): the controller then only discharges for
