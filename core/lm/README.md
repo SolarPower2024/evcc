@@ -685,8 +685,10 @@ field *Entladeregler* with it). evcc is the input, as for a Marstek:
   `hold`, anything else `normal`. It is written only where Home Assistant shows
   something else; evcc holds it (`peakShavingOwned`) as long as it is not
   `normal`, a change by hand is corrected meanwhile, one set by hand while evcc
-  holds nothing stays (`TestBydRequestHold`). The optimizer's hold gives way to
-  `normal` during a peak, see 16. Without the request entity grid charging and
+  holds nothing stays (`TestBydRequestHold`). While peak shaving runs the optimizer's hold
+  is `normal` as well: the soc threshold of 100 % holds the battery and a peak is
+  still covered at once, see 16 (`TestBydOptimizerHold`); a hold without peak shaving
+  is `hold`. Without the request entity grid charging and
   holding only warn, once (`TestBydWithoutRequestEntity`); the scripts of the
   evcc battery modes must then not touch the Fronius storage mode, the
   integration does. The charge power is written as before.

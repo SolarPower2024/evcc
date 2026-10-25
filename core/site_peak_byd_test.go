@@ -427,6 +427,22 @@ func TestBydOptimizerHold(t *testing.T) {
 	assert.Equal(t, "100", ha.get(haProtSoc))
 	assert.Equal(t, 30.0, sc.site.peak().holdSoc)
 
+	// the battery mode is hold, the request stays normal: the threshold holds the
+	// battery and a peak is still covered at once
+	assert.Equal(t, api.BatteryHold, sc.mode())
+	assert.Equal(t, requestNormal, sc.site.bydWant())
+	assert.Equal(t, "normal", ha.get(haRequest))
+	assert.False(t, sc.site.peakOwned())
+
+	// without peak shaving the hold is a hold
+	require.NoError(t, sc.site.SetPeakShaving(false))
+	sc.cycle(50, 3000, 0)
+	assert.Equal(t, requestHold, sc.site.bydWant())
+	assert.Equal(t, "hold", ha.get(haRequest))
+	require.NoError(t, sc.site.SetPeakShaving(true))
+	sc.cycle(50, 3000, 0)
+	assert.Equal(t, "normal", ha.get(haRequest))
+
 	sc.suggest(api.BatteryNormal.String())
 	sc.cycle(50, 3000, 0)
 	assert.Equal(t, "30", ha.get(haProtSoc))

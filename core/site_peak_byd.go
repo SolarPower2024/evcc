@@ -58,9 +58,17 @@ func (site *Site) bydLimitRule() (floor float64, zero bool) {
 }
 
 // bydWant returns the request evcc's battery mode asks for. For the battery type
-// Marstek it is always normal, the request does not exist there.
+// Marstek it is always normal, the request does not exist there. While peak shaving
+// runs and the optimizer holds the battery it is normal as well: hold would block
+// the discharge and leave a peak uncovered until evcc reacts, the integration
+// takes the held battery with the soc threshold of 100 % (site_peak_omni_hold.go)
+// and still covers peaks. A hold without peak shaving stays hold.
 func (site *Site) bydWant() string {
 	if site.omniType() {
+		return requestNormal
+	}
+
+	if site.peakRuns() && site.optimizerHolds() {
 		return requestNormal
 	}
 
@@ -283,4 +291,15 @@ func (site *Site) migratePeakEntity() {
 	if err := settings.Delete(keys.PeakShavingEntity); err != nil {
 		site.log.ERROR.Printf("peak shaving: delete %s: %v", keys.PeakShavingEntity, err)
 	}
+}
+
+// peakRuns reports whether peak shaving runs: on, set up and with a battery
+func (site *Site) peakRuns() bool {
+	s := site.peak()
+
+	s.mu.Lock()
+	run := s.enabled && s.configured()
+	s.mu.Unlock()
+
+	return run && site.batteryConfigured()
 }
