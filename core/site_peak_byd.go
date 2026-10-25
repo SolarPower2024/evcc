@@ -15,7 +15,9 @@ package core
 // The limit is also the sign of life of evcc: the integration sets it to 0 at the
 // start of every quarter hour and gives the battery free when evcc does not write
 // it again within 2 minutes. So evcc never writes 0 (minBydLimit) and writes the
-// limit again when the entity shows 0.
+// limit again when the entity shows 0. It does so in every cycle, with peak shaving
+// on or off and whatever the battery mode is, as long as the limit entity is set
+// and a battery is configured: evcc counts as gone for the integration otherwise.
 //
 // What evcc held is handed back: the switch off, the grid charge power to 0, see
 // releasePeak.

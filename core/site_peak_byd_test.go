@@ -131,6 +131,58 @@ func TestBydLimitSignOfLife(t *testing.T) {
 	assert.Empty(t, ha.take())
 }
 
+// TestBydLimitWithoutPeakShaving verifies that evcc goes on writing the limit
+// without peak shaving, whatever the battery mode: the integration takes evcc as
+// gone otherwise. Rules as before: at least 100 W, again at 0, no small rise.
+func TestBydLimitWithoutPeakShaving(t *testing.T) {
+	sc, ha := newByd(t)
+	sc.site.lms().socChargeEnabled = false
+	ha.take()
+
+	// peak shaving off, battery mode normal: the limit is there all the same
+	require.NoError(t, sc.site.SetPeakShaving(false))
+	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000"}, ha.take())
+	assert.Equal(t, "off", ha.get(haProtSwitch), "no switch, no threshold")
+
+	sc.cycle(50, 1000, 0)
+	assert.Empty(t, ha.take(), "written once while the entity shows it")
+
+	// the quarter hour began
+	ha.set(haProtLimit, "0")
+	sc.cycle(50, 1000, 0)
+	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000"}, ha.take())
+
+	// in any battery mode
+	for _, m := range []api.BatteryMode{api.BatteryHold, api.BatteryCharge} {
+		sc.site.SetBatteryMode(m)
+		ha.set(haProtLimit, "0")
+		sc.site.applyOmni()
+		assert.Equal(t, []string{"set_value " + haProtLimit + " 5000"}, ha.take(), m.String())
+	}
+
+	// without a limit entity or a battery there is nothing to write
+	s := sc.site.peak()
+	ha.set(haProtLimit, "0")
+	s.protLimit = ""
+	sc.site.applyOmni()
+	assert.Empty(t, ha.take())
+	s.protLimit = haProtLimit
+	sc.site.batteryMeters = nil
+	sc.site.applyOmni()
+	assert.Empty(t, ha.take())
+}
+
+// TestBydMarstekWithoutPeakShavingWritesNothing verifies the Marstek has no sign of life
+func TestBydMarstekWithoutPeakShavingWritesNothing(t *testing.T) {
+	sc, ha := newOmni(t)
+	require.NoError(t, sc.site.SetPeakShaving(false))
+	ha.take()
+
+	sc.cycle(50, 1000, 0)
+	sc.site.applyOmni()
+	assert.Empty(t, ha.take())
+}
+
 // TestBydPeakShavingOffReleasesSwitch verifies that switching peak shaving off
 // turns the integration's switch off, limit and threshold stay
 func TestBydPeakShavingOffReleasesSwitch(t *testing.T) {
