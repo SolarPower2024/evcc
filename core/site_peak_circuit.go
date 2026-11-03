@@ -83,6 +83,11 @@ func (site *Site) updatePeakCircuit() {
 
 	ref, me := rootCircuitMeter()
 
+	// the grid meter itself: nothing new to read, its counter is the source anyway
+	if ref != "" && ref == site.Meters.GridMeterRef {
+		ref, me = "", nil
+	}
+
 	s.mu.Lock()
 	s.reading = nil
 	prev, c := s.ref, s.collector

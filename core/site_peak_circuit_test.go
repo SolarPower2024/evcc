@@ -267,3 +267,24 @@ func TestGridPeakCollectorFallsBackToGridMeter(t *testing.T) {
 
 	assert.Same(t, c, site.gridPeakCollector())
 }
+
+// The main circuit's meter is the grid meter itself: it is not read a second time,
+// no collector, the source stays the grid meter.
+func TestPeakCircuitSameAsGridMeter(t *testing.T) {
+	m := &circuitMeter{energy: 100}
+	circuitSetup(t, "shelly", m)
+	site, clk := peakCircuitSite(t)
+	site.Meters.GridMeterRef = "shelly"
+
+	cycle(site, clk, 0, kWh(1))
+	m.energy = 100.05
+	cycle(site, clk, 0, kWh(1))
+
+	assert.Nil(t, site.peakCircuit().collector)
+	assert.Empty(t, site.peakCircuit().ref)
+	assert.Equal(t, peak.SourceMeter, site.peak().window.Source)
+
+	var n int64
+	require.NoError(t, db.Instance.Table("entities").Where(`"group" = ?`, metrics.GridPeak).Count(&n).Error)
+	assert.Zero(t, n)
+}
