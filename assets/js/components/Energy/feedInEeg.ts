@@ -125,6 +125,18 @@ export function importEegColor(): string {
   return colors.self || "";
 }
 
+// Colors of series where some have a color of their own: those keep it, the others
+// are graded as upstream does among themselves, as if the others were not there.
+export function ownSeriesColors(
+  series: HistorySeries[],
+  base: string,
+  shade: (i: number, n: number) => string
+): string[] {
+  const n = series.filter((s) => !s.color).length;
+  let i = 0;
+  return series.map((s) => s.color || (n <= 1 ? base : shade(i++, n)));
+}
+
 // The grid series with the EEG import as a series of its own in front: a bar next to
 // the grid import, not added to it, so no sum of the page changes. Unchanged
 // without EEG import.

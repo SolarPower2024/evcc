@@ -6,6 +6,7 @@ import {
   importEegLegends,
   importEegSeries,
   loadFeedInSplit,
+  ownSeriesColors,
   withoutFeedInEeg,
   type FeedInSplit,
 } from "./feedInEeg";
@@ -192,5 +193,30 @@ describe("withoutFeedInEeg", () => {
     const s = (title: string): HistorySeries => ({ title, group: "meter", data: [] });
     const res = withoutFeedInEeg([s("feedin-eeg"), s("import-eeg"), s("garage")]);
     expect(res.map((x) => x.title)).toEqual(["garage"]);
+  });
+});
+
+describe("ownSeriesColors", () => {
+  const s = (title: string, color?: string): HistorySeries => ({
+    title,
+    group: "grid",
+    color,
+    data: [],
+  });
+  const shade = (i: number, n: number) => `shade ${i}/${n}`;
+
+  test("a series with its own color keeps it, the grid keeps the color of a single series", () => {
+    expect(ownSeriesColors([s("EEG", "green"), s("grid")], "base", shade)).toEqual([
+      "green",
+      "base",
+    ]);
+  });
+
+  test("the others are graded among themselves as upstream does", () => {
+    expect(ownSeriesColors([s("EEG", "green"), s("a"), s("b")], "base", shade)).toEqual([
+      "green",
+      "shade 0/2",
+      "shade 1/2",
+    ]);
   });
 });

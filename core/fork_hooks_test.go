@@ -100,7 +100,7 @@ var forkUiHooks = []struct {
 	{"assets/js/components/Config/TariffCard.vue", []string{"<FeedInEegSummary"}},
 	{"assets/js/components/Config/TariffModal.vue", []string{"feedInEeg", "tariff-planner-optimizer"}},
 	{"assets/js/views/Energy.vue", []string{"gridChartSeries", ":feed-in-eeg=\"feedInEeg\"", "loadFeedInSplit(requestKey)", "withoutFeedInEeg(", "importEegLegends("}},
-	{"assets/js/components/Energy/GroupChart.vue", []string{"this.series.some((s) => s.color)"}},
+	{"assets/js/components/Energy/GroupChart.vue", []string{"this.series.some((s) => s.color)", "ownSeriesColors("}},
 	{"assets/js/components/Energy/GridStats.vue", []string{"feedInEegStats(this.feedInEeg"}},
 	{"assets/js/utils/version.ts", []string{"version.replace(/^v/, \"\")"}},
 	{"assets/js/components/AboutModal.vue", []string{"<!-- custom: the fork's tags carry a v", "{{ getShortVersion(installed) }}"}},
