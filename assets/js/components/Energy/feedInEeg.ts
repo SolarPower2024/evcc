@@ -1,12 +1,10 @@
 // Custom extension: export sold under two feed-in tariffs, see
-// core/site_feedin_eeg.go. The energy page splits the grid export into the
-// standard feed-in tariff and the EEG part metered by a Home Assistant counter,
-// in the chart, the legend and the revenue tiles. Without a counter nothing
+// core/site_feedin_eeg.go. The energy page splits the grid revenue tiles
+// into the standard feed-in tariff and the EEG part metered by a Home Assistant
+// counter. Chart and legend stay as upstream. Without a counter nothing
 // changes.
 import api from "@/api";
-import colors, { lighten } from "@/colors";
-import type { HistorySeries, HistorySlot } from "./GroupChart.vue";
-import type { Legend } from "../Sessions/types";
+import type { HistorySeries } from "./GroupChart.vue";
 import type { FlowCost, StatItem } from "./types";
 
 export interface FeedInSplit {
@@ -53,68 +51,6 @@ export function feedInSplitTotals(split: FeedInSplit[]): FeedInSplitTotals {
     eegPriced: sum("eegPriced"),
     standardPriced: sum("standardPriced"),
   };
-}
-
-// the EEG part next to the standard export, a lighter shade of the export color
-export function eegColor(): string {
-  return lighten(colors.export || "", 0.5);
-}
-
-// bucket key independent of the first slot a history bucket starts with
-function bucketKey(start: string, aggregate: string): string {
-  const d = new Date(start);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  switch (aggregate) {
-    case "month":
-      return day.slice(0, 7);
-    case "day":
-      return day;
-    case "hour":
-      return `${day} ${pad(d.getHours())}`;
-    default:
-      return String(d.getTime());
-  }
-}
-
-// Grid series with the EEG part taken out of the export, plus the EEG part as a
-// series of its own, stacked below it in the export direction.
-export function splitGridSeries(
-  grid: HistorySeries[],
-  split: FeedInSplit[],
-  aggregate: string,
-  gridTitle: string
-): HistorySeries[] {
-  // EEG left to take out per bucket: after a grid meter swap a bucket has
-  // export on several grid series, the EEG part comes off only once
-  const eeg = new Map(split.map((b) => [bucketKey(b.start, aggregate), b.eeg]));
-  const takeOut = (key: string, export_: number) => {
-    const part = Math.min(export_, eeg.get(key) || 0);
-    eeg.set(key, (eeg.get(key) || 0) - part);
-    return export_ - part;
-  };
-
-  const standard = grid.map((s) => ({
-    ...s,
-    title: gridTitle,
-    data: s.data.map((slot): HistorySlot => ({
-      ...slot,
-      returnEnergy: takeOut(bucketKey(slot.start, aggregate), Math.max(0, slot.returnEnergy)),
-    })),
-  }));
-
-  const color = eegColor();
-  const eegSeries: HistorySeries = {
-    title: "EEG",
-    group: "eeg",
-    color,
-    returnColor: color,
-    data: split
-      .filter((b) => b.eeg > 0)
-      .map((b) => ({ start: b.start, end: b.end, energy: 0, returnEnergy: b.eeg })),
-  };
-
-  return [eegSeries, ...standard];
 }
 
 export type Translate = (key: string) => string;
@@ -174,32 +110,6 @@ export function feedInEegStats(
   return stats.filter(
     (s) => s.key === "gridImport" || !!s.empty || Math.round((s.number || 0) * 100) !== 0
   );
-}
-
-// The grid legend with the export entry replaced by the standard tariff's part and
-// the EEG part, in the colors of the chart.
-export function splitLegends(
-  list: Legend[],
-  totals: FeedInSplitTotals,
-  t: Translate,
-  fmtKWh: (kWh: number) => string
-): Legend[] {
-  const res = [...list];
-  res.splice(
-    1,
-    1,
-    {
-      label: t("energy.grid.revenue"),
-      color: colors.export || "",
-      value: fmtKWh(totals.standard),
-    },
-    {
-      label: t("energy.feedInEeg.eeg"),
-      color: eegColor(),
-      value: fmtKWh(totals.eeg),
-    }
-  );
-  return res;
 }
 
 // The split of the export for the period, empty without an EEG counter or when it

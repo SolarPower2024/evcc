@@ -109,8 +109,7 @@
 								<GroupChart
 									group="grid"
 									:color="colors.grid || ''"
-									:series="gridChartSeries"
-									:stacked="!!feedInEeg"
+									:series="gridSeries"
 									:prices="chartPrices"
 									:currency="currency"
 									:height="200"
@@ -448,8 +447,6 @@ import api from "../api";
 import {
 	feedInSplitTotals,
 	loadFeedInSplit,
-	splitGridSeries,
-	splitLegends,
 	withoutFeedInEeg,
 	type FeedInSplit,
 	type FeedInSplitTotals,
@@ -896,18 +893,9 @@ export default defineComponent({
 			if (!this.feedInSplit.length) return null;
 			return feedInSplitTotals(this.feedInSplit);
 		},
-		gridChartSeries(): HistorySeries[] {
-			if (!this.feedInEeg) return this.gridSeries;
-			return splitGridSeries(
-				this.gridSeries,
-				this.feedInSplit,
-				this.aggregate,
-				this.$t("energy.group.grid")
-			);
-		},
 		// with the price overlay on, both prices as lines with their range over the period
 		gridLegends(): Legend[] {
-			let list: Legend[] = [
+			const list: Legend[] = [
 				{
 					label: this.$t("energy.grid.import"),
 					color: colors.grid || "",
@@ -919,9 +907,6 @@ export default defineComponent({
 					value: this.fmtKWh(this.gridExport),
 				},
 			];
-			// custom: export split by feed-in tariff, see feedInEeg.ts
-			if (this.feedInEeg)
-				list = splitLegends(list, this.feedInEeg, (key) => this.$t(key), this.fmtKWh);
 			const prices = this.gridPrices;
 			const range = (band: PriceBand) => {
 				const known = (v: (number | null)[]) => v.filter((x): x is number => x !== null);
