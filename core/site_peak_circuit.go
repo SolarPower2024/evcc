@@ -36,6 +36,7 @@ type peakCircuitState struct {
 	ref       string             // meter of the main circuit the collector records, empty = none
 	collector *metrics.Collector // records the counter per slot
 	reading   *float64           // counter read this cycle, valid until peakEnergy takes it
+	power     *float64           // the meter's power of the same cycle, see peakGridPower
 	failing   bool               // a failing read was logged
 	clock     clock.Clock        // for tests, nil = real time
 }
@@ -46,7 +47,7 @@ func (site *Site) peakCircuit() *peakCircuitState {
 
 // rootCircuitMeter returns the name and the energy counter of the main circuit's
 // own meter, empty and nil if the circuit has none or it has no energy
-func rootCircuitMeter() (string, api.MeterEnergy) {
+func rootCircuitMeter() (string, api.Meter) {
 	root := circuit.Root()
 	if root == nil {
 		return "", nil
@@ -67,8 +68,8 @@ func rootCircuitMeter() (string, api.MeterEnergy) {
 			return "", nil
 		}
 
-		if me, ok := api.Cap[api.MeterEnergy](md.Instance()); ok {
-			return ref, me
+		if api.HasCap[api.MeterEnergy](md.Instance()) {
+			return ref, md.Instance()
 		}
 		return "", nil
 	}
@@ -81,19 +82,19 @@ func rootCircuitMeter() (string, api.MeterEnergy) {
 func (site *Site) updatePeakCircuit() {
 	s := site.peakCircuit()
 
-	ref, me := rootCircuitMeter()
+	ref, meter := rootCircuitMeter()
 
 	// the grid meter itself: nothing new to read, its counter is the source anyway
 	if ref != "" && ref == site.Meters.GridMeterRef {
-		ref, me = "", nil
+		ref, meter = "", nil
 	}
 
 	s.mu.Lock()
-	s.reading = nil
+	s.reading, s.power = nil, nil
 	prev, c := s.ref, s.collector
 	s.mu.Unlock()
 
-	if me == nil {
+	if meter == nil {
 		if prev != "" {
 			s.mu.Lock()
 			s.ref, s.collector, s.failing = "", nil, false
@@ -110,13 +111,22 @@ func (site *Site) updatePeakCircuit() {
 		}
 	}
 
-	v, err := nonZeroEnergy(me.TotalEnergy())
+	energy, _ := api.Cap[api.MeterEnergy](meter)
+	v, err := nonZeroEnergy(energy.TotalEnergy())
+
+	// the window is metered with the circuit meter's counter and power together: the
+	// grid meter's power leaves out what the counter has (an energy community)
+	var power float64
+	powerErr := err
+	if err == nil {
+		power, powerErr = meter.CurrentPower()
+	}
 
 	s.mu.Lock()
 	warn, recovered := err != nil && !errors.Is(err, api.ErrNotAvailable) && !s.failing, err == nil && s.failing
 	s.failing = err != nil && !errors.Is(err, api.ErrNotAvailable)
-	if err == nil {
-		s.reading = &v
+	if err == nil && powerErr == nil {
+		s.reading, s.power = &v, &power
 	}
 	s.mu.Unlock()
 
@@ -195,6 +205,21 @@ func (site *Site) peakCircuitEnergy() (float64, bool) {
 		return 0, false
 	}
 	return *v, true
+}
+
+// peakGridPower is the grid power the peak window and the setpoint calculate with:
+// while the window is metered with the circuit meter's counter, that meter's power
+// of the cycle, else the grid power given
+func (site *Site) peakGridPower(gridPower float64) float64 {
+	s := site.peakCircuit()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.reading != nil && s.power != nil {
+		return *s.power
+	}
+	return gridPower
 }
 
 // gridPeakCollector is the collector evcc's monthly peak reads: the circuit

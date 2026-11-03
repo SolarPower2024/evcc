@@ -491,7 +491,7 @@ Assistant energy sensor (kWh or Wh), else the grid power. The circuit meter
 sees the real power at the connection, where the grid meter's import counter
 may leave out a part of it (an energy community); the circuit's configuration
 is read as it is, `meter` resolved through the meters, nothing in the circuit
-code is touched (`core/site_peak_circuit.go`, `TestPeakCircuit*`). A failed reading, a 0
+code is touched (`core/site_peak_circuit.go`, `TestPeakCircuit*`). While the window is metered with it, its power of the same cycle replaces the grid meter's power for the gaps, the allowed power and the setpoint (`TestPeakCircuitPowerForSetpoint`); if that power cannot be read, the cycle uses the grid meter's counter and power. A circuit meter that is the grid meter itself is not used. A failed reading, a 0
 of the sensor (as evcc takes it for the grid meter) and a reading below the last
 are replaced by the grid power for that interval. The lower reading only becomes
 the new base once the next one confirms it (a real reset); back at the old level

@@ -24,10 +24,11 @@ import (
 // circuitMeter is a meter with an energy counter
 type circuitMeter struct {
 	energy float64
+	power  float64
 	err    error
 }
 
-func (m *circuitMeter) CurrentPower() (float64, error) { return 0, nil }
+func (m *circuitMeter) CurrentPower() (float64, error) { return m.power, nil }
 func (m *circuitMeter) TotalEnergy() (float64, error)  { return m.energy, m.err }
 
 // powerOnlyMeter has no energy counter
@@ -330,4 +331,51 @@ func TestPeakCircuitWithoutDatabaseOnce(t *testing.T) {
 	_, err := settings.String(keys.GridPeakMeter)
 	assert.ErrorIs(t, err, settings.ErrNotFound, "not set again every cycle")
 	assert.Equal(t, "shelly", site.peakCircuit().ref)
+}
+
+// With the circuit meter as source the window and the setpoint calculate with its
+// power, not the grid meter's: an energy community of 3 kW, the real import 7 kW,
+// the grid meter 4 kW, the limit 5 kW. Without a circuit meter nothing changes.
+func TestPeakCircuitPowerForSetpoint(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		with bool
+		want float64
+	}{
+		{"circuit meter", true, 2000},
+		{"no circuit meter", false, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sc := newScenario(t)
+			sc.site.lms().socChargeEnabled = false
+
+			config.Reset()
+			t.Cleanup(config.Reset)
+			if tc.with {
+				circuitSetup(t, "shelly", &circuitMeter{energy: 100, power: 7000})
+			}
+
+			sc.site.updatePeakCircuit()
+			if tc.with {
+				assert.Equal(t, 7000.0, sc.site.peakGridPower(4000), "the cycle's power")
+			} else {
+				assert.Equal(t, 4000.0, sc.site.peakGridPower(4000))
+			}
+			sc.cycle(25, 4000, 0) // soc below the reserve: shaving
+
+			assert.Equal(t, tc.want, val(sc.peak), "discharge setpoint")
+		})
+	}
+
+	t.Run("failed power read falls back to the grid meter", func(t *testing.T) {
+		sc := newScenario(t)
+		sc.site.lms().socChargeEnabled = false
+		circuitSetup(t, "shelly", &circuitMeter{energy: 100, power: 7000, err: errors.New("offline")})
+
+		sc.site.updatePeakCircuit()
+		assert.Equal(t, 8000.0, sc.site.peakGridPower(8000))
+		sc.cycle(25, 8000, 0)
+
+		assert.Equal(t, 3000.0, val(sc.peak))
+	})
 }
