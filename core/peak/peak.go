@@ -49,9 +49,10 @@ const (
 
 // Where the energy drawn in the window comes from
 const (
-	SourceMeter  = "meter"  // grid meter's import counter
-	SourceEntity = "entity" // Home Assistant energy sensor
-	SourcePower  = "power"  // grid power of each cycle
+	SourceMeter   = "meter"   // grid meter's import counter
+	SourceEntity  = "entity"  // Home Assistant energy sensor
+	SourceCircuit = "circuit" // energy counter of the main circuit's meter
+	SourcePower   = "power"   // grid power of each cycle
 )
 
 // Setpoint returns the battery power needed to keep the grid draw at or below

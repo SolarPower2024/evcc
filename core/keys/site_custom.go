@@ -84,6 +84,9 @@ const (
 	FeedInEegEntity = "feedInEegEntity" // Home Assistant energy counter of the EEG export
 	TariffFeedInEeg = "tariffFeedInEeg" // published: current EEG price
 
+	// import from the energy community, shown in the grid chart, see core/site_import_eeg.go
+	ImportEegEntity = "importEegEntity" // Home Assistant energy counter of the EEG import
+
 	// log in daily files, see core/site_logfile.go
 	LogFile = "logFile"
 
@@ -95,4 +98,9 @@ const (
 	SnowCoverAuto     = "snowCoverAuto"     // the switch was turned on automatically
 	SnowAutoAvailable = "snowAutoAvailable" // published: an Open-Meteo solar forecast gives the location
 	SnowSeen          = "snowSeen"          // end of the last snow already counted
+)
+
+// monthly peak from the main circuit's meter, see core/site_peak_circuit.go
+const (
+	GridPeakMeter = "gridPeakMeter" // the circuit meter the peak collector recorded last
 )

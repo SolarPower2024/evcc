@@ -416,6 +416,8 @@
       "entityLabel": "Energiezähler EEG",
       "entityHelp": "Sensor in kWh oder Wh. Leer = gesamte Einspeisung zur Einspeisevergütung.",
       "counterLabel": "EEG-Zähler",
+      "importLabel": "EEG-Bezug",
+      "importHelp": "Energiezähler des Bezugs aus der Energiegemeinschaft. Nur zur Anzeige in der Netz-Grafik.",
       "none": "nicht festgelegt",
       "isSet": "festgelegt"
     },
@@ -1128,6 +1130,7 @@
       "protSwitchHelp": "Schalter des Peak Shaving. evcc schaltet ihn mit Peak Shaving ein.",
       "protSwitchLabel": "Peak-Shaving-Schalter",
       "source": {
+        "circuit": "Zähler des Stromkreises",
         "entity": "Energiezähler aus Home Assistant",
         "meter": "Energiezähler des Netzzählers",
         "power": "Netzleistung"

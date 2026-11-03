@@ -80,22 +80,8 @@ func (site *Site) GetFeedInEegEntity() string {
 // SetFeedInEegEntity sets the Home Assistant energy counter of the EEG export,
 // in kWh, Wh or MWh. Empty turns the split off.
 func (site *Site) SetFeedInEegEntity(entity string) error {
-	if entity != "" {
-		if !strings.HasPrefix(entity, "sensor.") && !strings.HasPrefix(entity, "input_number.") {
-			return fmt.Errorf("must be a sensor or input_number entity: %s", entity)
-		}
-
-		conn, err := site.haConnection()
-		if err != nil {
-			return err
-		}
-		state, err := conn.GetState(entity)
-		if err != nil {
-			return fmt.Errorf("%s: %w", entity, err)
-		}
-		if unit := state.Attributes.UnitOfMeasurement; unit != "kWh" && unit != "Wh" && unit != "MWh" {
-			return fmt.Errorf("%s must be an energy counter in kWh or Wh, not %q", entity, unit)
-		}
+	if err := site.checkEegEntity(entity); err != nil {
+		return err
 	}
 
 	if entity == site.GetFeedInEegEntity() {
@@ -109,6 +95,33 @@ func (site *Site) SetFeedInEegEntity(entity string) error {
 	site.log.DEBUG.Println("set feed-in eeg entity:", entity)
 	settings.SetString(keys.FeedInEegEntity, entity)
 	site.publish(keys.FeedInEegEntity, entity)
+
+	return nil
+}
+
+// checkEegEntity checks a Home Assistant energy counter of an EEG setting: a
+// sensor or input_number in kWh, Wh or MWh that Home Assistant knows. Empty is
+// fine, it turns the setting off.
+func (site *Site) checkEegEntity(entity string) error {
+	if entity == "" {
+		return nil
+	}
+
+	if !strings.HasPrefix(entity, "sensor.") && !strings.HasPrefix(entity, "input_number.") {
+		return fmt.Errorf("must be a sensor or input_number entity: %s", entity)
+	}
+
+	conn, err := site.haConnection()
+	if err != nil {
+		return err
+	}
+	state, err := conn.GetState(entity)
+	if err != nil {
+		return fmt.Errorf("%s: %w", entity, err)
+	}
+	if unit := state.Attributes.UnitOfMeasurement; unit != "kWh" && unit != "Wh" && unit != "MWh" {
+		return fmt.Errorf("%s must be an energy counter in kWh or Wh, not %q", entity, unit)
+	}
 
 	return nil
 }

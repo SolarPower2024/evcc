@@ -123,6 +123,8 @@ var customRouteSamples = map[string]string{
 	"feedineegentity":               "/feedineegentity/sensor.eeg_export",
 	"feedineegentitydelete":         "/feedineegentity",
 	"feedinsplit":                   "/feedinsplit?from=2026-09-01&to=2026-10-01&aggregate=day",
+	"importeegentity":               "/importeegentity/sensor.eeg_import",
+	"importeegentitydelete":         "/importeegentity",
 	"logfile":                       "/logfile",
 	"logfileset":                    "/logfile",
 	"snowcover":                     "/snowcover/true",

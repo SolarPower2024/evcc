@@ -416,6 +416,8 @@
       "entityLabel": "EEG energy counter",
       "entityHelp": "Sensor in kWh or Wh. Empty = all export at the export tariff.",
       "counterLabel": "EEG counter",
+      "importLabel": "EEG import",
+      "importHelp": "Energy meter of the import from the energy community. Display in the grid chart only.",
       "none": "not set",
       "isSet": "set"
     },
@@ -1128,6 +1130,7 @@
       "protSwitchHelp": "Switch of the peak shaving. evcc turns it on with peak shaving.",
       "protSwitchLabel": "Peak shaving switch",
       "source": {
+        "circuit": "circuit meter",
         "entity": "energy counter from Home Assistant",
         "meter": "energy counter of the grid meter",
         "power": "grid power"

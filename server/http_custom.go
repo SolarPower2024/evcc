@@ -37,7 +37,7 @@ var customConfigRoutes = []string{
 	"batteryidentuse", "lmadvanced", "lmexportforecast", "lmexportforecastdelete",
 	"lmhomeprofile", "lmhomeprofiledelete", "lmhomeprofilecsv",
 	"lmprofile", "lmprofiledelete",
-	"feedineegentity", "feedineegentitydelete", "logfile", "logfileset",
+	"feedineegentity", "feedineegentitydelete", "importeegentity", "importeegentitydelete", "logfile", "logfileset",
 	"peakshavinglimit", "peakfollowbuffer", "peaktariff",
 	"peakshavingbatterytype",
 	"peakshavingmanualentity", "peakshavingmanualentitydelete",
@@ -204,6 +204,10 @@ func customSiteRoutes(site site.API) map[string]route {
 		"feedineegentity":       {"POST", "/feedineegentity/{value:[a-zA-Z0-9_.]+}", stringHandler(site.SetFeedInEegEntity, site.GetFeedInEegEntity)},
 		"feedineegentitydelete": {"DELETE", "/feedineegentity", stringHandler(site.SetFeedInEegEntity, site.GetFeedInEegEntity)},
 		"feedinsplit":           {"GET", "/feedinsplit", feedInSplitHandler},
+
+		// import from the energy community, see core/site_import_eeg.go
+		"importeegentity":       {"POST", "/importeegentity/{value:[a-zA-Z0-9_.]+}", stringHandler(site.SetImportEegEntity, site.GetImportEegEntity)},
+		"importeegentitydelete": {"DELETE", "/importeegentity", stringHandler(site.SetImportEegEntity, site.GetImportEegEntity)},
 
 		// log in daily files, see core/site_logfile.go
 		"logfile":    {"GET", "/logfile", logFileHandler(site)},

@@ -27,6 +27,22 @@
 				/>
 			</FormRow>
 
+			<FormRow
+				id="importEegEntity"
+				:label="$t('config.feedineeg.importLabel')"
+				:help="$t('config.feedineeg.importHelp')"
+				optional
+			>
+				<input
+					id="importEegEntity"
+					v-model="importEntity"
+					type="text"
+					class="form-control"
+					placeholder="sensor.eeg_import_energy"
+					data-testid="importeeg-entity"
+				/>
+			</FormRow>
+
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
 				<button
 					type="button"
@@ -61,17 +77,28 @@ import FormRow from "./FormRow.vue";
 import store from "@/store";
 import api from "@/api";
 
-// Custom extension: the Home Assistant counter metering the export under the
-// second feed-in tariff (EEG), see core/site_feedin_eeg.go
+// Custom extension: the Home Assistant counters of the EEG, the export under the
+// second feed-in tariff and the import shown in the grid chart, see
+// core/site_feedin_eeg.go and core/site_import_eeg.go
 export default {
 	name: "FeedInEegModal",
 	components: { FormRow, GenericModal },
 	data() {
-		return { saving: false, error: "", entity: "", initialEntity: "" };
+		return {
+			saving: false,
+			error: "",
+			entity: "",
+			initialEntity: "",
+			importEntity: "",
+			initialImportEntity: "",
+		};
 	},
 	computed: {
 		changed() {
-			return this.entity.trim() !== this.initialEntity;
+			return (
+				this.entity.trim() !== this.initialEntity ||
+				this.importEntity.trim() !== this.initialImportEntity
+			);
 		},
 	},
 	methods: {
@@ -81,6 +108,16 @@ export default {
 			this.error = "";
 			this.entity = entity;
 			this.initialEntity = entity;
+			const importEntity = store?.state?.importEegEntity || "";
+			this.importEntity = importEntity;
+			this.initialImportEntity = importEntity;
+		},
+		async post(route, entity) {
+			if (entity) {
+				await api.post(`${route}/${encodeURIComponent(entity)}`);
+			} else {
+				await api.delete(route);
+			}
 		},
 		async save() {
 			this.saving = true;
@@ -88,10 +125,14 @@ export default {
 
 			try {
 				const entity = this.entity.trim();
-				if (entity) {
-					await api.post(`feedineegentity/${encodeURIComponent(entity)}`);
-				} else {
-					await api.delete("feedineegentity");
+				if (entity !== this.initialEntity) {
+					await this.post("feedineegentity", entity);
+					this.initialEntity = entity;
+				}
+				const importEntity = this.importEntity.trim();
+				if (importEntity !== this.initialImportEntity) {
+					await this.post("importeegentity", importEntity);
+					this.initialImportEntity = importEntity;
 				}
 				this.$refs.modal.close();
 			} catch (e) {

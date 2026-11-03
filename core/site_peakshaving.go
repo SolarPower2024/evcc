@@ -545,14 +545,18 @@ func (site *Site) updatePeakShaving(state siteState) {
 		return
 	}
 
-	site.updatePeakWindow(state.gridPower, state.battery.Power)
+	// with the circuit meter as source its power, see site_peak_circuit.go; read before
+	// the window takes the counter
+	gridPower := site.peakGridPower(state.gridPower)
+
+	site.updatePeakWindow(gridPower, state.battery.Power)
 	site.updatePeakFollow()
 	site.applyCircuitLimits() // load management switch and follow circuit, see site_lm_switch.go
 
 	s.mu.Lock()
 	enabled, limit, reserve, configured, allowed := s.enabled, s.limit, s.effectiveReserve(), s.configured(), s.window.Allowed
 	// read by peakPausesGridCharge later in the same cycle
-	s.demand = state.gridPower + state.battery.Power
+	s.demand = gridPower + state.battery.Power
 	s.mu.Unlock()
 
 	if !enabled || !configured || !site.batteryConfigured() {
@@ -588,15 +592,15 @@ func (site *Site) updatePeakShaving(state siteState) {
 	// no discharging while the battery charges from the grid. A peak pauses the
 	// charging in this same cycle, see peakPausesGridCharge, so the value then
 	// falls through to the regular one right away.
-	case site.GetBatteryMode() == api.BatteryCharge && state.gridPower+state.battery.Power <= limit:
+	case site.GetBatteryMode() == api.BatteryCharge && gridPower+state.battery.Power <= limit:
 		value = 0
 
 	case shaving:
-		value = peak.Setpoint(state.gridPower, state.battery.Power, allowed)
+		value = peak.Setpoint(gridPower, state.battery.Power, allowed)
 
 	// the optimizer withholds discharging: only a peak is covered, see site_optimizer_gate.go
 	case hold:
-		value = peak.Setpoint(state.gridPower, state.battery.Power, allowed)
+		value = peak.Setpoint(gridPower, state.battery.Power, allowed)
 	}
 
 	// log the start of a peak, not every cycle of it
@@ -610,7 +614,7 @@ func (site *Site) updatePeakShaving(state siteState) {
 	s.mu.Unlock()
 
 	if started {
-		site.lmm().AddEvent(lm.Event{At: s.clock.Now(), Type: lm.EventPeak, A: state.gridPower + state.battery.Power, B: limit})
+		site.lmm().AddEvent(lm.Event{At: s.clock.Now(), Type: lm.EventPeak, A: gridPower + state.battery.Power, B: limit})
 	}
 
 	// published explicitly rather than left for the ui to infer from the value:
@@ -791,8 +795,8 @@ func writeErrorText(err error) string {
 }
 
 // peakEnergy returns the grid import counter in kWh and where it came from: the
-// grid meter, else the Home Assistant sensor. Without either, the source is the
-// grid power. A 0 of the sensor is no reading, like evcc takes it for the grid
+// meter of the main circuit, else the grid meter, else the Home Assistant sensor.
+// Without any, the source is the grid power. A 0 of the sensor is no reading, like evcc takes it for the grid
 // meter.
 func (site *Site) peakEnergy() (float64, string) {
 	s := site.peak()
@@ -801,6 +805,10 @@ func (site *Site) peakEnergy() (float64, string) {
 	meter, get, entity := s.gridEnergy, s.energyGet, s.energyEntity
 	s.gridEnergy = nil // only valid for the cycle it was read in
 	s.mu.Unlock()
+
+	if v, ok := site.peakCircuitEnergy(); ok {
+		return v, peak.SourceCircuit
+	}
 
 	if meter != nil {
 		return *meter, peak.SourceMeter

@@ -37,6 +37,7 @@ import echartsChart from "@/mixins/echartsChart";
 import { PERIODS } from "../Sessions/types";
 import { is12hFormat } from "@/units";
 import { hasColorPicker, isBidirectional } from "./groups";
+import { ownSeriesColors } from "./feedInEeg"; // custom
 import type { PriceBand, PriceOverlay } from "./types";
 import { CURRENCY } from "@/types/evcc";
 import { energyAxisScale, type EnergyAxisScale } from "@/utils/energyAxis";
@@ -64,8 +65,6 @@ export interface HistorySeries {
 	virtual?: boolean;
 	// explicit color, skips palette resolution
 	color?: string;
-	// custom: export color of a split export, see components/Energy/feedInEeg.ts
-	returnColor?: string;
 	// socTemp holds a temperature, the entity heats instead of charging
 	isTemp?: boolean;
 	// Stable index into the palette, preserved across navigations even when the
@@ -441,6 +440,11 @@ export default defineComponent({
 			if (this.group === "battery") {
 				return this.series.map((s, i) => batteryColor(s.paletteIndex ?? i));
 			}
+			// custom: a series with a color of its own, the EEG import, see feedInEeg.ts
+			if (this.series.some((s) => s.color))
+				return ownSeriesColors(this.series, this.color, (i, n) =>
+					darken(this.color, stepAlpha(i, n))
+				);
 			if (this.series.length <= 1) return [this.color];
 			return this.series.map((_, i) => darken(this.color, stepAlpha(i, this.series.length)));
 		},
@@ -561,7 +565,6 @@ export default defineComponent({
 			this.series.forEach((s, i) => {
 				const c = this.entryColors[i] || this.color;
 				const returnEnergyColor =
-					s.returnColor || // custom: split export, see feedInEeg.ts
 					(s.group === "grid" && colors.export) ||
 					(s.group === "battery" ? setAlpha(c, "cc") || c : c);
 				const energyValues = energyByEntity[i]!;
