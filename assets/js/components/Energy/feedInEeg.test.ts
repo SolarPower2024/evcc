@@ -1,6 +1,16 @@
 import { describe, expect, test, vi } from "vite-plus/test";
 import api from "@/api";
-import { feedInEegStats, feedInSplitTotals, loadFeedInSplit, type FeedInSplit } from "./feedInEeg";
+import {
+  feedInEegStats,
+  feedInSplitTotals,
+  importEegLegends,
+  importEegSeries,
+  loadFeedInSplit,
+  withoutFeedInEeg,
+  type FeedInSplit,
+} from "./feedInEeg";
+import type { Legend } from "../Sessions/types";
+import type { HistorySeries } from "./GroupChart.vue";
 
 vi.mock("@/api", () => ({ default: { get: vi.fn() } }));
 
@@ -18,6 +28,7 @@ const split = (eeg: number): FeedInSplit[] => [
     standardRevenue: 0,
     eegPriced: 0,
     standardPriced: 0,
+    importEeg: 0,
   },
 ];
 
@@ -121,5 +132,65 @@ describe("loadFeedInSplit", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(api.get).mockRejectedValueOnce(new Error("x"));
     expect(await loadFeedInSplit(from, to, "day", "sensor.eeg")).toEqual([]);
+  });
+});
+
+describe("importEegSeries", () => {
+  const grid: HistorySeries[] = [
+    {
+      title: "grid",
+      group: "grid",
+      data: [{ start, end, energy: 2, returnEnergy: 1 }],
+    },
+  ];
+
+  test("without EEG import the grid series stay as they are", () => {
+    expect(importEegSeries(grid, split(0))).toBe(grid);
+    expect(importEegSeries(grid, [])).toBe(grid);
+  });
+
+  test("the EEG import is a series of its own in front, the grid is not touched", () => {
+    const res = importEegSeries(grid, [bucket({ importEeg: 0.5 }), bucket({ start: end, end })]);
+    expect(res).toHaveLength(2);
+    expect(res[0]!.title).toBe("EEG");
+    expect(res[0]!.group).toBe("grid");
+    expect(res[0]!.color).toBeDefined();
+    expect(res[0]!.data).toEqual([{ start, end, energy: 0.5, returnEnergy: 0 }]);
+    expect(res[1]).toBe(grid[0]);
+    expect(res[1]!.data[0]!.energy).toBe(2);
+  });
+});
+
+describe("importEegLegends", () => {
+  const list: Legend[] = [
+    { label: "import", color: "a", value: "1" },
+    { label: "export", color: "b", value: "2" },
+    { label: "price", color: "c", value: "3" },
+  ];
+
+  test("adds the EEG after import and export", () => {
+    const totals = feedInSplitTotals([bucket({ importEeg: 1.5 }), bucket({ importEeg: 1 })]);
+    const res = importEegLegends(list, totals, t, (v) => `${v} kWh`);
+    expect(res.map((l) => l.label)).toEqual([
+      "import",
+      "export",
+      "t:energy.feedInEeg.eeg",
+      "price",
+    ]);
+    expect(res[2]!.value).toBe("2.5 kWh");
+    expect(list).toHaveLength(3);
+  });
+
+  test("without EEG import the list stays as it is", () => {
+    const totals = feedInSplitTotals([bucket({})]);
+    expect(importEegLegends(list, totals, t, String)).toBe(list);
+  });
+});
+
+describe("withoutFeedInEeg", () => {
+  test("leaves out both EEG counters", () => {
+    const s = (title: string): HistorySeries => ({ title, group: "meter", data: [] });
+    const res = withoutFeedInEeg([s("feedin-eeg"), s("import-eeg"), s("garage")]);
+    expect(res.map((x) => x.title)).toEqual(["garage"]);
   });
 });

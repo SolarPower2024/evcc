@@ -416,6 +416,8 @@
       "entityLabel": "EEG energy counter",
       "entityHelp": "Sensor in kWh or Wh. Empty = all export at the export tariff.",
       "counterLabel": "EEG counter",
+      "importLabel": "EEG import",
+      "importHelp": "Energy meter of the import from the energy community. Display in the grid chart only.",
       "none": "not set",
       "isSet": "set"
     },

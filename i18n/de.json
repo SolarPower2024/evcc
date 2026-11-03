@@ -416,6 +416,8 @@
       "entityLabel": "Energiezähler EEG",
       "entityHelp": "Sensor in kWh oder Wh. Leer = gesamte Einspeisung zur Einspeisevergütung.",
       "counterLabel": "EEG-Zähler",
+      "importLabel": "EEG-Bezug",
+      "importHelp": "Energiezähler des Bezugs aus der Energiegemeinschaft. Nur zur Anzeige in der Netz-Grafik.",
       "none": "nicht festgelegt",
       "isSet": "festgelegt"
     },

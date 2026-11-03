@@ -109,7 +109,7 @@
 								<GroupChart
 									group="grid"
 									:color="colors.grid || ''"
-									:series="gridSeries"
+									:series="gridChartSeries"
 									:prices="chartPrices"
 									:currency="currency"
 									:height="200"
@@ -446,6 +446,8 @@ import api from "../api";
 // custom: export split by feed-in tariff, see core/site_feedin_eeg.go
 import {
 	feedInSplitTotals,
+	importEegLegends,
+	importEegSeries,
 	loadFeedInSplit,
 	withoutFeedInEeg,
 	type FeedInSplit,
@@ -890,12 +892,19 @@ export default defineComponent({
 		},
 		// custom: export split by feed-in tariff, see feedInEeg.ts
 		feedInEeg(): FeedInSplitTotals | null {
-			if (!this.feedInSplit.length) return null;
+			if (!this.feedInSplit.length || !store.state.feedInEegEntity) return null;
 			return feedInSplitTotals(this.feedInSplit);
+		},
+		// custom: the EEG import as a green bar of its own, only while its counter is set
+		importEegSplit(): FeedInSplit[] {
+			return store.state.importEegEntity ? this.feedInSplit : [];
+		},
+		gridChartSeries(): HistorySeries[] {
+			return importEegSeries(this.gridSeries, this.importEegSplit);
 		},
 		// with the price overlay on, both prices as lines with their range over the period
 		gridLegends(): Legend[] {
-			const list: Legend[] = [
+			let list: Legend[] = [
 				{
 					label: this.$t("energy.grid.import"),
 					color: colors.grid || "",
@@ -907,6 +916,14 @@ export default defineComponent({
 					value: this.fmtKWh(this.gridExport),
 				},
 			];
+			// custom: the EEG import next to import and export, see feedInEeg.ts
+			if (this.importEegSplit.length)
+				list = importEegLegends(
+					list,
+					feedInSplitTotals(this.importEegSplit),
+					(key) => this.$t(key),
+					this.fmtKWh
+				);
 			const prices = this.gridPrices;
 			const range = (band: PriceBand) => {
 				const known = (v: (number | null)[]) => v.filter((x): x is number => x !== null);
@@ -1378,7 +1395,7 @@ export default defineComponent({
 				this.from,
 				this.to,
 				this.aggregate,
-				store.state.feedInEegEntity
+				store.state.feedInEegEntity || store.state.importEegEntity
 			);
 			if (requestKey === this.fetchKey) this.feedInSplit = split;
 		},

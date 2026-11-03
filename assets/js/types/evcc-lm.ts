@@ -273,6 +273,8 @@ export interface LmState {
   lmHomeProfile?: LmHomeProfile | null;
   /** Home Assistant counter of the export under the second feed-in tariff (EEG), empty = off. */
   feedInEegEntity?: string;
+  /** Home Assistant counter of the import from the energy community (EEG), shown in the grid chart, empty = off. */
+  importEegEntity?: string;
   /** Current price of the second feed-in tariff. */
   tariffFeedInEeg?: number;
   /** Load management overview, only while circuits are configured. */

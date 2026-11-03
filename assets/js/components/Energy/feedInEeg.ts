@@ -3,8 +3,14 @@
 // into the standard feed-in tariff and the EEG part metered by a Home Assistant
 // counter. Chart and legend stay as upstream. Without a counter nothing
 // changes.
+//
+// Also the import from the energy community, see core/site_import_eeg.go: a
+// Home Assistant counter shown as a green bar of its own and a legend entry in
+// the grid chart, next to the grid import, never added to it.
 import api from "@/api";
+import colors from "@/colors";
 import type { HistorySeries } from "./GroupChart.vue";
+import type { Legend } from "../Sessions/types";
 import type { FlowCost, StatItem } from "./types";
 
 export interface FeedInSplit {
@@ -17,16 +23,17 @@ export interface FeedInSplit {
   standardRevenue: number;
   eegPriced: number; // kWh with a known EEG price
   standardPriced: number;
+  importEeg: number; // kWh, import from the energy community, display only
 }
 
 export type FeedInSplitTotals = Omit<FeedInSplit, "start" | "end">;
 
-// title of the EEG counter's own series, see metrics.FeedInEeg
-const FEED_IN_EEG = "feedin-eeg";
+// titles of the EEG counters' own series, see metrics.FeedInEeg and metrics.ImportEeg
+const EEG_COUNTERS = ["feedin-eeg", "import-eeg"];
 
-// the EEG counter is shown in the grid card, not again among the meters
+// the EEG counters are shown in the grid card, not again among the meters
 export function withoutFeedInEeg(meters: HistorySeries[]): HistorySeries[] {
-  return meters.filter((s) => s.title !== FEED_IN_EEG);
+  return meters.filter((s) => !EEG_COUNTERS.includes(s.title));
 }
 
 export async function fetchFeedInSplit(
@@ -50,6 +57,7 @@ export function feedInSplitTotals(split: FeedInSplit[]): FeedInSplitTotals {
     standardRevenue: sum("standardRevenue"),
     eegPriced: sum("eegPriced"),
     standardPriced: sum("standardPriced"),
+    importEeg: sum("importEeg"),
   };
 }
 
@@ -112,8 +120,49 @@ export function feedInEegStats(
   );
 }
 
-// The split of the export for the period, empty without an EEG counter or when it
-// cannot be read (the page then shows the grid as a whole).
+// the import from the energy community in the green of self-consumption
+export function importEegColor(): string {
+  return colors.self || "";
+}
+
+// The grid series with the EEG import as a series of its own in front: a bar next to
+// the grid import, not added to it, so no sum of the page changes. Unchanged
+// without EEG import.
+export function importEegSeries(grid: HistorySeries[], split: FeedInSplit[]): HistorySeries[] {
+  const data = split
+    .filter((b) => b.importEeg > 0)
+    .map((b) => ({ start: b.start, end: b.end, energy: b.importEeg, returnEnergy: 0 }));
+  if (!data.length) return grid;
+
+  const eeg: HistorySeries = {
+    title: "EEG",
+    group: "grid",
+    color: importEegColor(),
+    data,
+  };
+  return [eeg, ...grid];
+}
+
+// The grid legend with the EEG import after the import and the export, in the
+// color of its bar. Unchanged without EEG import.
+export function importEegLegends(
+  list: Legend[],
+  totals: FeedInSplitTotals,
+  t: Translate,
+  fmtKWh: (kWh: number) => string
+): Legend[] {
+  if (!(totals.importEeg > 0)) return list;
+  const res = [...list];
+  res.splice(2, 0, {
+    label: t("energy.feedInEeg.eeg"),
+    color: importEegColor(),
+    value: fmtKWh(totals.importEeg),
+  });
+  return res;
+}
+
+// The split of the export and the EEG import for the period, empty without an EEG
+// counter or when it cannot be read (the page then shows the grid as a whole).
 export async function loadFeedInSplit(
   from: Date,
   to: Date,

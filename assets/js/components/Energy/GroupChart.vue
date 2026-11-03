@@ -439,6 +439,9 @@ export default defineComponent({
 			if (this.group === "battery") {
 				return this.series.map((s, i) => batteryColor(s.paletteIndex ?? i));
 			}
+			// custom: a series with a color of its own, the EEG import, see feedInEeg.ts
+			if (this.series.some((s) => s.color))
+				return this.series.map((s) => s.color || this.color);
 			if (this.series.length <= 1) return [this.color];
 			return this.series.map((_, i) => darken(this.color, stepAlpha(i, this.series.length)));
 		},
