@@ -484,8 +484,14 @@ does a gap of over 2 minutes inside a window that the grid power or a changed
 source has to fill in (a counter of the same source before and after covers it),
 and such a window stays out of the statistics (`TestMeterUnmetered`).
 
-The energy drawn comes from the grid meter's import counter, else a Home
-Assistant energy sensor (kWh or Wh), else the grid power. A failed reading, a 0
+The energy drawn comes from the energy counter of the main circuit's own
+meter (the circuit's meter, if it has an energy counter; source `circuit`,
+*Zähler des Stromkreises*), else the grid meter's import counter, else a Home
+Assistant energy sensor (kWh or Wh), else the grid power. The circuit meter
+sees the real power at the connection, where the grid meter's import counter
+may leave out a part of it (an energy community); the circuit's configuration
+is read as it is, `meter` resolved through the meters, nothing in the circuit
+code is touched (`core/site_peak_circuit.go`, `TestPeakCircuit*`). A failed reading, a 0
 of the sensor (as evcc takes it for the grid meter) and a reading below the last
 are replaced by the grid power for that interval. The lower reading only becomes
 the new base once the next one confirms it (a real reset); back at the old level
@@ -495,6 +501,16 @@ counted (`TestMeterCounterGlitch`). A step beyond what a grid connection draws
 says more than 20 Wh in 2 minutes is replaced for the rest of the window
 (`peakShavingSource`). A failing sensor is logged once, then at debug level
 until it works again (`TestPeakEnergyReadLoggedOnce`).
+
+The circuit meter's counter is also recorded per 15 minute slot by the collector
+`grid-peak` of its own group `gridpeak`, which is in no balance, flow or
+group of the energy page (`TestGridPeakInNoBalance`); another circuit meter
+starts a fresh recording, also after a restart (`gridPeakMeter`). It is the
+preparation for evcc's monthly peak (evcc PR 35251): once an update brings it,
+a hook in `updateGridPeak` (`core/site_gridpeak.go`) takes the collector from
+`site.gridPeakCollector()` (the circuit meter's, else the grid meter's) instead
+of the grid meter's. That hook is pending (listed in `watch.json`); until then
+the circuit meter only feeds the window.
 
 A counter coarser than 0.01 kWh or updating less often than every 30 s delays the
 cut by the counter lag; the value from the window end then only counts in the
@@ -819,6 +835,26 @@ legend stay as upstream, one export color and "Einspeisung"); a tile whose reven
 rounds to 0 is hidden (without a price its hint stays). The counter is not
 listed again among the additional meters (its collector is titled `feedin-eeg`).
 See `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`.
+
+### EEG import in the grid chart
+
+Where the grid meter shows the supplier's import only and the part from the
+energy community is counted as pv, a second Home Assistant counter (kWh, Wh or
+MWh) meters the import from the community. Display only: balances, costs,
+self-sufficiency, charging sessions and every control stay as they are. The
+card of the EEG tariff has a second row *EEG-Bezug* for it (same dialog,
+`POST/DELETE /api/importeegentity`, checked like the export counter).
+
+- recorded per 15 minute slot by a collector of group `meter` (`import-eeg`),
+  which evcc keeps out of every balance, and not listed again among the meters;
+  a changed counter starts afresh (`TestImportEeg*`)
+- `GET /api/feedinsplit` also returns `importEeg` (kWh) per bucket
+- the grid chart shows it as a green bar of its own next to the import (a
+  series with its own color, never added to it) and a legend entry *EEG*, only
+  while the counter is set
+- the chart and legend of the export are as upstream ("Einspeisung")
+
+See `core/site_import_eeg.go`.
 
 ## 16. Optimizer inputs
 
@@ -1232,7 +1268,7 @@ in a running evcc) they answer 401. The ui opens the login on a 401 by itself.
 | List | Routes |
 |---|---|
 | `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmenabled`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakfollow`, `peakshavingreserve`, `feedinsplit` |
-| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `lmcircuit(delete)`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peakfollowbuffer`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
+| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `lmcircuit(delete)`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `importeegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peakfollowbuffer`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
 
 ## Upstream touch points
 
@@ -1271,7 +1307,8 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/components/Config/DeviceTags.vue` | value `stages` shown as "ein · ein · aus" |
 | `assets/js/components/Config/TariffCard.vue`, `TariffModal.vue` | EEG counter in the EEG card, price templates for `feedInEeg`, planner price hint |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label (`batteryChargeLabelKey` in `utils/lmEnergyflow.ts`) |
-| `assets/js/views/Energy.vue`, `assets/js/components/Energy/GridStats.vue` | EEG split of the grid revenue tiles, meters without the EEG counter (chart and legend as upstream); the logic (`feedInEegStats`, `loadFeedInSplit`) is in `feedInEeg.ts`, the files only call it |
+| `assets/js/views/Energy.vue`, `assets/js/components/Energy/GridStats.vue` | EEG split of the grid revenue tiles, meters without the EEG counters, the EEG import as a series and legend entry of the grid chart (`gridChartSeries`, `importEegLegends`; chart and legend of the export as upstream); the logic (`feedInEegStats`, `importEegSeries`, `importEegLegends`, `loadFeedInSplit`) is in `feedInEeg.ts`, the files only call it |
+| `assets/js/components/Energy/GroupChart.vue` | `entryColors`: a series with a color of its own (`HistorySeries.color`, the EEG import) keeps it in a group without color picker, other series as before; contract test `TestForkHooksInPlace` and `feedInEeg.test.ts` |
 | `assets/js/utils/version.ts`, `assets/js/components/AboutModal.vue` | `getShortVersion` drops a leading `v` before it sets one: the fork's tags (`v0.317.1-lm2`) carry it and the more menu and the about dialog showed `vv0.317.1-lm2`; the dialog shows the version as text, the evcc release page of the fork's tag does not exist (nightly keeps its commit link) |
 | `assets/js/types/evcc.ts` | `State`/`ConfigLoadpoint` extend the types in `evcc-lm.ts`; `feedInEeg` tariff type |
 | `i18n/de.json`, `i18n/en.json` | added texts only |
@@ -1289,7 +1326,8 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
-| EEG | `core/site_feedin_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
+| EEG | `core/site_feedin_eeg.go`, `core/site_import_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
+| peak from the circuit meter | `core/site_peak_circuit.go`, `core/metrics/grid_peak_custom.go` |
 | log file | `util/logstash/file_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |

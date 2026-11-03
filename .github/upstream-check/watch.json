@@ -112,9 +112,16 @@
     },
     {
       "name": "Zweiter Einspeisetarif (EEG) / Energieseite",
-      "files": ["core/site_feedin_eeg.go", "core/metrics/feedin_eeg_custom.go"],
+      "files": ["core/site_feedin_eeg.go", "core/site_import_eeg.go", "core/metrics/feedin_eeg_custom.go"],
       "prs": [33635, 33735],
       "keywords": ["feedInEeg", "energy community", "Energiegemeinschaft"]
+    },
+    {
+      "name": "Monatsspitze aus dem Zähler des Hauptkreises (Hook in updateGridPeak ausstehend)",
+      "files": ["core/site_peak_circuit.go", "core/metrics/grid_peak_custom.go"],
+      "prs": [35251],
+      "keywords": ["DailyPeakEnergy", "updateGridPeak", "gridPeak"],
+      "paths": ["core/metrics/"]
     },
     {
       "name": "Optimizer: Automatikmodus und Planer",
