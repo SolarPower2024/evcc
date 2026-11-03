@@ -791,8 +791,8 @@ func writeErrorText(err error) string {
 }
 
 // peakEnergy returns the grid import counter in kWh and where it came from: the
-// grid meter, else the Home Assistant sensor. Without either, the source is the
-// grid power. A 0 of the sensor is no reading, like evcc takes it for the grid
+// meter of the main circuit, else the grid meter, else the Home Assistant sensor.
+// Without any, the source is the grid power. A 0 of the sensor is no reading, like evcc takes it for the grid
 // meter.
 func (site *Site) peakEnergy() (float64, string) {
 	s := site.peak()
@@ -801,6 +801,10 @@ func (site *Site) peakEnergy() (float64, string) {
 	meter, get, entity := s.gridEnergy, s.energyGet, s.energyEntity
 	s.gridEnergy = nil // only valid for the cycle it was read in
 	s.mu.Unlock()
+
+	if v, ok := site.peakCircuitEnergy(); ok {
+		return v, peak.SourceCircuit
+	}
 
 	if meter != nil {
 		return *meter, peak.SourceMeter

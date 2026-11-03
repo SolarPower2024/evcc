@@ -1128,6 +1128,7 @@
       "protSwitchHelp": "Switch of the peak shaving. evcc turns it on with peak shaving.",
       "protSwitchLabel": "Peak shaving switch",
       "source": {
+        "circuit": "circuit meter",
         "entity": "energy counter from Home Assistant",
         "meter": "energy counter of the grid meter",
         "power": "grid power"

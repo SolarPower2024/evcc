@@ -96,3 +96,8 @@ const (
 	SnowAutoAvailable = "snowAutoAvailable" // published: an Open-Meteo solar forecast gives the location
 	SnowSeen          = "snowSeen"          // end of the last snow already counted
 )
+
+// monthly peak from the main circuit's meter, see core/site_peak_circuit.go
+const (
+	GridPeakMeter = "gridPeakMeter" // the circuit meter the peak collector recorded last
+)

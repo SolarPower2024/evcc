@@ -100,10 +100,11 @@ type lmState struct {
 
 // siteCustom is the state of this fork's features, one field in upstream's Site
 type siteCustom struct {
-	lm     lmState
-	peak   peakState
-	snow   snowState           // snow on pv, see site_snow.go
-	export exportForecastState // planned grid export as forecast in Home Assistant, see site_lm_export_forecast.go
+	lm          lmState
+	peak        peakState
+	snow        snowState           // snow on pv, see site_snow.go
+	export      exportForecastState // planned grid export as forecast in Home Assistant, see site_lm_export_forecast.go
+	peakCircuit peakCircuitState    // monthly peak from the main circuit meter, see site_peak_circuit.go
 }
 
 // restoreCustom restores the fork's settings, deferred at the start of upstream's
@@ -131,6 +132,7 @@ func (site *Site) restoreCustom() {
 // the export under the second feed-in tariff, the battery identification and snow on pv
 func (site *Site) updateCustom(state siteState) {
 	site.dropOrphanCircuits()
+	site.updatePeakCircuit() // before peak shaving, which takes the reading
 	site.updatePeakShaving(state)
 	site.updateFeedInEeg()
 	site.updateBatteryIdent()
