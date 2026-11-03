@@ -20,6 +20,10 @@ import (
 // FeedInEeg is the name and title of the EEG counter's collector in group Meter
 const FeedInEeg = "feedin-eeg"
 
+// ImportEeg is the name and title of the collector of the import from the energy
+// community in group Meter, see core/site_import_eeg.go
+const ImportEeg = "import-eeg"
+
 type eegPrice struct {
 	Timestamp int64   `gorm:"column:ts;uniqueIndex"` // 15min boundary
 	Price     float64 `gorm:"column:price"`
@@ -56,14 +60,16 @@ type FeedInSplit struct {
 	StandardRevenue float64   `json:"standardRevenue"`
 	EegPriced       float64   `json:"eegPriced"` // kWh with a known EEG price
 	StandardPriced  float64   `json:"standardPriced"`
+	ImportEeg       float64   `json:"importEeg"` // kWh, import from the energy community, display only
 }
 
 type feedInSlot struct {
-	Ts     int64
-	Export float64
-	Eeg    *float64
-	FeedIn *float64
-	Price  *float64
+	Ts        int64
+	Export    float64
+	Eeg       *float64
+	FeedIn    *float64
+	Price     *float64
+	ImportEeg *float64
 }
 
 // splitSlot divides a slot's export: EEG as metered, the rest at the standard
@@ -77,8 +83,9 @@ func splitSlot(export float64, eeg *float64) (float64, float64) {
 }
 
 // QueryFeedInSplit returns the export in [from,to) per bucket of the energy
-// history (15m, hour, day, month), oldest first. Buckets without export and
-// without EEG energy are left out.
+// history (15m, hour, day, month), oldest first, with the import from the energy
+// community (display only). Buckets without export, EEG energy and EEG import are
+// left out.
 func QueryFeedInSplit(from, to time.Time, aggregate string) ([]FeedInSplit, error) {
 	addDuration, ok := aggregateDurations[aggregate]
 	if !ok {
@@ -88,16 +95,18 @@ func QueryFeedInSplit(from, to time.Time, aggregate string) ([]FeedInSplit, erro
 	var slots []feedInSlot
 
 	err := db.Instance.Raw(`
-		SELECT g.ts AS ts, g.return_energy AS export, e.energy AS eeg, t.feedin AS feed_in, p.price AS price
+		SELECT g.ts AS ts, g.return_energy AS export, e.energy AS eeg, t.feedin AS feed_in, p.price AS price, i.energy AS import_eeg
 		FROM meters g
 		JOIN entities ge ON ge.id = g.meter AND ge."group" = ?
 		LEFT JOIN entities ee ON ee."group" = ? AND ee.name = ?
 		LEFT JOIN meters e ON e.meter = ee.id AND e.ts = g.ts
 		LEFT JOIN tariffs t ON t.ts = g.ts
 		LEFT JOIN tariffs_eeg p ON p.ts = g.ts
+		LEFT JOIN entities ie ON ie."group" = ? AND ie.name = ?
+		LEFT JOIN meters i ON i.meter = ie.id AND i.ts = g.ts
 		WHERE g.ts >= ? AND g.ts < ?
 		ORDER BY g.ts`,
-		Grid, Meter, FeedInEeg, from.Unix(), to.Unix(),
+		Grid, Meter, FeedInEeg, Meter, ImportEeg, from.Unix(), to.Unix(),
 	).Scan(&slots).Error
 	if err != nil {
 		return nil, err
@@ -115,6 +124,9 @@ func QueryFeedInSplit(from, to time.Time, aggregate string) ([]FeedInSplit, erro
 		b.Export += s.Export
 		b.Eeg += eeg
 		b.Standard += standard
+		if s.ImportEeg != nil {
+			b.ImportEeg += *s.ImportEeg
+		}
 
 		if s.Price != nil {
 			b.EegRevenue += eeg * *s.Price
@@ -128,7 +140,7 @@ func QueryFeedInSplit(from, to time.Time, aggregate string) ([]FeedInSplit, erro
 
 	out := make([]FeedInSplit, 0, len(res))
 	for _, b := range res {
-		if b.Export > 0 || b.Eeg > 0 {
+		if b.Export > 0 || b.Eeg > 0 || b.ImportEeg > 0 {
 			out = append(out, b)
 		}
 	}

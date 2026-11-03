@@ -63,6 +63,10 @@ type CustomAPI interface {
 	GetFeedInEegEntity() string
 	SetFeedInEegEntity(string) error
 
+	// import from the energy community, see core/site_import_eeg.go
+	GetImportEegEntity() string
+	SetImportEegEntity(string) error
+
 	// log in daily files, see core/site_logfile.go
 	LogFile() logstash.FileState
 	SetLogFile(logstash.FileConfig) error

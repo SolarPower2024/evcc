@@ -84,6 +84,9 @@ const (
 	FeedInEegEntity = "feedInEegEntity" // Home Assistant energy counter of the EEG export
 	TariffFeedInEeg = "tariffFeedInEeg" // published: current EEG price
 
+	// import from the energy community, shown in the grid chart, see core/site_import_eeg.go
+	ImportEegEntity = "importEegEntity" // Home Assistant energy counter of the EEG import
+
 	// log in daily files, see core/site_logfile.go
 	LogFile = "logFile"
 

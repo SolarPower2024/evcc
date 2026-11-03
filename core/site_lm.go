@@ -77,6 +77,7 @@ type lmState struct {
 	batteryShedUntil  time.Time      // battery grid charge hold-off after a shed
 	gridOnce          gridChargeOnce // one-time grid charging, see site_lm_once.go
 	eeg               feedInEegState // second feed-in tariff, see site_feedin_eeg.go
+	importEeg         feedInEegState // import from the energy community, see site_import_eeg.go
 	batteryCircuit    api.Circuit    // resolved from the assignment
 	batteryCircuitRef string         // what batteryCircuit was resolved from
 	batteryLoad       *batteryLoad
@@ -123,6 +124,7 @@ func (site *Site) restoreCustom() {
 	// back, so phasesMissing read false: publish them once more
 	site.publishLmAdvanced()
 	site.restoreFeedInEeg()
+	site.restoreImportEeg()
 	site.restoreLogFile()
 	site.restoreSnowCover()
 }
@@ -135,6 +137,7 @@ func (site *Site) updateCustom(state siteState) {
 	site.updatePeakCircuit() // before peak shaving, which takes the reading
 	site.updatePeakShaving(state)
 	site.updateFeedInEeg()
+	site.updateImportEeg()
 	site.updateBatteryIdent()
 	site.updateSnowCover(time.Now())
 }
