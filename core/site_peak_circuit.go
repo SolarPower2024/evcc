@@ -102,7 +102,8 @@ func (site *Site) updatePeakCircuit() {
 		return
 	}
 
-	if ref != prev || c == nil {
+	// once per meter: a failing start is logged once, not every cycle
+	if ref != prev {
 		var err error
 		if c, err = site.applyPeakCircuit(ref, prev); err != nil {
 			site.log.ERROR.Printf("peak circuit: %v", err)
@@ -144,6 +145,11 @@ func (site *Site) applyPeakCircuit(ref, prev string) (*metrics.Collector, error)
 
 	stored, _ := settings.String(keys.GridPeakMeter)
 	changed := (prev != "" && prev != ref) || (stored != "" && stored != ref)
+
+	// the meter is taken note of whatever follows, so a failure does not repeat
+	s.mu.Lock()
+	s.ref, s.collector, s.failing = ref, nil, false
+	s.mu.Unlock()
 
 	var c *metrics.Collector
 

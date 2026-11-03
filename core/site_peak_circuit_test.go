@@ -1,7 +1,9 @@
 package core
 
 import (
+	"bytes"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -287,4 +289,45 @@ func TestPeakCircuitSameAsGridMeter(t *testing.T) {
 	var n int64
 	require.NoError(t, db.Instance.Table("entities").Where(`"group" = ?`, metrics.GridPeak).Count(&n).Error)
 	assert.Zero(t, n)
+}
+
+// A meter whose recording cannot start is tried and logged once, not every cycle.
+func TestPeakCircuitFailedStartNotRepeated(t *testing.T) {
+	m := &circuitMeter{energy: 100}
+	circuitSetup(t, "shelly", m)
+	site, clk := peakCircuitSite(t)
+
+	var buf bytes.Buffer
+	site.log = testLogger(&buf)
+
+	// no entities table: the collector cannot be created
+	require.NoError(t, db.Instance.Migrator().DropTable("entities"))
+
+	for range 4 {
+		cycle(site, clk, 0, nil)
+	}
+	assert.Equal(t, 1, strings.Count(buf.String(), "ERROR"), buf.String())
+	assert.Nil(t, site.peakCircuit().collector)
+	assert.Equal(t, "shelly", site.peakCircuit().ref)
+
+	// the window still uses the counter
+	assert.Equal(t, peak.SourceCircuit, site.peak().window.Source)
+}
+
+// Without a database the meter is taken note of once and nothing is persisted again.
+func TestPeakCircuitWithoutDatabaseOnce(t *testing.T) {
+	m := &circuitMeter{energy: 100}
+	circuitSetup(t, "shelly", m)
+	site, clk := peakCircuitSite(t)
+	db.Instance = nil
+
+	cycle(site, clk, 0, nil)
+	require.NoError(t, settings.Delete(keys.GridPeakMeter))
+	for range 3 {
+		cycle(site, clk, 0, nil)
+	}
+
+	_, err := settings.String(keys.GridPeakMeter)
+	assert.ErrorIs(t, err, settings.ErrNotFound, "not set again every cycle")
+	assert.Equal(t, "shelly", site.peakCircuit().ref)
 }
