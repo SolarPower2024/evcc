@@ -10,7 +10,7 @@ package core
 //   - the peak window (peakEnergy) takes it before the grid meter's counter,
 //   - the collector "grid-peak" records it per 15 minute slot in a group of its
 //     own, in no balance, flow or chart, for evcc's monthly peak, which reads
-//     it through gridPeakCollector once the update with it is in.
+//     it through gridPeakCollector.
 //
 // The circuit's configuration is read as it is (its meter reference, resolved
 // through the meters), nothing in the circuit code is touched. Without such a

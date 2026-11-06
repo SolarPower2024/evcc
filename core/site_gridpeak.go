@@ -12,7 +12,7 @@ import (
 // energy metrics and the resulting import target
 func (site *Site) updateGridPeak() {
 	var energy []*float64
-	if c, ok := site.collectors[site.Meters.GridMeterRef]; ok {
+	if c := site.gridPeakCollector(); c != nil { // custom: the main circuit's meter if it has one, see core/site_peak_circuit.go
 		var err error
 		if energy, err = c.DailyPeakEnergy(); err != nil {
 			site.log.ERROR.Printf("grid peak: %v", err)

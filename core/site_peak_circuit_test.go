@@ -379,3 +379,45 @@ func TestPeakCircuitPowerForSetpoint(t *testing.T) {
 		assert.Equal(t, 3000.0, val(sc.peak))
 	})
 }
+
+// evcc's monthly peak reads the main circuit's meter when it has one: there the
+// grid meter leaves out what comes from the energy community.
+func TestGridPeakReadsCircuitMeter(t *testing.T) {
+	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	t.Cleanup(func() { db.Instance = nil })
+	require.NoError(t, metrics.SetupSchema())
+
+	clk := clock.NewMock()
+	clk.Set(time.Date(2026, 10, 24, 12, 0, 0, 0, time.Local))
+
+	slot := func(c *metrics.Collector, wh float64) {
+		require.NoError(t, c.AddEnergy(nil, nil, wh))
+	}
+
+	grid, err := metrics.NewCollector(metrics.Grid, "grid", "grid", metrics.WithClock(clk))
+	require.NoError(t, err)
+	meter, err := metrics.NewCollector(metrics.GridPeak, metrics.GridPeakName, metrics.GridPeakName, metrics.WithClock(clk))
+	require.NoError(t, err)
+
+	// one completed slot: 4 kW on the grid meter, 6 kW on the circuit meter
+	slot(grid, 4000)
+	slot(meter, 6000)
+	clk.Add(15 * time.Minute)
+	slot(grid, 4000)
+	slot(meter, 6000)
+
+	site := &Site{
+		log:        util.NewLogger("test"),
+		Meters:     MetersConfig{GridMeterRef: "grid"},
+		collectors: map[string]*metrics.Collector{"grid": grid},
+	}
+	require.NoError(t, site.SetGridPeakBaseline(1000))
+	t.Cleanup(func() { _ = settings.Delete(keys.GridPeakBaseline) })
+
+	site.updateGridPeak()
+	assert.InDelta(t, 4000, site.GetGridPeakTarget(), 1e-6, "without a circuit meter the grid meter")
+
+	site.peakCircuit().collector = meter
+	site.updateGridPeak()
+	assert.InDelta(t, 6000, site.GetGridPeakTarget(), 1e-6, "with one the circuit meter")
+}
