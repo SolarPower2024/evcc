@@ -509,7 +509,9 @@ starts a fresh recording, also after a restart (`gridPeakMeter`). evcc's monthly
 peak (evcc PR 35251, taken in ahead of its release as one commit, inert until a
 limit is set) reads it: a hook in `updateGridPeak` (`core/site_gridpeak.go`) takes
 the collector from `site.gridPeakCollector()` (the circuit meter's, else the grid
-meter's) instead of the grid meter's (`TestGridPeakReadsCircuitMeter`).
+meter's) instead of the grid meter's (`TestGridPeakReadsCircuitMeter`). The
+priorities read a circuit's `EffectiveMaxPower`, so they see that limit and the
+HEMS limit as well (`TestPrioritiesSeeTheGridPeakTarget`).
 
 A counter coarser than 0.01 kWh or updating less often than every 30 s delays the
 cut by the counter lag; the value from the window end then only counts in the

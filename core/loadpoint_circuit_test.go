@@ -36,7 +36,7 @@ func TestSetLimitCircuitKeepsMinCurrent(t *testing.T) {
 			}).AnyTimes()
 			// custom: what the priorities of core/lm ask the circuit
 			circuit.EXPECT().GetParent().Return(nil).AnyTimes()
-			circuit.EXPECT().GetMaxPower().Return(0.0).AnyTimes()
+			circuit.EXPECT().EffectiveMaxPower().Return(0.0).AnyTimes()
 			circuit.EXPECT().GetMaxCurrent().Return(0.0).AnyTimes()
 			circuit.EXPECT().GetChargePower().Return(0.0).AnyTimes()
 			circuit.EXPECT().GetMaxPhaseCurrent().Return(0.0).AnyTimes()

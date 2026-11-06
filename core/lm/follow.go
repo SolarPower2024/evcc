@@ -49,7 +49,7 @@ func followTolerance(allowed float64) float64 {
 // overloaded reports whether a limited level of c's parent chain is above its limit
 func overloaded(c api.Circuit) bool {
 	for ; c != nil; c = c.GetParent() {
-		if m := c.GetMaxPower(); m > 0 && c.GetChargePower() > m {
+		if m := c.EffectiveMaxPower(); m > 0 && c.GetChargePower() > m {
 			return true
 		}
 		if m := c.GetMaxCurrent(); m > 0 && c.GetMaxPhaseCurrent() > m {
