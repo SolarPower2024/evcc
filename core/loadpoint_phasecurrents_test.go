@@ -476,3 +476,27 @@ func TestPreparePublishesPhaseSwitch(t *testing.T) {
 	assert.Equal(t, 5*time.Minute, got[keys.PhaseScale3pDelay])
 	assert.Equal(t, 4*time.Minute, got[keys.PhaseScale1pDelay])
 }
+
+// evcc's start on the phases it switches to decides on the limits of those phases
+func TestEnablePhaseCurrents(t *testing.T) {
+	lp := phaseCurrentsLoadpoint(t, 1, 6, 20)
+	minCurrent, maxCurrent := lp.enablePhaseCurrents(6, 20, 3)
+	assert.Equal(t, 8.0, minCurrent, "3p needs the 3p minimum")
+	assert.Equal(t, 20.0, maxCurrent, "1p ends at the 1p maximum")
+
+	lp = phaseCurrentsLoadpoint(t, 1, 0, 0)
+	minCurrent, maxCurrent = lp.enablePhaseCurrents(7, 15, 3)
+	assert.Equal(t, 7.0, minCurrent, "without 1p values as evcc")
+	assert.Equal(t, 15.0, maxCurrent, "without 1p values as evcc")
+}
+
+// a disabled loadpoint starts on 1p at the 1p minimum and takes nothing off the site power
+func TestProjectPhaseSwitch1pDisabled(t *testing.T) {
+	lp := phaseCurrentsLoadpoint(t, 3, 6, 20)
+	lp.enabled = false
+
+	power, phases, minCurrent := lp.projectPhaseSwitch1p(1000, 8)
+	assert.Equal(t, 1000.0, power)
+	assert.Equal(t, 1, phases)
+	assert.Equal(t, 6.0, minCurrent)
+}

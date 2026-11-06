@@ -171,6 +171,9 @@ func (lp *Loadpoint) SetCurrents1p(minCurrent, maxCurrent float64) error {
 // pending scale down to 1p the loadpoint runs at the 1p minimum, which is returned too
 func (lp *Loadpoint) projectPhaseSwitch1p(sitePower, minCurrent float64) (float64, int, float64) {
 	sitePower, phases := lp.projectPhaseSwitch(sitePower, minCurrent)
+	if !lp.enabled && phases == 1 {
+		return sitePower, phases, lp.min1pCurrentOr(minCurrent) // nothing draws yet, it starts at the 1p minimum
+	}
 	if lp.hasPhaseSwitching() && !lp.phaseTimer.IsZero() {
 		if min1p := lp.effectiveMinCurrentFor(1); min1p != minCurrent {
 			sitePower -= grid.Voltage * (minCurrent - min1p)
@@ -178,6 +181,16 @@ func (lp *Loadpoint) projectPhaseSwitch1p(sitePower, minCurrent float64) (float6
 		}
 	}
 	return sitePower, phases, minCurrent
+}
+
+// enablePhaseCurrents returns the limits evcc's pvEnablePhases decides on: 3p needs
+// the 3p minimum, what 1p can take ends at the 1p maximum. Without 1p limits the
+// given ones, as upstream.
+func (lp *Loadpoint) enablePhaseCurrents(minCurrent, maxCurrent float64, maxPhases int) (float64, float64) {
+	if lp.minCurrent1p == 0 && lp.maxCurrent1p == 0 {
+		return minCurrent, maxCurrent
+	}
+	return lp.effectiveMinCurrentFor(maxPhases), lp.effectiveMaxCurrentFor(1)
 }
 
 // phaseScaleDelay1p is the delay before scaling down to 1p. When 1p is not

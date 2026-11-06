@@ -276,7 +276,7 @@ func (p lmPlan) floor(req *optimizer.OptimizationInput, home int, res *optimizer
 func lmSolve(ctx context.Context, client *optimizer.ClientWithResponses, req optimizer.OptimizationInput) (*optimizer.OptimizationResult, error) {
 	resp, err := client.PostOptimizeChargeScheduleWithResponse(ctx, req, func(_ context.Context, r *http.Request) error {
 		if sponsor.IsAuthorizedForApi() {
-			r.Header.Set("Authorization", "Bearer "+sponsor.Token)
+			r.Header.Set("Authorization", "Bearer "+sponsor.Token())
 		}
 		return nil
 	})
