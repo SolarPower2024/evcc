@@ -269,7 +269,7 @@ func headroom(c api.Circuit) (float64, float64) {
 	power, current := math.Inf(1), math.Inf(1)
 
 	for ; c != nil; c = c.GetParent() {
-		if m := c.GetMaxPower(); m > 0 {
+		if m := c.EffectiveMaxPower(); m > 0 {
 			power = min(power, m-c.GetChargePower())
 		}
 		if m := c.GetMaxCurrent(); m > 0 {
@@ -293,7 +293,7 @@ func (m *Manager) relief(entries []entry, c api.Circuit, prio int, self Load, se
 	for level := c; level != nil; level = level.GetParent() {
 		lowerPower, lowerCurrent := m.below(entries, level, prio, self, selfPower, selfCurrent)
 
-		if limit := level.GetMaxPower(); limit > 0 {
+		if limit := level.EffectiveMaxPower(); limit > 0 {
 			power = min(power, limit-level.GetChargePower()-freePower+lowerPower)
 		}
 		if limit := level.GetMaxCurrent(); limit > 0 {

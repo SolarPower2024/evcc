@@ -97,7 +97,9 @@ type Site struct {
 	batteryGridDischarge      bool     // allow battery discharge to grid (experimental)
 
 	// grid settings
-	gridExportLimit float64 // static grid export power limit in W, 0 = disabled
+	gridExportLimit  float64 // static grid export power limit in W, 0 = disabled
+	gridPeakBaseline float64 // grid import peak target floor in W, 0 = disabled
+	gridPeakTarget   float64 // grid import target from the month's peak in W, 0 = none
 
 	// forecast settings
 	solarAdjusted bool // adjust solar forecast to real production data
@@ -273,6 +275,7 @@ func (site *Site) Boot(log *util.Logger, loadpoints []*Loadpoint, tariffs *tarif
 	// circuit
 	if c := circuit.Root(); c != nil {
 		site.circuit = c
+		c.SetPeakLimiter(gridPeakLimiter{site})
 	}
 
 	// grid meter
@@ -502,6 +505,11 @@ func (site *Site) restoreSettings() error {
 	}
 	if v, err := settings.Float(keys.GridExportLimit); err == nil {
 		if err := site.SetGridExportLimit(v); err != nil {
+			return err
+		}
+	}
+	if v, err := settings.Float(keys.GridPeakBaseline); err == nil {
+		if err := site.SetGridPeakBaseline(v); err != nil {
 			return err
 		}
 	}
@@ -1381,6 +1389,8 @@ func (site *Site) update(lp updater) {
 		site.updateCustom(state) // custom: see core/site_lm.go
 	}
 
+	site.updateGridPeak()
+
 	// smart grid charging
 	rate := site.currentRate(consumption)
 
@@ -1504,6 +1514,7 @@ func (site *Site) prepare() {
 	site.publish(keys.SolarAdjusted, site.solarAdjusted)
 	site.publish(keys.ResidualPower, site.GetResidualPower())
 	site.publish(keys.GridExportLimit, site.GetGridExportLimit())
+	site.publish(keys.GridPeakBaseline, site.GetGridPeakBaseline())
 	site.publish(keys.ProfilePercentile, site.GetProfilePercentile())
 	site.publish(keys.SmartCostAvailable, site.isDynamicTariff(api.TariffUsagePlanner))
 	site.publish(keys.SmartFeedInPriorityAvailable, site.isDynamicTariff(api.TariffUsageFeedIn))

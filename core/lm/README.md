@@ -505,12 +505,13 @@ until it works again (`TestPeakEnergyReadLoggedOnce`).
 The circuit meter's counter is also recorded per 15 minute slot by the collector
 `grid-peak` of its own group `gridpeak`, which is in no balance, flow or
 group of the energy page (`TestGridPeakInNoBalance`); another circuit meter
-starts a fresh recording, also after a restart (`gridPeakMeter`). It is the
-preparation for evcc's monthly peak (evcc PR 35251): once an update brings it,
-a hook in `updateGridPeak` (`core/site_gridpeak.go`) takes the collector from
-`site.gridPeakCollector()` (the circuit meter's, else the grid meter's) instead
-of the grid meter's. That hook is pending (listed in `watch.json`); until then
-the circuit meter only feeds the window.
+starts a fresh recording, also after a restart (`gridPeakMeter`). evcc's monthly
+peak (evcc PR 35251, taken in ahead of its release as one commit, inert until a
+limit is set) reads it: a hook in `updateGridPeak` (`core/site_gridpeak.go`) takes
+the collector from `site.gridPeakCollector()` (the circuit meter's, else the grid
+meter's) instead of the grid meter's (`TestGridPeakReadsCircuitMeter`). The
+priorities read a circuit's `EffectiveMaxPower`, so they see that limit and the
+HEMS limit as well (`TestPrioritiesSeeTheGridPeakTarget`).
 
 A counter coarser than 0.01 kWh or updating less often than every 30 s delays the
 cut by the counter lag; the value from the window end then only counts in the
@@ -1280,6 +1281,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site_battery.go` | `lmGateBatteryMode` in `updateBatteryMode` right after evcc decided the mode, before its §14a check (optimizer automatic mode; returns the mode unchanged without it) |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
+| `core/site_gridpeak.go` | `updateGridPeak` reads the collector through `gridPeakCollector` |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerResult` after the solve, `lmForecastLowest` for the forecast |
 | `core/site/api.go` | embeds `CustomAPI` |
 | `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`, evcc's rule that a charging loadpoint keeps its minimum on a full circuit asks `keepsMin` (with the priorities on top, what a higher priority waits for is still shed); three `lp.lmm().Peek*` probes; `pvEnablePhases` (the phases a disabled charger starts on) decides on `enablePhaseCurrents`, `pvMaxCurrent` then takes the limits of those phases; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` (in front of the disable branch, behind the always-charge/battery return) keeps a heater in stages on its running stages until the disable delay has passed, the phase timers take `phaseScaleDelay` (scaling down: `phaseScaleDelay1p`, the disable delay when 1p is not sustainable and evcc disables instead), `batterySupported` projects a pending 1p switch with `projectPhaseSwitch1p`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |

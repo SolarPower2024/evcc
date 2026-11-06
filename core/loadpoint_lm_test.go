@@ -728,3 +728,33 @@ func TestKeepsMinWithPriorities(t *testing.T) {
 		assert.False(t, c.keepsMin(6, minPower), "held off")
 	})
 }
+
+// lmFixedLimit is a fixed consumption limit of a circuit
+type lmFixedLimit float64
+
+func (l lmFixedLimit) MaxConsumptionPower() *float64 {
+	v := float64(l)
+	return &v
+}
+
+// TestPrioritiesSeeTheGridPeakTarget: over evcc's limit on a circuit without a
+// max power of its own the lower load goes first, the higher one keeps its power
+func TestPrioritiesSeeTheGridPeakTarget(t *testing.T) {
+	const carPower = 4140 // 6 A on three phases
+
+	s := newIdleSetup(t, 0, 1000)
+	s.circuit.SetPeakLimiter(lmFixedLimit(6000))
+
+	s.high.status = api.StatusC
+	s.high.offeredCurrent = 6
+	s.high.chargePower = carPower
+
+	s.low.charger = &lmSwitch{rated: 2000}
+	s.low.chargePower = 2000
+
+	s.meter.power = s.base + s.high.chargePower + s.low.chargePower
+	require.NoError(t, s.circuit.Update(nil))
+
+	s.low.lmLimit(16)
+	assert.GreaterOrEqual(t, s.high.lmCircuit().ValidatePower(carPower, carPower), float64(carPower))
+}
