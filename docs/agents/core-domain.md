@@ -155,14 +155,14 @@ Device key (`batteryDetail.key()`): `battery:<name>` or `loadpoint:<id>`; empty 
 
 Runs after each solve, and again every cycle via `reapplySuggestions` when the active slot changes (re-derived from the cached solve, no new request). Expiry is only evaluated on that slot change: if the horizon is passed or no solve completed for `2 * tariff.SlotDuration`, `clearSuggestions()` drops suggestions, battery forecast and notification state. Within an unchanged slot the cached advice stays active regardless of age. A failed solve keeps the previous advice so controlled devices are not released for one cycle.
 
-1. `slot = schedule.activeSlot(now)`, `slotHours` = its duration. Grid import/export and all home-battery discharge for that slot are summed.
-2. `currentSlotSuggestion(detail, req, res, slot, gridImport, gridExport, slotHours)` per battery. Because the LP is linear, the slot result sits at an operating-range extreme and maps cleanly onto discrete modes. All thresholds use `suggestionThreshold = 50 W` to ignore solver noise.
+1. `slot = schedule.activeSlot(now)`, `slotHours` = its duration. Grid import/export and all home-battery charge and discharge for that slot are summed. The PV surplus over home demand (`ft - gt`) is shared by the home batteries in proportion to their charge (`pvShare`).
+2. `currentSlotSuggestion(detail, req, res, ts, slot, gridImport, gridExport, slotHours, pvShare)` per battery. Because the LP is linear, the slot result sits at an operating-range extreme and maps cleanly onto discrete modes. All thresholds use `suggestionThreshold = 50 W` to ignore solver noise.
 
 **Home battery** (`Action` is an `api.BatteryMode` string):
 
 | Condition (slot values, W)                         | Action       | Meaning                             |
 | -------------------------------------------------- | ------------ | ----------------------------------- |
-| charge > thr and grid importing                    | `charge`     | grid charging                       |
+| charge > pvShare + thr and grid importing          | `charge`     | grid charging                       |
 | idle and grid importing and soc > `SMin`           | `hold`       | discharge deliberately withheld     |
 | idle and grid exporting and soc < `SMax`           | `holdcharge` | surplus exported instead of charged |
 | discharge > thr and grid exporting                 | `discharge`  | battery-to-grid                     |
@@ -183,7 +183,7 @@ Gated by `OptimizerAutomatic()`: `off` (advisory only), battery-only, or `full` 
 **Home battery** (`requiredBatteryMode`, `core/site_battery.go`), in priority order:
 
 - external mode (API) wins.
-- `Automatic()` and `unmodelledCharging(rate)`: a loadpoint the optimizer does not control is fast charging or on the smart cost limit. The suggestion did not account for that load, so force `hold`.
+- `Automatic()` and `unmodelledCharging(rate)`: a loadpoint the optimizer does not control is fast charging or on the smart cost limit, and the request does not contain that load: heaters, vehicles without capacity or session energy limit, plan or min soc charging. A vehicle the request models as storage on mode now or the smart cost limit is fixed demand (`fixedDemandModelled`) and does not count. The suggestion did not account for that load, so force `hold`, unless the suggestion is `charge`: grid charging cannot drain the battery into that load.
 - `Automatic()`: `batterySuggestionMode()` takes the first controllable battery's suggestion (`api.BatteryModeString(s.Action)`); an unknown action releases to `normal`; no suggestion releases to `normal` only if evcc had modified the mode (`batteryModeModified`), otherwise the mode is left untouched. This replaces the grid charge limit and discharge control. TODO: per-battery modes.
 - not automatic: legacy grid charge / discharge control / feed-in discharge rules.
 
@@ -192,8 +192,9 @@ Gated by `OptimizerAutomatic()`: `off` (advisory only), battery-only, or `full` 
 - `ModeSmart` strategy switch calls `optimizerCharging(s)` and skips the smart cost / feed-in price limits.
   - `surplusRegime` (charge below max power, no grid flow, no battery discharge): not handled, the PV loop tracks measured surplus instead of the forecast.
   - `stop` without always-charge: not handled, PV loop may still enable on measured surplus.
-  - `charge` at full power or above what the active phases deliver: `fastCharging()`.
-  - `charge` at a limited setpoint: `setLimit(PowerToCurrent(s.Charge))`, or `minCharging()` below min current.
+  - `charge` at full power, or above what the active phases deliver and at least 3p min power: `fastCharging()`.
+  - `charge` at a limited setpoint: `setLimit(PowerToCurrent(s.Charge))` capped at max current, or `minCharging()` below min current.
+    Inside the 1p/3p gap (above 1p max, below 3p min power) this charges on 1p below the suggestion, never above it.
   - `stop` with always-charge: `minCharging()`.
 - Planner is reduced to a backstop: `plannerActive = planDeadlineCritical()`.
 - Session `LimitEnergy` / `LimitSoc` do not stop charging while the optimizer is driving a plan goal above them.

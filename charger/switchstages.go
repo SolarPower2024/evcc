@@ -39,6 +39,7 @@ import (
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/plugin"
 	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/grid"
 )
 
 func init() {
@@ -318,7 +319,7 @@ func (c *SwitchStages) phases() int {
 // runs at least one. The tolerance only covers floating point error from
 // converting power to current and back, a partial stage is never rounded up.
 func (c *SwitchStages) target(phases int) int {
-	n := int(math.Floor(voltage*c.current*float64(phases)/c.stagePower + 1e-6))
+	n := int(math.Floor(grid.Voltage*c.current*float64(phases)/c.stagePower + 1e-6))
 	return min(max(n, 1), len(c.stages))
 }
 
@@ -423,7 +424,7 @@ func (c *SwitchStages) StagePhaseCurrent() (float64, bool) {
 		return 0, false
 	}
 
-	return c.stagePower / voltage, true
+	return c.stagePower / grid.Voltage, true
 }
 
 // RunningCurrent returns the current the stages switched on by the last write
@@ -433,7 +434,7 @@ func (c *SwitchStages) RunningCurrent(phases int) float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return float64(c.level) * c.stagePower / (voltage * float64(phases))
+	return float64(c.level) * c.stagePower / (grid.Voltage * float64(phases))
 }
 
 // Status implements the api.Charger interface
@@ -556,7 +557,7 @@ func (c *SwitchStages) adopt(phases int) (bool, error) {
 	}
 
 	c.enabled, c.level = true, n
-	c.current = float64(n) * c.stagePower / (voltage * float64(phases))
+	c.current = float64(n) * c.stagePower / (grid.Voltage * float64(phases))
 
 	return true, nil
 }

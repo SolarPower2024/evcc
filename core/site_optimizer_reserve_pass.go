@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/tariff"
-	"github.com/evcc-io/evcc/util/sponsor"
 	optimizer "github.com/evcc-io/optimizer/client"
 )
 
@@ -275,9 +274,7 @@ func (p lmPlan) floor(req *optimizer.OptimizationInput, home int, res *optimizer
 // lmSolve runs a further pass
 func lmSolve(ctx context.Context, client *optimizer.ClientWithResponses, req optimizer.OptimizationInput) (*optimizer.OptimizationResult, error) {
 	resp, err := client.PostOptimizeChargeScheduleWithResponse(ctx, req, func(_ context.Context, r *http.Request) error {
-		if sponsor.IsAuthorizedForApi() {
-			r.Header.Set("Authorization", "Bearer "+sponsor.Token)
-		}
+		optimizerAuth(r)
 		return nil
 	})
 	if err != nil {
@@ -448,31 +445,6 @@ func passErr(err error, res *optimizer.OptimizationResult) any {
 		return "no result"
 	default:
 		return "unusable result: " + string(res.Status)
-	}
-}
-
-// lmOptimizeLater remembers a forced run requested while one is running: a
-// changed setting or grid charging starting then waits for the next slot
-// otherwise, which with several passes per run happens often
-func (site *Site) lmOptimizeLater(force bool) {
-	if !force {
-		return
-	}
-
-	site.lms().optimizeAgain.Store(true)
-
-	// the running one may have finished and checked the flag before it was set:
-	// then nobody else picks it up
-	if site.optimizerMu.TryLock() {
-		site.optimizerMu.Unlock()
-		site.lmOptimizeAgain()
-	}
-}
-
-// lmOptimizeAgain runs a remembered forced run once the running one is done
-func (site *Site) lmOptimizeAgain() {
-	if site.lms().optimizeAgain.Swap(false) {
-		go site.optimizerUpdateAsync(true)
 	}
 }
 

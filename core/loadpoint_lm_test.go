@@ -671,3 +671,60 @@ func TestLoadpointBelowItsOfferDoesNotShedLowerLoad(t *testing.T) {
 		})
 	}
 }
+
+// TestKeepsMinWithPriorities: evcc keeps a charging loadpoint's minimum on a full
+// circuit, but what a higher priority waits for is not there to keep
+func TestKeepsMinWithPriorities(t *testing.T) {
+	const minPower = 4140 // 6 A on three phases
+
+	setup := func(t *testing.T) *lmIdleSetup {
+		s := newIdleSetup(t, 11000, 11000-minPower)
+		s.low.offeredCurrent = 6
+		s.low.chargePower = minPower
+		s.meter.power = s.base + s.low.chargePower
+		require.NoError(t, s.circuit.Update(nil))
+		return s
+	}
+
+	// as in setLimit: the load has asked the circuit before
+	asked := func(s *lmIdleSetup) *lmCircuit {
+		c := s.low.lmCircuit()
+		c.ValidateCurrent(s.low.actualMaxChargeCurrent(), 16)
+		c.ValidatePower(s.low.chargePower, grid.CurrentToPower(16, 3))
+		return c
+	}
+
+	t.Run("nobody waits", func(t *testing.T) {
+		s := setup(t)
+		assert.True(t, asked(s).keepsMin(6, minPower))
+	})
+
+	t.Run("higher priority waits", func(t *testing.T) {
+		s := setup(t)
+		asked(s)
+		s.high.lmLimit(16)
+		assert.False(t, asked(s).keepsMin(6, minPower))
+	})
+
+	t.Run("over the limit", func(t *testing.T) {
+		s := setup(t)
+		s.meter.power = s.base + s.low.chargePower + 500
+		require.NoError(t, s.circuit.Update(nil))
+		assert.False(t, asked(s).keepsMin(6, minPower))
+	})
+
+	t.Run("all or nothing", func(t *testing.T) {
+		s := setup(t)
+		c := s.low.lmCircuit()
+		c.switchDevice = true
+		assert.False(t, c.keepsMin(6, minPower), "switch device")
+
+		c = s.low.lmCircuit()
+		c.stageCurrent = 13
+		assert.False(t, c.keepsMin(6, minPower), "heater in stages")
+
+		c = s.low.lmCircuit()
+		c.guarded = true
+		assert.False(t, c.keepsMin(6, minPower), "held off")
+	})
+}

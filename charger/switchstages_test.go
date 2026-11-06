@@ -13,6 +13,7 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/util"
+	"github.com/evcc-io/evcc/util/grid"
 	jww "github.com/spf13/jwalterweatherman"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,7 +81,7 @@ func stagesCharger(t *testing.T, delay time.Duration) (*SwitchStages, *fakeSwitc
 
 // amps returns the per-phase current evcc offers for a power on 3 phases
 func amps(power float64) float64 {
-	return power / (voltage * 3)
+	return power / (grid.Voltage * 3)
 }
 
 func TestSwitchStagesLimits(t *testing.T) {
@@ -709,7 +710,7 @@ func TestSwitchStagesRunningCurrent(t *testing.T) {
 	require.NoError(t, c.MaxCurrentMillis(amps(6000)))
 	require.NoError(t, c.Enable(true))
 	assert.InDelta(t, amps(6000), c.RunningCurrent(3), 1e-9)
-	assert.InDelta(t, 6000/voltage, c.RunningCurrent(1), 1e-9)
+	assert.InDelta(t, 6000/grid.Voltage, c.RunningCurrent(1), 1e-9)
 }
 
 func TestSwitchStagesPhaseCurrents(t *testing.T) {
@@ -719,7 +720,7 @@ func TestSwitchStagesPhaseCurrents(t *testing.T) {
 
 	stage, ok := c.StagePhaseCurrent()
 	require.True(t, ok)
-	assert.InDelta(t, 3000/voltage, stage, 1e-9)
+	assert.InDelta(t, 3000/grid.Voltage, stage, 1e-9)
 
 	i1, i2, i3, err := c.Currents()
 	require.NoError(t, err)

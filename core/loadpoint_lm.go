@@ -211,6 +211,21 @@ func (c *lmCircuit) ValidatePower(old, new float64) float64 {
 	return new
 }
 
+// keepsMin is evcc's check whether a charging loadpoint measuring below its offer
+// keeps its minimum on a full circuit, with the priorities on top: what is
+// reserved for a higher priority is not there to keep, so such a load is still
+// shed. A load held off, a switch device and a heater in stages were answered
+// with all or nothing already.
+func (c *lmCircuit) keepsMin(minCurrent, minPower float64) bool {
+	if c.guarded || c.switchDevice || c.stageCurrent > 0 {
+		return false
+	}
+
+	m := c.lp.lmm()
+	return m.PeekCurrent(c.lp, c.Circuit, minCurrent, minCurrent) >= minCurrent &&
+		m.PeekPower(c.lp, c.Circuit, minPower, minPower) >= minPower
+}
+
 // done records the result of setLimit's circuit check for the overview and
 // starts the shed guard when a running load was switched off
 func (c *lmCircuit) done(current, limited float64) {

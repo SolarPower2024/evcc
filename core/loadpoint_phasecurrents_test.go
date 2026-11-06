@@ -476,3 +476,58 @@ func TestPreparePublishesPhaseSwitch(t *testing.T) {
 	assert.Equal(t, 5*time.Minute, got[keys.PhaseScale3pDelay])
 	assert.Equal(t, 4*time.Minute, got[keys.PhaseScale1pDelay])
 }
+
+// evcc's start on the phases it switches to decides on the limits of those phases
+func TestEnablePhaseCurrents(t *testing.T) {
+	lp := phaseCurrentsLoadpoint(t, 1, 6, 20)
+	minCurrent, maxCurrent := lp.enablePhaseCurrents(6, 20, 3)
+	assert.Equal(t, 8.0, minCurrent, "3p needs the 3p minimum")
+	assert.Equal(t, 20.0, maxCurrent, "1p ends at the 1p maximum")
+
+	lp = phaseCurrentsLoadpoint(t, 1, 0, 0)
+	minCurrent, maxCurrent = lp.enablePhaseCurrents(7, 15, 3)
+	assert.Equal(t, 7.0, minCurrent, "without 1p values as evcc")
+	assert.Equal(t, 15.0, maxCurrent, "without 1p values as evcc")
+}
+
+// a disabled loadpoint starts on 1p at the 1p minimum and takes nothing off the site power
+func TestProjectPhaseSwitch1pDisabled(t *testing.T) {
+	lp := phaseCurrentsLoadpoint(t, 3, 6, 20)
+	lp.enabled = false
+
+	power, phases, minCurrent := lp.projectPhaseSwitch1p(1000, 8)
+	assert.Equal(t, 1000.0, power)
+	assert.Equal(t, 1, phases)
+	assert.Equal(t, 6.0, minCurrent)
+}
+
+// a 1p maximum below the 3p minimum does not make a start on 3p impossible
+func TestPvEnablePhases1pMaxBelow3pMin(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	charger := &struct {
+		*api.MockCharger
+		*api.MockPhaseSwitcher
+	}{
+		api.NewMockCharger(ctrl),
+		api.NewMockPhaseSwitcher(ctrl),
+	}
+
+	lp := &Loadpoint{
+		log:          util.NewLogger("foo"),
+		clock:        clock.NewMock(),
+		charger:      charger,
+		site:         &mockSite{},
+		wakeUpTimer:  NewTimer(),
+		minCurrent:   10,
+		maxCurrent:   16,
+		minCurrent1p: 6,
+		maxCurrent1p: 8,
+		phases:       3,
+		solarShare:   1,
+		status:       api.StatusB,
+	}
+
+	assert.Zero(t, lp.pvEnablePhases(-grid.CurrentToPower(10, 3), 0, 10, 16), "stays on 3p")
+	assert.Equal(t, 1, lp.pvEnablePhases(-grid.CurrentToPower(6, 1), 0, 10, 16), "too little for 3p")
+}

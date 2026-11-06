@@ -20,7 +20,6 @@ import (
 	"math"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/evcc-io/evcc/api"
@@ -89,9 +88,6 @@ type lmState struct {
 	// the home battery's inputs for the further optimizer passes, see
 	// site_optimizer_reserve_pass.go
 	plan *lmPlan
-
-	// a forced optimizer run arrived while one was running
-	optimizeAgain atomic.Bool
 
 	// battery identification, see site_battery_ident.go
 	identUse bool
