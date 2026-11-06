@@ -2123,7 +2123,7 @@ func (lp *Loadpoint) pvEnablePhases(sitePower, batteryPower, minCurrent, maxCurr
 	availablePower := lp.chargePower - sitePower
 	_, enable := lp.pvEnableDecision(0, minCurrent, sitePower, batteryPower, maxPhases)
 	startMax := enable && grid.PowerToCurrent(availablePower, maxPhases) >= minCurrent &&
-		maxCurrent >= minCurrent && lp.circuitAllowsPhases(maxPhases, minCurrent)
+		maxCurrent >= lp.min1pCurrentOr(minCurrent) && lp.circuitAllowsPhases(maxPhases, minCurrent) // custom: maxCurrent is the 1p limit, see core/loadpoint_phasecurrents.go
 
 	switch phases := lp.GetPhases(); {
 	case phases == 1 && startMax && grid.PowerToCurrent(availablePower, 1) > maxCurrent:

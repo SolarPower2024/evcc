@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/tariff"
-	"github.com/evcc-io/evcc/util/sponsor"
 	optimizer "github.com/evcc-io/optimizer/client"
 )
 
@@ -275,9 +274,7 @@ func (p lmPlan) floor(req *optimizer.OptimizationInput, home int, res *optimizer
 // lmSolve runs a further pass
 func lmSolve(ctx context.Context, client *optimizer.ClientWithResponses, req optimizer.OptimizationInput) (*optimizer.OptimizationResult, error) {
 	resp, err := client.PostOptimizeChargeScheduleWithResponse(ctx, req, func(_ context.Context, r *http.Request) error {
-		if sponsor.IsAuthorizedForApi() {
-			r.Header.Set("Authorization", "Bearer "+sponsor.Token())
-		}
+		optimizerAuth(r)
 		return nil
 	})
 	if err != nil {

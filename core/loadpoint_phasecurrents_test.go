@@ -500,3 +500,34 @@ func TestProjectPhaseSwitch1pDisabled(t *testing.T) {
 	assert.Equal(t, 1, phases)
 	assert.Equal(t, 6.0, minCurrent)
 }
+
+// a 1p maximum below the 3p minimum does not make a start on 3p impossible
+func TestPvEnablePhases1pMaxBelow3pMin(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	charger := &struct {
+		*api.MockCharger
+		*api.MockPhaseSwitcher
+	}{
+		api.NewMockCharger(ctrl),
+		api.NewMockPhaseSwitcher(ctrl),
+	}
+
+	lp := &Loadpoint{
+		log:          util.NewLogger("foo"),
+		clock:        clock.NewMock(),
+		charger:      charger,
+		site:         &mockSite{},
+		wakeUpTimer:  NewTimer(),
+		minCurrent:   10,
+		maxCurrent:   16,
+		minCurrent1p: 6,
+		maxCurrent1p: 8,
+		phases:       3,
+		solarShare:   1,
+		status:       api.StatusB,
+	}
+
+	assert.Zero(t, lp.pvEnablePhases(-grid.CurrentToPower(10, 3), 0, 10, 16), "stays on 3p")
+	assert.Equal(t, 1, lp.pvEnablePhases(-grid.CurrentToPower(6, 1), 0, 10, 16), "too little for 3p")
+}
