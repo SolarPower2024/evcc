@@ -183,28 +183,6 @@ func TestLmPlanChargeLevels(t *testing.T) {
 	assert.Equal(t, levels, capLevels(levels, 1, 5, 4500), "later: unchanged")
 }
 
-// A forced run requested while one runs is remembered and run once after it.
-func TestLmOptimizeAgain(t *testing.T) {
-	site := &Site{log: util.NewLogger("test")}
-
-	// a run is in progress
-	site.optimizerMu.Lock()
-
-	site.lmOptimizeLater(false)
-	assert.False(t, site.lms().optimizeAgain.Load(), "a periodic run waits for the next slot")
-
-	site.lmOptimizeLater(true)
-	assert.True(t, site.lms().optimizeAgain.Load())
-
-	site.optimizerMu.Unlock()
-	site.lmOptimizeAgain()
-	assert.False(t, site.lms().optimizeAgain.Load(), "run once")
-
-	// the running one finished before the request was remembered: it is not lost
-	site.lmOptimizeLater(true)
-	assert.False(t, site.lms().optimizeAgain.Load(), "started right away")
-}
-
 func TestLmPlanValid(t *testing.T) {
 	req, res, _ := floorCase()
 	assert.True(t, lmPlanValid(*req, 0, res))

@@ -451,31 +451,6 @@ func passErr(err error, res *optimizer.OptimizationResult) any {
 	}
 }
 
-// lmOptimizeLater remembers a forced run requested while one is running: a
-// changed setting or grid charging starting then waits for the next slot
-// otherwise, which with several passes per run happens often
-func (site *Site) lmOptimizeLater(force bool) {
-	if !force {
-		return
-	}
-
-	site.lms().optimizeAgain.Store(true)
-
-	// the running one may have finished and checked the flag before it was set:
-	// then nobody else picks it up
-	if site.optimizerMu.TryLock() {
-		site.optimizerMu.Unlock()
-		site.lmOptimizeAgain()
-	}
-}
-
-// lmOptimizeAgain runs a remembered forced run once the running one is done
-func (site *Site) lmOptimizeAgain() {
-	if site.lms().optimizeAgain.Swap(false) {
-		go site.optimizerUpdateAsync(true)
-	}
-}
-
 // usableResult reports whether a result is a plan: optimal or feasible
 func usableResult(res *optimizer.OptimizationResult) bool {
 	return res != nil && (res.Status == optimizer.Optimal || res.Status == optimizer.Feasible)

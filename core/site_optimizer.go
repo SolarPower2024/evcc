@@ -505,10 +505,8 @@ func (site *Site) optimizerUpdateAsync(force bool) {
 	}
 
 	if !site.optimizerMu.TryLock() {
-		site.lmOptimizeLater(force) // custom: a forced run is not dropped, see core/site_optimizer_reserve_pass.go
 		return
 	}
-	defer site.lmOptimizeAgain() // custom: after unlocking, see core/site_optimizer_reserve_pass.go
 	defer site.optimizerUnlock()
 
 	// false if a run that started after the trigger already served it
