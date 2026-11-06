@@ -686,22 +686,31 @@ func TestKeepsMinWithPriorities(t *testing.T) {
 		return s
 	}
 
+	// as in setLimit: the load has asked the circuit before
+	asked := func(s *lmIdleSetup) *lmCircuit {
+		c := s.low.lmCircuit()
+		c.ValidateCurrent(s.low.actualMaxChargeCurrent(), 16)
+		c.ValidatePower(s.low.chargePower, grid.CurrentToPower(16, 3))
+		return c
+	}
+
 	t.Run("nobody waits", func(t *testing.T) {
 		s := setup(t)
-		assert.True(t, s.low.lmCircuit().keepsMin(6, minPower))
+		assert.True(t, asked(s).keepsMin(6, minPower))
 	})
 
 	t.Run("higher priority waits", func(t *testing.T) {
 		s := setup(t)
+		asked(s)
 		s.high.lmLimit(16)
-		assert.False(t, s.low.lmCircuit().keepsMin(6, minPower))
+		assert.False(t, asked(s).keepsMin(6, minPower))
 	})
 
 	t.Run("over the limit", func(t *testing.T) {
 		s := setup(t)
 		s.meter.power = s.base + s.low.chargePower + 500
 		require.NoError(t, s.circuit.Update(nil))
-		assert.False(t, s.low.lmCircuit().keepsMin(6, minPower))
+		assert.False(t, asked(s).keepsMin(6, minPower))
 	})
 
 	t.Run("all or nothing", func(t *testing.T) {

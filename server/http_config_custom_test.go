@@ -62,6 +62,7 @@ func (phaseSwitchLoadpoint) GetBatteryBoostLimit() int             { return 0 }
 func (phaseSwitchLoadpoint) GetSmartCostLimit() *float64           { return nil }
 func (phaseSwitchLoadpoint) GetSolarShare() float64                { return 0 }
 func (phaseSwitchLoadpoint) GetSmartFeedInPriorityLimit() *float64 { return nil }
+func (phaseSwitchLoadpoint) GetDemandPredictor() string            { return "" }
 
 // the config of a loadpoint carries its 1p limits and phase delays to the form
 func TestGetLoadpointDynamicConfigPhaseSwitch(t *testing.T) {

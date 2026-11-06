@@ -34,6 +34,12 @@ func TestSetLimitCircuitKeepsMinCurrent(t *testing.T) {
 			circuit.EXPECT().ValidatePower(gomock.Any(), gomock.Any()).DoAndReturn(func(_, new float64) float64 {
 				return new
 			}).AnyTimes()
+			// custom: what the priorities of core/lm ask the circuit
+			circuit.EXPECT().GetParent().Return(nil).AnyTimes()
+			circuit.EXPECT().GetMaxPower().Return(0.0).AnyTimes()
+			circuit.EXPECT().GetMaxCurrent().Return(0.0).AnyTimes()
+			circuit.EXPECT().GetChargePower().Return(0.0).AnyTimes()
+			circuit.EXPECT().GetMaxPhaseCurrent().Return(0.0).AnyTimes()
 
 			lp := &Loadpoint{
 				log:            util.NewLogger("foo"),
