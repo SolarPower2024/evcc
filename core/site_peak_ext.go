@@ -89,7 +89,7 @@ func (site *Site) applyOmniProtection() {
 	s.mu.Lock()
 	configured := site.batteryConfigured()
 	want := s.enabled && s.configured() && configured
-	keepAlive := !want && byd && s.protLimit != "" && s.limit > 0 && configured
+	keepAlive := !want && byd && s.protLimit != "" && configured
 	owned, raised, sw, limitEntity, socSet := s.protOwned, s.holdSoc > 0, s.protSwitch, s.protLimit, s.protSocSet
 	threshold := s.effectiveReserve()
 
