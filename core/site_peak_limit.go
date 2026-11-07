@@ -24,7 +24,8 @@ func peakLimitFor(baseline, monthPeak float64) float64 {
 	if baseline <= 0 {
 		return 0
 	}
-	return max(baseline, math.Floor(min(monthPeak, maxPeakLimit)/peakLimitRound)*peakLimitRound)
+	// a typo in the dialog must not drain the battery
+	return max(baseline, minPeakLimit, math.Floor(min(monthPeak, maxPeakLimit)/peakLimitRound)*peakLimitRound)
 }
 
 // updatePeakLimit takes evcc's limit and the month's peak, once per cycle and on

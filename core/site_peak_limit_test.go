@@ -25,6 +25,7 @@ func TestPeakLimitFor(t *testing.T) {
 	assert.Equal(t, maxPeakLimit, peakLimitFor(9000, 30000), "capped")
 	assert.Equal(t, 25000.0, peakLimitFor(25000, 30000), "a limit above the cap stays")
 	assert.Zero(t, peakLimitFor(0, 6320), "no limit, no peak shaving")
+	assert.Equal(t, minPeakLimit, peakLimitFor(1000, 0), "the battery's floor")
 }
 
 // The limit in evcc's dialog and the one set here are one: the battery takes
