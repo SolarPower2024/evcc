@@ -89,12 +89,7 @@ import { socSteps, MARSTEK_MIN_RESERVE } from "@/utils/socSteps";
 import { peakShavingSetUp } from "@/utils/peakShaving";
 import { optimizerAutomaticOn } from "@/utils/optimizerAutomatic";
 import { openModal } from "@/configModal";
-import {
-	isConfigured,
-	isLoggedIn,
-	openLoginModal,
-	updateAuthStatus,
-} from "../Auth/auth";
+import { isConfigured, isLoggedIn, openLoginModal, updateAuthStatus } from "../Auth/auth";
 import Card from "../Helper/Card.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
 
