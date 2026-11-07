@@ -141,6 +141,7 @@ func TestBydLimitWithoutLimit(t *testing.T) {
 	sc.site.lms().socChargeEnabled = false
 	require.NoError(t, sc.site.SetPeakShaving(false))
 	require.NoError(t, sc.site.SetGridPeakBaseline(0))
+	sc.site.updatePeakLimit()
 	ha.take()
 
 	ha.set(haProtLimit, "0")
