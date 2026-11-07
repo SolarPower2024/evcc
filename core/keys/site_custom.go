@@ -13,7 +13,7 @@ const (
 
 	// battery peak shaving
 	PeakShaving                     = "peakShaving"
-	PeakShavingLimit                = "peakShavingLimit"
+	PeakShavingLimit                = "peakShavingLimit" // published; the stored key is removed on start, see core/site_peak_limit.go
 	PeakShavingReserve              = "peakShavingReserve"
 	PeakShavingEntity               = "peakShavingEntity"       // removed: the discharge setpoint target of the old battery type BYD, only read to be deleted at start, see core/site_peak_byd.go
 	PeakShavingOwned                = "peakShavingOwned"        // evcc holds the battery: the manual control (marstek), not published
@@ -40,7 +40,7 @@ const (
 	PeakMonths                      = "peakMonths"                // monthly peak statistics
 	PeakShavingChargeEntity         = "peakShavingChargeEntity"   // grid charge power target
 	PeakShavingChargeSetpoint       = "peakShavingChargeSetpoint" // grid charge power written, 0 = not charging
-	PeakFollow                      = "peakFollow"                // follow the peak, see core/site_peak_follow.go
+	PeakFollow                      = "peakFollow"                // gone, removed on start, see core/site_peak_limit.go
 	PeakFollowBuffer                = "peakFollowBuffer"
 	PeakFollowBase                  = "peakFollowBase"
 	PeakFollowCircuit               = "peakFollowCircuit" // lm3/lm4, taken over into LmCircuit

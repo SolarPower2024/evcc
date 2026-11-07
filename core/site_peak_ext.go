@@ -39,6 +39,12 @@ var errHandBack = errors.New("could not hand the battery back, see the log")
 // configured reports whether peak shaving has what it needs to run: the three
 // entities of the external peak control. Called with mu held.
 func (s *peakState) configured() bool {
+	return s.entitiesSet() && s.limit > 0
+}
+
+// entitiesSet returns whether the entities of the controller are set: without them
+// peak shaving cannot be switched on, without a limit it just holds no reserve
+func (s *peakState) entitiesSet() bool {
 	return s.protSwitch != "" && s.protLimit != "" && s.protSocSet != nil
 }
 
@@ -63,7 +69,7 @@ func (site *Site) peakConfigured() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.configured()
+	return s.entitiesSet()
 }
 
 // applyOmniProtection brings the external peak control to what peak shaving
@@ -83,7 +89,7 @@ func (site *Site) applyOmniProtection() {
 	s.mu.Lock()
 	configured := site.batteryConfigured()
 	want := s.enabled && s.configured() && configured
-	keepAlive := !want && byd && s.protLimit != "" && configured
+	keepAlive := !want && byd && s.protLimit != "" && s.limit > 0 && configured
 	owned, raised, sw, limitEntity, socSet := s.protOwned, s.holdSoc > 0, s.protSwitch, s.protLimit, s.protSocSet
 	threshold := s.effectiveReserve()
 

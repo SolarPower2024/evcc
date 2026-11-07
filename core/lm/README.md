@@ -257,21 +257,20 @@ once it follows. See `core/lm/follow.go`, `core/site_lm_follow.go`.
 
 *Erweitert → Stromkreis Lastmanagement (Peak)* names the circuit whose power
 limit is the peak, beside one for the fuse or the agreed connection power.
-Chosen, only it is shown in the overview, lifted by the switch and raised by
-follow the peak; none = all circuits, nothing raised (`lmCircuit`).
+Chosen, only it is shown in the overview and lifted by the switch; none = all
+circuits (`lmCircuit`).
 
 *Mehr → Lastmanagement (Peak) → Lastmanagement* off lifts that circuit's power
 limit (without one, all circuits') at runtime, so loads and battery grid
 charging are no longer throttled for it. Fuse current limits, a HEMS limit
 (§14a) and peak shaving keep applying; circuits whose limit comes from a plugin
-are left alone. On restores the configured or followed limit. Survives a
+are left alone. On restores the configured limit. Survives a
 restart (`lmOff`). See `core/site_lm_switch.go`.
 
 *Erweitert → Grenze = Peak-Shaving-Grenze* (`circuitFromPeak`, default off, so
 nothing changes unconfigured): the chosen circuit's power limit is the peak
-limit from the battery tab while peak shaving is on, with follow the peak and
-also below the configured value. A change of the peak limit (setter, profile,
-follow, peak shaving on or off) is taken at once, otherwise with the next cycle;
+limit while peak shaving is on, also below the configured value. A change of the
+peak limit (setter, profile, the month's peak, peak shaving on or off) is taken at once, otherwise with the next cycle;
 after a restart it applies once the peak settings are back, before the first
 cycle. The `circuits` data shows a changed limit with the next cycle (setters do
 not publish it, they run beside the cycle that writes the circuit values). The
@@ -400,7 +399,7 @@ for both battery types (the type, then the switch, the limit and the soc thresho
 of the controller, one short help each; the type only sets placeholders and
 limits: soc steps, the 20 % floor of a Marstek, the hysteresis), below it, for a
 Marstek only, *Netzladen (nur Marstek)* with the manual control and the mode; then
-energy counter and follow the peak.
+the energy counter.
 
 evcc does not regulate the discharge itself. A controller in Home Assistant
 does, within seconds: Omnibattery for a Marstek, the integration evcc Peak
@@ -553,11 +552,15 @@ The window, the allowed power, the setpoint and the hysteresis are in
 `core/site_peakshaving.go` feeds it and handles settings, Home Assistant and the
 battery mode.
 
-**Follow the peak**: once the month has a peak above the limit, shaving below it
-saves nothing. Followed, the limit rises to the month's peak minus a buffer
-(0-5 kW, default 0.5 kW) and never below the limit set by hand; a new month
-starts there again. The load management circuit rises along. See
-`core/site_peak_follow.go`.
+**One limit**: the peak limit is evcc's grid import peak limit (`gridPeakBaseline`,
+*Externe Begrenzung → Statische Limits → Netzbezugsspitze*; the value on the battery
+card opens this dialog, which peak shaving keeps reachable without experimental
+and country), which also limits the loads. Once the month has a higher peak, shaving below it saves nothing, so the
+battery's limit (`peakShavingLimit`, no longer stored) is the higher of the two; a
+new month starts at the limit again. Without a limit there is no reserve. A limit
+stored before moves to evcc's on start if that has none and peak shaving is on
+(`peakShavingLimit`, `peakFollow`, `peakFollowBase`, `peakFollowBuffer` are removed
+from the database). See `core/site_peak_limit.go`.
 
 **Statistics** (*Mehr → Peak Shaving*): per month the highest quarter hour with
 and without the battery and how often it covered a peak; only quarter hours
@@ -1255,8 +1258,6 @@ Every fork feature follows these, so taking in a new evcc version stays cheap:
    A stored value its setter would refuse (out of range, start soc not below
    stop soc, a phase count of 2) is warned about once, deleted and the default
    applies; the setters and the restore share the checks (`valid…` functions).
-   The peak limit is only checked for its range: follow the peak stores it in
-   steps of 100 W.
 
 ### Authentication of the api routes
 
@@ -1268,8 +1269,8 @@ in a running evcc) they answer 401. The ui opens the login on a 401 by itself.
 
 | List | Routes |
 |---|---|
-| `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmenabled`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakfollow`, `peakshavingreserve`, `feedinsplit` |
-| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `lmcircuit(delete)`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `importeegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peakfollowbuffer`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
+| `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmenabled`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakshavingreserve`, `feedinsplit` |
+| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `lmcircuit(delete)`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `importeegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
 
 ## Upstream touch points
 
@@ -1282,6 +1283,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_gridpeak.go` | `updateGridPeak` reads the collector through `gridPeakCollector` |
+| `assets/js/components/Config/HemsModal.vue` | `experimental` and `peakLimitAvailable` also with peak shaving on: its limit is set here |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerResult` after the solve, `lmForecastLowest` for the forecast |
 | `core/site/api.go` | embeds `CustomAPI` |
 | `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`, evcc's rule that a charging loadpoint keeps its minimum on a full circuit asks `keepsMin` (with the priorities on top, what a higher priority waits for is still shed); three `lp.lmm().Peek*` probes; `pvEnablePhases` (the phases a disabled charger starts on) decides on `enablePhaseCurrents`, `pvMaxCurrent` then takes the limits of those phases; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` (in front of the disable branch, behind the always-charge/battery return) keeps a heater in stages on its running stages until the disable delay has passed, the phase timers take `phaseScaleDelay` (scaling down: `phaseScaleDelay1p`, the disable delay when 1p is not sustainable and evcc disables instead), `batterySupported` projects a pending 1p switch with `projectPhaseSwitch1p`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |
@@ -1323,7 +1325,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
-| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_follow.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |

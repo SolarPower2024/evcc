@@ -68,8 +68,8 @@
 					<div v-if="peak.allowed" class="tile-sub" data-testid="lm-peak-allowed">
 						{{ peak.allowed }}
 					</div>
-					<div v-if="peak.follow" class="tile-sub" data-testid="lm-peak-follow">
-						{{ peak.follow }}
+					<div v-if="peak.raised" class="tile-sub" data-testid="lm-peak-raised">
+						{{ peak.raised }}
 					</div>
 				</div>
 			</div>
@@ -170,7 +170,7 @@ export default {
 				: this.$t("lmoverview.disabledHelp");
 		},
 		circuits() {
-			// configured limits of circuits changed at runtime (switched off, following the peak)
+			// configured limits of circuits changed at runtime (switched off)
 			const configured = this.state?.lmOff?.limits || {};
 			return Object.entries(this.state?.circuits || {})
 				.filter(([name]) => !this.lmCircuit || name === this.lmCircuit)
@@ -189,10 +189,6 @@ export default {
 						// custom: the limit is the peak limit, see core/site_lm_switch.go
 						note = this.$t("lmoverview.circuitFromPeak", {
 							limit: this.fmtW(configured[name] > 0 ? configured[name] : c.maxPower),
-						});
-					} else if (configured[name] > 0 && configured[name] !== c.maxPower) {
-						note = this.$t("lmoverview.circuitFollows", {
-							limit: this.fmtW(configured[name]),
 						});
 					}
 					return {
@@ -225,19 +221,19 @@ export default {
 							time: this.fmtHourMinute(new Date(end)),
 						})
 					: "";
-			// follow the peak raised the limit this month, see core/site_peak_follow.go
-			const f = this.state.peakFollow;
+			// the month's peak raised the limit, see core/site_peak_limit.go
+			const baseline = this.state.gridPeakBaseline || 0;
 			const limit = this.state.peakShavingLimit || 0;
-			const follow =
-				f?.enabled && limit > f.base
-					? this.$t("lmoverview.peakFollow", { limit: this.fmtW(f.base) })
+			const raised =
+				baseline > 0 && limit > baseline
+					? this.$t("lmoverview.peakRaised", { limit: this.fmtW(baseline) })
 					: "";
 			return {
 				avg: this.state.peakShavingWindowAvg || 0,
 				limit,
 				text,
 				allowed,
-				follow,
+				raised,
 			};
 		},
 		// the optimizer decides some of the loads, load management limits them

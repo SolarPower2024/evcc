@@ -84,15 +84,6 @@ func mergePeakMonths(in []peakMonth) ([]peakMonth, bool) {
 	return out, !slices.Equal(in, out)
 }
 
-// manualPeakLimit returns the limit set by hand: while following the peak that is
-// the base, never the raised limit. Must be called with the lock held.
-func (s *peakState) manualPeakLimit() float64 {
-	if s.follow {
-		return s.followBase
-	}
-	return s.limit
-}
-
 // peakMonthOf returns the entry of the month t lies in, adding it in its place
 // (newest first) if missing, and whether it did. The running month starts with the
 // limit set by hand, an earlier one that is entered late has no baseline. A month
@@ -111,7 +102,7 @@ func (s *peakState) peakMonthOf(t time.Time) (*peakMonth, bool) {
 		now = s.clock.Now()
 	}
 	if month == now.Local().Format("2006-01") {
-		m.Baseline = s.manualPeakLimit()
+		m.Baseline = s.baseline
 	}
 
 	i := slices.IndexFunc(s.months, func(e peakMonth) bool { return e.Month < month })
@@ -180,7 +171,7 @@ func (site *Site) fillPeakBaselines() {
 	s := site.peak()
 
 	s.mu.Lock()
-	if limit := s.manualPeakLimit(); limit > 0 {
+	if limit := s.baseline; limit > 0 {
 		for i := range s.months {
 			if s.months[i].Baseline == 0 {
 				s.months[i].Baseline = limit

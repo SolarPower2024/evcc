@@ -1,19 +1,15 @@
 package core
 
-// Custom extension: runtime changes to the circuits' power limits, from three
+// Custom extension: runtime changes to the circuits' power limits, from two
 // sources, without touching the configuration:
 //
 //   - load management off (Mehr → Lastmanagement (Peak)): the power limit of
 //     the load management (peak) circuit is lifted, so wallboxes, heaters and
 //     the battery's grid charging are no longer throttled or shed for it.
 //     Without that circuit chosen, the power limits of all circuits.
-//   - follow the peak: the load management (peak) circuit's limit rises with
-//     the raised peak limit, never below its configured value, see
-//     site_peak_follow.go
 //   - the peak limit as the circuit's limit (Erweitert → Grenze =
 //     Peak-Shaving-Grenze): while peak shaving is on, the load management (peak)
-//     circuit's limit is the peak limit, with follow the peak and also below the
-//     configured value. Needs the circuit chosen; the configured value applies
+//     circuit's limit is the peak limit, also below the configured value. Needs the circuit chosen; the configured value applies
 //     again once peak shaving is off.
 //
 // The load management (peak) circuit is chosen under Lastmanagement-Details →
@@ -49,7 +45,7 @@ func (site *Site) restoreLmSwitch() {
 
 	circuit, err := settings.String(keys.LmCircuit)
 	if err != nil {
-		// lm3/lm4 chose it as the circuit following the peak
+		// lm3/lm4 stored it under this key
 		if circuit, err = settings.String(keys.PeakFollowCircuit); err == nil && circuit != "" {
 			settings.SetString(keys.LmCircuit, circuit)
 		}
@@ -67,16 +63,13 @@ func (site *Site) restoreLmSwitch() {
 }
 
 // circuitLimitWanted returns the power limit a circuit should have for its
-// configured value, 0 = unlimited. The peak limit already includes follow the
-// peak.
-func circuitLimitWanted(configured float64, off, fromPeak, follow bool, peakLimit float64) float64 {
+// configured value, 0 = unlimited.
+func circuitLimitWanted(configured float64, off, fromPeak bool, peakLimit float64) float64 {
 	switch {
 	case off:
 		return 0
 	case fromPeak:
 		return peakLimit
-	case follow:
-		return max(configured, peakLimit)
 	default:
 		return configured
 	}
@@ -87,7 +80,6 @@ func circuitLimitWanted(configured float64, off, fromPeak, follow bool, peakLimi
 func (site *Site) applyCircuitLimits() {
 	p := site.peak()
 	p.mu.Lock()
-	following := p.follow && p.limit > p.followBase
 	peakLimit := p.limit
 	fromPeak := site.advanced().CircuitFromPeak && p.enabled && p.limit > 0
 	p.mu.Unlock()
@@ -97,13 +89,10 @@ func (site *Site) applyCircuitLimits() {
 	s.mu.Lock()
 	off, lmCircuit := s.off, s.circuit
 
-	// a chosen circuit that no longer exists: nothing is lifted, nothing follows,
+	// a chosen circuit that no longer exists: nothing is lifted,
 	// see dropOrphanCircuits
 	orphan := lmCircuit != "" && !circuitExists(lmCircuit)
-	followCircuit, peakCircuit := "", ""
-	if following && !orphan {
-		followCircuit = lmCircuit
-	}
+	peakCircuit := ""
 	if fromPeak && !orphan {
 		peakCircuit = lmCircuit
 	}
@@ -123,7 +112,7 @@ func (site *Site) applyCircuitLimits() {
 		}
 
 		lift := off && !orphan && (lmCircuit == "" || name == lmCircuit)
-		wanted := circuitLimitWanted(configured, lift, name == peakCircuit, name == followCircuit, peakLimit)
+		wanted := circuitLimitWanted(configured, lift, name == peakCircuit, peakLimit)
 		if name == peakCircuit {
 			peakConfigured = configured
 		}
@@ -166,7 +155,7 @@ func (site *Site) applyCircuitLimits() {
 		changed = true
 	}
 
-	if !off && followCircuit == "" && peakCircuit == "" && len(s.offDynamic) > 0 {
+	if !off && peakCircuit == "" && len(s.offDynamic) > 0 {
 		s.offDynamic = nil
 		changed = true
 	}

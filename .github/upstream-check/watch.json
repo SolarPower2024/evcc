@@ -40,7 +40,7 @@
       "files": [
         "core/peak/",
         "core/site_peakshaving.go",
-        "core/site_peak_follow.go",
+        "core/site_peak_limit.go",
         "core/site_peak_stats.go",
         "core/site_peak_tariff.go"
       ],
@@ -51,7 +51,8 @@
         "demand charge",
         "Leistungspreis",
         "capacity tariff",
-        "Leistungstarif"
+        "Leistungstarif",
+        "GridPeakBaseline"
       ]
     },
     {

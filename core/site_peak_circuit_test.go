@@ -70,7 +70,7 @@ func peakCircuitSite(t *testing.T) (*Site, *clock.Mock) {
 	site := &Site{log: util.NewLogger("test"), collectors: map[string]*metrics.Collector{}}
 	site.custom.peakCircuit.clock = clk
 	site.custom.peak.clock = clk
-	site.peak().limit = 5000
+	setPeakLimit(site, 5000)
 
 	return site, clk
 }

@@ -200,9 +200,7 @@ export default {
 		// core/site_peak_stats.go; before the first one: the limit now
 		limit() {
 			if (this.current?.baseline) return this.current.baseline;
-			const follow = store.state?.peakFollow;
-			if (follow?.enabled && follow.base) return follow.base;
-			return store.state?.peakShavingLimit || 0;
+			return store.state?.gridPeakBaseline || 0;
 		},
 		// custom: capacity tariff, see core/site_peak_tariff.go
 		costs() {

@@ -60,10 +60,9 @@
 					<BatteryPeakShavingCard
 						class="box-pull-out mt-4"
 						:enabled="!!state.peakShaving"
-						:limit="state.peakShavingLimit ?? 5000"
+						:limit="state.gridPeakBaseline ?? 0"
 						:reserve="state.peakShavingReserve ?? 30"
 						:shaving="!!state.peakShavingActive"
-						:follow="state.peakFollow"
 					/>
 
 					<Card

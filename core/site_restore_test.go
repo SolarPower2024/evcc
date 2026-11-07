@@ -20,7 +20,7 @@ func restoreTestSite(t *testing.T) (*Site, *bytes.Buffer) {
 	// keys other tests left behind (e.g. a battery circuit) would log errors
 	freshSettings(t)
 	site := newScenario(t).site
-	// other tests leave follow the peak on, which would move the limit
+	// keys from before the one limit, which would set it
 	for _, key := range []string{keys.PeakFollow, keys.PeakFollowBase, keys.PeakFollowBuffer} {
 		_ = settings.Delete(key)
 	}
@@ -165,15 +165,11 @@ func TestRestoreOutOfRange(t *testing.T) {
 		{"guard 600", keys.LmShedGuard, "600", (*Site).restoreLmGuard, func(s *Site) float64 { return float64(s.GetLmShedGuard()) }},
 		{"freeValue 0", keys.LmAdvanced, `{"freeValue":0}`, (*Site).restoreLmAdvanced, (*Site).peakFreeValue},
 		{"phases 2", keys.LmAdvanced, `{"phases":2}`, (*Site).restoreLmAdvanced, func(s *Site) float64 { return float64(s.lmBatteryPhases()) }},
-		{"follow buffer -100", keys.PeakFollowBuffer, "-100", (*Site).restorePeakFollow, (*Site).GetPeakFollowBuffer},
 		{"soc start >= stop", keys.BatterySocGridChargeStart, "90", (*Site).restoreLmSettings, (*Site).GetBatterySocGridChargeStart},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			site, buf := restoreTestSite(t)
 			before := tc.get(site)
-			if tc.key == keys.PeakFollowBuffer {
-				before = defaultPeakFollowBuffer // restore sets it, the state starts at 0
-			}
 
 			if tc.key == keys.BatterySocGridChargeStart {
 				settings.SetString(keys.BatterySocGridChargeStop, "50")
@@ -209,10 +205,11 @@ func TestRestoreOutOfRange(t *testing.T) {
 	})
 }
 
-// TestRestoreFollowLimitKept: follow the peak stores its limit in steps of 100 W,
-// which is no multiple of the 500 W step of the setter
-func TestRestoreFollowLimitKept(t *testing.T) {
+// TestRestoreRaisedLimitKept: follow the peak stored its limit in steps of 100 W
+func TestRestoreRaisedLimitKept(t *testing.T) {
 	site, buf := restoreTestSite(t)
+	site.gridPeakBaseline = 0
+	settings.SetString(keys.PeakShaving, "true")
 	settings.SetString(keys.PeakShavingLimit, "11300")
 
 	site.restorePeakSettings()
@@ -224,8 +221,8 @@ func TestRestoreFollowLimitKept(t *testing.T) {
 // TestRestoreLiveValuesUnchanged: the values of the live system run through as they are
 func TestRestoreLiveValuesUnchanged(t *testing.T) {
 	site, buf := restoreTestSite(t)
+	setPeakLimit(site, 3500)
 
-	settings.SetString(keys.PeakShavingLimit, "3500")
 	settings.SetString(keys.PeakShavingReserve, "20")
 	settings.SetString(keys.PeakShavingChargePower, "1800")
 	settings.SetString(keys.BatterySocGridChargeStart, "15")
@@ -247,7 +244,7 @@ func TestRestoreLiveValuesUnchanged(t *testing.T) {
 	assert.Equal(t, 50.0, site.peakWriteTolerance())
 
 	assert.Empty(t, buf.String(), "nothing warned or logged")
-	for _, key := range []string{keys.PeakShavingLimit, keys.PeakShavingReserve, keys.LmAdvanced, keys.BatteryGridChargeOnce} {
+	for _, key := range []string{keys.PeakShavingReserve, keys.LmAdvanced, keys.BatteryGridChargeOnce} {
 		_, err := settings.String(key)
 		assert.NoError(t, err, key)
 	}

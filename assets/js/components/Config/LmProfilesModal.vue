@@ -370,12 +370,8 @@ export default {
 				dischargeControl: !!s.batteryDischargeControl,
 				peakShaving: !!s.peakShaving,
 				peakReserve: s.peakShavingReserve,
-				// custom: while following the peak, the limit set by hand
-				peakLimit: s.peakFollow?.enabled
-					? s.peakFollow.base / 1000
-					: typeof s.peakShavingLimit === "number"
-						? s.peakShavingLimit / 1000
-						: undefined,
+				// custom: the limit set by hand, not the month's peak
+				peakLimit: s.gridPeakBaseline ? s.gridPeakBaseline / 1000 : undefined,
 			};
 			this.wallboxes.forEach((w) => (current[`solarShare:${w.name}`] = w.solarShare));
 

@@ -18,18 +18,14 @@ import (
 
 func TestCircuitLimitWanted(t *testing.T) {
 	noSettingsDB(t)
-	assert.Equal(t, 10000.0, circuitLimitWanted(10000, false, false, false, 0), "as configured")
-	assert.Equal(t, 0.0, circuitLimitWanted(10000, true, true, true, 11300), "off: lifted")
-	assert.Equal(t, 11300.0, circuitLimitWanted(10000, false, false, true, 11300), "follows the peak")
-	assert.Equal(t, 22000.0, circuitLimitWanted(22000, false, false, true, 11300), "never below the configured value")
-	assert.Equal(t, 3500.0, circuitLimitWanted(10000, false, true, false, 3500), "the peak limit, below the configured value")
-	assert.Equal(t, 3500.0, circuitLimitWanted(10000, false, true, true, 3500), "the peak limit wins over following it")
+	assert.Equal(t, 10000.0, circuitLimitWanted(10000, false, false, 0), "as configured")
+	assert.Equal(t, 0.0, circuitLimitWanted(10000, true, true, 11300), "off: lifted")
+	assert.Equal(t, 3500.0, circuitLimitWanted(10000, false, true, 3500), "the peak limit, below the configured value")
 }
 
 // Switching load management off lifts the power limits and keeps the current
-// limits; follow the peak raises the chosen circuit; both return to the
-// configured values.
-func TestLmSwitchAndFollowCircuit(t *testing.T) {
+// limits and returns to the configured values.
+func TestLmSwitchCircuit(t *testing.T) {
 	noSettingsDB(t)
 	config.Reset()
 	t.Cleanup(config.Reset)
@@ -49,8 +45,6 @@ func TestLmSwitchAndFollowCircuit(t *testing.T) {
 	p := site.peak()
 	p.clock = clk
 	setPeakShaving(site, 10000, 20)
-	p.followBuffer = defaultPeakFollowBuffer
-	p.months = []peakMonth{{Month: "2026-09", Peak: 11800}}
 
 	// off: power limits lifted, the fuse stays
 	require.NoError(t, site.SetLmEnabled(false))
@@ -65,32 +59,12 @@ func TestLmSwitchAndFollowCircuit(t *testing.T) {
 	assert.Equal(t, 10000.0, main.GetMaxPower())
 	assert.Equal(t, 7000.0, sub.GetMaxPower())
 
-	// follow the peak with main as the load management circuit: it rises along
+	// main as the load management circuit: off lifts it only, on returns to the configured value
 	require.NoError(t, site.SetLmCircuit("main"))
-	require.NoError(t, site.SetPeakFollow(true))
-	assert.Equal(t, 11300.0, site.GetPeakShavingLimit())
-	assert.Equal(t, 11300.0, main.GetMaxPower())
-	assert.Equal(t, 7000.0, sub.GetMaxPower(), "not chosen")
-
-	// off wins for the load management circuit only, on returns to the raised value
 	require.NoError(t, site.SetLmEnabled(false))
 	assert.Zero(t, main.GetMaxPower())
 	assert.Equal(t, 7000.0, sub.GetMaxPower(), "not the load management circuit")
 	require.NoError(t, site.SetLmEnabled(true))
-	assert.Equal(t, 11300.0, main.GetMaxPower())
-
-	// new month: back to the configured value
-	clk.Set(time.Date(2026, 10, 1, 0, 5, 0, 0, time.Local))
-	site.updatePeakFollow()
-	site.applyCircuitLimits()
-	assert.Equal(t, 10000.0, main.GetMaxPower())
-
-	// follow off: stays configured
-	p.months = append([]peakMonth{{Month: "2026-10", Peak: 12500}}, p.months...)
-	site.updatePeakFollow()
-	site.applyCircuitLimits()
-	assert.Equal(t, 12000.0, main.GetMaxPower())
-	require.NoError(t, site.SetPeakFollow(false))
 	assert.Equal(t, 10000.0, main.GetMaxPower())
 
 	require.Error(t, site.SetLmCircuit("unknown"))
@@ -181,7 +155,6 @@ func TestLmCircuitFromPeak(t *testing.T) {
 	p := site.peak()
 	clk := p.clock.(*clock.Mock)
 	clk.Set(time.Date(2026, 9, 20, 12, 0, 0, 0, time.Local))
-	p.followBuffer = defaultPeakFollowBuffer
 
 	// default off: nothing changes
 	require.NoError(t, site.SetLmCircuit("main"))
@@ -214,17 +187,17 @@ func TestLmCircuitFromPeak(t *testing.T) {
 	site.applyCircuitLimits()
 	assert.Equal(t, 4000.0, main.GetMaxPower())
 
-	// follow the peak raises the limit and with it the circuit, a new month returns to the base
+	// the month's peak raises the limit and with it the circuit, a new month returns to the limit
 	require.NoError(t, site.SetPeakShavingLimit(5000))
 	p.months = []peakMonth{{Month: "2026-09", Peak: 8800}}
-	require.NoError(t, site.SetPeakFollow(true))
-	assert.Equal(t, 8300.0, site.GetPeakShavingLimit())
-	assert.Equal(t, 8300.0, main.GetMaxPower())
+	site.updatePeakLimit()
+	site.applyCircuitLimits()
+	assert.Equal(t, 8800.0, site.GetPeakShavingLimit())
+	assert.Equal(t, 8800.0, main.GetMaxPower())
 	clk.Set(time.Date(2026, 10, 1, 0, 5, 0, 0, time.Local))
-	site.updatePeakFollow()
+	site.updatePeakLimit()
 	site.applyCircuitLimits()
 	assert.Equal(t, 5000.0, main.GetMaxPower(), "below the configured value as well")
-	require.NoError(t, site.SetPeakFollow(false))
 
 	// load management off lifts it, on returns to the peak limit
 	require.NoError(t, site.SetLmEnabled(false))

@@ -100,7 +100,7 @@ func (site *Site) releasePeak() {
 
 		site.restoreOmniThreshold()
 
-		if protOwned && limitEntity != "" {
+		if protOwned && limitEntity != "" && limit > 0 {
 			if conn, err := site.haConnection(); err == nil {
 				site.omniWriteLimit(conn, limitEntity, limit, omniLimitBasis(false, limit))
 			}
