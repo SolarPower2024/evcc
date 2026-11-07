@@ -443,6 +443,53 @@ func TestPeakReserveKeepsExternalMode(t *testing.T) {
 	assert.Equal(t, api.BatteryHold, sc.mode())
 }
 
+// TestPeakReserveKeepsEvHold: below the reserve upstream's hold for a fast
+// charging vehicle stays (both controllers still cover peaks while held), ends
+// with the fast charging, and without discharge control normal stays
+func TestPeakReserveKeepsEvHold(t *testing.T) {
+	sc := newScenario(t)
+	sc.site.lms().socChargeEnabled = false
+
+	lp := &Loadpoint{log: util.NewLogger("lp"), mode: api.ModeNow, status: api.StatusC}
+	sc.site.loadpoints = []*Loadpoint{lp}
+
+	// discharge control off: below the reserve the battery stays normal
+	sc.cycle(15, 3000, 0)
+	assert.True(t, sc.site.peakShavingActive())
+	assert.Equal(t, api.BatteryNormal, sc.mode())
+
+	// discharge control on: the fast charging vehicle holds the battery
+	sc.site.batteryDischargeControl = true
+	sc.cycle(15, 3000, 0)
+	assert.Equal(t, api.BatteryHold, sc.mode())
+	sc.cycle(15, 3000, 0)
+	assert.Equal(t, api.BatteryHold, sc.mode(), "the hold stays while fast charging")
+
+	// fast charging ends: back to normal for the reserve
+	lp.mode = api.ModePV
+	sc.cycle(15, 3000, 0)
+	assert.Equal(t, api.BatteryNormal, sc.mode())
+
+	// a pause of the vehicle releases the hold as well
+	lp.mode = api.ModeNow
+	sc.cycle(15, 3000, 0)
+	assert.Equal(t, api.BatteryHold, sc.mode())
+	lp.status = api.StatusB
+	sc.cycle(15, 3000, 0)
+	assert.Equal(t, api.BatteryNormal, sc.mode())
+}
+
+// TestPeakReserveGridChargeBeatsEvHold: soc-based grid charging below the reserve
+// still wins over the hold of a fast charging vehicle, as upstream decides
+func TestPeakReserveGridChargeBeatsEvHold(t *testing.T) {
+	sc := newScenario(t)
+	sc.site.batteryDischargeControl = true
+	sc.site.loadpoints = []*Loadpoint{{log: util.NewLogger("lp"), mode: api.ModeNow, status: api.StatusC}}
+
+	assert.True(t, sc.cycle(15, 3000, 0))
+	assert.Equal(t, api.BatteryCharge, sc.mode())
+}
+
 // TestNumberWrite verifies that a value the entity already holds is not written
 // again, while an unavailable entity and a real change are
 func TestNumberWrite(t *testing.T) {

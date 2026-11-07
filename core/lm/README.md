@@ -516,8 +516,11 @@ A counter coarser than 0.01 kWh or updating less often than every 30 s delays th
 cut by the counter lag; the value from the window end then only counts in the
 next window (a known compromise, `TestMeterLateCounter`).
 
-Below the reserve the battery is kept in normal mode, as hold would block the
-discharge controller of the battery; a battery mode set from outside through the api stays.
+Below the reserve the battery is kept in normal mode; a battery mode set from
+outside through the api stays. So does evcc's hold for a charging vehicle (discharge
+control: fast, plan, min soc or smart cost charging) while the optimizer is not
+automatic: both controllers still cover peaks while held, and the reserve is not
+drained into the vehicle (`TestPeakReserveKeepsEvHold`).
 While the demand without the battery exceeds the limit, or the grid power the
 running window still allows if that is less (an earlier peak used up its
 budget), grid charging pauses and stays off for the hold-off, so it cannot add
