@@ -479,6 +479,21 @@ func TestPeakReserveKeepsEvHold(t *testing.T) {
 	assert.Equal(t, api.BatteryNormal, sc.mode())
 }
 
+// TestPeakReserveKeepsEvHoldGridDischarge: upstream also holds a fast charging
+// vehicle while grid discharge is active, without discharge control; below the
+// reserve that hold stays as well
+func TestPeakReserveKeepsEvHoldGridDischarge(t *testing.T) {
+	sc := newScenario(t)
+	sc.site.lms().socChargeEnabled = false
+	sc.site.loadpoints = []*Loadpoint{{log: util.NewLogger("lp"), mode: api.ModeNow, status: api.StatusC}}
+
+	sc.cycle(15, 3000, 0)
+	assert.Equal(t, api.BatteryNormal, sc.mode())
+
+	sc.site.updateBatteryModePeakAware(false, true, sc.rate)
+	assert.Equal(t, api.BatteryHold, sc.mode())
+}
+
 // TestPeakReserveGridChargeBeatsEvHold: soc-based grid charging below the reserve
 // still wins over the hold of a fast charging vehicle, as upstream decides
 func TestPeakReserveGridChargeBeatsEvHold(t *testing.T) {

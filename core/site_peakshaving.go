@@ -1003,8 +1003,7 @@ func (site *Site) peakChargeHeadroom() (headroom float64, ok bool) {
 // battery mode, and only below the reserve: grid charging has already been
 // cleared against both the circuit and a running peak (see
 // batteryGridChargeRequested), a mode set from outside through the api stays the
-// caller's decision, and so does upstream's hold for a charging vehicle (see
-// evHoldsBattery).
+// caller's decision, and so does upstream's hold (see upstreamHoldsBattery).
 func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rate api.Rate) {
 	// the last hook of the cycle: the calls to Home Assistant are done
 	defer site.haCycleEnd()
@@ -1017,7 +1016,7 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 
 	site.peakCheckMeters()
 
-	if gridCharge || site.optimizerCharges() || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown || site.evHoldsBattery(rate) {
+	if gridCharge || site.optimizerCharges() || !site.peakShavingActive() || site.GetBatteryModeExternal() != api.BatteryUnknown || site.upstreamHoldsBattery(gridDischarge, rate) {
 		site.updateBatteryMode(gridCharge, gridDischarge, rate)
 		return
 	}
@@ -1042,14 +1041,21 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 	site.SetBatteryMode(api.BatteryNormal)
 }
 
-// evHoldsBattery reports whether upstream holds the battery for a charging
-// vehicle (discharge control: fast, plan, min soc or smart cost charging). Below
-// the reserve the hold stays: both external controllers still cover a peak while
-// held (Omnibattery through its capacity protection, evcc Peak Fronius through the
-// hold request), so the reserve is not drained into the vehicle. Not with the
-// optimizer in automatic mode, which decides the hold itself (lmGateBatteryMode).
-func (site *Site) evHoldsBattery(rate api.Rate) bool {
-	return !site.Automatic() && site.dischargeControlActive(rate)
+// upstreamHoldsBattery reports whether upstream holds the battery, e.g. for a
+// fast, plan, min soc or smart cost charging vehicle. Below the reserve the hold
+// stays: both external controllers still cover a peak while held (Omnibattery
+// through its capacity protection, evcc Peak Fronius through the hold request),
+// so the reserve is not drained into the vehicle. Upstream's own decision is
+// asked, so a hold case it adds later applies as well. Not with the optimizer in
+// automatic mode (decision of the user): its hold goes through lmGateBatteryMode,
+// and a stale result keeps the battery normal for the reserve as before.
+func (site *Site) upstreamHoldsBattery(gridDischarge bool, rate api.Rate) bool {
+	if site.Automatic() {
+		return false
+	}
+
+	// grid charging takes the path to upstream before this is asked
+	return site.fromTo(site.requiredBatteryMode(false, gridDischarge, rate), api.BatteryHold)
 }
 
 //
