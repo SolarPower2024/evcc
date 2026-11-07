@@ -85,8 +85,8 @@ func (p Profile) Validate() error {
 	}
 
 	soc("peak reserve", p.PeakReserve, 1, 99)
-	if v := p.PeakLimit; v != nil && (*v < 2000 || *v > 20000 || math.Mod(*v, 500) != 0) {
-		fail("peak limit must be between 2000 and 20000 W in 500 W steps")
+	if v := p.PeakLimit; v != nil && (*v < 2000 || *v > 20000) {
+		fail("peak limit must be between 2000 and 20000 W")
 	}
 
 	for lp, v := range p.SolarShare {

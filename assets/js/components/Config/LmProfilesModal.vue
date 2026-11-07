@@ -399,7 +399,6 @@ export default {
 						unit: field?.unit,
 						min: fmt(problem.min),
 						max: fmt(problem.max),
-						step: fmt(problem.step),
 					}
 				)
 			);

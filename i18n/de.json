@@ -697,7 +697,6 @@
       "invalidBatteryOrder": "Batterienutzung: Es muss gelten Priorität ≤ Puffer ≤ Puffer-Start (0 schaltet Puffer aus).",
       "invalidGridChargeOrder": "Netzladen: Start muss unter Stopp liegen.",
       "invalidRange": "{label}: Bitte einen Wert von {min} bis {max} {unit} eingeben.",
-      "invalidStep": "{label}: Nur in {step}-kW-Schritten möglich.",
       "missingValue": "Bitte für jeden angehakten Wert eine Zahl eingeben.",
       "name": "Name",
       "new": "Neues Profil",
