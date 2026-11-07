@@ -1893,7 +1893,7 @@
     "battery": "Batterie (Netzladen)",
     "circuitFromPeak": "aus Peak Shaving, eingestellt {limit}",
     "circuitLifted": "Grenze {limit} aufgehoben",
-    "disabledHelp": "Aus: Die Leistungsgrenzen der Stromkreise gelten nicht, nichts wird dafür gedrosselt. Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv.",
+    "disabledHelp": "Aus: Die Leistungsgrenzen der Stromkreise gelten nicht, nichts wird dafür gedrosselt. Absicherung (Stromgrenzen), §14a, Netzbezugsspitze und das Peak Shaving der Batterie bleiben aktiv.",
     "enabled": "Lastmanagement",
     "enabledHelp": "Die Leistungsgrenzen der Stromkreise (Peak) drosseln Wallbox, Heizstäbe und Batterie-Netzladen.",
     "event": {
@@ -1937,7 +1937,7 @@
     },
     "title": "Lastmanagement (Peak)",
     "enabledHelpCircuit": "Die Leistungsgrenze von „{circuit}“ drosselt Wallbox, Heizstäbe und Batterie-Netzladen.",
-    "disabledHelpCircuit": "Aus: Die Leistungsgrenze von „{circuit}“ gilt nicht, nichts wird dafür gedrosselt. Andere Stromkreise, Absicherung (Stromgrenzen), §14a und das Peak Shaving der Batterie bleiben aktiv.",
+    "disabledHelpCircuit": "Aus: Die Leistungsgrenze von „{circuit}“ gilt nicht, nichts wird dafür gedrosselt. Andere Stromkreise, Absicherung (Stromgrenzen), §14a, Netzbezugsspitze und das Peak Shaving der Batterie bleiben aktiv.",
     "peakRaised": "Grenze diesen Monat auf die Monatsspitze angehoben, eingestellt {limit}",
     "optimizer": "Optimizer",
     "optimizerHint": "Der Optimizer entscheidet, das Lastmanagement begrenzt."

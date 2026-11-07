@@ -263,7 +263,7 @@ circuits (`lmCircuit`).
 *Mehr → Lastmanagement (Peak) → Lastmanagement* off lifts that circuit's power
 limit (without one, all circuits') at runtime, so loads and battery grid
 charging are no longer throttled for it. Fuse current limits, a HEMS limit
-(§14a) and peak shaving keep applying; circuits whose limit comes from a plugin
+(§14a), the grid import peak and peak shaving keep applying; circuits whose limit comes from a plugin
 are left alone. On restores the configured limit. Survives a
 restart (`lmOff`). See `core/site_lm_switch.go`.
 
