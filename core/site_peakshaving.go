@@ -23,7 +23,6 @@ package core
 import (
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -45,12 +44,10 @@ import (
 )
 
 const (
-	defaultPeakLimit   = 5000.0 // W
-	defaultPeakReserve = 30.0   // %
+	defaultPeakReserve = 30.0 // %
 
-	minPeakLimit  = 2000.0 // W
-	maxPeakLimit  = 20000.0
-	peakLimitStep = 500.0
+	minPeakLimit = 2000.0 // W
+	maxPeakLimit = 20000.0
 )
 
 // peakState is the runtime state of peak shaving
@@ -110,10 +107,7 @@ type peakState struct {
 	metersLost bool         // the meters failed for longer than peak.MaxGap
 	read       peakReadings // outages evcc does not report, see site_peak_readings.go
 
-	// follow the peak, see site_peak_follow.go
-	follow       bool
-	followBuffer float64 // W below the month's peak
-	followBase   float64 // W, the limit set by hand
+	baseline float64 // W, evcc's grid import peak limit, see site_peak_limit.go
 
 	tariff peakTariff // capacity tariff, see site_peak_tariff.go
 
@@ -138,7 +132,6 @@ type peakState struct {
 // peak returns the peak shaving state, applying defaults on first use
 func (site *Site) peak() *peakState {
 	site.custom.peak.once.Do(func() {
-		site.custom.peak.limit = defaultPeakLimit
 		site.custom.peak.reserve = defaultPeakReserve
 		if site.custom.peak.clock == nil {
 			site.custom.peak.clock = clock.New()
@@ -152,11 +145,8 @@ func (site *Site) peak() *peakState {
 func (site *Site) restorePeakSettings() {
 	s := site.peak()
 
-	if v, ok := restoreFloat(site.log, keys.PeakShavingLimit, validPeakLimit); ok {
-		s.mu.Lock()
-		s.limit = v
-		s.mu.Unlock()
-	}
+	site.migratePeakLimit()
+
 	if v, ok := restoreFloat(site.log, keys.PeakShavingReserve, validPeakReserve); ok {
 		s.mu.Lock()
 		s.reserve = v
@@ -254,7 +244,7 @@ func (site *Site) restorePeakSettings() {
 	site.migratePeakEntity() // the old discharge setpoint way is gone, see site_peak_byd.go
 
 	site.restorePeakMonths()
-	site.restorePeakFollow()
+	site.updatePeakLimit()
 	site.fillPeakBaselines()
 	site.restorePeakTariff()
 	site.publishPeakSettings()
@@ -539,8 +529,8 @@ func (site *Site) updatePeakShaving(state siteState) {
 		// the meter values cannot be trusted (no grid power, a grid power that stands
 		// still, a battery power that cannot be read): like for a failing meter nothing
 		// is metered and the setpoint stays, see peakCheckMeters
-		site.updatePeakFollow()
-		site.applyCircuitLimits() // load management switch and follow circuit, see site_lm_switch.go
+		site.updatePeakLimit()
+		site.applyCircuitLimits() // load management switch, see site_lm_switch.go
 
 		return
 	}
@@ -550,8 +540,8 @@ func (site *Site) updatePeakShaving(state siteState) {
 	gridPower := site.peakGridPower(state.gridPower)
 
 	site.updatePeakWindow(gridPower, state.battery.Power)
-	site.updatePeakFollow()
-	site.applyCircuitLimits() // load management switch and follow circuit, see site_lm_switch.go
+	site.updatePeakLimit()
+	site.applyCircuitLimits() // load management switch, see site_lm_switch.go
 
 	s.mu.Lock()
 	enabled, limit, reserve, configured, allowed := s.enabled, s.limit, s.effectiveReserve(), s.configured(), s.window.Allowed
@@ -1324,8 +1314,7 @@ func (site *Site) GetPeakShavingLimit() float64 {
 	return s.limit
 }
 
-// validPeakLimit checks the range of the peak limit, not its step: follow the peak
-// stores the raised limit in steps of peakFollowStep
+// validPeakLimit checks the range of a peak limit set here
 func validPeakLimit(limit float64) error {
 	if limit < minPeakLimit || limit > maxPeakLimit {
 		return fmt.Errorf("peak limit must be between %.0fW and %.0fW", minPeakLimit, maxPeakLimit)
@@ -1349,38 +1338,19 @@ func validPeakChargePower(power float64) error {
 	return nil
 }
 
+// SetPeakShavingLimit sets the peak limit, which is evcc's grid import peak limit
 func (site *Site) SetPeakShavingLimit(limit float64) error {
 	if err := validPeakLimit(limit); err != nil {
 		return err
 	}
-	if math.Mod(limit, peakLimitStep) != 0 {
-		return fmt.Errorf("peak limit must be a multiple of %.0fW", peakLimitStep)
+
+	if err := site.SetGridPeakBaseline(limit); err != nil {
+		return err
 	}
 
-	site.raisePeakBaseline(limit) // the month's savings are counted above it, see site_peak_stats.go
-
-	// following the peak: the limit set by hand is the base
-	if site.peakFollowSetBase(limit) {
-		// the circuit may take the peak limit, see site_lm_switch.go
-		site.applyCircuitLimits()
-		return nil
-	}
-
-	s := site.peak()
-
-	s.mu.Lock()
-	changed := s.limit != limit
-	s.limit = limit
-	s.mu.Unlock()
-
-	if changed {
-		site.log.DEBUG.Println("set peak shaving limit:", limit)
-		settings.SetFloat(keys.PeakShavingLimit, limit)
-		site.publish(keys.PeakShavingLimit, limit)
-		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
-		// the circuit may take the peak limit, see site_lm_switch.go
-		site.applyCircuitLimits()
-	}
+	site.updatePeakLimit()
+	// the circuit may take the peak limit, see site_lm_switch.go
+	site.applyCircuitLimits()
 
 	return nil
 }

@@ -152,41 +152,6 @@
 				<strong>{{ sourceText }}</strong>
 			</p>
 
-			<!-- custom: follow the peak, see core/site_peak_follow.go -->
-			<hr class="my-4" />
-			<div class="form-check form-switch mb-2">
-				<input
-					id="peakFollow"
-					v-model="follow"
-					class="form-check-input"
-					type="checkbox"
-					role="switch"
-					data-testid="peakshaving-follow"
-				/>
-				<label class="form-check-label" for="peakFollow">
-					{{ $t("config.peakshaving.followLabel") }}
-				</label>
-			</div>
-			<p class="small text-muted">{{ $t("config.peakshaving.followHelp") }}</p>
-			<FormRow
-				v-if="follow"
-				id="peakFollowBuffer"
-				:label="$t('config.peakshaving.followBufferLabel')"
-				:help="$t('config.peakshaving.followBufferHelp')"
-			>
-				<div class="input-group">
-					<input
-						id="peakFollowBuffer"
-						v-model.number="buffer"
-						type="number"
-						step="any"
-						class="form-control"
-						data-testid="peakshaving-follow-buffer"
-					/>
-					<span class="input-group-text">kW</span>
-				</div>
-			</FormRow>
-
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
 				<button
 					type="button"
@@ -247,10 +212,6 @@ export default {
 			initialProtSoc: "",
 			energyEntity: "",
 			initialEnergyEntity: "",
-			follow: false,
-			initialFollow: false,
-			buffer: 0.5,
-			initialBuffer: 0.5,
 			tolerance: 0,
 			initialTolerance: 0,
 		};
@@ -291,12 +252,6 @@ export default {
 		energyEntityChanged() {
 			return this.energyEntity.trim() !== this.initialEnergyEntity;
 		},
-		followChanged() {
-			return this.follow !== this.initialFollow;
-		},
-		bufferChanged() {
-			return this.buffer !== this.initialBuffer;
-		},
 		toleranceChanged() {
 			return this.tolerance !== this.initialTolerance;
 		},
@@ -306,8 +261,6 @@ export default {
 				this.marstekChanged ||
 				this.protChanged ||
 				this.energyEntityChanged ||
-				this.followChanged ||
-				this.bufferChanged ||
 				this.toleranceChanged
 			);
 		},
@@ -341,11 +294,6 @@ export default {
 			this.initialProtSoc = protSoc;
 			this.energyEntity = energyEntity;
 			this.initialEnergyEntity = energyEntity;
-			const follow = store?.state?.peakFollow;
-			this.follow = !!follow?.enabled;
-			this.initialFollow = this.follow;
-			this.buffer = (follow?.buffer ?? 500) / 1000;
-			this.initialBuffer = this.buffer;
 			// stored with the advanced settings, see core/site_lm_advanced.go
 			this.tolerance = store?.state?.lmAdvanced?.writeTolerance ?? 0;
 			this.initialTolerance = this.tolerance;
@@ -362,19 +310,6 @@ export default {
 			}
 		},
 		async save() {
-			// 0-5 kW in 0.1 kW steps, see core/site_peak_follow.go
-			const bufferW = Math.round(this.buffer * 1000);
-			if (
-				this.bufferChanged &&
-				(typeof this.buffer !== "number" ||
-					Number.isNaN(this.buffer) ||
-					bufferW < 0 ||
-					bufferW > 5000 ||
-					bufferW % 100 !== 0)
-			) {
-				this.error = this.$t("config.peakshaving.followBufferInvalid");
-				return;
-			}
 			if (
 				this.toleranceChanged &&
 				(!Number.isInteger(this.tolerance) || this.tolerance < 0 || this.tolerance > 1000)
@@ -446,14 +381,8 @@ export default {
 					}
 				}
 
-				if (this.bufferChanged) {
-					await api.post(`peakfollowbuffer/${bufferW}`);
-				}
 				if (this.toleranceChanged) {
 					await api.post(`lmadvanced/writeTolerance/${this.tolerance}`);
-				}
-				if (this.followChanged) {
-					await api.post(`peakfollow/${this.follow}`);
 				}
 
 				this.$emit("changed");

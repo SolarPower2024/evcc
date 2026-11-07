@@ -131,8 +131,6 @@ var customRouteSamples = map[string]string{
 	"snowauto":                      "/snowauto/true",
 	"peakshaving":                   "/peakshaving/false",
 	"peakshavinglimit":              "/peakshavinglimit/7000",
-	"peakfollow":                    "/peakfollow/true",
-	"peakfollowbuffer":              "/peakfollowbuffer/1000",
 	"peaktariff":                    "/peaktariff/price/40",
 	"peakshavingreserve":            "/peakshavingreserve/40",
 	"peakshavingbatterytype":        "/peakshavingbatterytype/marstek",
@@ -197,7 +195,6 @@ func TestCustomRoutesMatch(t *testing.T) {
 	assert.Equal(t, 10, site.GetLmShedGuard())
 	assert.Equal(t, 7000.0, site.GetPeakShavingLimit())
 	assert.Equal(t, 40.0, site.GetPeakShavingReserve())
-	assert.Equal(t, 1000.0, site.GetPeakFollowBuffer())
 	assert.Equal(t, 4000.0, site.GetPeakShavingChargePower())
 	assert.Equal(t, "marstek", site.GetPeakShavingBatteryType())
 	assert.False(t, site.GetLmEnabled())

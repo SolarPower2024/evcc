@@ -87,14 +87,6 @@ export interface PeakMonth {
   baseline?: number;
 }
 
-export interface PeakFollow {
-  enabled: boolean;
-  /** W below the month's peak. */
-  buffer: number;
-  /** W, the limit set by hand. */
-  base: number;
-}
-
 export interface PeakTariffMonth {
   /** YYYY-MM */
   month: string;
@@ -226,7 +218,6 @@ export interface LmState {
   /** Monthly peak statistics, newest first. */
   peakMonths?: PeakMonth[];
   /** Follow the peak: the limit rises to the month's peak minus the buffer (W), base = limit set by hand. */
-  peakFollow?: PeakFollow;
   /** Load management switch: off lifts the circuits' power limits; limits = configured values of changed circuits. */
   /** circuit: the load management (peak) circuit, empty = all */
   lmOff?: {

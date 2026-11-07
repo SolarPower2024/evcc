@@ -220,7 +220,7 @@ export default defineComponent({
 			return `${docsPrefix()}/external-limit`;
 		},
 		experimental(): boolean {
-			return store.state?.experimental === true;
+			return store.state?.experimental === true || this.activeTab === "static"; // custom: the battery card links here, see core/site_peak_limit.go
 		},
 		serverExportLimit(): number {
 			return store.state?.gridExportLimit || 0;
@@ -233,7 +233,11 @@ export default defineComponent({
 		},
 		peakLimitAvailable(): boolean {
 			// an active limit stays editable after a country change
-			return PEAK_LIMIT_COUNTRIES.includes(this.country) || this.serverPeakLimit > 0;
+			return (
+				PEAK_LIMIT_COUNTRIES.includes(this.country) ||
+				this.serverPeakLimit > 0 ||
+				this.activeTab === "static" // custom: the battery card links here, see core/site_peak_limit.go
+			);
 		},
 		serverPeakLimit(): number {
 			return store.state?.gridPeakBaseline || 0;

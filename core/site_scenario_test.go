@@ -87,6 +87,7 @@ func newScenario(t *testing.T) *scenario {
 	s.clock = clock.NewMock() // stands still at the start of a window, so its allowed power is the limit
 	s.enabled = true
 	s.chargePower = 6250
+	setPeakLimit(site, 5000)
 
 	// the external peak control against a fake Home Assistant, as the battery types use it
 	conn, err := homeassistant.NewConnection(util.NewLogger("test"), homeassistant.SupervisorURI, "", false)
@@ -534,7 +535,7 @@ func TestScenarioSettingsValidation(t *testing.T) {
 		limit float64
 		ok    bool
 	}{
-		{1999, false}, {2000, true}, {2250, false}, {2500, true}, {20000, true}, {20500, false},
+		{1999, false}, {2000, true}, {2250, true}, {2500, true}, {20000, true}, {20500, false},
 	} {
 		assert.Equal(t, tc.ok, site.SetPeakShavingLimit(tc.limit) == nil, "limit %.0f", tc.limit)
 	}

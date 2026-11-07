@@ -31,7 +31,6 @@ func TestValidate(t *testing.T) {
 		{"priority above buffer", func(p *Profile) { p.PrioritySoc = f(85) }},
 		{"buffer above buffer start", func(p *Profile) { p.BufferStartSoc = f(70) }},
 		{"reserve 0", func(p *Profile) { p.PeakReserve = f(0) }},
-		{"limit not in 500 W steps", func(p *Profile) { p.PeakLimit = f(8200) }},
 		{"limit too low", func(p *Profile) { p.PeakLimit = f(1500) }},
 		{"solar share above 100", func(p *Profile) { p.SolarShare = map[string]float64{"db:1": 110} }},
 	} {

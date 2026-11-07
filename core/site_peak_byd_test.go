@@ -134,6 +134,21 @@ func TestBydLimitSignOfLife(t *testing.T) {
 // TestBydLimitWithoutPeakShaving verifies that evcc goes on writing the limit
 // without peak shaving, whatever the battery mode: the integration takes evcc as
 // gone otherwise. Rules as before: at least 100 W, again at 0, no small rise.
+// Without a limit the integration keeps getting evcc's sign of life: holding and grid
+// charging do not depend on the limit
+func TestBydLimitWithoutLimit(t *testing.T) {
+	sc, ha := newByd(t)
+	sc.site.lms().socChargeEnabled = false
+	require.NoError(t, sc.site.SetPeakShaving(false))
+	require.NoError(t, sc.site.SetGridPeakBaseline(0))
+	sc.site.updatePeakLimit()
+	ha.take()
+
+	ha.set(haProtLimit, "0")
+	sc.cycle(50, 1000, 0)
+	assert.Equal(t, []string{"set_value " + haProtLimit + " 100"}, ha.take())
+}
+
 func TestBydLimitWithoutPeakShaving(t *testing.T) {
 	sc, ha := newByd(t)
 	sc.site.lms().socChargeEnabled = false

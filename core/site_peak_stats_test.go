@@ -71,7 +71,7 @@ func TestPeakMonthsPartialWindow(t *testing.T) {
 // and the statistics are saved
 func TestPeakMonthsInterventions(t *testing.T) {
 	sc := newScenario(t)
-	sc.site.peak().limit = 5000
+	setPeakLimit(sc.site, 5000)
 
 	sc.cycle(20, 8000, 0) // peak starts
 	sc.cycle(20, 8000, 3000)
@@ -112,7 +112,7 @@ func TestPeakMonthsKept(t *testing.T) {
 func TestPeakBaseline(t *testing.T) {
 	site, clk := peakWindowSite(t, 0)
 	s := site.peak()
-	s.limit = 7500
+	setPeakLimit(site, 7500)
 
 	// a new month starts with the limit set by hand
 	site.updatePeakWindow(4000, 0)
@@ -150,36 +150,12 @@ func TestPeakBaseline(t *testing.T) {
 	assert.Equal(t, s.months, saved)
 }
 
-// TestPeakBaselineFollow verifies that following the peak counts the base, not
-// the raised limit
-func TestPeakBaselineFollow(t *testing.T) {
-	site, clk := peakWindowSite(t, 0)
-	s := site.peak()
-	s.limit = 5000
-	s.followBuffer = defaultPeakFollowBuffer
-	s.months = []peakMonth{{Month: "2026-09", Peak: 12000, Baseline: 5000}}
-
-	require.NoError(t, site.SetPeakFollow(true))
-	assert.Equal(t, 11500.0, s.limit, "raised to the month's peak")
-	assert.Equal(t, 5000.0, s.manualPeakLimit())
-
-	// a new month while the limit is raised
-	clk.Set(time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC))
-	m, _ := s.peakMonthOf(clk.Now())
-	assert.Equal(t, 5000.0, m.Baseline)
-
-	// set by hand: the base
-	require.NoError(t, site.SetPeakShavingLimit(6000))
-	assert.Equal(t, 6000.0, s.months[0].Baseline)
-	assert.Equal(t, "2026-10", s.months[0].Month)
-}
-
 // TestPeakFillBaselines verifies that only months without a baseline are filled
 // and that an entry from before the baseline existed is still read
 func TestPeakFillBaselines(t *testing.T) {
 	site, _ := peakWindowSite(t, 0)
 	s := site.peak()
-	s.limit = 7000
+	setPeakLimit(site, 7000)
 
 	old := `[{"month":"2026-09","peak":5000,"peakAt":"2026-09-25T10:00:00Z","demand":6000,"demandAt":"2026-09-25T10:00:00Z","interventions":2},` +
 		`{"month":"2026-08","peak":4000,"peakAt":"2026-08-05T10:00:00Z","demand":4000,"demandAt":"2026-08-05T10:00:00Z","interventions":0,"baseline":4500}]`
@@ -200,13 +176,13 @@ func TestPeakFillBaselines(t *testing.T) {
 	assert.Equal(t, s.months, saved)
 
 	// fixed from now on
-	s.limit = 8000
+	setPeakLimit(site, 8000)
 	site.fillPeakBaselines()
 	assert.Equal(t, 7000.0, s.months[0].Baseline)
 
 	// without a limit nothing is filled
 	s.months = []peakMonth{{Month: "2026-09"}}
-	s.limit = 0
+	setPeakLimit(site, 0)
 	site.fillPeakBaselines()
 	assert.Zero(t, s.months[0].Baseline)
 }
@@ -272,7 +248,7 @@ func TestPeakMonthsNoDuplicateAtMonthChange(t *testing.T) {
 func TestPeakMonthsLateWindow(t *testing.T) {
 	site, _ := peakWindowSite(t, 0)
 	s := site.peak()
-	s.limit = 7000
+	setPeakLimit(site, 7000)
 	s.months = []peakMonth{{Month: "2026-09", Baseline: 7000}, {Month: "2026-07", Baseline: 4000}}
 
 	s.mu.Lock()

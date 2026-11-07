@@ -28,7 +28,7 @@ func TestPeakPausesGridCharge(t *testing.T) {
 	site := &Site{log: util.NewLogger("test")}
 
 	s := site.peak()
-	s.limit = 5000
+	setPeakLimit(site, 5000)
 	externalControl(s)
 
 	// peak shaving off: nothing to give way to
@@ -176,7 +176,7 @@ func TestBatteryChargeSetpoint(t *testing.T) {
 	site := &Site{log: util.NewLogger("test")}
 
 	s := site.peak()
-	s.limit = 5000
+	setPeakLimit(site, 5000)
 	s.chargePower = 6250
 	externalControl(s)
 
@@ -241,7 +241,7 @@ func TestPeakValueWrittenEveryCycle(t *testing.T) {
 	var charges []float64
 
 	s := sc.site.peak()
-	s.limit = 10000
+	setPeakLimit(sc.site, 10000)
 	s.chargeSet = func(v float64) error { charges = append(charges, v); return nil }
 
 	for range 3 {
@@ -304,7 +304,7 @@ func peakWindowSite(t *testing.T, minute int) (*Site, *clock.Mock) {
 
 	site := &Site{log: util.NewLogger("test")}
 	site.custom.peak.clock = clk
-	site.peak().limit = 5000
+	setPeakLimit(site, 5000)
 
 	return site, clk
 }
@@ -498,7 +498,7 @@ func TestChargeSetpointWindowBudget(t *testing.T) {
 
 	s := site.peak()
 	s.enabled = true
-	s.limit = 3500
+	setPeakLimit(site, 3500)
 	s.chargePower = 1800
 	externalControl(s)
 
@@ -528,7 +528,7 @@ func TestChargeSetpointWindowBudgetAboveLimit(t *testing.T) {
 
 	s := site.peak()
 	s.enabled = true
-	s.limit = 3500
+	setPeakLimit(site, 3500)
 	s.chargePower = 6250
 	externalControl(s)
 
@@ -554,7 +554,7 @@ func TestChargeSetpointWindowStale(t *testing.T) {
 
 	s := site.peak()
 	s.enabled = true
-	s.limit = 3500
+	setPeakLimit(site, 3500)
 	s.chargePower = 1800
 	externalControl(s)
 

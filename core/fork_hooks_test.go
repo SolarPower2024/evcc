@@ -85,6 +85,7 @@ var forkUiHooks = []struct {
 	text []string
 }{
 	{"assets/js/views/App.vue", []string{"<LmGlobalModals"}},
+	{"assets/js/components/Config/HemsModal.vue", []string{"=== \"static\"; // custom: the battery card", "=== \"static\" // custom: the battery card"}},
 	{"assets/js/views/Config.vue", []string{"<PeakShavingConfig", "<LmConfigModals", "feedInEegTariff"}},
 	{"assets/js/views/Battery.vue", []string{"<!-- custom: soc grid charging and peak shaving", "<BatterySocGridChargeCard", "socCardShown", "chargeSupported", "<BatteryGridChargeOnceCard", "<BatteryPeakShavingCard", "<BatteryProfileCard", "priceCardVisible("}},
 	{"assets/js/components/BottomTabs/MoreMenu.vue", []string{"<LmMoreMenuItems"}},

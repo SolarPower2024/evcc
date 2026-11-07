@@ -32,14 +32,13 @@
 					/>
 				</template>
 				<template #limit>
-					<InlineSocSelect
-						id="batteryPeakShavingLimit"
-						:options="limitOptions"
-						:selected="selectedLimit"
-						:label="peakLimitText(selectedLimit)"
-						nowrap
-						@change="changeLimit"
-					/>
+					<a
+						href="#"
+						class="limit-link text-decoration-underline fw-bold text-nowrap"
+						data-testid="battery-peak-shaving-limit"
+						@click.prevent="openLimit"
+						>{{ limitText }}</a
+					>
 				</template>
 			</i18n-t>
 		</div>
@@ -54,6 +53,22 @@
 
 		<div v-if="error" class="alert alert-danger mt-3 mb-0 py-2 small">{{ error }}</div>
 
+		<p
+			v-if="raised"
+			class="small text-muted mt-3 mb-0"
+			data-testid="battery-peak-shaving-raised"
+		>
+			{{ $t("battery.peakShaving.raised", { limit: kwText(limit) }) }}
+		</p>
+
+		<div
+			v-if="enabled && !limit"
+			class="alert alert-warning mt-3 mb-0 py-2 small"
+			data-testid="battery-peak-shaving-no-limit"
+		>
+			{{ $t("battery.peakShaving.noLimit") }}
+		</div>
+
 		<div
 			v-if="entitiesMissing"
 			class="alert alert-warning mt-3 mb-0 py-2 small"
@@ -66,46 +81,41 @@
 
 <script lang="ts">
 import "@h2d2/shopicons/es/regular/lightning";
-import { defineComponent, type PropType } from "vue";
-import type { PeakFollow } from "@/types/evcc";
+import { defineComponent } from "vue";
 import formatter from "@/mixins/formatter";
 import api from "@/api";
 import store from "@/store";
 import { socSteps, MARSTEK_MIN_RESERVE } from "@/utils/socSteps";
 import { peakShavingSetUp } from "@/utils/peakShaving";
 import { optimizerAutomaticOn } from "@/utils/optimizerAutomatic";
+import { openModal } from "@/configModal";
+import { isConfigured, isLoggedIn, openLoginModal, updateAuthStatus } from "../Auth/auth";
 import Card from "../Helper/Card.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
 
-// peak limit range, picked in 0.5 kW steps but sent and stored in watts
-const MIN_LIMIT = 2000;
-const MAX_LIMIT = 20000;
-const LIMIT_STEP = 500;
-
 // Peak shaving: hold the battery's lower soc range back and spend it only on
 // grid demand above the peak limit, which is what a demand charge is billed on.
+// The limit is evcc's grid import peak limit, set in its dialog, see core/site_peak_limit.go.
 //
 // Careful with method names here: the formatter mixin carries a `fmtLimit` data
 // property, and data shadows methods on the instance. A method of that name is
 // silently replaced by the number and only blows up at render time, taking the
-// whole <i18n-t> subtree - both selects included - down with it.
+// whole <i18n-t> subtree - the select included - down with it.
 export default defineComponent({
 	name: "BatteryPeakShavingCard",
 	components: { Card, InlineSocSelect },
 	mixins: [formatter],
 	props: {
 		enabled: Boolean,
-		limit: { type: Number, default: 5000 },
+		limit: { type: Number, default: 0 }, // set in the dialog
+		applied: { type: Number, default: 0 }, // with the month's peak on top
 		reserve: { type: Number, default: 30 },
 		// reported by the backend, not inferred from power: a setpoint can
 		// legitimately equal the free-discharge value
 		shaving: Boolean,
-		// follow the peak: { enabled, buffer, base }, see core/site_peak_follow.go
-		follow: { type: Object as PropType<PeakFollow>, default: undefined },
 	},
 	data() {
 		return {
-			selectedLimit: 5000,
 			selectedReserve: 30,
 			error: "",
 		};
@@ -128,19 +138,11 @@ export default defineComponent({
 		entitiesMissing(): boolean {
 			return !peakShavingSetUp(store.state);
 		},
-		followOn(): boolean {
-			return !!this.follow?.enabled;
+		raised(): boolean {
+			return this.limit > 0 && this.applied > this.limit;
 		},
-		// the limit set by hand: the base while following the peak
-		handLimit(): number {
-			return this.followOn && this.follow?.base ? this.follow.base : this.limit;
-		},
-		limitOptions() {
-			const options = [];
-			for (let w = MAX_LIMIT; w >= MIN_LIMIT; w -= LIMIT_STEP) {
-				options.push({ value: w, name: this.peakLimitText(w) });
-			}
-			return options;
+		limitText(): string {
+			return this.limit > 0 ? this.kwText(Math.max(this.limit, this.applied)) : "– kW";
 		},
 		// a Marstek gets 5 % steps down to 20 %, the lowest threshold of Omnibattery's
 		// peak shaving, see utils/socSteps.ts
@@ -154,18 +156,6 @@ export default defineComponent({
 		},
 	},
 	watch: {
-		limit: {
-			handler() {
-				this.selectedLimit = this.handLimit;
-			},
-			immediate: true,
-		},
-		follow: {
-			handler() {
-				this.selectedLimit = this.handLimit;
-			},
-			deep: true,
-		},
 		reserve: {
 			handler(v) {
 				this.selectedReserve = v;
@@ -185,18 +175,20 @@ export default defineComponent({
 				console.error(err);
 			}
 		},
-		async changeLimit($event: Event) {
-			const value = parseInt(($event.target as HTMLInputElement).value, 10);
-			const previous = this.selectedLimit;
-			this.selectedLimit = value;
-			this.error = "";
+		// evcc's dialog on the configuration page, closing it comes back here
+		async openLimit() {
+			// the config page's guard would drop the dialog from the url after a login
+			await updateAuthStatus();
+			if (isConfigured() && !isLoggedIn()) {
+				openLoginModal("/config?hems[type:static]");
+				return;
+			}
 
-			try {
-				await api.post(`peakshavinglimit/${encodeURIComponent(value)}`);
-			} catch (err: any) {
-				this.selectedLimit = previous;
-				this.error = this.apiError(err);
-				console.error(err);
+			const router = this.$router;
+			const from = router.currentRoute.value.fullPath;
+			await openModal("hems", { type: "static" });
+			if (router.currentRoute.value.path === "/config") {
+				router.push(from);
 			}
 		},
 		async changeReserve($event: Event) {
@@ -213,12 +205,12 @@ export default defineComponent({
 				console.error(err);
 			}
 		},
+		// shown in kW, stored in watts
+		kwText(watt: number): string {
+			return `${this.fmtNumber(watt / 1000, Number.isInteger(watt / 100) ? 1 : 2)} kW`;
+		},
 		socText(soc: number): string {
 			return this.fmtPercentage(soc);
-		},
-		// shown in kW, stored in watts
-		peakLimitText(watt: number): string {
-			return `${this.fmtNumber(watt / 1000, 1)} kW`;
 		},
 		apiError(err: any): string {
 			return err?.response?.data?.error || err?.message || "error";
@@ -226,3 +218,9 @@ export default defineComponent({
 	},
 });
 </script>
+
+<style scoped>
+.limit-link {
+	color: inherit;
+}
+</style>

@@ -3,13 +3,11 @@
 // profile form: only the ticked ones, the peak limit in kW.
 
 export type ProfileProblem = {
-  code: "range" | "step" | "gridChargeOrder" | "batteryOrder";
+  code: "range" | "gridChargeOrder" | "batteryOrder";
   /** form key of the offending value, empty for the order rules */
   key: string;
   min?: number;
   max?: number;
-  /** step in kW for code "step" */
-  step?: number;
 };
 
 // percent values: key -> [min, max]
@@ -24,7 +22,6 @@ const PERCENT: Record<string, [number, number]> = {
 
 const SOLAR_SHARE = "solarShare:";
 const PEAK_LIMIT_KW: [number, number] = [2, 20];
-const PEAK_LIMIT_STEP_KW = 0.5;
 
 export function profileProblem(values: Record<string, unknown>): ProfileProblem | null {
   const num = (key: string): number | undefined => {
@@ -41,9 +38,6 @@ export function profileProblem(values: Record<string, unknown>): ProfileProblem 
   if (limit !== undefined) {
     const [min, max] = PEAK_LIMIT_KW;
     if (limit < min || limit > max) return { code: "range", key: "peakLimit", min, max };
-    if (Math.round(limit * 1000) % (PEAK_LIMIT_STEP_KW * 1000) !== 0) {
-      return { code: "step", key: "peakLimit", step: PEAK_LIMIT_STEP_KW };
-    }
   }
 
   for (const key of Object.keys(values)) {

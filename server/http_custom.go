@@ -38,7 +38,7 @@ var customConfigRoutes = []string{
 	"lmhomeprofile", "lmhomeprofiledelete", "lmhomeprofilecsv",
 	"lmprofile", "lmprofiledelete",
 	"feedineegentity", "feedineegentitydelete", "importeegentity", "importeegentitydelete", "logfile", "logfileset",
-	"peakshavinglimit", "peakfollowbuffer", "peaktariff",
+	"peakshavinglimit", "peaktariff",
 	"peakshavingbatterytype",
 	"peakshavingmanualentity", "peakshavingmanualentitydelete",
 	"peakshavingmodeentity", "peakshavingmodeentitydelete",
@@ -58,7 +58,7 @@ var customOperateRoutes = []string{
 	"batterysocgridcharge", "batterysocgridchargestart", "batterysocgridchargestop",
 	"batterygridchargeonce", "batterygridchargeonceuntil", "batterygridchargeoncecancel",
 	"lmenabled", "lmprofileapply", "snowcover", "snowauto",
-	"peakshaving", "peakfollow", "peakshavingreserve", "feedinsplit",
+	"peakshaving", "peakshavingreserve", "feedinsplit",
 }
 
 // customAuth is the authentication of the http server, set by
@@ -220,8 +220,6 @@ func customSiteRoutes(site site.API) map[string]route {
 		// peak shaving, see core/site_peakshaving.go
 		"peakshaving":                   {"POST", "/peakshaving/{value:[01truefalse]+}", boolHandler(site.SetPeakShaving, site.GetPeakShaving)},
 		"peakshavinglimit":              {"POST", "/peakshavinglimit/{value:[0-9.]+}", floatHandler(site.SetPeakShavingLimit, site.GetPeakShavingLimit)},
-		"peakfollow":                    {"POST", "/peakfollow/{value:[01truefalse]+}", boolHandler(site.SetPeakFollow, site.GetPeakFollow)},
-		"peakfollowbuffer":              {"POST", "/peakfollowbuffer/{value:[0-9.]+}", floatHandler(site.SetPeakFollowBuffer, site.GetPeakFollowBuffer)},
 		"peaktariff":                    {"POST", "/peaktariff/{name:[a-zA-Z]+}/{value:[0-9.]+}", peakTariffHandler(site)},
 		"peakshavingreserve":            {"POST", "/peakshavingreserve/{value:[0-9.]+}", floatHandler(site.SetPeakShavingReserve, site.GetPeakShavingReserve)},
 		"peakshavingbatterytype":        {"POST", "/peakshavingbatterytype/{value:byd|marstek}", stringHandler(site.SetPeakShavingBatteryType, site.GetPeakShavingBatteryType)},

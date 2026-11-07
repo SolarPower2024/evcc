@@ -47,13 +47,8 @@ describe("profileProblem", () => {
     expect(profileProblem({ [key]: value })).toBeNull();
   });
 
-  test("peak limit in 0.5 kW steps", () => {
-    expect(profileProblem({ peakLimit: 6.25 })).toEqual({
-      code: "step",
-      key: "peakLimit",
-      step: 0.5,
-    });
-    expect(profileProblem({ peakLimit: 6.5 })).toBeNull();
+  test("peak limit in any step", () => {
+    expect(profileProblem({ peakLimit: 6.25 })).toBeNull();
   });
 
   test("grid charge start below stop", () => {
