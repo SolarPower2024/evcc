@@ -115,6 +115,7 @@ func TestMigratePeakLimit(t *testing.T) {
 		{"peak shaving off: the loads stay unlimited", map[string]string{keys.PeakShaving: "false", keys.PeakShavingLimit: "9000"}, 0, 0},
 		{"nothing stored: the default that was in use", map[string]string{keys.PeakShaving: "true"}, 0, 5000},
 		{"invalid: the default", map[string]string{keys.PeakShaving: "true", keys.PeakShavingLimit: "0"}, 0, 5000},
+		{"evcc's restore failed: its stored limit stays", map[string]string{keys.PeakShaving: "true", keys.PeakShavingLimit: "9000", keys.GridPeakBaseline: "7000"}, 0, 7000},
 		{"nothing stored, peak shaving off", map[string]string{}, 0, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

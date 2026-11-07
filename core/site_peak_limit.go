@@ -65,6 +65,13 @@ func (site *Site) updatePeakLimit() {
 // if that has none, and removes the old keys. Only with peak shaving on: evcc's
 // limit also throttles the loads, which a limit never in use must not start doing.
 func (site *Site) migratePeakLimit() {
+	// a failed restore step of evcc's before it must neither lose nor overwrite evcc's limit
+	if v, err := settings.Float(keys.GridPeakBaseline); err == nil && v > 0 && site.GetGridPeakBaseline() == 0 {
+		if err := site.SetGridPeakBaseline(v); err != nil {
+			site.log.ERROR.Printf("restore %s: %v", keys.GridPeakBaseline, err)
+		}
+	}
+
 	limit, ok := restoreFloat(site.log, keys.PeakShavingLimit, validPeakLimit)
 	if follow, err := settings.Bool(keys.PeakFollow); err == nil && follow {
 		// following the peak, the limit set by hand was the base
