@@ -81,6 +81,12 @@ import { socSteps, MARSTEK_MIN_RESERVE } from "@/utils/socSteps";
 import { peakShavingSetUp } from "@/utils/peakShaving";
 import { optimizerAutomaticOn } from "@/utils/optimizerAutomatic";
 import { openModal } from "@/configModal";
+import {
+	isConfigured,
+	isLoggedIn,
+	openLoginModal,
+	updateAuthStatus,
+} from "../Auth/auth";
 import Card from "../Helper/Card.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
 
@@ -165,6 +171,13 @@ export default defineComponent({
 		},
 		// evcc's dialog on the configuration page, closing it comes back here
 		async openLimit() {
+			// the config page's guard would drop the dialog from the url after a login
+			await updateAuthStatus();
+			if (isConfigured() && !isLoggedIn()) {
+				openLoginModal("/config?hems[type:static]");
+				return;
+			}
+
 			const router = this.$router;
 			const from = router.currentRoute.value.fullPath;
 			await openModal("hems", { type: "static" });
