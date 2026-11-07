@@ -554,8 +554,7 @@ battery mode.
 
 **One limit**: the peak limit is evcc's grid import peak limit (`gridPeakBaseline`,
 *Externe Begrenzung → Statische Limits → Netzbezugsspitze*; the value on the battery
-card opens this dialog, which peak shaving keeps reachable without experimental
-and country), which also limits the loads. Once the month has a higher peak, shaving below it saves nothing, so the
+card opens this dialog, its static tab also without experimental and country), which also limits the loads. Once the month has a higher peak, shaving below it saves nothing, so the
 battery's limit (`peakShavingLimit`, no longer stored) is the higher of the two; a
 new month starts at the limit again. Without a limit there is no reserve. A limit
 stored before moves to evcc's on start if that has none and peak shaving is on
@@ -1283,7 +1282,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
 | `core/site_gridpeak.go` | `updateGridPeak` reads the collector through `gridPeakCollector` |
-| `assets/js/components/Config/HemsModal.vue` | `experimental` and `peakLimitAvailable` also with peak shaving on: its limit is set here |
+| `assets/js/components/Config/HemsModal.vue` | `experimental` and `peakLimitAvailable` also on the static tab: the battery card links there |
 | `core/site_optimizer.go` | `optimizerGridTariff` for the grid price, `applyLmOptimizerInputs` where the request is assembled, `lmOptimizerResult` after the solve, `lmForecastLowest` for the forecast |
 | `core/site/api.go` | embeds `CustomAPI` |
 | `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`, evcc's rule that a charging loadpoint keeps its minimum on a full circuit asks `keepsMin` (with the priorities on top, what a higher priority waits for is still shed); three `lp.lmm().Peek*` probes; `pvEnablePhases` (the phases a disabled charger starts on) decides on `enablePhaseCurrents`, `pvMaxCurrent` then takes the limits of those phases; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` (in front of the disable branch, behind the always-charge/battery return) keeps a heater in stages on its running stages until the disable delay has passed, the phase timers take `phaseScaleDelay` (scaling down: `phaseScaleDelay1p`, the disable delay when 1p is not sustainable and evcc disables instead), `batterySupported` projects a pending 1p switch with `projectPhaseSwitch1p`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |
