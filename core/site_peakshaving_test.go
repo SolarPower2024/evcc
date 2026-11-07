@@ -494,6 +494,23 @@ func TestPeakReserveKeepsEvHoldGridDischarge(t *testing.T) {
 	assert.Equal(t, api.BatteryHold, sc.mode())
 }
 
+// TestPeakReserveEvHoldNotAutomatic: with the optimizer in automatic mode the
+// reserve keeps the battery normal for a fast charging vehicle as before
+func TestPeakReserveEvHoldNotAutomatic(t *testing.T) {
+	sc := newScenario(t)
+	sc.site.lms().socChargeEnabled = false
+	sc.site.batteryDischargeControl = true
+	sc.site.loadpoints = []*Loadpoint{{log: util.NewLogger("lp"), mode: api.ModeNow, status: api.StatusC}}
+
+	enableAutomatic(t)
+	require.True(t, sc.site.Automatic())
+
+	sc.site.SetBatteryMode(api.BatteryHold)
+	sc.cycle(15, 3000, 0)
+	assert.Equal(t, api.BatteryNormal, sc.mode())
+	assert.False(t, sc.site.upstreamHoldsBattery(true, sc.rate))
+}
+
 // TestPeakReserveGridChargeBeatsEvHold: soc-based grid charging below the reserve
 // still wins over the hold of a fast charging vehicle, as upstream decides
 func TestPeakReserveGridChargeBeatsEvHold(t *testing.T) {
