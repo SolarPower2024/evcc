@@ -89,6 +89,7 @@
       "normal": "Self-consumption, reserve untouched",
       "off": "Inactive",
       "optimizer": "Automatic: the battery always covers peaks, even when the optimizer holds it.",
+      "raised": "Raised to the month's peak this month, set {limit}.",
       "shaving": "Reserve active, capping peaks"
     },
     "socGridCharge": {

@@ -53,6 +53,14 @@
 
 		<div v-if="error" class="alert alert-danger mt-3 mb-0 py-2 small">{{ error }}</div>
 
+		<p
+			v-if="raised"
+			class="small text-muted mt-3 mb-0"
+			data-testid="battery-peak-shaving-raised"
+		>
+			{{ $t("battery.peakShaving.raised", { limit: kwText(limit) }) }}
+		</p>
+
 		<div
 			v-if="enabled && !limit"
 			class="alert alert-warning mt-3 mb-0 py-2 small"
@@ -104,7 +112,8 @@ export default defineComponent({
 	mixins: [formatter],
 	props: {
 		enabled: Boolean,
-		limit: { type: Number, default: 0 },
+		limit: { type: Number, default: 0 }, // set in the dialog
+		applied: { type: Number, default: 0 }, // with the month's peak on top
 		reserve: { type: Number, default: 30 },
 		// reported by the backend, not inferred from power: a setpoint can
 		// legitimately equal the free-discharge value
@@ -134,9 +143,11 @@ export default defineComponent({
 		entitiesMissing(): boolean {
 			return !peakShavingSetUp(store.state);
 		},
-		// shown in kW, stored in watts
+		raised(): boolean {
+			return this.limit > 0 && this.applied > this.limit;
+		},
 		limitText(): string {
-			return this.limit > 0 ? `${this.fmtNumber(this.limit / 1000, 1)} kW` : "– kW";
+			return this.limit > 0 ? this.kwText(Math.max(this.limit, this.applied)) : "– kW";
 		},
 		// a Marstek gets 5 % steps down to 20 %, the lowest threshold of Omnibattery's
 		// peak shaving, see utils/socSteps.ts
@@ -198,6 +209,10 @@ export default defineComponent({
 				this.error = this.apiError(err);
 				console.error(err);
 			}
+		},
+		// shown in kW, stored in watts
+		kwText(watt: number): string {
+			return `${this.fmtNumber(watt / 1000, Number.isInteger(watt / 100) ? 1 : 2)} kW`;
 		},
 		socText(soc: number): string {
 			return this.fmtPercentage(soc);

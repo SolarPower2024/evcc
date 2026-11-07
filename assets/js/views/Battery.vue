@@ -61,6 +61,7 @@
 						class="box-pull-out mt-4"
 						:enabled="!!state.peakShaving"
 						:limit="state.gridPeakBaseline ?? 0"
+						:applied="state.peakShavingLimit ?? 0"
 						:reserve="state.peakShavingReserve ?? 30"
 						:shaving="!!state.peakShavingActive"
 					/>
