@@ -14,8 +14,10 @@ import (
 	"github.com/evcc-io/evcc/db/settings"
 )
 
-// peakLimitRound is the step the month's peak is rounded down to
-const peakLimitRound = 100.0
+const (
+	peakLimitRound   = 100.0  // W, the month's peak is rounded down to it
+	defaultPeakLimit = 5000.0 // W, in use with peak shaving on and no limit stored
+)
 
 // peakLimitFor is the battery's limit for evcc's limit and the month's peak
 func peakLimitFor(baseline, monthPeak float64) float64 {
@@ -70,7 +72,11 @@ func (site *Site) migratePeakLimit() {
 		}
 	}
 
-	if on, err := settings.Bool(keys.PeakShaving); err == nil && on && ok && site.GetGridPeakBaseline() == 0 {
+	if !ok {
+		limit = defaultPeakLimit
+	}
+
+	if on, err := settings.Bool(keys.PeakShaving); err == nil && on && site.GetGridPeakBaseline() == 0 {
 		site.log.INFO.Printf("peak shaving: limit %.1f kW taken over as grid import peak limit", limit/1e3)
 		if err := site.SetGridPeakBaseline(limit); err != nil {
 			site.log.ERROR.Printf("restore %s: %v", keys.PeakShavingLimit, err)

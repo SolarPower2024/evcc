@@ -112,8 +112,9 @@ func TestMigratePeakLimit(t *testing.T) {
 		{"following: the limit set by hand", map[string]string{keys.PeakShaving: "true", keys.PeakShavingLimit: "11300", keys.PeakFollow: "true", keys.PeakFollowBase: "9000", keys.PeakFollowBuffer: "500"}, 0, 9000},
 		{"not following: the old base does not count", map[string]string{keys.PeakShaving: "true", keys.PeakShavingLimit: "8000", keys.PeakFollow: "false", keys.PeakFollowBase: "9000"}, 0, 8000},
 		{"peak shaving off: the loads stay unlimited", map[string]string{keys.PeakShaving: "false", keys.PeakShavingLimit: "9000"}, 0, 0},
-		{"nothing stored", map[string]string{keys.PeakShaving: "true"}, 0, 0},
-		{"invalid", map[string]string{keys.PeakShaving: "true", keys.PeakShavingLimit: "0"}, 0, 0},
+		{"nothing stored: the default that was in use", map[string]string{keys.PeakShaving: "true"}, 0, 5000},
+		{"invalid: the default", map[string]string{keys.PeakShaving: "true", keys.PeakShavingLimit: "0"}, 0, 5000},
+		{"nothing stored, peak shaving off", map[string]string{}, 0, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			site, _ := restoreTestSite(t)
