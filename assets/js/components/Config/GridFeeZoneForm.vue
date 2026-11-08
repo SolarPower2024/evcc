@@ -40,7 +40,11 @@
 				{{ pctResult }}
 			</div>
 			<div v-if="isValueInvalid" class="invalid-feedback d-block">
-				{{ isPct ? $t("config.lmgridfee.pctRange") : $t("config.tariff.zones.priceRequired") }}
+				{{
+					isPct
+						? $t("config.lmgridfee.pctRange")
+						: $t("config.tariff.zones.priceRequired")
+				}}
 			</div>
 		</div>
 
