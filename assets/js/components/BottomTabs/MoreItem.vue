@@ -35,7 +35,6 @@ import MoreMenu from "./MoreMenu.vue";
 import { isUserConfigError } from "@/utils/fatal";
 import { isNewVersionAvailable, isNewVersionUnacknowledged } from "@/utils/version";
 import settings from "@/settings";
-import { lmOffBadge } from "@/utils/lmOff"; // custom
 import type { FatalError, Sponsor, AuthProviders, Vehicle } from "@/types/evcc";
 
 export default defineComponent({
@@ -74,7 +73,7 @@ export default defineComponent({
 			return !!this.sponsor?.status?.expiresSoon;
 		},
 		showConfigBadge() {
-			return this.sponsorExpires || isUserConfigError(this.fatal) || lmOffBadge(); // custom: load management off, see utils/lmOff.ts
+			return this.sponsorExpires || isUserConfigError(this.fatal);
 		},
 		newVersionAvailable() {
 			return isNewVersionAvailable(this.installed, this.availableVersion);

@@ -275,10 +275,8 @@ export interface LmState {
   /** Monthly peak statistics, newest first. */
   peakMonths?: PeakMonth[];
   /** Follow the peak: the limit rises to the month's peak minus the buffer (W), base = limit set by hand. */
-  /** Load management switch: off lifts the circuits' power limits; limits = configured values of changed circuits. */
-  /** circuit: the load management (peak) circuit, empty = all */
+  /** Circuit limits changed at runtime; limits = configured values of changed circuits, circuit: the load management (peak) circuit, empty = none. */
   lmOff?: {
-    enabled: boolean;
     limits: Record<string, number>;
     dynamic: string[];
     circuit: string;

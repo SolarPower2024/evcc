@@ -728,7 +728,7 @@
       "gridChargeWindowLabel": "Reach the battery grid charge goal within",
       "gridChargeWindowHelp": "Optimizer only: for soc-based battery grid charging it plans the stop soc after the charging time at the grid charge power: without peak shaving at most after this time, with it as long as the room below the limit takes.",
       "circuitLabel": "Load management (peak) circuit",
-      "circuitHelp": "The circuit holding your peak limit, not the fuse. Only it shows under More → Load management (peak) and is lifted by the switch there. None: all circuits.",
+      "circuitHelp": "The circuit holding your peak limit, not the fuse. Only it can take the peak shaving limit (below).",
       "circuitFromPeakHelp": "The circuit limits controllable loads to the grid import peak, after a higher peak this month to that one. Its configured value only applies without peak shaving.",
       "circuitFromPeakLabel": "Limit = peak shaving limit",
       "circuitAll": "None",
@@ -2003,11 +2003,6 @@
   },
   "lmoverview": {
     "battery": "Battery (grid charging)",
-    "circuitFromPeak": "from peak shaving, configured {limit}",
-    "circuitLifted": "limit {limit} lifted",
-    "disabledHelp": "Off: the circuits' power limits do not apply, nothing is throttled for them. Fuses (current limits), §14a and battery peak shaving stay active.",
-    "enabled": "Load management",
-    "enabledHelp": "The circuits' power limits (peak) throttle wallboxes, heaters and battery grid charging.",
     "event": {
       "batteryMode": "evcc: mode {mode}",
       "gridChargeDenied": "Grid charging blocked · circuit allows {allowed} of {wanted}",
@@ -2027,23 +2022,7 @@
       "storageLost": "Storage not reachable",
       "throttled": "{load} throttled {requested} → {allowed}"
     },
-    "events": "Recent events",
     "loads": "Loads · throttled from the bottom up",
-    "menu": "Load management (peak)",
-    "menuOff": "off",
-    "noEvents": "No events since the start.",
-    "noLoads": "No loads in load management.",
-    "overall": {
-      "limited": "Limited",
-      "normal": "Normal",
-      "off": "Off",
-      "overload": "Overload"
-    },
-    "peak": "Peak shaving · 15 min average",
-    "peakAllowed": "Allowed {power} until {time}",
-    "peakFree": "Above the reserve · free",
-    "peakOff": "Off",
-    "peakReserve": "Reserve active · setpoint {setpoint}",
     "protected": "Shed guard",
     "state": {
       "off": "Off",
@@ -2057,10 +2036,6 @@
       "throttled": "Throttled · {allowed} of {requested}",
       "waiting": "Waiting · needs {requested}, {allowed} free"
     },
-    "title": "Load management (peak)",
-    "enabledHelpCircuit": "The power limit of \"{circuit}\" throttles wallboxes, heaters and battery grid charging.",
-    "disabledHelpCircuit": "Off: the power limit of \"{circuit}\" does not apply, nothing is throttled for it. Other circuits, fuses (current limits), §14a, grid import peak and battery peak shaving stay active.",
-    "peakRaised": "Limit raised to the month's peak this month, set {limit}",
     "optimizer": "Optimizer",
     "optimizerHint": "The optimizer decides, load management limits."
   },
