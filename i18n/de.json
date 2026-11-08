@@ -762,6 +762,7 @@
       "pctRange": "Bitte 0 bis 100 % eingeben.",
       "pctResult": "{fee} − {value} % = {result} Netzgebühr",
       "summaryPct": "−{value} % Netzgebühr",
+      "timeSame": "Start und Ende dürfen nicht gleich sein.",
       "valueAbs": "Netzgebühr",
       "valuePct": "Abzug"
     },

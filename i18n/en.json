@@ -762,6 +762,7 @@
       "pctRange": "Please enter 0 to 100 %.",
       "pctResult": "{fee} − {value} % = {result} grid fee",
       "summaryPct": "−{value} % grid fee",
+      "timeSame": "Start and end must differ.",
       "valueAbs": "Grid fee",
       "valuePct": "Reduction"
     },

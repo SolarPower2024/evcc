@@ -102,7 +102,7 @@
 				/>
 			</div>
 			<div v-if="isTimeRangeInvalid" class="invalid-feedback d-block">
-				{{ $t("config.tariff.zones.timeRangeError") }}
+				{{ $t("config.lmgridfee.timeSame") }}
 			</div>
 		</div>
 
@@ -202,8 +202,8 @@ export default {
 		isValidTimeRange() {
 			const { timeFrom, timeTo } = this.uiZone;
 			if (!timeFrom || !timeTo) return false;
-			if (timeTo === "00:00") return true;
-			return timeFrom < timeTo;
+			// over midnight (22:00-06:00) is fine, the template splits it
+			return timeFrom !== timeTo || timeFrom === "00:00";
 		},
 		isTimeRangeInvalid() {
 			return this.saveAttempted && !this.isValidTimeRange;
