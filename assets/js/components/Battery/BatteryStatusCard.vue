@@ -1,13 +1,10 @@
 <template>
 	<Card data-testid="battery-status-card">
 		<div class="values">
-			<!-- custom: peak status dialog, see core/site_peak_status.go -->
-			<PeakStatusLink>
-				<LabelAndValue :label="title" :color="color" align="start">
-					<h3
-						class="value m-0 fw-bold d-flex align-items-center gap-2"
-						:style="{ color }"
-					>
+			<LabelAndValue :label="title" :color="color" align="start">
+				<h3 class="value m-0 fw-bold d-flex align-items-center gap-2" :style="{ color }">
+					<!-- custom: peak status dialog, see core/site_peak_status.go -->
+					<PeakStatusLink>
 						<SocGauge
 							:soc="soc"
 							:color="color"
@@ -15,10 +12,10 @@
 							:mode="controllable ? batteryMode : undefined"
 						/>
 						{{ fmtPercentage(soc) }}
-					</h3>
-				</LabelAndValue>
-			</PeakStatusLink>
-			<!-- custom -->
+					</PeakStatusLink>
+					<!-- custom -->
+				</h3>
+			</LabelAndValue>
 
 			<LabelAndValue
 				class="text-center"

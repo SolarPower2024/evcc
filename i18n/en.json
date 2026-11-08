@@ -102,7 +102,7 @@
       "mini": {
         "battery": "Battery",
         "grid": "Grid",
-        "quarter": "Quarter hour",
+        "quarter": "15 min",
         "soc": "Storage"
       },
       "mode": {
@@ -114,9 +114,9 @@
         "unknown": "unknown"
       },
       "month": {
-        "interventions": "Peaks covered: {count}",
+        "covered": "Peaks covered",
         "none": "none yet",
-        "peak": "{power} on {date}",
+        "thisMonth": "this month",
         "title": "Monthly peak"
       },
       "more": "More",
@@ -143,6 +143,11 @@
           "text": "evcc charges the battery from the grid with {power}.",
           "title": "Grid charging"
         },
+        "gridDischarge": {
+          "detail": "evcc discharges the battery into the grid. Peak shaving does not act meanwhile.",
+          "text": "evcc discharges the battery into the grid.",
+          "title": "Grid discharge"
+        },
         "hold": {
           "detail": "evcc holds the battery, storage {soc}. It helps only when grid draw rises above {limit}.",
           "text": "evcc holds the battery. It helps only when grid draw rises above {limit}.",
@@ -154,7 +159,7 @@
           "title": "Hold – covering a peak"
         },
         "meter": {
-          "detail": "The grid value has been missing for over 2 minutes. The battery discharges freely and grid charging pauses until it is back.",
+          "detail": "The grid value has been missing for over 2 minutes. The battery discharges freely and grid charging pauses until it is back.",
           "text": "The grid value is missing. The battery is free for safety.",
           "title": "Meter outage"
         },
@@ -183,7 +188,7 @@
       "window": {
         "allowed": "still allows {power}",
         "avg": "Average so far",
-        "left": "{minutes} min left",
+        "left": "{minutes} min left",
         "limit": "Limit",
         "title": "Quarter hour"
       }
@@ -2000,7 +2005,7 @@
       "meterLost": "Meter outage · battery free",
       "notFollowing": "{load} ignores its limit · {power} instead of {allowed}",
       "peak": "Peak covered · demand {demand}, limit {limit}",
-      "peakEnd": "Peak over · battery covered up to {power}, {minutes} min",
+      "peakEnd": "Peak over · battery covered up to {power}, {minutes} min",
       "peakSwitchOff": "Peak shaving off",
       "peakSwitchOn": "Peak shaving on",
       "reserveAbove": "Above {reserve}: battery free",

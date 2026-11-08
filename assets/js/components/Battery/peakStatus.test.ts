@@ -3,11 +3,14 @@ import type { LmEvent, PeakState, PeakStatus } from "@/types/evcc-lm";
 import de from "../../../../i18n/de.json";
 import en from "../../../../i18n/en.json";
 import {
+  type Fmt,
   detailText,
   eventText,
   heroText,
   heroTitle,
   heroTone,
+  limitsText,
+  makeFmt,
   miniValues,
   notes,
   peakEvents,
@@ -26,7 +29,12 @@ const translate =
 const tEn = translate(en);
 const tDe = translate(de);
 
-const kw = (w: number) => `${(w / 1000).toFixed(1)} kW`;
+// plain spaces, so the expected texts read as they are; makeFmt is tested below
+const f: Fmt = {
+  w: (w) => `${(w / 1000).toFixed(1)} kW`,
+  pct: (p) => `${Math.round(p)} %`,
+};
+const kw = f;
 
 const base: PeakStatus = {
   state: "free",
@@ -40,6 +48,7 @@ const base: PeakStatus = {
   battery: 0,
   setpoint: 0,
   limited: true,
+  held: false,
   batteryMode: "normal",
   storageOk: true,
   window: {
@@ -56,6 +65,7 @@ const states: PeakState[] = [
   "storage",
   "meter",
   "gridCharge",
+  "gridDischarge",
   "holdShaving",
   "hold",
   "shaving",
@@ -107,6 +117,12 @@ describe("texts with real numbers", () => {
     );
   });
 
+  test("grid discharge", () => {
+    const st = { ...base, state: "gridDischarge" as const };
+    expect(heroTitle(st, tEn)).toBe("Grid discharge");
+    expect(heroText(st, tDe, kw)).toBe("evcc entlädt die Batterie ins Netz.");
+  });
+
   test("grid charging", () => {
     const st = { ...base, state: "gridCharge" as const, chargePower: 2500 };
     expect(heroText(st, tDe, kw)).toBe("evcc lädt die Batterie mit 2.5 kW aus dem Netz.");
@@ -130,6 +146,8 @@ describe("miniValues", () => {
     expect(grid).toMatchObject({ key: "grid", value: "2.3 kW" });
     expect(grid.fill).toBeCloseTo(0.575);
     expect(quarter).toMatchObject({ key: "quarter", value: "2.8 kW" });
+    expect(quarter.label).toBe("15 min");
+    expect(miniValues({ ...base, state: "saving" }, tDe, kw)[2].label).toBe("15 Min");
     expect(quarter.fill).toBeCloseTo(0.7);
   });
 
@@ -169,6 +187,28 @@ describe("notes", () => {
     expect(free[1].tone).toBe("bad");
   });
 
+  test("no mode chip before evcc has set a mode", () => {
+    const n = notes({ ...base, batteryMode: "unknown", limited: false }, tDe, kw);
+    expect(n.map((x) => x.text)).toEqual(["Speicher verbunden", "Entladen frei"]);
+    expect(notes({ ...base, batteryMode: "" }, tDe, kw)).toHaveLength(2);
+  });
+
+  test("a hold of another kind says nothing on the discharge", () => {
+    const n = notes(
+      { ...base, state: "hold", batteryMode: "hold", held: true, limited: false },
+      tEn,
+      kw
+    );
+    expect(n.map((x) => x.text)).toEqual(["Mode: hold", "Storage connected"]);
+  });
+
+  test("grid charge and discharge say nothing on the discharge either", () => {
+    for (const state of ["gridCharge", "gridDischarge"] as const) {
+      const n = notes({ ...base, state, limited: false }, tEn, kw);
+      expect(n.map((x) => x.text)).not.toContain("Discharge free");
+    }
+  });
+
   test("the hint of the integration (byd)", () => {
     const n = notes({ ...base, storageHint: "modeStuck" }, tDe, kw);
     expect(n.at(-1)?.text).toBe("Fronius übernimmt den Modus nicht");
@@ -176,9 +216,39 @@ describe("notes", () => {
   });
 
   test("every mode has a name", () => {
-    for (const mode of ["normal", "hold", "holdcharge", "charge", "discharge", "unknown"]) {
+    for (const mode of ["normal", "hold", "holdcharge", "charge", "discharge"]) {
       expect(notes({ ...base, batteryMode: mode }, tEn, kw)[0].text).not.toContain("?");
     }
+  });
+});
+
+describe("number and unit stay together", () => {
+  const fmt = makeFmt(
+    (w) => `${(w / 1000).toFixed(1).replace(".", ",")} kW`,
+    (p) => `${Math.round(p)} %`
+  );
+
+  test("makeFmt", () => {
+    expect(fmt.w(4000)).toBe("4,0 kW");
+    expect(fmt.pct(25)).toBe("25 %");
+    expect(fmt.pct(25)).not.toContain(" ");
+  });
+
+  test("in the sentences, the tile, the notes and the events", () => {
+    const st = { ...base, state: "saving" as const, limited: true, setpoint: 1600 };
+    const all = [
+      heroText(st, tDe, fmt),
+      detailText(st, tDe, fmt),
+      limitsText(st, tDe, fmt),
+      ...miniValues(st, tDe, fmt).map((m) => m.value),
+      ...notes(st, tDe, fmt).map((n) => n.text),
+      eventText({ at: "", type: "reserveBelow", a: 24, b: 25 }, tDe, fmt) ?? "",
+      eventText({ at: "", type: "peakEnd", a: 1600, b: 180 }, tDe, fmt) ?? "",
+    ].join(" | ");
+
+    expect(all).not.toMatch(/\d (%|kW)/);
+    expect(all).toContain("25 %");
+    expect(all).toContain("4,0 kW");
   });
 });
 
@@ -220,8 +290,8 @@ describe("events", () => {
     const cases: [LmEvent, string, string][] = [
       [
         ev("peakEnd", 1600, 180),
-        "Peak over · battery covered up to 1.6 kW, 3 min",
-        "Spitze vorbei · Batterie deckte bis 1.6 kW, 3 min",
+        "Peak over · battery covered up to 1.6 kW, 3 min",
+        "Spitze vorbei · Batterie deckte bis 1.6 kW, 3 min",
       ],
       [
         ev("reserveBelow", 24, 25),
@@ -245,7 +315,7 @@ describe("events", () => {
   });
 
   test("a peak of less than 30 s counts as one minute", () => {
-    expect(eventText(ev("peakEnd", 1000, 20), tEn, kw)).toContain("1 min");
+    expect(eventText(ev("peakEnd", 1000, 20), tEn, kw)).toContain("1 min");
   });
 
   test("the older types are left to their own texts", () => {

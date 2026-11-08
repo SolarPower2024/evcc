@@ -7,7 +7,7 @@
 		@open="onOpen"
 		@closed="onClosed"
 	>
-		<div v-if="visible && status" class="d-flex flex-column gap-4">
+		<div v-if="visible && status" class="d-flex flex-column gap-3">
 			<PeakStatusHero :status="status" />
 
 			<section>
@@ -37,25 +37,32 @@
 				<div class="d-flex justify-content-between small evcc-gray mt-1">
 					<span
 						>{{ $t("battery.peakStatus.window.avg") }}
-						{{ power(status.window?.avg ?? 0) }}</span
+						{{ fmt.w(status.window?.avg ?? 0) }}</span
 					>
 					<span
-						>{{ $t("battery.peakStatus.window.limit") }} {{ power(status.limit) }}</span
+						>{{ $t("battery.peakStatus.window.limit") }} {{ fmt.w(status.limit) }}</span
 					>
 				</div>
 				<div class="small mt-1" :class="{ 'text-warning': windowData.warn }">
 					{{
 						$t("battery.peakStatus.window.allowed", {
-							power: power(windowData.allowed),
+							power: fmt.w(windowData.allowed),
 						})
 					}}
 				</div>
 			</section>
 
-			<section data-testid="peak-status-month">
-				<h6 class="section-title">{{ $t("battery.peakStatus.month.title") }}</h6>
-				<div>{{ monthPeak }}</div>
-				<div class="small evcc-gray">{{ monthInterventions }}</div>
+			<section class="tiles" data-testid="peak-status-month">
+				<div class="tile" data-testid="peak-status-month-peak">
+					<div class="section-title">{{ $t("battery.peakStatus.month.title") }}</div>
+					<div class="tile-value">{{ monthPeak.value }}</div>
+					<div class="tile-sub">{{ monthPeak.sub }}</div>
+				</div>
+				<div class="tile" data-testid="peak-status-month-covered">
+					<div class="section-title">{{ $t("battery.peakStatus.month.covered") }}</div>
+					<div class="tile-value">{{ status.month?.interventions ?? 0 }}</div>
+					<div class="tile-sub">{{ $t("battery.peakStatus.month.thisMonth") }}</div>
+				</div>
 			</section>
 
 			<section data-testid="peak-status-events">
@@ -66,11 +73,11 @@
 				<div
 					v-for="(e, i) in shownEvents"
 					:key="i"
-					class="d-flex gap-3 event"
+					class="event"
 					data-testid="peak-status-event"
 				>
-					<span class="evcc-gray event-time text-nowrap">{{ eventTime(e) }}</span>
-					<span>{{ eventLine(e) }}</span>
+					<span class="evcc-gray text-nowrap">{{ eventTime(e) }}</span>
+					<span class="event-text">{{ eventLine(e) }}</span>
 				</div>
 				<button
 					v-if="events.length > FEW"
@@ -94,7 +101,7 @@ import formatter from "@/mixins/formatter";
 import type { LmEvent, PeakStatus } from "@/types/evcc-lm";
 import GenericModal from "../Helper/GenericModal.vue";
 import PeakStatusHero from "./PeakStatusHero.vue";
-import { detailText, eventText, notes, peakEvents, windowInfo } from "./peakStatus";
+import { detailText, eventText, makeFmt, notes, peakEvents, windowInfo } from "./peakStatus";
 
 const FEW = 5;
 const TICK = 15_000;
@@ -120,11 +127,17 @@ export default defineComponent({
 			const st = store.state.peakStatus;
 			return st?.state ? st : undefined;
 		},
+		fmt() {
+			return makeFmt(
+				(watt: number) => this.fmtW(watt),
+				(percent: number) => this.fmtPercentage(percent)
+			);
+		},
 		detail(): string {
-			return this.status ? detailText(this.status, this.tr, this.power) : "";
+			return this.status ? detailText(this.status, this.tr, this.fmt) : "";
 		},
 		noteList() {
-			return this.status ? notes(this.status, this.tr, this.power) : [];
+			return this.status ? notes(this.status, this.tr, this.fmt) : [];
 		},
 		windowData() {
 			return this.status ? windowInfo(this.status, this.now) : null;
@@ -134,18 +147,13 @@ export default defineComponent({
 			if (!w) return "";
 			return `${this.fmtHourMinute(new Date(w.start))}–${this.fmtHourMinute(new Date(w.end))}`;
 		},
-		monthPeak(): string {
+		monthPeak(): { value: string; sub: string } {
 			const m = this.status?.month;
-			if (!m || !m.peak) return this.$t("battery.peakStatus.month.none");
-			return this.$t("battery.peakStatus.month.peak", {
-				power: this.power(m.peak),
-				date: this.fmtWeekdayDayTime(new Date(m.peakAt)),
-			});
-		},
-		monthInterventions(): string {
-			return this.$t("battery.peakStatus.month.interventions", {
-				count: this.status?.month?.interventions ?? 0,
-			});
+			if (!m || !m.peak) return { value: this.$t("battery.peakStatus.month.none"), sub: "" };
+			return {
+				value: this.fmt.w(m.peak),
+				sub: this.fmtWeekdayDayTime(new Date(m.peakAt)),
+			};
 		},
 		events(): LmEvent[] {
 			// the whole list from the api, until it is there what the status publishes
@@ -168,26 +176,23 @@ export default defineComponent({
 		tr(key: string, params?: Record<string, unknown>): string {
 			return this.$t(key, params as Record<string, string>);
 		},
-		power(watt: number): string {
-			return this.fmtW(watt);
-		},
 		eventTime(e: LmEvent): string {
 			const at = new Date(e.at);
 			const today = new Date(this.now).toDateString() === at.toDateString();
 			return today ? this.fmtHourMinute(at) : this.fmtWeekdayDayTime(at);
 		},
 		eventLine(e: LmEvent): string {
-			return eventText(e, this.tr, this.power) ?? this.lmEventText(e);
+			return eventText(e, this.tr, this.fmt) ?? this.lmEventText(e);
 		},
 		// the older types: the same texts as the load management overview
 		lmEventText(e: LmEvent): string {
 			const k = (name: string, p: Record<string, string>) =>
 				this.$t(`lmoverview.event.${name}`, p);
 			if (e.type === "peak") {
-				return k("peak", { demand: this.power(e.a), limit: this.power(e.b) });
+				return k("peak", { demand: this.fmt.w(e.a), limit: this.fmt.w(e.b) });
 			}
 			if (e.type === "gridChargePaused") {
-				return k("gridChargePaused", { demand: this.power(e.a), limit: this.power(e.b) });
+				return k("gridChargePaused", { demand: this.fmt.w(e.a), limit: this.fmt.w(e.b) });
 			}
 			return e.type;
 		},
@@ -216,10 +221,36 @@ export default defineComponent({
 
 <style scoped>
 .section-title {
-	font-size: 0.8rem;
+	font-size: 0.75rem;
+	font-weight: normal;
 	text-transform: uppercase;
 	color: var(--evcc-gray);
-	margin-bottom: 0.5rem;
+	margin-bottom: 0.35rem;
+}
+.tiles {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.75rem;
+}
+.tile {
+	background: var(--evcc-background);
+	border-radius: 0.75rem;
+	padding: 0.6rem 0.8rem;
+	min-width: 0;
+}
+.tile .section-title {
+	margin-bottom: 0.1rem;
+}
+.tile-value {
+	font-size: 1.35rem;
+	font-weight: bold;
+	line-height: 1.3;
+	overflow-wrap: anywhere;
+}
+.tile-sub {
+	min-height: 1.2em;
+	font-size: 0.8rem;
+	color: var(--evcc-gray);
 }
 .pill {
 	display: inline-block;
@@ -263,10 +294,15 @@ export default defineComponent({
 	background: var(--evcc-default-text);
 }
 .event {
+	display: grid;
+	grid-template-columns: 5rem minmax(0, 1fr);
+	column-gap: 0.75rem;
 	font-size: 0.9rem;
-	line-height: 1.8;
+	line-height: 1.6;
+	padding: 0.1rem 0;
 }
-.event-time {
-	min-width: 4.5rem;
+.event-text {
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 </style>

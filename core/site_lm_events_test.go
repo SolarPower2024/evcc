@@ -1,7 +1,10 @@
 package core
 
 import (
+	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,4 +105,40 @@ func TestLmEventsStopPersists(t *testing.T) {
 	var saved []lm.Event
 	require.NoError(t, settings.Json(keys.LmEvents, &saved))
 	assert.Len(t, saved, 2)
+}
+
+// TestPeakEventListsMatch: the ui lists the peak related event types by hand
+// (PEAK_EVENTS in peakStatus.ts), they have to be the ones of lm.PeakEvent
+func TestPeakEventListsMatch(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "assets", "js", "components", "Battery", "peakStatus.ts"))
+	require.NoError(t, err)
+
+	m := regexp.MustCompile(`(?s)PEAK_EVENTS = new Set<string>\(\[(.*?)\]\)`).FindSubmatch(src)
+	require.NotNil(t, m, "PEAK_EVENTS in peakStatus.ts")
+
+	ui := make(map[string]bool)
+	for _, name := range regexp.MustCompile(`"(\w+)"`).FindAllStringSubmatch(string(m[1]), -1) {
+		ui[name[1]] = true
+	}
+
+	// every event type there is
+	for _, typ := range []string{
+		lm.EventShed, lm.EventThrottled, lm.EventGridChargePaused, lm.EventGridChargeDenied, lm.EventPeak,
+		lm.EventNotFollowing, lm.EventPeakEnd, lm.EventReserveBelow, lm.EventReserveAbove, lm.EventBatteryMode,
+		lm.EventPeakSwitch, lm.EventMeter, lm.EventStorage,
+	} {
+		assert.Equal(t, lm.PeakEvent(typ), ui[typ], "event type %s", typ)
+		delete(ui, typ)
+	}
+
+	assert.Empty(t, ui, "types in the ui list that the backend does not know: %s", strings.Join(keysOf(ui), ", "))
+}
+
+func keysOf(m map[string]bool) []string {
+	var res []string
+	for k := range m {
+		res = append(res, k)
+	}
+
+	return res
 }

@@ -5,7 +5,22 @@
 import type { LmEvent, PeakState, PeakStatus } from "@/types/evcc-lm";
 
 export type Translate = (key: string, params?: Record<string, unknown>) => string;
-export type FmtPower = (watt: number) => string;
+
+/** Number formats of the dialog: power (kW with unit) and percent, as the battery card formats them. */
+export interface Fmt {
+  w: (watt: number) => string;
+  pct: (percent: number) => string;
+}
+
+const NBSP = " ";
+
+/** A number and its unit stay on one line. */
+const nb = (text: string): string => text.replace(/(\d) (?=%|[kMG]?W\b)/g, `$1${NBSP}`);
+
+/** Formats for the dialog from the formatter of the app. */
+export function makeFmt(fmtW: (watt: number) => string, fmtPercentage: (p: number) => string): Fmt {
+  return { w: (watt) => nb(fmtW(watt)), pct: (p) => nb(fmtPercentage(p)) };
+}
 
 const P = "battery.peakStatus";
 
@@ -15,6 +30,7 @@ const TONES: Record<PeakState, string> = {
   storage: "var(--evcc-gray)",
   meter: "var(--evcc-orange)",
   gridCharge: "var(--evcc-darker-green)",
+  gridDischarge: "var(--evcc-darker-yellow)",
   holdShaving: "var(--evcc-red)",
   hold: "var(--evcc-default-text)",
   shaving: "var(--evcc-red)",
@@ -35,31 +51,35 @@ function covering(st: PeakStatus): number {
   return st.battery > 0 ? st.battery : st.setpoint;
 }
 
-function params(st: PeakStatus, fmtW: FmtPower): Record<string, unknown> {
+function params(st: PeakStatus, f: Fmt): Record<string, unknown> {
   return {
-    soc: `${Math.round(st.soc)} %`,
-    reserve: `${Math.round(st.reserve)} %`,
-    limit: fmtW(st.limit),
-    grid: fmtW(st.grid),
-    house: fmtW(st.house),
-    battery: fmtW(covering(st)),
-    power: fmtW(st.chargePower ?? 0),
+    soc: f.pct(st.soc),
+    reserve: f.pct(st.reserve),
+    limit: f.w(st.limit),
+    grid: f.w(st.grid),
+    house: f.w(st.house),
+    battery: f.w(covering(st)),
+    power: f.w(st.chargePower ?? 0),
   };
 }
 
 /** The sentence of the tile. */
-export function heroText(st: PeakStatus, t: Translate, fmtW: FmtPower): string {
-  return t(`${P}.state.${st.state}.text`, params(st, fmtW));
+export function heroText(st: PeakStatus, t: Translate, f: Fmt): string {
+  return t(`${P}.state.${st.state}.text`, params(st, f));
+}
+
+/** The line under the values of the tile. */
+export function limitsText(st: PeakStatus, t: Translate, f: Fmt): string {
+  return t(`${P}.reserveLimit`, { reserve: f.pct(st.reserve), limit: f.w(st.limit) });
 }
 
 /** The longer sentence under "what is happening". */
-export function detailText(st: PeakStatus, t: Translate, fmtW: FmtPower): string {
-  const p = params(st, fmtW);
-  let text = t(`${P}.state.${st.state}.detail`, p);
+export function detailText(st: PeakStatus, t: Translate, f: Fmt): string {
+  let text = t(`${P}.state.${st.state}.detail`, params(st, f));
 
   // the band of the integration: free again from the reserve plus 2 %
   if ((st.state === "saving" || st.state === "shaving") && st.freeAt) {
-    text += " " + t(`${P}.freeAt`, { freeAt: `${Math.round(st.freeAt)} %` });
+    text += " " + t(`${P}.freeAt`, { freeAt: f.pct(st.freeAt) });
   }
 
   return text;
@@ -78,19 +98,19 @@ export interface MiniValue {
 const unit = (v: number) => Math.min(1, Math.max(0, v));
 
 /** The three values of the tile with their bars. */
-export function miniValues(st: PeakStatus, t: Translate, fmtW: FmtPower): MiniValue[] {
+export function miniValues(st: PeakStatus, t: Translate, f: Fmt): MiniValue[] {
   const res: MiniValue[] = [
     {
       key: "soc",
       label: t(`${P}.mini.soc`),
-      value: `${Math.round(st.soc)} %`,
+      value: f.pct(st.soc),
       fill: unit(st.soc / 100),
       mark: unit(st.reserve / 100),
     },
     {
       key: "grid",
       label: t(`${P}.mini.grid`),
-      value: fmtW(st.grid),
+      value: f.w(st.grid),
       fill: st.limit > 0 ? unit(st.grid / st.limit) : 0,
     },
   ];
@@ -100,14 +120,14 @@ export function miniValues(st: PeakStatus, t: Translate, fmtW: FmtPower): MiniVa
     res.push({
       key: "battery",
       label: t(`${P}.mini.battery`),
-      value: fmtW(power),
+      value: f.w(power),
       fill: st.limit > 0 ? unit(power / st.limit) : 0,
     });
   } else {
     res.push({
       key: "quarter",
       label: t(`${P}.mini.quarter`),
-      value: st.window ? fmtW(st.window.avg) : "–",
+      value: st.window ? f.w(st.window.avg) : "–",
       fill: st.window && st.limit > 0 ? unit(st.window.avg / st.limit) : 0,
     });
   }
@@ -121,18 +141,31 @@ export interface Note {
 }
 
 /** The notes: mode, storage connection, discharge, hints of the integration. */
-export function notes(st: PeakStatus, t: Translate, fmtW: FmtPower): Note[] {
-  const mode = t(`${P}.mode.${st.batteryMode || "unknown"}`);
+export function notes(st: PeakStatus, t: Translate, f: Fmt): Note[] {
+  const res: Note[] = [];
 
-  const res: Note[] = [
-    { text: t(`${P}.notes.mode`, { mode }), tone: "plain" },
+  // the mode once evcc has set one
+  if (st.batteryMode && st.batteryMode !== "unknown") {
+    res.push({
+      text: t(`${P}.notes.mode`, { mode: t(`${P}.mode.${st.batteryMode}`) }),
+      tone: "plain",
+    });
+  }
+
+  res.push(
     st.storageOk
       ? { text: t(`${P}.notes.connected`), tone: "ok" }
-      : { text: t(`${P}.notes.notConnected`), tone: "bad" },
-    st.limited
-      ? { text: t(`${P}.notes.dischargeMax`, { power: fmtW(st.setpoint) }), tone: "plain" }
-      : { text: t(`${P}.notes.dischargeFree`), tone: "plain" },
-  ];
+      : { text: t(`${P}.notes.notConnected`), tone: "bad" }
+  );
+
+  // no word on the discharge where it is not evcc's call: grid charging and
+  // discharge, a hold of another kind
+  const other = st.state === "gridCharge" || st.state === "gridDischarge";
+  if (st.limited) {
+    res.push({ text: t(`${P}.notes.dischargeMax`, { power: f.w(st.setpoint) }), tone: "plain" });
+  } else if (!st.held && !other) {
+    res.push({ text: t(`${P}.notes.dischargeFree`), tone: "plain" });
+  }
 
   if (st.storageHint) {
     res.push({ text: t(`${P}.hint.${st.storageHint}`), tone: "bad" });
@@ -170,7 +203,10 @@ export function windowInfo(st: PeakStatus, now: number): WindowInfo | null {
   };
 }
 
-/** Event types shown in the dialog. */
+/**
+ * Event types shown in the dialog. The same list as lm.PeakEvent in
+ * core/lm/status.go; core/site_lm_events_test.go (TestPeakEventListsMatch) checks them.
+ */
 const PEAK_EVENTS = new Set<string>([
   "peak",
   "peakEnd",
@@ -188,16 +224,16 @@ export function peakEvents(events: LmEvent[] = []): LmEvent[] {
 }
 
 /** The text of the event types of the peak status; undefined for the others. */
-export function eventText(e: LmEvent, t: Translate, fmtW: FmtPower): string | undefined {
+export function eventText(e: LmEvent, t: Translate, f: Fmt): string | undefined {
   const k = (name: string, p?: Record<string, unknown>) => t(`lmoverview.event.${name}`, p);
 
   switch (e.type) {
     case "peakEnd":
-      return k("peakEnd", { power: fmtW(e.a), minutes: Math.max(1, Math.round(e.b / 60)) });
+      return k("peakEnd", { power: f.w(e.a), minutes: Math.max(1, Math.round(e.b / 60)) });
     case "reserveBelow":
-      return k("reserveBelow", { reserve: `${Math.round(e.b)} %` });
+      return k("reserveBelow", { reserve: f.pct(e.b) });
     case "reserveAbove":
-      return k("reserveAbove", { reserve: `${Math.round(e.b)} %` });
+      return k("reserveAbove", { reserve: f.pct(e.b) });
     case "batteryMode":
       return k("batteryMode", { mode: t(`${P}.mode.${e.load || "unknown"}`) });
     case "peakSwitch":

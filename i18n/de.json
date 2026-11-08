@@ -102,7 +102,7 @@
       "mini": {
         "battery": "Batterie",
         "grid": "Netz",
-        "quarter": "Viertelstunde",
+        "quarter": "15 Min",
         "soc": "Speicher"
       },
       "mode": {
@@ -114,9 +114,9 @@
         "unknown": "unbekannt"
       },
       "month": {
-        "interventions": "Spitzen gedeckt: {count}",
+        "covered": "Spitzen gedeckt",
         "none": "noch keine",
-        "peak": "{power} am {date}",
+        "thisMonth": "diesen Monat",
         "title": "Monatsspitze"
       },
       "more": "Mehr",
@@ -143,6 +143,11 @@
           "text": "evcc lädt die Batterie mit {power} aus dem Netz.",
           "title": "Laden aus dem Netz"
         },
+        "gridDischarge": {
+          "detail": "evcc entlädt die Batterie ins Netz. Peak Shaving greift in dieser Zeit nicht.",
+          "text": "evcc entlädt die Batterie ins Netz.",
+          "title": "Entladen ins Netz"
+        },
         "hold": {
           "detail": "evcc hält die Batterie, Speicher {soc}. Sie hilft nur, wenn der Netzbezug über {limit} steigt.",
           "text": "evcc hebt die Batterie auf. Sie hilft nur, wenn der Netzbezug über {limit} steigt.",
@@ -154,7 +159,7 @@
           "title": "Halten – kappt Spitze"
         },
         "meter": {
-          "detail": "Seit über 2 Minuten fehlt der Netzwert. Die Batterie entlädt frei und Netzladen pausiert, bis er wieder da ist.",
+          "detail": "Seit über 2 Minuten fehlt der Netzwert. Die Batterie entlädt frei und Netzladen pausiert, bis er wieder da ist.",
           "text": "Der Netzwert fehlt. Die Batterie ist zur Sicherheit frei.",
           "title": "Messausfall"
         },
@@ -183,7 +188,7 @@
       "window": {
         "allowed": "erlaubt noch {power}",
         "avg": "Schnitt bisher",
-        "left": "noch {minutes} min",
+        "left": "noch {minutes} min",
         "limit": "Grenze",
         "title": "Viertelstunde"
       }
@@ -2000,7 +2005,7 @@
       "meterLost": "Messausfall · Batterie frei",
       "notFollowing": "{load} folgt der Vorgabe nicht · {power} statt {allowed}",
       "peak": "Peak abgefangen · Bedarf {demand}, Grenze {limit}",
-      "peakEnd": "Spitze vorbei · Batterie deckte bis {power}, {minutes} min",
+      "peakEnd": "Spitze vorbei · Batterie deckte bis {power}, {minutes} min",
       "peakSwitchOff": "Peak Shaving aus",
       "peakSwitchOn": "Peak Shaving an",
       "reserveAbove": "Über {reserve}: Batterie frei",

@@ -1,7 +1,7 @@
 <template>
-	<div
+	<span
 		v-if="active"
-		class="peak-link"
+		class="peak-link d-inline-flex align-items-center gap-2"
 		role="button"
 		tabindex="0"
 		:aria-label="$t('battery.peakStatus.open')"
@@ -12,7 +12,7 @@
 	>
 		<slot />
 		<shopicon-regular-info size="s" class="hint" aria-hidden="true"></shopicon-regular-info>
-	</div>
+	</span>
 	<slot v-else />
 </template>
 
@@ -22,7 +22,7 @@ import { defineComponent } from "vue";
 import Modal from "bootstrap/js/dist/modal";
 import store from "@/store";
 
-// Custom extension: wraps the soc of a battery card. With peak shaving set up it
+// Custom extension: wraps the ring and the percentage of a battery card. With peak shaving set up it
 // opens the peak status dialog (PeakStatusModal, mounted in the battery page);
 // without it the content passes through unchanged. See core/site_peak_status.go.
 export default defineComponent({
@@ -43,8 +43,6 @@ export default defineComponent({
 
 <style scoped>
 .peak-link {
-	position: relative;
-	min-width: 0;
 	cursor: pointer;
 	border-radius: 0.5rem;
 }
@@ -52,11 +50,9 @@ export default defineComponent({
 	outline: 2px solid var(--bs-primary);
 	outline-offset: 2px;
 }
-/* the hint sits at the right of the label line */
+/* right next to the percentage, on its line */
 .hint {
-	position: absolute;
-	right: 0.25rem;
-	top: 0.3rem;
+	flex-shrink: 0;
 	width: 14px;
 	height: 14px;
 	color: var(--evcc-gray);

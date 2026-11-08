@@ -22,7 +22,7 @@
 				class="mini"
 				:data-testid="`peak-status-mini-${m.key}`"
 			>
-				<div class="mini-label text-truncate">{{ m.label }}</div>
+				<div class="mini-label">{{ m.label }}</div>
 				<div class="mini-value fw-bold text-nowrap">{{ m.value }}</div>
 				<div class="bar">
 					<div class="bar-fill" :style="{ width: `${m.fill * 100}%` }"></div>
@@ -41,6 +41,7 @@
 
 <script lang="ts">
 import "@h2d2/shopicons/es/regular/batterycharge";
+import "@h2d2/shopicons/es/regular/batterydischarge";
 import "@h2d2/shopicons/es/regular/batteryfull";
 import "@h2d2/shopicons/es/regular/batteryquarter";
 import "@h2d2/shopicons/es/regular/exclamationtriangle";
@@ -50,7 +51,7 @@ import "@h2d2/shopicons/es/regular/powersupply";
 import { defineComponent, type PropType } from "vue";
 import formatter from "@/mixins/formatter";
 import type { PeakState, PeakStatus } from "@/types/evcc-lm";
-import { heroText, heroTitle, heroTone, miniValues } from "./peakStatus";
+import { heroText, heroTitle, heroTone, limitsText, makeFmt, miniValues } from "./peakStatus";
 
 // the tile at the top of the peak status dialog, see core/site_peak_status.go
 const ICONS: Record<PeakState, string> = {
@@ -58,6 +59,7 @@ const ICONS: Record<PeakState, string> = {
 	storage: "shopicon-regular-exclamationtriangle",
 	meter: "shopicon-regular-exclamationtriangle",
 	gridCharge: "shopicon-regular-batterycharge",
+	gridDischarge: "shopicon-regular-batterydischarge",
 	holdShaving: "shopicon-regular-lightning",
 	hold: "shopicon-regular-lock",
 	shaving: "shopicon-regular-lightning",
@@ -81,28 +83,28 @@ export default defineComponent({
 		icon(): string {
 			return ICONS[this.state];
 		},
+		fmt() {
+			return makeFmt(
+				(watt: number) => this.fmtW(watt),
+				(percent: number) => this.fmtPercentage(percent)
+			);
+		},
 		title(): string {
 			return heroTitle(this.status, this.tr);
 		},
 		text(): string {
-			return heroText(this.status, this.tr, this.power);
+			return heroText(this.status, this.tr, this.fmt);
 		},
 		minis() {
-			return miniValues(this.status, this.tr, this.power);
+			return miniValues(this.status, this.tr, this.fmt);
 		},
 		limits(): string {
-			return this.$t("battery.peakStatus.reserveLimit", {
-				reserve: `${Math.round(this.status.reserve)} %`,
-				limit: this.power(this.status.limit),
-			});
+			return limitsText(this.status, this.tr, this.fmt);
 		},
 	},
 	methods: {
 		tr(key: string, params?: Record<string, unknown>): string {
 			return this.$t(key, params as Record<string, string>);
-		},
-		power(watt: number): string {
-			return this.fmtW(watt);
 		},
 	},
 });

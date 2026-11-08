@@ -161,6 +161,7 @@ export type PeakState =
   | "storage"
   | "meter"
   | "gridCharge"
+  | "gridDischarge"
   | "holdShaving"
   | "hold"
   | "shaving"
@@ -188,6 +189,8 @@ export interface PeakStatus {
   setpoint: number;
   /** The discharge is limited to the setpoint. */
   limited: boolean;
+  /** evcc holds the battery. */
+  held: boolean;
   chargePower?: number;
   batteryMode: string;
   storageOk: boolean;
