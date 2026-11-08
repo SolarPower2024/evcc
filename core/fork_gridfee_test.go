@@ -40,8 +40,10 @@ func TestGridFeeZonesHook(t *testing.T) {
 	}
 
 	form := readRepoFile(t, "assets/js/components/Config/GridFeeZoneForm.vue")
-	for _, key := range []string{"mode:", "value,", "days:", "months:", "hours:"} {
-		assert.Contains(t, form, key, "form writes zone key")
+	save := form[strings.Index(form, "convertFromUiZone(uiZone: UiZone)"):]
+	save = save[:strings.Index(save, "handleSave()")]
+	for _, key := range []string{"mode: uiZone.mode", "				value,", "days: this.formatWeekdaysToString", "months: this.formatMonthsToString", "hours: isAllDay"} {
+		assert.Contains(t, save, key, "form writes zone key")
 	}
 }
 
@@ -71,6 +73,13 @@ func TestGridFeeTemplateChoice(t *testing.T) {
 		_, err := os.Stat(filepath.Join("..", "templates", "definition", "tariff", name+".yaml"))
 		assert.NoError(t, err, name)
 	}
+
+	// the zone hint reads the entered grid fee from DeviceModalBase.values
+	assert.Contains(t, modal, `ref="lmBase"`)
+	assert.Contains(t, modal, "?.values?.gridfee")
+	base := readRepoFile(t, "assets/js/components/Config/DeviceModal/DeviceModalBase.vue")
+	assert.Contains(t, base, "values: { ...this.initialValues } as DeviceValues")
+	assert.Contains(t, base, "this.values = device.config")
 
 	helper := readRepoFile(t, "assets/js/utils/lmGridTariff.ts")
 	assert.Contains(t, helper, `SPLIT_TEMPLATE = "fixed-netz"`)

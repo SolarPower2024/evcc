@@ -67,7 +67,7 @@
 </template>
 
 <script lang="ts">
-import { computed, defineComponent, markRaw, type PropType } from "vue";
+import { computed, defineComponent, markRaw, type PropType } from "vue"; // custom: computed, markRaw
 import DeviceModalBase from "./DeviceModal/DeviceModalBase.vue";
 import NewDeviceButton from "./NewDeviceButton.vue";
 import FormRow from "./FormRow.vue";
