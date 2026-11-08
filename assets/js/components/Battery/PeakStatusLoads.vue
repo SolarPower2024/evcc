@@ -9,7 +9,7 @@
 				<tbody>
 					<tr v-for="l in loads" :key="l.name" :data-testid="`lm-load-${l.name}`">
 						<td class="name">
-							<span class="d-inline-flex align-items-center text-break">
+							<span class="d-inline-flex align-items-center">
 								{{ l.battery ? $t("lmoverview.battery") : l.title || l.name }}
 								<shopicon-regular-lock
 									v-if="l.protected && l.state === 'shed'"
@@ -118,8 +118,10 @@ export default defineComponent({
 	color: var(--evcc-gray);
 	background: var(--bs-secondary-bg);
 }
+/* a long name breaks at its syllables, not in the middle of a word */
 .name {
 	min-width: 6rem;
+	hyphens: auto;
 }
 .lock {
 	vertical-align: -2px;
