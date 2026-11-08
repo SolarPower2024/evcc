@@ -8,7 +8,7 @@
 			<table class="table table-sm align-middle mb-0">
 				<tbody>
 					<tr v-for="l in loads" :key="l.name" :data-testid="`lm-load-${l.name}`">
-						<td>
+						<td class="name">
 							<span class="d-inline-flex align-items-center text-break">
 								{{ l.battery ? $t("lmoverview.battery") : l.title || l.name }}
 								<shopicon-regular-lock
@@ -117,6 +117,9 @@ export default defineComponent({
 .pill-muted {
 	color: var(--evcc-gray);
 	background: var(--bs-secondary-bg);
+}
+.name {
+	min-width: 6rem;
 }
 .lock {
 	vertical-align: -2px;
