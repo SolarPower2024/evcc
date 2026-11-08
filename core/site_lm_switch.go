@@ -24,11 +24,11 @@ import (
 	"github.com/evcc-io/evcc/util/config"
 )
 
-// lmSwitchState is what the ui shows
+// lmSwitchState is what the ui shows: the circuit limits changed at runtime
 type lmSwitchState struct {
 	Limits  map[string]float64 `json:"limits"`  // W, the configured power limits of the changed circuits
 	Dynamic []string           `json:"dynamic"` // circuits whose limit comes from a plugin and stays
-	Circuit string             `json:"circuit"` // the load management (peak) circuit, empty = all
+	Circuit string             `json:"circuit"` // the load management (peak) circuit, empty = none
 	// FromPeak: the circuit's limit is the peak limit right now, see circuitFromPeak
 	FromPeak bool `json:"fromPeak"`
 }
@@ -55,8 +55,8 @@ func (site *Site) restoreLmSwitch() {
 	site.applyCircuitLimits()
 }
 
-// circuitLimitWanted returns the power limit a circuit should have for its
-// configured value, 0 = unlimited.
+// circuitLimitWanted returns the power limit a circuit should have: the peak
+// limit for the circuit that follows it, else the configured value.
 func circuitLimitWanted(configured float64, fromPeak bool, peakLimit float64) float64 {
 	if fromPeak {
 		return peakLimit
@@ -189,13 +189,10 @@ func (site *Site) applyCircuitLimits() {
 }
 
 func limitText(w float64) string {
-	if w <= 0 {
-		return "lifted"
-	}
 	return fmt.Sprintf("%.1f kW", w/1e3)
 }
 
-// GetLmCircuit returns the load management (peak) circuit, empty = all
+// GetLmCircuit returns the load management (peak) circuit, empty = none
 func (site *Site) GetLmCircuit() string {
 	s := site.lms()
 
@@ -205,7 +202,7 @@ func (site *Site) GetLmCircuit() string {
 	return s.circuit
 }
 
-// SetLmCircuit sets the load management (peak) circuit, empty = all
+// SetLmCircuit sets the load management (peak) circuit, empty = none
 func (site *Site) SetLmCircuit(name string) error {
 	if name != "" {
 		if _, err := config.Circuits().ByName(name); err != nil {
