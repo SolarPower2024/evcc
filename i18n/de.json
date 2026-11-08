@@ -93,6 +93,7 @@
       "shaving": "Reserve aktiv, kappt Lastspitzen"
     },
     "peakStatus": {
+      "actions": "Letzte Eingriffe",
       "freeAt": "Frei ab {freeAt}.",
       "hint": {
         "modeStuck": "Fronius übernimmt den Modus nicht",

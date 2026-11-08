@@ -93,6 +93,7 @@
       "shaving": "Reserve active, capping peaks"
     },
     "peakStatus": {
+      "actions": "Recent actions",
       "freeAt": "Free from {freeAt}.",
       "hint": {
         "modeStuck": "Fronius does not take the mode",

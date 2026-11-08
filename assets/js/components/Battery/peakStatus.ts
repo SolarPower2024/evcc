@@ -208,9 +208,31 @@ export function windowInfo(st: PeakStatus, now: number): WindowInfo | null {
   };
 }
 
-/** The events of the dialog, peak shaving and load management, newest first as the backend sends them. */
+/**
+ * Event types of the peak shaving ("Zuletzt"), the others are the actions of the
+ * load management ("Letzte Eingriffe"). The same list as lm.PeakEvent in
+ * core/lm/status.go; core/site_lm_events_test.go (TestPeakEventListsMatch) checks them.
+ */
+const PEAK_EVENTS = new Set<string>([
+  "peak",
+  "peakEnd",
+  "reserveBelow",
+  "reserveAbove",
+  "batteryMode",
+  "peakSwitch",
+  "meter",
+  "storage",
+  "gridChargePaused",
+]);
+
+/** The events of the peak shaving, in the order given (newest first). */
 export function peakEvents(events: LmEvent[] = []): LmEvent[] {
-  return [...events].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  return events.filter((e) => PEAK_EVENTS.has(e.type));
+}
+
+/** The actions of the load management: shed, throttled, not following, grid charging denied. */
+export function actionEvents(events: LmEvent[] = []): LmEvent[] {
+  return events.filter((e) => !PEAK_EVENTS.has(e.type));
 }
 
 /** The text of an event; the type itself for one without text. */

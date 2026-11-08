@@ -4,6 +4,7 @@ import de from "../../../../i18n/de.json";
 import en from "../../../../i18n/en.json";
 import {
   type Fmt,
+  actionEvents,
   detailText,
   eventText,
   heroText,
@@ -380,15 +381,31 @@ describe("events", () => {
     }
   });
 
-  test("the dialog lists all events, newest first", () => {
-    const at = (iso: string, type: LmEvent["type"]): LmEvent => ({ ...ev(type), at: iso });
+  test("peak shaving and load management events are told apart", () => {
     const list = [
-      at("2026-11-07T14:00:00Z", "shed"),
-      at("2026-11-07T16:00:00Z", "peak"),
-      at("2026-11-07T15:00:00Z", "throttled"),
+      ev("shed"),
+      ev("peak"),
+      ev("throttled"),
+      ev("meter"),
+      ev("gridChargePaused"),
+      ev("gridChargeDenied"),
+      ev("notFollowing"),
+      ev("storage"),
     ];
-    expect(peakEvents(list).map((e) => e.type)).toEqual(["peak", "throttled", "shed"]);
+    expect(peakEvents(list).map((e) => e.type)).toEqual([
+      "peak",
+      "meter",
+      "gridChargePaused",
+      "storage",
+    ]);
+    expect(actionEvents(list).map((e) => e.type)).toEqual([
+      "shed",
+      "throttled",
+      "gridChargeDenied",
+      "notFollowing",
+    ]);
     expect(peakEvents(undefined)).toEqual([]);
+    expect(actionEvents(undefined)).toEqual([]);
   });
 });
 

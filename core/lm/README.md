@@ -295,11 +295,14 @@ removed with a warning at the start and with the next cycle
 
 *Mehr → Peak Shaving* (without peak shaving but with loads in load management:
 *Mehr → Lastmanagement*, the same dialog) shows below the month's peak, when a
-circuit has a power limit and there are loads, the section *Verbraucher*: every load
+circuit has a power or current limit and there are loads, the section *Verbraucher*: every load
 including battery grid charging with its power and state (running, throttled, shed and held off
 until, waiting with what it needs and what is free, paused), the shed guard lock and the
 *Optimizer* badge (`PeakStatusLoads.vue`, `peakDialog.ts`, `peakDialog.test.ts`). *Zuletzt* lists
-all events, peak and load management, by time (`peakEvents()` in `peakStatus.ts`). There is
+the peak events (`peakEvents()` in `peakStatus.ts`, the list of `lm.PeakEvent`,
+`TestPeakEventListsMatch`), *Letzte Eingriffe* the others (shed, throttled, not following,
+grid charging denied; `actionEvents()`, `PeakStatusEventList.vue`), the newest 5 and *Mehr*;
+it shows below the loads, or as a section of its own without them. There is
 no view of its own and no circuit tile any more; circuits are set in their configuration.
 The status is published as `lmStatus` at the end of every cycle
 (`core/site_lm_status.go`, records in `core/lm/status.go`); it never feeds back
@@ -310,7 +313,7 @@ The event log keeps 7 days (also when read), at most 300 peak related events and
 `lmEvents`, stored every 5 minutes and when evcc stops, then written to the database at once
 as the function that persists the settings may be done earlier (`TestLmEventsStopPersists`), `core/site_lm_events.go`,
 `TestLmEventsSurviveRestart`, `TestEventLogKeeps`); the status publishes the newest
-20. `GET /api/peakshaving/events` (open) answers the whole log, peak and load management events,
+20. `GET /api/peakshaving/events` (open) answers the whole log, peak and load management events (the ui splits them),
 for the dialog, newest first (`TestPeakEventsRoute`, `TestLmEventsSurviveRestart`), see [11](#peak-status-dialog).
 In the optimizer's automatic mode the battery and the loadpoints it controls
 carry the badge *Optimizer* (`optimizer` in the status, `TestLmStatusOptimizer`)

@@ -67,30 +67,26 @@
 
 			<PeakStatusLoads v-if="showLoads" />
 
-			<section data-testid="peak-status-events">
-				<h6 class="section-title">{{ $t("battery.peakStatus.recent") }}</h6>
-				<p v-if="!events.length" class="text-muted mb-0">
-					{{ $t("battery.peakStatus.noEvents") }}
-				</p>
-				<div
-					v-for="(e, i) in shownEvents"
-					:key="i"
-					class="event"
-					data-testid="peak-status-event"
-				>
-					<span class="evcc-gray text-nowrap">{{ eventTime(e) }}</span>
-					<span class="event-text">{{ eventLine(e) }}</span>
-				</div>
-				<button
-					v-if="events.length > FEW"
-					type="button"
-					class="btn btn-link btn-sm p-0 mt-1"
-					data-testid="peak-status-more"
-					@click="all = !all"
-				>
-					{{ $t(all ? "battery.peakStatus.less" : "battery.peakStatus.more") }}
-				</button>
-			</section>
+			<PeakStatusEventList
+				v-if="actions.length"
+				:events="actions"
+				:title="$t('battery.peakStatus.actions')"
+				:now="now"
+				section="peak-status-actions"
+				row="peak-status-action"
+				more="peak-status-actions-more"
+			/>
+
+			<PeakStatusEventList
+				v-if="status"
+				:events="events"
+				:title="$t('battery.peakStatus.recent')"
+				:empty="$t('battery.peakStatus.noEvents')"
+				:now="now"
+				section="peak-status-events"
+				row="peak-status-event"
+				more="peak-status-more"
+			/>
 		</div>
 	</GenericModal>
 </template>
@@ -104,10 +100,10 @@ import type { LmEvent, PeakStatus } from "@/types/evcc-lm";
 import GenericModal from "../Helper/GenericModal.vue";
 import PeakStatusHero from "./PeakStatusHero.vue";
 import PeakStatusLoads from "./PeakStatusLoads.vue";
+import PeakStatusEventList from "./PeakStatusEventList.vue";
 import { dialogTitleKey, loadsShown } from "./peakDialog";
-import { detailText, eventText, makeFmt, notes, peakEvents, windowInfo } from "./peakStatus";
+import { actionEvents, detailText, makeFmt, notes, peakEvents, windowInfo } from "./peakStatus";
 
-const FEW = 5;
 const TICK = 15_000;
 
 // Custom extension: what peak shaving does with the battery and why, see
@@ -116,16 +112,14 @@ const TICK = 15_000;
 // menu (MoreMenuItems.vue).
 export default defineComponent({
 	name: "PeakStatusModal",
-	components: { GenericModal, PeakStatusHero, PeakStatusLoads },
+	components: { GenericModal, PeakStatusHero, PeakStatusLoads, PeakStatusEventList },
 	mixins: [formatter],
 	data() {
 		return {
 			visible: false,
-			all: false,
 			now: Date.now(),
 			fetched: null as LmEvent[] | null,
 			timer: undefined as ReturnType<typeof setInterval> | undefined,
-			FEW,
 		};
 	},
 	computed: {
@@ -173,12 +167,17 @@ export default defineComponent({
 			const e = store.state.lmStatus?.events?.[0];
 			return e ? `${e.at}${e.type}` : "";
 		},
-		events(): LmEvent[] {
-			// the whole list from the api, until it is there what the status publishes
-			return peakEvents(this.fetched ?? store.state.lmStatus?.events);
+		// the whole list from the api, until it is there what the status publishes
+		allEvents(): LmEvent[] {
+			return this.fetched ?? store.state.lmStatus?.events ?? [];
 		},
-		shownEvents(): LmEvent[] {
-			return this.all ? this.events : this.events.slice(0, FEW);
+		// peak shaving: "Zuletzt"
+		events(): LmEvent[] {
+			return peakEvents(this.allEvents);
+		},
+		// load management: "Letzte Eingriffe"
+		actions(): LmEvent[] {
+			return actionEvents(this.allEvents);
 		},
 	},
 	watch: {
@@ -198,14 +197,6 @@ export default defineComponent({
 		tr(key: string, params?: Record<string, unknown>): string {
 			return this.$t(key, params as Record<string, string>);
 		},
-		eventTime(e: LmEvent): string {
-			const at = new Date(e.at);
-			const today = new Date(this.now).toDateString() === at.toDateString();
-			return today ? this.fmtHourMinute(at) : this.fmtWeekdayDayTime(at);
-		},
-		eventLine(e: LmEvent): string {
-			return eventText(e, this.tr, this.fmt);
-		},
 		async load() {
 			try {
 				const res = await api.get<LmEvent[]>("peakshaving/events");
@@ -216,7 +207,6 @@ export default defineComponent({
 		},
 		onOpen() {
 			this.visible = true;
-			this.all = false;
 			this.now = Date.now();
 			this.timer = setInterval(() => (this.now = Date.now()), TICK);
 			this.load();
@@ -302,17 +292,5 @@ export default defineComponent({
 	height: 14px;
 	margin-left: -1px;
 	background: var(--evcc-default-text);
-}
-.event {
-	display: grid;
-	grid-template-columns: 5rem minmax(0, 1fr);
-	column-gap: 0.75rem;
-	font-size: 0.9rem;
-	line-height: 1.6;
-	padding: 0.1rem 0;
-}
-.event-text {
-	min-width: 0;
-	overflow-wrap: anywhere;
 }
 </style>

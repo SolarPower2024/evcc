@@ -61,8 +61,8 @@ func (site *Site) saveLmEvents(force bool) {
 	}
 }
 
-// PeakEvents returns the events the peak shaving dialog shows, peak and load
-// management ones, newest first
+// PeakEvents returns the whole event log for the peak shaving dialog, peak and
+// load management events, newest first; the ui tells them apart
 func (site *Site) PeakEvents() []lm.Event {
 	return site.lmm().AllEvents(site.peak().clock.Now(), nil)
 }
