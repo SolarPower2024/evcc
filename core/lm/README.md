@@ -301,6 +301,13 @@ events. Published as `lmStatus` at the end of every cycle
 (`core/site_lm_status.go`, records in `core/lm/status.go`); it never feeds back
 into decisions.
 
+The event log keeps 7 days (also when read), at most 300 peak related events and 20 others
+(a shed load cannot push peak events out), and survives a restart (setting
+`lmEvents`, stored every 5 minutes and when evcc stops, then written to the database at once
+as the function that persists the settings may be done earlier (`TestLmEventsStopPersists`), `core/site_lm_events.go`,
+`TestLmEventsSurviveRestart`, `TestEventLogKeeps`); the overview publishes the newest
+20. `GET /api/peakshaving/events` (open) answers the whole log of the peak related
+events for the peak status dialog, newest first (`TestPeakEventsRoute`), see [11](#peak-status-dialog).
 In the optimizer's automatic mode the battery and the loadpoints it controls
 carry the badge *Optimizer* (`optimizer` in the status, `TestLmStatusOptimizer`)
 and a line says that the optimizer decides and load management limits. The
@@ -565,22 +572,19 @@ stored before moves to evcc's on start if that has none and peak shaving is on
 (`peakShavingLimit`, `peakFollow`, `peakFollowBase`, `peakFollowBuffer` are removed
 from the database). See `core/site_peak_limit.go`.
 
-**Statistics** (*Mehr → Peak Shaving*): per month the highest quarter hour with
+**Statistics** (collected, no dialog at the moment; *Mehr → Peak Shaving* shows the peak status): per month the highest quarter hour with
 and without the battery and how often it covered a peak; only quarter hours
 metered from their start count, kept for 24 months (`peakMonths`,
 `core/site_peak_stats.go`). "Without the battery" adds back only what the
 battery gave to the house, not what it fed into the grid (`TestMeterCompleted`;
 with a counter an approximation, as the import counter knows no export). Each month also keeps its baseline, the highest
 limit set by hand in it (the base while following the peak); months from before
-get the current one at the start. A month is looked up, never assumed to be the first entry; one entered late (a window of the month before) is put in its place with no baseline, and a list with a month twice is merged at start. The dialog shows the current month in two
-tiles (highest quarter hour with and without the battery next to each other
-and the limit; the month's saving, the total since the first month and the
-interventions), below one row per month.
+get the current one at the start. A month is looked up, never assumed to be the first entry; one entered late (a window of the month before) is put in its place with no baseline, and a list with a month twice is merged at start.
 
 **Capacity tariff** (*Lastmanagement-Details → Leistungstarif*): price per kW
 and year up to a threshold, a higher one above, at least a minimum and a share
 of the agreed power; zero price = off. Each month's cost with and without the
-battery and the saving are shown with the statistics; the saving only counts
+battery and the saving are kept with the statistics (not shown at the moment); the saving only counts
 above the month's baseline, as the grid draw up to it is allowed anyway. Prefilled with the
 Austrian draft for 2027 (33.82 EUR/kW/year up to 10 kW, double above, at least
 20 % of the agreed power and 2 kW). See `core/site_peak_tariff.go`.
@@ -761,6 +765,58 @@ DELETE /api/peakshavingprotlimit
 POST   /api/peakshavingprotsoc/{entity}
 DELETE /api/peakshavingprotsoc
 ```
+
+### Peak status dialog
+
+What peak shaving does with the battery right now and why, for both battery types.
+Display only, the control stays as it is. `peakStatus` is derived in Go
+(`core/site_peak_status.go`: `peakStatusNow`) and published at the end of the
+fork's part of the cycle (after the outputs were written, their failures are part of
+the status) and when peak shaving is switched, only when it changed. Empty `state`
+= not set up (the entities of the controller or a battery missing): nothing to show.
+
+States, checked in this order: `off` (peak shaving off), `storage` (not reachable),
+`meter` (no grid values for longer than `peak.MaxGap`), `gridCharge` (battery mode
+charge), `holdShaving` (hold, a peak is covered), `hold`, `shaving` (below the reserve,
+setpoint > 0), `saving` (below the reserve), `free`; `gridDischarge` (battery mode
+discharge) comes after `gridCharge`. Tests: `TestPeakStatusStates` (each
+state, Marstek and BYD), `TestPeakStatusOrder`, `TestPeakStatusValues`.
+
+- *Storage connected*: the outputs written in every cycle (connect, soc threshold,
+  limit, switch) did not fail the last time, a battery delivered a soc and the battery
+  power could be read, and for BYD the integration's status is not `no_evcc`
+  (`TestPeakStatusStorage`). evcc has no age of the battery values, so "delivers
+  values" is the result of the last read.
+- BYD: the status sensor of the integration is read once per cycle through the shared
+  connection (guarded like every call). It is derived from the switch,
+  `switch.<x>_peak_shaving` has `sensor.<x>_status`; without it or with another
+  name only the extra hints are missing, no error (`TestPeakStatusBydSensor`). Hints:
+  `noSoc` (the integration sees no soc), `modeStuck` (the status differs from the hold
+  or charge mode evcc set for longer than a minute).
+- `freeAt` (reserve plus 2 %) only for BYD; Marstek has no hysteresis.
+- A failed write is over when the entity shows what was to be written and nothing is
+  written (`TestPeakStatusStorageBack`); the quarter hour shows while it is the running
+  window (`TestPeakStatusWindowCurrent`); `limited` (discharge max.) only below the reserve
+  or while the optimizer's hold gives way, a hold of another kind sets `held` only
+  (`TestPeakStatusHoldReason`); grid discharge is its own state `gridDischarge`; the api path
+  publishes without asking Home Assistant, each publication derives the status anew under a
+  lock (`TestPeakStatusApiPath`); the integration's sensor is read only while peak shaving is on.
+- Events (`TestPeakStatusEvents`, one per change, the start sets the reference only):
+  `reserveBelow`/`reserveAbove`, `batteryMode`, `peakSwitch`, `meter`, `storage`,
+  `peakEnd` (with the most the battery gave and the duration), next to the existing
+  `peak` and `gridChargePaused`. A change of the mode, the meter or the storage is logged
+  when it stayed for a minute, with the time of the change (`TestPeakStatusEventsDebounced`). Kept 7 days, see [8](#8-overview).
+
+The dialog (*Mehr → Peak Shaving*, shown with peak shaving set up, also while off): a tile (color, icon, title, one
+sentence, storage / grid / quarter hour or battery as bars, reserve and limit) and
+below it what is happening in a longer sentence, notes (mode, storage connected,
+discharge, hints of the integration), the running quarter hour (bar, time mark,
+what it still allows, orange while that is less than the grid draw now), the month's
+peak with the interventions and the last events (5, *Mehr* shows all from
+`GET /api/peakshaving/events`). Peak shaving off shows `off`. Components
+`PeakStatusModal` (mounted by `GlobalModals.vue`), `PeakStatusHero`, texts and numbers in
+`peakStatus.ts` (`peakStatus.test.ts`); texts `battery.peakStatus.*` and
+`lmoverview.event.*` (the overview menu shows the new event types as well). No hook of its own; watched in `watch.json`.
 
 ## 12. Battery profiles
 
@@ -1272,7 +1328,7 @@ in a running evcc) they answer 401. The ui opens the login on a 401 by itself.
 
 | List | Routes |
 |---|---|
-| `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmenabled`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakshavingreserve`, `feedinsplit` |
+| `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmenabled`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakshavingreserve`, `peakshavingevents`, `feedinsplit` |
 | `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `lmcircuit(delete)`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `importeegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
 
 ## Upstream touch points
@@ -1328,7 +1384,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
-| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go`, `core/site_lm_events.go`, `core/site_peak_status.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
@@ -1339,7 +1395,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
-| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/utils/optimizerAutomatic.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
+| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/utils/optimizerAutomatic.ts`, `assets/js/components/LoadManagement/`, the battery cards in `assets/js/components/Battery/` (`PeakStatusModal`, `PeakStatusHero`, `peakStatus.ts`, `BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
 | build | `.github/workflows/custom-image.yml` |
 | start page | `.github/README.md` (GitHub shows it instead of the evcc `README.md`; its feature list follows part 1) |
 

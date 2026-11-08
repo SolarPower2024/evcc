@@ -65,6 +65,8 @@ type lmState struct {
 	offFromPeak  bool   // the circuit's limit is the peak limit, as published
 	circuit      string // the load management (peak) circuit, empty = all
 
+	eventsSaved time.Time // the event log was stored then, see site_lm_events.go
+
 	guardMinutes int             // shed guard, see site_lm_guard.go
 	guarded      map[string]bool // loadpoints the shed guard protects, by name
 
@@ -111,6 +113,7 @@ type siteCustom struct {
 func (site *Site) restoreCustom() {
 	site.dropStoredLoadpointKeys()
 	site.restoreLmSettings()
+	site.restoreLmEvents()
 	site.restorePeakSettings()
 	site.dropOrphanCircuits()
 	// the circuit may take the peak limit: restoreLmSettings ran before the peak
@@ -136,6 +139,7 @@ func (site *Site) updateCustom(state siteState) {
 	site.updateImportEeg()
 	site.updateBatteryIdent()
 	site.updateSnowCover(time.Now())
+	site.saveLmEvents(false)
 }
 
 // lms returns the load management state, applying defaults on first use

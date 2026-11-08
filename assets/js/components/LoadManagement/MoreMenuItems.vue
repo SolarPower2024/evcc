@@ -12,15 +12,15 @@
 			{{ $t("lmoverview.menuOff") }}
 		</span>
 	</button>
-	<!-- monthly peak statistics, see core/site_peak_stats.go -->
+	<!-- peak status, see core/site_peak_status.go -->
 	<button
 		v-if="hasPeakShaving"
 		type="button"
 		class="dropdown-item"
-		data-testid="more-peak-stats"
-		@click="open('peakStatsModal')"
+		data-testid="more-peak-status"
+		@click="open('peakStatusModal')"
 	>
-		{{ $t("peakstats.menu") }}
+		{{ $t("battery.peakStatus.title") }}
 	</button>
 </template>
 
@@ -28,7 +28,6 @@
 import { defineComponent } from "vue";
 import Modal from "bootstrap/js/dist/modal";
 import store from "@/store";
-import { peakShavingSetUp } from "@/utils/peakShaving";
 import { lmOffBadge } from "@/utils/lmOff";
 
 // Custom extension: the fork's entries in the "more" menu. The dialogs they
@@ -43,7 +42,8 @@ export default defineComponent({
 			return lmOffBadge(store.state);
 		},
 		hasPeakShaving() {
-			return peakShavingSetUp(store.state) || !!store.state?.peakMonths?.length;
+			// set up, also while off
+			return !!store.state?.peakStatus?.state;
 		},
 	},
 	methods: {

@@ -151,6 +151,7 @@ var customRouteSamples = map[string]string{
 	"peakshavingchargepower":        "/peakshavingchargepower/4000",
 	"peakshavingcircuit":            "/peakshavingcircuit/db:1",
 	"peakshavingcircuitdelete":      "/peakshavingcircuit",
+	"peakshavingevents":             "/peakshaving/events",
 }
 
 // TestCustomRoutesMatch sends a request to every custom route through a real
@@ -402,4 +403,22 @@ func TestPatternShape(t *testing.T) {
 	assert.Equal(t, "/batterygridchargeonce/{soc}/{until}", patternShape("/batterygridchargeonce/{soc:[0-9]+}/{until:[0-9]{2}:[0-9]{2}}"))
 	assert.Equal(t, "/state", patternShape("/state"))
 	assert.Equal(t, "/a/{b}", patternShape("/a/{b}"))
+}
+
+// TestPeakEventsRoute: the peak status asks for its events, a list even when empty
+func TestPeakEventsRoute(t *testing.T) {
+	site := core.NewSite()
+
+	rt := customSiteRoutes(site)["peakshavingevents"]
+	r := mux.NewRouter()
+	r.Methods(rt.Methods()...).Path(rt.Pattern).Handler(rt.HandlerFunc)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/peakshaving/events", nil))
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, "[]", w.Body.String())
+
+	// the switch of peak shaving keeps its own route
+	assert.NotContains(t, rt.Pattern, "{value")
 }

@@ -127,6 +127,9 @@ type peakState struct {
 
 	months      []peakMonth // statistics, newest first, see site_peak_stats.go
 	monthsDirty bool
+
+	setpoint float64        // the last setpoint computed in W, shown by the peak status
+	status   peakStatusMemo // the peak status and its changes, see site_peak_status.go
 }
 
 // peak returns the peak shaving state, applying defaults on first use
@@ -610,6 +613,10 @@ func (site *Site) updatePeakShaving(state siteState) {
 	// a setpoint can legitimately equal the free value, e.g. a 15kW demand
 	// against a 5kW limit asks for exactly 10000W. It is written nowhere: the
 	// external peak control regulates itself, see applyOmniProtection.
+	s.mu.Lock()
+	s.setpoint = value
+	s.mu.Unlock()
+
 	site.publish(keys.PeakShavingActive, shaving)
 	site.publish(keys.PeakShavingPower, value)
 }
@@ -1010,6 +1017,7 @@ func (site *Site) updateBatteryModePeakAware(gridCharge, gridDischarge bool, rat
 
 	// everything the overview shows is decided now
 	defer site.publishLmStatus(gridCharge)
+	defer site.publishPeakStatus() // after the outputs were written, see site_peak_status.go
 	defer site.publishLmWallboxes()
 	defer site.checkLmFollowing()
 	defer site.applyOmni() // after the battery mode, see site_peak_omni.go
@@ -1104,6 +1112,8 @@ func (site *Site) SetPeakShaving(val bool) error {
 		if !val {
 			site.applyOmni()
 		}
+
+		site.publishPeakStatusCached() // from the api: Home Assistant is asked by the cycle only
 	}
 
 	return nil

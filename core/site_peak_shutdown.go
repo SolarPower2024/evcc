@@ -62,6 +62,8 @@ func (site *Site) releasePeakOnShutdown() {
 	// refused until the cycle ends, see site_ha_guard.go
 	site.haStop()
 
+	site.saveLmEvents(true)
+
 	done := make(chan struct{})
 
 	go func() {

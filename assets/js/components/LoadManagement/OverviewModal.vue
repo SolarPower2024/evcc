@@ -131,6 +131,7 @@ import GenericModal from "../Helper/GenericModal.vue";
 import formatter from "@/mixins/formatter";
 import store from "@/store";
 import { peakShavingSetUp } from "@/utils/peakShaving";
+import { eventText } from "../Battery/peakStatus";
 import api from "@/api";
 
 // Custom extension: what load management is doing right now, see
@@ -347,7 +348,8 @@ export default {
 						allowed: kw(e.b),
 					});
 			}
-			return e.type;
+			// the events of the peak status, see components/Battery/peakStatus.ts
+			return eventText(e, (key, params) => this.$t(key, params), kw) ?? e.type;
 		},
 	},
 };

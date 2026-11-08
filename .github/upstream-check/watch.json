@@ -179,6 +179,11 @@
       "paths": ["core/site_optimizer.go"]
     },
     {
+      "name": "Peak-Status-Dialog (Mehr → Peak Shaving)",
+      "files": ["core/site_peak_status.go", "assets/js/components/Battery/PeakStatusModal.vue"],
+      "keywords": ["peakStatus", "PeakStatus", "peakStatusModal"]
+    },
+    {
       "name": "Grundlagen, auf denen der Fork aufbaut",
       "files": ["core/loadpoint_lm.go"],
       "prs": [30367, 33463]

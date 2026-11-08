@@ -92,6 +92,106 @@
       "raised": "Diesen Monat auf die Monatsspitze angehoben, eingestellt {limit}.",
       "shaving": "Reserve aktiv, kappt Lastspitzen"
     },
+    "peakStatus": {
+      "freeAt": "Frei ab {freeAt}.",
+      "hint": {
+        "modeStuck": "Fronius übernimmt den Modus nicht",
+        "noSoc": "Fronius sieht keinen Speicherstand"
+      },
+      "less": "Weniger",
+      "mini": {
+        "battery": "Batterie",
+        "grid": "Netz",
+        "quarter": "15 Min",
+        "soc": "Speicher"
+      },
+      "mode": {
+        "charge": "Netzladen",
+        "discharge": "Entladen",
+        "hold": "Halten",
+        "holdcharge": "Halten",
+        "normal": "normal",
+        "unknown": "unbekannt"
+      },
+      "month": {
+        "covered": "Spitzen gedeckt",
+        "none": "noch keine",
+        "thisMonth": "diesen Monat",
+        "title": "Monatsspitze"
+      },
+      "more": "Mehr",
+      "noEvents": "Noch keine Ereignisse.",
+      "notes": {
+        "connected": "Speicher verbunden",
+        "dischargeFree": "Entladen frei",
+        "dischargeMax": "Entladen max. {power}",
+        "mode": "Modus: {mode}",
+        "notConnected": "Speicher nicht erreichbar"
+      },
+      "now": "Was gerade passiert",
+      "recent": "Zuletzt",
+      "reserveLimit": "Reserve {reserve} · Grenze {limit}",
+      "state": {
+        "free": {
+          "detail": "Speicher {soc} liegt über der Reserve {reserve}. Die Batterie regelt selbst, Peak Shaving greift erst darunter.",
+          "text": "Über der Reserve, die Batterie regelt selbst.",
+          "title": "Batterie frei"
+        },
+        "gridCharge": {
+          "detail": "evcc lädt die Batterie mit {power} aus dem Netz. Steigt der Bedarf über {limit}, pausiert das Laden.",
+          "text": "evcc lädt die Batterie mit {power} aus dem Netz.",
+          "title": "Laden aus dem Netz"
+        },
+        "gridDischarge": {
+          "detail": "evcc entlädt die Batterie ins Netz. Peak Shaving greift in dieser Zeit nicht.",
+          "text": "evcc entlädt die Batterie ins Netz.",
+          "title": "Entladen ins Netz"
+        },
+        "hold": {
+          "detail": "evcc hält die Batterie, Speicher {soc}. Sie hilft nur, wenn der Netzbezug über {limit} steigt.",
+          "text": "evcc hebt die Batterie auf. Sie hilft nur, wenn der Netzbezug über {limit} steigt.",
+          "title": "Halten"
+        },
+        "holdShaving": {
+          "detail": "evcc hält die Batterie. Der Bedarf von {house} liegt über {limit}, deshalb gibt sie {battery} gegen die Spitze.",
+          "text": "Die Batterie ist gehalten und gibt nur {battery} gegen die Spitze.",
+          "title": "Halten – kappt Spitze"
+        },
+        "meter": {
+          "detail": "Seit über 2 Minuten fehlt der Netzwert. Die Batterie entlädt frei und Netzladen pausiert, bis er wieder da ist.",
+          "text": "Der Netzwert fehlt. Die Batterie ist zur Sicherheit frei.",
+          "title": "Messausfall"
+        },
+        "off": {
+          "detail": "Peak Shaving ist ausgeschaltet. Die Batterie arbeitet wie ohne Peak Shaving.",
+          "text": "Die Batterie arbeitet wie ohne Peak Shaving.",
+          "title": "Peak Shaving aus"
+        },
+        "saving": {
+          "detail": "Speicher {soc} liegt unter der Reserve {reserve}. Die Batterie entlädt nur, was über {limit} Netzbezug geht. Gerade sind es {grid}, deshalb entlädt sie nicht.",
+          "text": "Speicher unter der Reserve. Die Batterie hilft erst ab {limit} Netzbezug.",
+          "title": "Spart für Spitzen"
+        },
+        "shaving": {
+          "detail": "Speicher {soc} liegt unter der Reserve {reserve}. Das Haus braucht {house}, aus dem Netz sind {limit} erlaubt. Die Batterie gibt den Rest: {battery}.",
+          "text": "Das Haus braucht {house}. Die Batterie gibt {battery} dazu, das Netz bleibt bei {limit}.",
+          "title": "Kappt Spitze"
+        },
+        "storage": {
+          "detail": "evcc erreicht die Batterie-Steuerung in Home Assistant nicht oder bekommt keine Batteriewerte. Peak Shaving hat so lange keine Wirkung.",
+          "text": "evcc erreicht die Batterie-Steuerung nicht. Die Batterie arbeitet wie ohne Peak Shaving.",
+          "title": "Speicher nicht erreichbar"
+        }
+      },
+      "title": "Peak Shaving",
+      "window": {
+        "allowed": "erlaubt noch {power}",
+        "avg": "Schnitt bisher",
+        "left": "noch {minutes} min",
+        "limit": "Grenze",
+        "title": "Viertelstunde"
+      }
+    },
     "socGridCharge": {
       "active": "Netzladen läuft",
       "enable": "Hausbatterie abhängig vom Ladestand aus dem Netz laden.",
@@ -1897,12 +1997,22 @@
     "enabled": "Lastmanagement",
     "enabledHelp": "Die Leistungsgrenzen der Stromkreise (Peak) drosseln Wallbox, Heizstäbe und Batterie-Netzladen.",
     "event": {
+      "batteryMode": "evcc: Modus {mode}",
       "gridChargeDenied": "Netzladen gesperrt · Stromkreis erlaubt {allowed} von {wanted}",
       "gridChargePaused": "Netzladen pausiert · Bedarf {demand} über erlaubtem Netzbezug {limit}",
+      "meterBack": "Messung wieder da",
+      "meterLost": "Messausfall · Batterie frei",
       "notFollowing": "{load} folgt der Vorgabe nicht · {power} statt {allowed}",
       "peak": "Peak abgefangen · Bedarf {demand}, Grenze {limit}",
+      "peakEnd": "Spitze vorbei · Batterie deckte bis {power}, {minutes} min",
+      "peakSwitchOff": "Peak Shaving aus",
+      "peakSwitchOn": "Peak Shaving an",
+      "reserveAbove": "Über {reserve}: Batterie frei",
+      "reserveBelow": "Unter {reserve}: spart jetzt für Spitzen",
       "shed": "{load} abgeworfen · Stromkreis bei {power}",
       "shedGuard": "{load} abgeworfen · Stromkreis bei {power}, {minutes} min gesperrt",
+      "storageBack": "Speicher wieder verbunden",
+      "storageLost": "Speicher nicht erreichbar",
       "throttled": "{load} gedrosselt {requested} → {allowed}"
     },
     "events": "Letzte Ereignisse",
@@ -2373,27 +2483,6 @@
     "noMatch": "Passwörter stimmen nicht überein",
     "titleUpdate": "Administrator Passwort ändern",
     "updatePassword": "Passwort ändern"
-  },
-  "peakstats": {
-    "cost": "Leistungspreis",
-    "costShort": "Kosten",
-    "description": "Der Leistungspreis richtet sich nach der höchsten Viertelstunde im Monat. Gemessen mit Batterie, berechnet ohne. Gespart wird nur über der Grenze.",
-    "empty": "Noch keine vollständige Viertelstunde erfasst.",
-    "extraCost": "Mehrkosten {cost}",
-    "interventionsCount": "Eingriffe: {count}",
-    "limitShort": "Grenze {limit}",
-    "menu": "Peak Shaving",
-    "month": "Monat",
-    "monthly": "Je Monat",
-    "peakIn": "Höchste Viertelstunde im {month}",
-    "savingIn": "Ersparnis im {month}",
-    "savingShort": "gespart {saving}",
-    "savingSince": "seit {month}: {total}",
-    "title": "Peak Shaving",
-    "withBattery": "Mit Batterie",
-    "withShort": "mit {power}",
-    "withoutBattery": "Ohne Batterie",
-    "withoutShort": "ohne {power}"
   },
   "session": {
     "addOdometer": "Wert eintragen",

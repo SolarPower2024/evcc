@@ -3,6 +3,7 @@ package site
 import (
 	"time"
 
+	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/lm/profile"
 	"github.com/evcc-io/evcc/util/logstash"
 )
@@ -58,6 +59,9 @@ type CustomAPI interface {
 	SaveLmProfile(profile.Profile) (profile.Profile, error)
 	DeleteLmProfile(id string) error
 	ApplyLmProfile(id string) error
+
+	// the events of the peak status in the battery page, see core/site_lm_events.go
+	PeakEvents() []lm.Event
 
 	// export under a second feed-in tariff, see core/site_feedin_eeg.go
 	GetFeedInEegEntity() string

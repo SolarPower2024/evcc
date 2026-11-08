@@ -58,7 +58,7 @@ var customOperateRoutes = []string{
 	"batterysocgridcharge", "batterysocgridchargestart", "batterysocgridchargestop",
 	"batterygridchargeonce", "batterygridchargeonceuntil", "batterygridchargeoncecancel",
 	"lmenabled", "lmprofileapply", "snowcover", "snowauto",
-	"peakshaving", "peakshavingreserve", "feedinsplit",
+	"peakshaving", "peakshavingreserve", "peakshavingevents", "feedinsplit",
 }
 
 // customAuth is the authentication of the http server, set by
@@ -208,6 +208,9 @@ func customSiteRoutes(site site.API) map[string]route {
 		// import from the energy community, see core/site_import_eeg.go
 		"importeegentity":       {"POST", "/importeegentity/{value:[a-zA-Z0-9_.]+}", stringHandler(site.SetImportEegEntity, site.GetImportEegEntity)},
 		"importeegentitydelete": {"DELETE", "/importeegentity", stringHandler(site.SetImportEegEntity, site.GetImportEegEntity)},
+
+		// the events of the peak status in the battery page, see core/site_lm_events.go
+		"peakshavingevents": {"GET", "/peakshaving/events", peakEventsHandler(site)},
 
 		// log in daily files, see core/site_logfile.go
 		"logfile":    {"GET", "/logfile", logFileHandler(site)},
@@ -388,6 +391,13 @@ func lmHomeProfileCsvHandler(site site.API) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename="lastprofil.csv"`)
 		_, _ = w.Write(data)
+	}
+}
+
+// peakEventsHandler answers the events of the peak status, newest first
+func peakEventsHandler(site site.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		jsonWrite(w, site.PeakEvents())
 	}
 }
 
