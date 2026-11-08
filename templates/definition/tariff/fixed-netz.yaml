@@ -1,0 +1,84 @@
+template: fixed-netz
+products:
+  - description:
+      de: Fester Preis (aufgeteilt)
+      en: Fixed Price (split)
+requirements:
+  description:
+    de: Fester Netzbezugspreis aus Arbeitspreis, Netzgebühr und Abgaben. Zonen ändern nur die Netzgebühr, entweder als neuer Wert oder als Abzug in Prozent. Wenn sich Zonen überschneiden, gilt die zuletzt zutreffende Zone.
+    en: Fixed grid import price made of energy price, grid fee and levies. Zones change only the grid fee, either as a new value or as a percentage deduction. If zones overlap, the last matching zone applies.
+group: price
+params:
+  - name: price
+    type: pricePerKWh
+    required: true
+    description:
+      en: Energy price
+      de: Arbeitspreis
+    help:
+      en: Supplier energy price.
+      de: Energiepreis des Lieferanten.
+  - name: gridfee
+    type: pricePerKWh
+    default: 0
+    description:
+      en: Grid fee
+      de: Netzgebühr
+    help:
+      en: Grid usage and losses. Zones change only this part.
+      de: Netznutzung und Netzverlust. Zonen ändern nur diesen Teil.
+  - name: levies
+    type: pricePerKWh
+    default: 0
+    description:
+      en: Levies
+      de: Abgaben
+    help:
+      en: Other per-kWh amounts, e.g. electricity levy.
+      de: Weitere Beträge je kWh, z. B. Elektrizitätsabgabe.
+  - name: taxpercent
+    type: float
+    unit: "%"
+    description:
+      en: Sales tax
+      de: Umsatzsteuer
+    help:
+      en: "Empty: amounts above are gross. With a value: net, tax is added."
+      de: "Leer: Beträge oben sind brutto. Mit Wert: netto, Steuer wird aufgeschlagen."
+  - name: gridfeeZones
+    type: zones
+    description:
+      en: Grid fee zones
+      de: Netzgebühr-Zonen
+    help:
+      en: Time-based grid fee, by month, day and time. Optional.
+      de: Zeitabhängige Netzgebühr nach Monat, Tag und Uhrzeit. Optional.
+render: |
+  type: fixed
+  {{- $fee := float64 (default 0.0 .gridfee) }}
+  {{- $levies := float64 (default 0.0 .levies) }}
+  price: {{ .price }}
+  charges: {{ printf "%.6f" (addf $fee $levies) }}
+  {{- if .gridfeeZones }}
+  chargesZones:
+  {{- range .gridfeeZones }}
+    - charges: {{ if eq (toString .mode) "pct" }}{{ printf "%.6f" (addf (mulf $fee (subf 1.0 (divf (float64 .value) 100.0))) $levies) }}{{ else }}{{ printf "%.6f" (addf (float64 .value) $levies) }}{{ end }}
+      {{- if .days }}
+      days: {{ .days }}
+      {{- end }}
+      {{- if .hours }}
+      {{- $h := splitList "-" (toString .hours) }}
+      {{- if and (eq (len $h) 2) (eq (len (index $h 0)) 5) (eq (len (index $h 1)) 5) (gt (index $h 0) (index $h 1)) (ne (index $h 1) "00:00") }}
+      hours: {{ index $h 0 }}-00:00,00:00-{{ index $h 1 }}
+      {{- else }}
+      hours: {{ .hours }}
+      {{- end }}
+      {{- end }}
+      {{- if .months }}
+      months: {{ .months }}
+      {{- end }}
+  {{- end }}
+  {{- end }}
+  {{- if float64 (default 0.0 .taxpercent) }}
+  tax: {{ printf "%.6f" (divf (float64 .taxpercent) 100.0) }}
+  {{- end }}
