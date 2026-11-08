@@ -42,8 +42,8 @@ type lmAdvanced struct {
 	// Home Assistant entity the optimizer's planned grid export is written to, empty = off,
 	// see site_lm_export_forecast.go
 	ExportForecastEntity string `json:"exportForecastEntity,omitempty"`
-	// the load management (peak) circuit's power limit is the peak limit while peak
-	// shaving is on, see site_lm_switch.go. Set through the number route, 1 = on.
+	// the load management (peak) circuit took the peak limit, gone: only read from the
+	// stored settings, restoreLmAdvanced drops it at start
 	CircuitFromPeak bool `json:"circuitFromPeak,omitempty"`
 }
 
@@ -66,7 +66,6 @@ type lmAdvancedState struct {
 	GridChargeWindow     float64 `json:"gridChargeWindow"`
 	HomeForecast         int     `json:"homeForecast"`
 	ExportForecastEntity string  `json:"exportForecastEntity"`
-	CircuitFromPeak      bool    `json:"circuitFromPeak"`
 	// PhasesMissing: the circuit has a current limit and the battery phases are not set, grid charging stays off
 	PhasesMissing bool `json:"phasesMissing"`
 }
@@ -90,7 +89,7 @@ var lmAdvancedLimits = map[string]lmAdvancedLimit{
 	"gridChargeWindow": {1, 24, true},
 	"homeWeekday":      {0, 1, true},
 	"homeForecast":     {0, 2, true},
-	"circuitFromPeak":  {0, 1, true},
+	"circuitFromPeak":  {0, 1, true}, // no longer used, still accepted: dropped at start
 }
 
 // restoreLmAdvanced restores the persisted advanced settings
@@ -103,6 +102,12 @@ func (site *Site) restoreLmAdvanced() {
 		// no setting any more, see bydHysteresis
 		gone := adv.Hysteresis != nil
 		adv.Hysteresis = nil
+		if adv.CircuitFromPeak {
+			site.log.INFO.Println("setting \"limit = peak shaving limit\" removed: the circuits limit with their configured value")
+		}
+		// no setting any more, the circuits limit as configured
+		gone = gone || adv.CircuitFromPeak
+		adv.CircuitFromPeak = false
 		if dropped || moved || gone {
 			_ = settings.SetJson(keys.LmAdvanced, adv)
 		}
@@ -156,7 +161,6 @@ func (site *Site) publishLmAdvanced() {
 		GridChargeWindow:     site.gridChargeWindow().Hours(),
 		HomeForecast:         site.homeForecast(),
 		ExportForecastEntity: site.exportForecastEntity(),
-		CircuitFromPeak:      site.advanced().CircuitFromPeak,
 		PhasesMissing:        site.batteryPhasesMissing(),
 	})
 }
@@ -223,8 +227,6 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 	case "homeWeekday", "homeForecast":
 		s.adv.HomeForecast = &v
 		s.adv.HomeWeekday = nil
-	case "circuitFromPeak":
-		s.adv.CircuitFromPeak = value == 1
 	}
 	adv := s.adv
 	s.advMu.Unlock()
@@ -240,9 +242,6 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 	}
 	if name == "homeWeekday" || name == "homeForecast" {
 		site.Optimize() // the home demand forecast changed
-	}
-	if name == "circuitFromPeak" {
-		site.applyCircuitLimits()
 	}
 
 	site.publishLmAdvanced()

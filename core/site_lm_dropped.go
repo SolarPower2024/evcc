@@ -62,3 +62,25 @@ func (site *Site) dropLmOff() {
 		site.log.ERROR.Printf("load management switch: remove stored value: %v", err)
 	}
 }
+
+// dropLmCircuit removes the stored load management (peak) circuit and the switch
+// "load management off", which are gone: the circuits limit with the power limit
+// of their configuration, as in evcc. A circuit changed at runtime had its
+// configured value only in memory, so it starts with it. lm3/lm4 stored the
+// circuit under peakFollowCircuit.
+func (site *Site) dropLmCircuit() {
+	for _, key := range []string{keys.LmCircuit, keys.PeakFollowCircuit} {
+		name, err := settings.String(key)
+		if err != nil {
+			continue
+		}
+		if name != "" {
+			site.log.INFO.Printf("load management circuit %s removed: the circuits limit with their configured value", name)
+		}
+		if err := settings.Delete(key); err != nil {
+			site.log.ERROR.Printf("load management circuit: remove stored value %s: %v", key, err)
+		}
+	}
+
+	site.dropLmOff()
+}

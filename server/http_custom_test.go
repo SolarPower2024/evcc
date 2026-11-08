@@ -107,8 +107,6 @@ var customRouteSamples = map[string]string{
 	"lmpriority":                    "/lmpriority/db%3A3/7",
 	"lmshedguard":                   "/lmshedguard/10",
 	"lmshedprotect":                 "/lmshedprotect/db:3/true",
-	"lmcircuit":                     "/lmcircuit/db:1",
-	"lmcircuitdelete":               "/lmcircuit",
 	"batteryidentuse":               "/batteryidentuse/true",
 	"lmadvanced":                    "/lmadvanced/hysteresis/3",
 	"lmexportforecast":              "/lmexportforecast/sensor.evcc_einspeiseprognose",

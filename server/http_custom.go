@@ -33,7 +33,7 @@ const namePattern = "[a-zA-Z0-9_.:-]+"
 // need a login or the api key, like evcc's own configuration. Without
 // authentication (--disable-auth) they are open.
 var customConfigRoutes = []string{
-	"lmpriority", "lmshedguard", "lmshedprotect", "lmcircuit", "lmcircuitdelete",
+	"lmpriority", "lmshedguard", "lmshedprotect",
 	"batteryidentuse", "lmadvanced", "lmexportforecast", "lmexportforecastdelete",
 	"lmhomeprofile", "lmhomeprofiledelete", "lmhomeprofilecsv",
 	"lmprofile", "lmprofiledelete",
@@ -176,10 +176,6 @@ func customSiteRoutes(site site.API) map[string]route {
 		// load management shed guard, see core/site_lm_guard.go
 		"lmshedguard":   {"POST", "/lmshedguard/{value:[0-9]+}", intHandler(site.SetLmShedGuard, site.GetLmShedGuard)},
 		"lmshedprotect": {"POST", "/lmshedprotect/{name:" + namePattern + "}/{value:[01truefalse]+}", lmShedProtectHandler(site)},
-
-		// load management switch, see core/site_lm_switch.go
-		"lmcircuit":       {"POST", "/lmcircuit/{value:" + namePattern + "}", stringHandler(site.SetLmCircuit, site.GetLmCircuit)},
-		"lmcircuitdelete": {"DELETE", "/lmcircuit", stringHandler(site.SetLmCircuit, site.GetLmCircuit)},
 
 		// battery identification, see core/site_battery_ident.go
 		"batteryidentuse": {"POST", "/batteryidentuse/{value:[01truefalse]+}", boolHandler(site.SetBatteryIdentUse, site.GetBatteryIdentUse)},

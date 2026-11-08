@@ -35,10 +35,6 @@ type CustomAPI interface {
 	SetLmShedGuard(int) error
 	SetLmShedProtected(name string, protected bool) error
 
-	// load management (peak) circuit, see core/site_lm_switch.go
-	GetLmCircuit() string
-	SetLmCircuit(string) error
-
 	// battery identification, see core/site_battery_ident.go
 	GetBatteryIdentUse() bool
 	SetBatteryIdentUse(bool) error

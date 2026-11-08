@@ -532,7 +532,6 @@ func (site *Site) updatePeakShaving(state siteState) {
 		// still, a battery power that cannot be read): like for a failing meter nothing
 		// is metered and the setpoint stays, see peakCheckMeters
 		site.updatePeakLimit()
-		site.applyCircuitLimits() // load management switch, see site_lm_switch.go
 
 		return
 	}
@@ -543,7 +542,6 @@ func (site *Site) updatePeakShaving(state siteState) {
 
 	site.updatePeakWindow(gridPower, state.battery.Power)
 	site.updatePeakLimit()
-	site.applyCircuitLimits() // load management switch, see site_lm_switch.go
 
 	s.mu.Lock()
 	enabled, limit, reserve, configured, allowed := s.enabled, s.limit, s.effectiveReserve(), s.configured(), s.window.Allowed
@@ -1105,8 +1103,6 @@ func (site *Site) SetPeakShaving(val bool) error {
 		settings.SetBool(keys.PeakShaving, val)
 		site.publish(keys.PeakShaving, val)
 		site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
-		// the circuit may take the peak limit, see site_lm_switch.go
-		site.applyCircuitLimits()
 
 		// hand control back when switching off
 		if !val {
@@ -1375,8 +1371,6 @@ func (site *Site) SetPeakShavingLimit(limit float64) error {
 	}
 
 	site.updatePeakLimit()
-	// the circuit may take the peak limit, see site_lm_switch.go
-	site.applyCircuitLimits()
 
 	return nil
 }

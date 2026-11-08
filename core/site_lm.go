@@ -57,13 +57,6 @@ type lmState struct {
 
 	prios map[string]int // shed priorities set in the ui, by load name
 
-	// circuit limits changed at runtime, see site_lm_switch.go
-	offLimits    map[string]float64 // configured power limits of the circuits changed at runtime, by name
-	offDynamic   map[string]bool    // circuits with a plugin limit that stays
-	offPublished bool
-	offFromPeak  bool   // the circuit's limit is the peak limit, as published
-	circuit      string // the load management (peak) circuit, empty = none
-
 	eventsSaved time.Time // the event log was stored then, see site_lm_events.go
 
 	guardMinutes int             // shed guard, see site_lm_guard.go
@@ -115,9 +108,6 @@ func (site *Site) restoreCustom() {
 	site.restoreLmEvents()
 	site.restorePeakSettings()
 	site.dropOrphanCircuits()
-	// the circuit may take the peak limit: restoreLmSettings ran before the peak
-	// settings were back, so the limit applies here, not with the first cycle
-	site.applyCircuitLimits()
 	// restoreLmSettings published the advanced settings before the battery circuit was
 	// back, so phasesMissing read false: publish them once more
 	site.publishLmAdvanced()
@@ -191,7 +181,7 @@ func (site *Site) restoreLmSettings() {
 
 	site.restoreLmGuard()
 	site.restoreLmAdvanced()
-	site.restoreLmSwitch()
+	site.dropLmCircuit()
 	site.restoreBatteryIdent()
 	site.restoreBatteryGridChargeMode()
 	site.restoreLmProfiles()
