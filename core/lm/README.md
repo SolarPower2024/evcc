@@ -16,7 +16,7 @@ Part 1 describes the features, part 2 how the fork is kept maintainable.
 4. [Heater in stages](#4-heater-in-stages)
 5. [Shed guard](#5-shed-guard)
 6. [Loads not following their limit](#6-loads-not-following-their-limit)
-7. [Load management circuit](#7-load-management-circuit)
+7. [Circuit limits](#7-circuit-limits)
 8. [Loads and events in the dialog](#8-loads-and-events-in-the-dialog)
 9. [Phase switching: 1p currents and delays](#9-phase-switching-1p-currents-and-delays)
 10. [Battery grid charging by soc and one-time](#10-battery-grid-charging-by-soc-and-one-time)
@@ -254,42 +254,33 @@ circuit counts a cycle; after the set cycles (*Erweitert*, default 3, 0 = off)
 it is no longer counted on and the next load up is cut. It is counted on again
 once it follows. See `core/lm/follow.go`, `core/site_lm_follow.go`.
 
-## 7. Load management circuit
+## 7. Circuit limits
 
-The circuits limit with the power limit set in their configuration, as in evcc.
-There is no switch to lift them: a limit goes by changing the circuit. The former
-switch *Lastmanagement* (route `lmenabled`, setting `lmOff`) is gone; a stored
-`lmOff` is read at the start, noted in the log if it was off, and removed
-(`dropLmOff` in `core/site_lm_dropped.go`, `TestLmOffDropped`). The published
-state `lmOff` stays (`limits`, `dynamic`, `circuit`, `fromPeak`); fuse current
-limits, a HEMS limit (§14a), the grid import peak and peak shaving apply as always.
+The circuits limit with the power and current limits set in their configuration
+(*Max. Leistung*, *Max. Stromstärke*), as in evcc. Nothing in the fork changes
+them at runtime and there is no switch to lift them: a limit goes by changing
+the circuit. Fuse current limits, a HEMS limit (§14a), the grid import peak
+(evcc's *Netzbezugsspitze*) and peak shaving apply as always.
 
-*Erweitert → Stromkreis Lastmanagement (Peak)* names the circuit whose power
-limit is the peak, beside one for the fuse or the agreed connection power. It is
-the circuit that can take the peak limit (`lmCircuit`, `core/site_lm_switch.go`).
+Gone, each read at the start and removed (`dropLmCircuit`, `dropLmOff` in
+`core/site_lm_dropped.go`, `TestLmCircuitDropped`, `TestLmOffDropped`,
+`TestLmCircuitDroppedAtRestore`):
 
-*Erweitert → Grenze = Peak-Shaving-Grenze* (`circuitFromPeak`, default off, so
-nothing changes unconfigured): the chosen circuit's power limit is the peak
-limit while peak shaving is on, also below the configured value. A change of the
-peak limit (setter, profile, the month's peak, peak shaving on or off) is taken at once, otherwise with the next cycle;
-after a restart it applies once the peak settings are back, before the first
-cycle. The `circuits` data shows a changed limit with the next cycle (setters do
-not publish it, they run beside the cycle that writes the circuit values). The
-configured value is not overwritten: it applies again with the setting or
-peak shaving off. Without a
-circuit chosen the setting has no effect (not on all circuits); a circuit
-without a power limit or with one from a plugin is left alone. Fuse current
-limits and §14a apply as always. `lmOff.fromPeak` tells the ui whether the
-limit is the peak limit right now. The ui shows where it comes from: the circuit dialog (hint under the
-power limit, `CircuitPeakHint.vue`, the field stays editable) and the peak
-shaving card of the battery tab (*Also applies to circuit …*); the configured
-value stays stored. With the 3.5 kW of a small peak limit the
-minimum of a 3-phase wallbox (6 A × 3 = 4.1 kW) no longer fits under the circuit:
-it charges 1-phase or with the battery's help until the reserve is reached.
+- the switch *Lastmanagement* (route `lmenabled`, setting `lmOff`), noted in the
+  log if it was off;
+- *Erweitert → Stromkreis Lastmanagement (Peak)* (setting `lmCircuit`, routes
+  `lmcircuit` and `lmcircuitdelete`, key `peakFollowCircuit` of lm3/lm4);
+- *Erweitert → Grenze = Peak-Shaving-Grenze* (`circuitFromPeak`; the number route
+  still accepts it without effect, `TestLmAdvancedCircuitFromPeakIgnored`) and
+  the published state `lmOff`.
 
-A chosen circuit that is deleted afterwards is not followed: the name is
-removed with a warning at the start and with the next cycle
-(`core/site_lm_orphan.go`).
+A circuit changed at runtime kept its configured value only in memory, so it
+starts with it. To limit loads to the peak, set evcc's *Netzbezugsspitze*
+(*Konfiguration → Externe Limits*).
+
+The circuit chosen for the battery stays (§2). One that is deleted afterwards is
+not followed: the name is removed with a warning at the start and with the next
+cycle (`core/site_lm_orphan.go`, `TestBatteryCircuitDeleted`).
 
 ## 8. Loads and events in the dialog
 
@@ -945,9 +936,8 @@ matches what the fork will do (`core/site_optimizer_lm.go`):
   reaches it the rest is solved again (`core/site_optimizer_soc_pass.go`) with
   the stop soc as goal, as the optimizer only knows minimums. While charging
   runs the stop soc is a goal of the first solve.
-- the peak limit stays a hard grid import limit in the plan, also with load
-  management off or a load management circuit set higher: the loads then draw
-  more than planned and only the battery cuts, which is right for the battery.
+- the peak limit stays a hard grid import limit in the plan, also with a
+  circuit limit set higher: the loads then draw more than planned and only the battery cuts, which is right for the battery.
 - grid charging goals follow the charge slot by slot as the fork does it, at the
   grid charge power with the charging efficiency; with peak shaving only with
   the room below the limit, paused while a peak runs.
@@ -1148,19 +1138,18 @@ values are not stored, so a changed default applies.
 | `timeout` | expiry of unserved demand | 10 min | 1-60 |
 | `phases` | battery phases for current accounting, set under *Batterie → Stromkreis* (same key) | not set, accounting uses 3; required with a current limit, see [2](#2-battery-in-load-management) | 1-3 |
 | `peakFreeze` | minute from which the peak budget no longer grows | 12 | 1-14 |
-| `peakCap` | allowed grid power at most × limit | 2 | 1-10 |
+| `peakCap` | no longer used (the cap on the peak budget is fixed at 2 × limit, `peak.DefaultCap`): still accepted, without effect, and dropped at start | – | 1-10 |
 | `followCycles` | cycles until a load not following is ignored | 3 | 0-20, 0 = off |
 | `gridChargeWindow` | hours to reach the stop soc in the plan; it only moves the stop soc forward without peak shaving and only if the fork's charge time is longer than the window, otherwise it has no effect (no harm done) | 3 | 1-24 |
 | `homeForecast` | home forecast: evcc, per weekday, manual. The old name `homeWeekday` (0/1) is still accepted; a stored `homeWeekday` moves into `homeForecast` at start | 0 | 0-2 |
 | `exportForecastEntity` | text, not a number: entity for the export forecast, see [16](#export-forecast) | empty = off | `sensor.<name>` |
-| `circuitFromPeak` | the load management circuit's limit is the peak limit, see [7](#7-load-management-circuit) | 0 (off) | 0-1 |
+| `circuitFromPeak` | no longer used (the peak limit as circuit limit, see [7](#7-circuit-limits)): still accepted, without effect, and dropped at start | – | 0-1 |
 
-Also there: the load management circuit ([7](#7-load-management-circuit))
-and evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
+Also there: evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
 
 The dialog shows the settings in four closed groups, so it stays short on a
-phone: *Lastmanagement* (circuit, `circuitFromPeak`, `timeout`, `followCycles`), *Peak Shaving*
-(`peakFreeze`, `peakCap`), *Batterie-Netzladen*
+phone: *Lastmanagement* (`timeout`, `followCycles`), *Peak Shaving*
+(`peakFreeze`), *Batterie-Netzladen*
 (`holdOff`, `gridChargeWindow`) and *Optimizer* (`homeForecast`, load
 profile, `profilePercentile`, `exportForecastEntity`). A rejected value opens its group.
 
@@ -1362,7 +1351,7 @@ in a running evcc) they answer 401. The ui opens the login on a 401 by itself.
 | List | Routes |
 |---|---|
 | `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakshavingreserve`, `peakshavingevents`, `feedinsplit` |
-| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `lmcircuit(delete)`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `importeegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
+| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `importeegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
 
 ## Upstream touch points
 
@@ -1395,7 +1384,6 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/views/Forecast.vue` | `<SnowCoverSwitch />` under the solar chart (snow on pv as one choice); evcc's *adjust* switch stays in the card header |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
-| `assets/js/components/Config/CircuitModal.vue` | mounts `CircuitPeakHint.vue` at the start of `before-actions`: the hint under the power limit while the circuit takes the peak limit |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown; default mode labels Aus/Smart/Ein for a heater in stages (`chargerIsStages`) |
 | `assets/js/components/Loadpoints/Loadpoint.vue`, `Mode.vue` | `chargerStages` prop, mode labels Aus/Smart/Ein for a heater in stages; `chargePowerEstimate` shown as "≈ 6 kW" (whole kW, fits a phone), formatted by `fmtPowerEstimate` (`utils/lmEnergyflow.ts`) |
 | `assets/js/components/Site/Site.vue` | energy flow gets `measuredLoadpoints(…)` (`utils/lmEnergyflow.ts`): a loadpoint with `chargePowerEstimated` is left out |
@@ -1413,7 +1401,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 | Area | Files |
 | --- | --- |
-| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_switch.go`, `core/site_lm_orphan.go`, `core/site_lm_phases.go`, `core/site_lm_advanced.go`, `core/site_restore.go`, `core/site_lm_dropped.go`, `core/circuit/circuit_custom.go` |
+| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_orphan.go`, `core/site_lm_phases.go`, `core/site_lm_advanced.go`, `core/site_restore.go`, `core/site_lm_dropped.go`, `core/circuit/circuit_custom.go` |
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
@@ -1429,7 +1417,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | split grid tariff | `templates/definition/tariff/fixed-netz.yaml`, `tariff/fixed_netz_test.go`, `assets/js/utils/lmGridTariff.ts`, `assets/js/components/Config/GridFeeZonesField.vue`, `GridFeeZoneForm.vue`, `GridFeeZoneSummary.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
-| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/utils/optimizerAutomatic.ts`, `assets/js/components/LoadManagement/`, the battery cards in `assets/js/components/Battery/` (`PeakStatusModal`, `PeakStatusHero`, `PeakStatusLoads`, `peakStatus.ts`, `peakDialog.ts`, `BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
+| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/utils/optimizerAutomatic.ts`, `assets/js/components/LoadManagement/`, the battery cards in `assets/js/components/Battery/` (`PeakStatusModal`, `PeakStatusHero`, `PeakStatusLoads`, `peakStatus.ts`, `peakDialog.ts`, `BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`) |
 | build | `.github/workflows/custom-image.yml` |
 | start page | `.github/README.md` (GitHub shows it instead of the evcc `README.md`; its feature list follows part 1) |
 

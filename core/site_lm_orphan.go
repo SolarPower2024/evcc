@@ -1,13 +1,11 @@
 package core
 
-// Custom extension: circuits chosen for the fork's features that were deleted
-// since. A name that no longer resolves must not widen what a feature touches
-// (the battery grid charging without a circuit check): the assignment is removed with a warning, at the
-// start and once per cycle, so the window ends with the next cycle.
+// Custom extension: the circuit chosen for the battery that was deleted since. A
+// name that no longer resolves must not widen what a feature touches (the
+// battery grid charging without a circuit check): the assignment is removed with
+// a warning, at the start and once per cycle, so the window ends with the next cycle.
 
 import (
-	"github.com/evcc-io/evcc/core/keys"
-	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/config"
 )
 
@@ -17,37 +15,11 @@ func circuitExists(name string) bool {
 	return err == nil
 }
 
-// dropOrphanCircuits removes the load management (peak) circuit and the
-// battery's circuit when they no longer exist.
+// dropOrphanCircuits removes the battery's circuit when it no longer exists.
 func (site *Site) dropOrphanCircuits() {
-	s := site.lms()
-
-	s.mu.Lock()
-	name := s.circuit
-	s.mu.Unlock()
-
-	changed := false
-
-	if name != "" && !circuitExists(name) {
-		s.mu.Lock()
-		s.circuit = ""
-		s.offPublished = false
-		s.mu.Unlock()
-
-		_ = settings.Delete(keys.LmCircuit)
-
-		site.log.WARN.Printf("load management: circuit %s no longer exists, removed", name)
-		changed = true
-	}
-
 	if ref := site.GetPeakShavingCircuit(); ref != "" && !circuitExists(ref) {
 		site.log.WARN.Printf("peak shaving: battery circuit %s no longer exists, removed, the battery is not part of load management", ref)
 		_ = site.SetPeakShavingCircuit("")
-		changed = true
-	}
-
-	if changed {
-		site.applyCircuitLimits()
 	}
 }
 

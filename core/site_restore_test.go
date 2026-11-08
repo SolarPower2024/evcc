@@ -101,15 +101,15 @@ func TestRestoreLaterSaveKeepsInvalidCopy(t *testing.T) {
 // TestRestoreLmAdvancedKeepsGoodFields: a field of the wrong type does not take the others along
 func TestRestoreLmAdvancedKeepsGoodFields(t *testing.T) {
 	site, buf := restoreTestSite(t)
-	settings.SetString(keys.LmAdvanced, `{"holdOff":15,"timeout":"x","peakCap":3}`)
+	settings.SetString(keys.LmAdvanced, `{"holdOff":15,"timeout":"x","followCycles":4}`)
 
 	site.restoreLmAdvanced()
 
 	adv := site.advanced()
 	require.NotNil(t, adv.HoldOff)
 	assert.Equal(t, 15.0, *adv.HoldOff)
-	require.NotNil(t, adv.PeakCap)
-	assert.Equal(t, 3.0, *adv.PeakCap)
+	require.NotNil(t, adv.FollowCycles)
+	assert.Equal(t, 4.0, *adv.FollowCycles)
 	assert.Nil(t, adv.Timeout)
 
 	assert.Equal(t, 1, strings.Count(buf.String(), "ERROR"), buf.String())
@@ -275,4 +275,22 @@ func TestRestoreHomeWeekdayMoved(t *testing.T) {
 	site.lms().adv = lmAdvanced{}
 	site.restoreLmAdvanced()
 	assert.Equal(t, homeForecastManual, site.homeForecast())
+}
+
+// TestRestorePeakCapDropped: the cap on the peak budget is fixed now, a stored value is removed at start
+func TestRestorePeakCapDropped(t *testing.T) {
+	site, _ := restoreTestSite(t)
+	settings.SetString(keys.LmAdvanced, `{"peakCap":3,"holdOff":15}`)
+
+	site.restoreLmAdvanced()
+
+	adv := site.advanced()
+	assert.Nil(t, adv.PeakCap)
+	require.NotNil(t, adv.HoldOff)
+	assert.Equal(t, 15.0, *adv.HoldOff, "the other values stay")
+
+	raw, err := settings.String(keys.LmAdvanced)
+	require.NoError(t, err)
+	assert.NotContains(t, raw, "peakCap")
+	assert.Contains(t, raw, "holdOff")
 }

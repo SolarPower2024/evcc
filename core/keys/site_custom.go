@@ -44,7 +44,7 @@ const (
 	PeakFollow                      = "peakFollow"                // gone, removed on start, see core/site_peak_limit.go
 	PeakFollowBuffer                = "peakFollowBuffer"
 	PeakFollowBase                  = "peakFollowBase"
-	PeakFollowCircuit               = "peakFollowCircuit" // lm3/lm4, taken over into LmCircuit
+	PeakFollowCircuit               = "peakFollowCircuit" // gone (lm3/lm4), removed on start, see core/site_lm_dropped.go
 	PeakTariff                      = "peakTariff"        // capacity tariff, see core/site_peak_tariff.go
 
 	// load management shed priorities
@@ -65,9 +65,9 @@ const (
 	// uploaded load profile for the home consumption forecast, see core/site_load_manual.go
 	LmHomeProfile = "lmHomeProfile"
 
-	// load management switched off, see core/site_lm_switch.go
+	// gone, removed on start, see core/site_lm_dropped.go: the switch "load management off"
 	LmOff     = "lmOff"
-	LmCircuit = "lmCircuit" // the load management (peak) circuit
+	LmCircuit = "lmCircuit" // gone as well: the load management (peak) circuit
 
 	// battery identification, see core/site_battery_ident.go
 	BatteryIdent    = "batteryIdent"    // published: measured capacity and efficiency

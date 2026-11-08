@@ -21,7 +21,6 @@ func TestLmAdvancedSettings(t *testing.T) {
 	assert.Equal(t, lm.DefaultTimeout, site.lmTimeout())
 	assert.Equal(t, lm.DefaultPhases, site.lmBatteryPhases())
 	assert.Equal(t, 12*time.Minute, site.peakFreeze())
-	assert.Equal(t, 2.0, site.peakCap())
 	assert.Equal(t, 0.0, site.peakWriteTolerance())
 
 	// set in the ui
@@ -30,7 +29,7 @@ func TestLmAdvancedSettings(t *testing.T) {
 	require.NoError(t, site.SetLmAdvanced("timeout", 3))
 	require.NoError(t, site.SetLmAdvanced("phases", 1))
 	require.NoError(t, site.SetLmAdvanced("peakFreeze", 10))
-	require.NoError(t, site.SetLmAdvanced("peakCap", 1.5))
+	require.NoError(t, site.SetLmAdvanced("peakCap", 1.5)) // accepted, without effect
 	require.NoError(t, site.SetLmAdvanced("writeTolerance", 50))
 
 	assert.Nil(t, site.advanced().Hysteresis, "no setting any more")
@@ -39,7 +38,7 @@ func TestLmAdvancedSettings(t *testing.T) {
 	assert.Equal(t, 3*time.Minute, site.lmTimeout())
 	assert.Equal(t, 1, site.lmBatteryPhases())
 	assert.Equal(t, 10*time.Minute, site.peakFreeze())
-	assert.Equal(t, 1.5, site.peakCap())
+	assert.Nil(t, site.advanced().PeakCap, "fixed at the default")
 	assert.Equal(t, 50.0, site.peakWriteTolerance())
 
 	// the free value is no setting any more: accepted, without effect

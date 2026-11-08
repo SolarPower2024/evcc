@@ -25,7 +25,9 @@ type lmAdvanced struct {
 	Timeout    *float64 `json:"timeout,omitempty"`    // unserved demand expiry in minutes
 	Phases     *float64 `json:"phases,omitempty"`     // battery phases for current accounting
 	PeakFreeze *float64 `json:"peakFreeze,omitempty"` // minute of the window from which the peak budget no longer grows
-	PeakCap    *float64 `json:"peakCap,omitempty"`    // allowed grid power at most this multiple of the peak limit
+	// allowed grid power at most this multiple of the peak limit, fixed now (peak.DefaultCap):
+	// only read from the stored settings, restoreLmAdvanced drops it at start
+	PeakCap *float64 `json:"peakCap,omitempty"`
 	// smallest change in W that is written to a peak shaving entity, see numberSetter
 	WriteTolerance *float64 `json:"writeTolerance,omitempty"`
 	// cycles after which a load not following its limit is no longer counted on, 0 = never
@@ -42,8 +44,8 @@ type lmAdvanced struct {
 	// Home Assistant entity the optimizer's planned grid export is written to, empty = off,
 	// see site_lm_export_forecast.go
 	ExportForecastEntity string `json:"exportForecastEntity,omitempty"`
-	// the load management (peak) circuit's power limit is the peak limit while peak
-	// shaving is on, see site_lm_switch.go. Set through the number route, 1 = on.
+	// the load management (peak) circuit took the peak limit, gone: only read from the
+	// stored settings, restoreLmAdvanced drops it at start
 	CircuitFromPeak bool `json:"circuitFromPeak,omitempty"`
 }
 
@@ -60,13 +62,11 @@ type lmAdvancedState struct {
 	Timeout              float64 `json:"timeout"`
 	Phases               int     `json:"phases"`
 	PeakFreeze           float64 `json:"peakFreeze"`
-	PeakCap              float64 `json:"peakCap"`
 	WriteTolerance       float64 `json:"writeTolerance"`
 	FollowCycles         int     `json:"followCycles"`
 	GridChargeWindow     float64 `json:"gridChargeWindow"`
 	HomeForecast         int     `json:"homeForecast"`
 	ExportForecastEntity string  `json:"exportForecastEntity"`
-	CircuitFromPeak      bool    `json:"circuitFromPeak"`
 	// PhasesMissing: the circuit has a current limit and the battery phases are not set, grid charging stays off
 	PhasesMissing bool `json:"phasesMissing"`
 }
@@ -84,13 +84,13 @@ var lmAdvancedLimits = map[string]lmAdvancedLimit{
 	"timeout":          {1, 60, true},
 	"phases":           {1, 3, true},
 	"peakFreeze":       {1, 14, true},
-	"peakCap":          {1, 10, false},
+	"peakCap":          {1, 10, false}, // no longer used, still accepted: dropped at start
 	"writeTolerance":   {0, 1000, true},
 	"followCycles":     {0, 20, true},
 	"gridChargeWindow": {1, 24, true},
 	"homeWeekday":      {0, 1, true},
 	"homeForecast":     {0, 2, true},
-	"circuitFromPeak":  {0, 1, true},
+	"circuitFromPeak":  {0, 1, true}, // no longer used, still accepted: dropped at start
 }
 
 // restoreLmAdvanced restores the persisted advanced settings
@@ -103,6 +103,15 @@ func (site *Site) restoreLmAdvanced() {
 		// no setting any more, see bydHysteresis
 		gone := adv.Hysteresis != nil
 		adv.Hysteresis = nil
+		// no setting any more, see peak.DefaultCap
+		gone = gone || adv.PeakCap != nil
+		adv.PeakCap = nil
+		if adv.CircuitFromPeak {
+			site.log.INFO.Println("setting \"limit = peak shaving limit\" removed: the circuits limit with their configured value")
+		}
+		// no setting any more, the circuits limit as configured
+		gone = gone || adv.CircuitFromPeak
+		adv.CircuitFromPeak = false
 		if dropped || moved || gone {
 			_ = settings.SetJson(keys.LmAdvanced, adv)
 		}
@@ -150,13 +159,11 @@ func (site *Site) publishLmAdvanced() {
 		Timeout:              site.lmTimeout().Minutes(),
 		Phases:               site.lmBatteryPhases(),
 		PeakFreeze:           site.peakFreeze().Minutes(),
-		PeakCap:              site.peakCap(),
 		WriteTolerance:       site.peakWriteTolerance(),
 		FollowCycles:         site.lmFollowCycles(),
 		GridChargeWindow:     site.gridChargeWindow().Hours(),
 		HomeForecast:         site.homeForecast(),
 		ExportForecastEntity: site.exportForecastEntity(),
-		CircuitFromPeak:      site.advanced().CircuitFromPeak,
 		PhasesMissing:        site.batteryPhasesMissing(),
 	})
 }
@@ -199,6 +206,12 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 		return err
 	}
 
+	// accepted for old clients, nothing to store
+	switch name {
+	case "peakCap", "circuitFromPeak":
+		return nil
+	}
+
 	s := site.lms()
 
 	s.advMu.Lock()
@@ -212,8 +225,6 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 		s.adv.Phases = &v
 	case "peakFreeze":
 		s.adv.PeakFreeze = &v
-	case "peakCap":
-		s.adv.PeakCap = &v
 	case "writeTolerance":
 		s.adv.WriteTolerance = &v
 	case "followCycles":
@@ -223,8 +234,6 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 	case "homeWeekday", "homeForecast":
 		s.adv.HomeForecast = &v
 		s.adv.HomeWeekday = nil
-	case "circuitFromPeak":
-		s.adv.CircuitFromPeak = value == 1
 	}
 	adv := s.adv
 	s.advMu.Unlock()
@@ -240,9 +249,6 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 	}
 	if name == "homeWeekday" || name == "homeForecast" {
 		site.Optimize() // the home demand forecast changed
-	}
-	if name == "circuitFromPeak" {
-		site.applyCircuitLimits()
 	}
 
 	site.publishLmAdvanced()

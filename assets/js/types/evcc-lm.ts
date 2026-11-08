@@ -34,8 +34,6 @@ export interface LmAdvanced {
   phases: number;
   /** Minute of the quarter hour from which the peak budget no longer grows. */
   peakFreeze: number;
-  /** Allowed grid draw at most this multiple of the peak limit. */
-  peakCap: number;
   /** Smallest change in W written to a peak shaving entity. */
   writeTolerance: number;
   /** Home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load profile. */
@@ -45,8 +43,6 @@ export interface LmAdvanced {
   gridChargeWindow: number;
   /** Home Assistant entity the optimizer's planned grid export is written to, empty = off. */
   exportForecastEntity?: string;
-  /** The load management (peak) circuit's power limit is the peak limit while peak shaving is on. */
-  circuitFromPeak?: boolean;
   /** The battery's circuit has a current limit and the battery phases are not set: no grid charging. */
   phasesMissing?: boolean;
 }
@@ -275,14 +271,6 @@ export interface LmState {
   /** Monthly peak statistics, newest first. */
   peakMonths?: PeakMonth[];
   /** Follow the peak: the limit rises to the month's peak minus the buffer (W), base = limit set by hand. */
-  /** Circuit limits changed at runtime; limits = configured values of changed circuits, circuit: the load management (peak) circuit, empty = none. */
-  lmOff?: {
-    limits: Record<string, number>;
-    dynamic: string[];
-    circuit: string;
-    /** The circuit's limit is the peak limit right now. */
-    fromPeak?: boolean;
-  };
   /** Capacity tariff with each month's cost with and without the battery, a zero price is off. */
   peakTariff?: PeakTariff;
   /** Battery capacity and efficiency learned from the stored slots. */

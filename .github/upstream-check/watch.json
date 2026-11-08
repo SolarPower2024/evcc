@@ -139,12 +139,6 @@
       "paths": ["core/site_optimizer.go", "core/planner/"]
     },
     {
-      "name": "Kreis-Leistungsgrenze aus der Peak-Grenze (dynamische Kreisgrenze; evcc könnte sie aus Tarifen oder Plugins anbieten)",
-      "files": ["core/site_lm_switch.go", "core/site_lm_advanced.go"],
-      "keywords": ["getMaxPower", "GetMaxPower", "MaxPowerFrom", "maxPowerFrom", "dynamic limit"],
-      "paths": ["core/circuit/", "core/site_circuits.go", "core/site.go"]
-    },
-    {
       "name": "Log-Datei (Tagesdateien)",
       "files": ["util/logstash/file_custom.go", "core/site_logfile.go"],
       "prs": [32018],

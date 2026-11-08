@@ -14,7 +14,7 @@ The original evcc description is in [README.md](../README.md).
 - Heater in stages
 - Shed guard
 - Loads not following their limit
-- Load management circuit
+- Circuit limits
 - Loads and events in the peak shaving dialog
 - Phase switching: 1p currents and delays
 - Battery grid charging by soc and one-time
