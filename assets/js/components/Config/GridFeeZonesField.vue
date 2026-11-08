@@ -61,7 +61,7 @@ export default {
 	},
 	methods: {
 		addZone() {
-			const zone: GridFeeZone = { mode: "abs", value: 0, hours: "", days: "", months: "" };
+			const zone: GridFeeZone = { mode: "abs", value: null, hours: "", days: "", months: "" };
 			const newZones = [...(this.modelValue || []), zone];
 			this.$emit("update:modelValue", newZones);
 			this.$nextTick(() => this.startEdit(newZones.length - 1));
