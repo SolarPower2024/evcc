@@ -168,6 +168,11 @@ export default defineComponent({
 				sub: this.fmtWeekdayDayTime(new Date(m.peakAt)),
 			};
 		},
+		// the newest event the status reports, changes with every new line
+		newestEvent(): string {
+			const e = store.state.lmStatus?.events?.[0];
+			return e ? `${e.at}${e.type}` : "";
+		},
 		events(): LmEvent[] {
 			// the whole list from the api, until it is there what the status publishes
 			return peakEvents(this.fetched ?? store.state.lmStatus?.events);
@@ -179,6 +184,10 @@ export default defineComponent({
 	watch: {
 		// a change of the state: the list has a new line
 		"status.state"() {
+			if (this.visible) this.load();
+		},
+		// a new event while the dialog is open (also one of the load management)
+		newestEvent() {
 			if (this.visible) this.load();
 		},
 	},
