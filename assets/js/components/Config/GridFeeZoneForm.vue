@@ -196,7 +196,7 @@ export default {
 		},
 		isValidValue() {
 			const value = this.uiZone.value;
-			return value !== null && !isNaN(value);
+			return value !== null && (value as unknown) !== "" && !isNaN(value);
 		},
 		isValidTimeRange() {
 			const { timeFrom, timeTo } = this.uiZone;
