@@ -206,6 +206,12 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 		return err
 	}
 
+	// accepted for old clients, nothing to store
+	switch name {
+	case "peakCap", "circuitFromPeak":
+		return nil
+	}
+
 	s := site.lms()
 
 	s.advMu.Lock()
