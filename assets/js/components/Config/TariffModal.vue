@@ -79,6 +79,7 @@ import tariffPriceYaml from "./defaultYaml/tariffPrice.yaml?raw";
 import tariffCo2Yaml from "./defaultYaml/tariffCo2.yaml?raw";
 import tariffSolarYaml from "./defaultYaml/tariffSolar.yaml?raw";
 import tariffTemperatureYaml from "./defaultYaml/tariffTemperature.yaml?raw";
+import { defaultPriceTemplate, priceTemplatesFor } from "@/utils/lmGridTariff"; // custom
 
 const initialValues = {
 	type: ConfigType.Template,
@@ -127,7 +128,7 @@ export default defineComponent({
 		},
 		// a fixed price is the common case for grid import and export
 		defaultTemplate(): string | undefined {
-			return this.tariffType === "grid" || this.tariffType === "feedIn" ? "fixed" : undefined;
+			return defaultPriceTemplate(this.tariffType); // custom: split grid tariff
 		},
 		modalTitle(): string {
 			if (this.name !== "tariff") {
@@ -162,6 +163,7 @@ export default defineComponent({
 			// Separate demo/generic templates from real services
 			const genericTemplates = [
 				"fixed",
+				"fixed-netz", // custom: split grid tariff
 				"fixed-zones",
 				"merged",
 				"demo-co2-forecast",
@@ -190,7 +192,11 @@ export default defineComponent({
 			const co2Products = filterByGroup("co2");
 			const solarProducts = filterByGroup("solar");
 			const temperatureProducts = filterByGroup("temperature");
-			const priceGeneric = extractGeneric("price");
+			const priceGeneric = priceTemplatesFor(
+				extractGeneric("price"),
+				this.tariffType,
+				this.isNew
+			); // custom: split grid tariff
 			const co2Generic = extractGeneric("co2");
 			const solarGeneric = extractGeneric("solar");
 			const temperatureGeneric = extractGeneric("temperature");

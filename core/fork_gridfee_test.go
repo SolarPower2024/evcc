@@ -54,3 +54,25 @@ func TestGridFeeI18n(t *testing.T) {
 		}
 	}
 }
+
+// TestGridFeeTemplateChoice pins what the template choice in TariffModal relies on:
+// evcc's "fixed" stays the template existing tariffs were saved with, the split
+// template sits behind it in the generic list and both exist as templates.
+func TestGridFeeTemplateChoice(t *testing.T) {
+	modal := readRepoFile(t, "assets/js/components/Config/TariffModal.vue")
+
+	fixed := strings.Index(modal, "\"fixed\",\n")
+	split := strings.Index(modal, "\"fixed-netz\", // custom")
+	require.NotEqual(t, -1, fixed, "evcc's generic list starts with fixed")
+	assert.Less(t, fixed, split)
+	assert.Contains(t, modal, "return defaultPriceTemplate(this.tariffType)")
+
+	for _, name := range []string{"fixed", "fixed-netz"} {
+		_, err := os.Stat(filepath.Join("..", "templates", "definition", "tariff", name+".yaml"))
+		assert.NoError(t, err, name)
+	}
+
+	helper := readRepoFile(t, "assets/js/utils/lmGridTariff.ts")
+	assert.Contains(t, helper, `SPLIT_TEMPLATE = "fixed-netz"`)
+	assert.Contains(t, helper, `tariffType === "grid"`, "only grid import gets the split template")
+}
