@@ -44,16 +44,24 @@ func (site *Site) saveLmEvents(force bool) {
 	}
 
 	events, changed := site.lmm().Snapshot()
-	if !changed {
-		return
+	if changed {
+		if err := settings.SetJson(keys.LmEvents, events); err != nil {
+			site.log.ERROR.Printf("load management events: %v", err)
+			site.lmm().Unsaved() // tried again with the next save
+			return
+		}
 	}
 
-	if err := settings.SetJson(keys.LmEvents, events); err != nil {
-		site.log.ERROR.Printf("load management events: %v", err)
+	// stopping: the settings are written to the database by a function that
+	// stops in parallel and may be done before this one, so write them now
+	if force {
+		if err := settings.Persist(); err != nil {
+			site.log.ERROR.Printf("load management events: %v", err)
+		}
 	}
 }
 
 // PeakEvents returns the events the peak status shows, newest first
 func (site *Site) PeakEvents() []lm.Event {
-	return site.lmm().AllEvents(func(e lm.Event) bool { return lm.PeakEvent(e.Type) })
+	return site.lmm().AllEvents(site.peak().clock.Now(), func(e lm.Event) bool { return lm.PeakEvent(e.Type) })
 }

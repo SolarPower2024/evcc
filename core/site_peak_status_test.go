@@ -58,6 +58,10 @@ var statusCases = []struct {
 		sc.cycle(25, 8000, 0)
 		sc.site.batteryMode = api.BatteryHold
 	}},
+	{"gridDischarge", peakStateGridDischarge, func(sc *scenario, ha *fakeHA) {
+		sc.cycle(50, 3000, 0)
+		sc.site.batteryMode = api.BatteryDischarge
+	}},
 	{"hold", peakStateHold, func(sc *scenario, ha *fakeHA) {
 		sc.cycle(50, 3000, 0)
 		sc.site.batteryMode = api.BatteryHold
@@ -96,7 +100,9 @@ func TestPeakStatusStates(t *testing.T) {
 				assert.Equal(t, typ, st.Type)
 				assert.Equal(t, 5000.0, st.Limit)
 				assert.Equal(t, 30.0, st.Reserve)
-				assert.NotNil(t, st.Window, "the window of the running quarter hour")
+				if tc.state != peakStateMeter {
+					assert.NotNil(t, st.Window, "the window of the running quarter hour")
+				}
 
 				// the hysteresis of the integration only
 				if typ == batteryTypeBYD {
@@ -271,7 +277,7 @@ func TestPeakStatusBydSensor(t *testing.T) {
 // eventTypes counts the logged events by type
 func eventTypes(site *Site) map[string]int {
 	res := make(map[string]int)
-	for _, e := range site.lmm().AllEvents(nil) {
+	for _, e := range site.lmm().AllEvents(time.Time{}, nil) {
 		res[e.Type]++
 	}
 
@@ -306,7 +312,7 @@ func TestPeakStatusEvents(t *testing.T) {
 	assert.Equal(t, 1, types[lm.EventPeakEnd], "once at the end")
 
 	var end lm.Event
-	for _, e := range site.lmm().AllEvents(nil) {
+	for _, e := range site.lmm().AllEvents(time.Time{}, nil) {
 		if e.Type == lm.EventPeakEnd {
 			end = e
 		}
@@ -317,25 +323,35 @@ func TestPeakStatusEvents(t *testing.T) {
 	sc.cycle(33, 3000, 0)
 	assert.Equal(t, 1, eventTypes(site)[lm.EventReserveAbove])
 
+	// what stays for a minute is logged, once
+	clk := mockClock(sc)
+	settle := func() {
+		site.publishPeakStatus()
+		clk.Add(61 * time.Second)
+		site.publishPeakStatus()
+		site.publishPeakStatus()
+	}
+
 	// the battery mode
 	site.batteryMode = api.BatteryHold
-	site.publishPeakStatus()
-	site.publishPeakStatus()
+	settle()
 	assert.Equal(t, 1, eventTypes(site)[lm.EventBatteryMode])
 
 	// a meter outage and its end
 	s.metersLost = true
-	site.publishPeakStatus()
+	settle()
 	s.metersLost = false
-	site.publishPeakStatus()
+	settle()
 	assert.Equal(t, 2, eventTypes(site)[lm.EventMeter])
 
 	// the storage
 	ha.fail["number/set_value"] = http.StatusInternalServerError
 	s.reserve = 35
 	sc.cycle(33, 3000, 0)
+	settle()
 	delete(ha.fail, "number/set_value")
 	sc.cycle(33, 3000, 0)
+	settle()
 	assert.Equal(t, 2, eventTypes(site)[lm.EventStorage], "lost and connected again")
 
 	// the switch: switching off is no rise above the reserve
@@ -347,6 +363,167 @@ func TestPeakStatusEvents(t *testing.T) {
 	types = eventTypes(site)
 	assert.Equal(t, 2, types[lm.EventPeakSwitch])
 	assert.Equal(t, before, types[lm.EventReserveAbove])
+}
+
+// TestPeakStatusEventsDebounced: a change that returns within a minute is no pair
+func TestPeakStatusEventsDebounced(t *testing.T) {
+	sc, _ := newBydStatus(t)
+	site := sc.site
+	s := site.peak()
+	clk := mockClock(sc)
+
+	sc.cycle(50, 3000, 0)
+	site.batteryMode = api.BatteryNormal
+	site.publishPeakStatus()
+
+	// the mode flips and flips back after 20 s, the meter after 30 s
+	site.batteryMode = api.BatteryHold
+	s.metersLost = true
+	site.publishPeakStatus()
+	clk.Add(20 * time.Second)
+	site.batteryMode = api.BatteryNormal
+	site.publishPeakStatus()
+	clk.Add(10 * time.Second)
+	s.metersLost = false
+	site.publishPeakStatus()
+	clk.Add(2 * time.Minute)
+	site.publishPeakStatus()
+
+	assert.Empty(t, eventTypes(site), "no pair")
+
+	// stays: logged with the time of the change
+	changed := clk.Now()
+	site.batteryMode = api.BatteryHold
+	site.publishPeakStatus()
+	clk.Add(30 * time.Second)
+	site.publishPeakStatus()
+	assert.Empty(t, eventTypes(site), "not yet")
+
+	clk.Add(40 * time.Second)
+	site.publishPeakStatus()
+
+	ev := site.lmm().AllEvents(time.Time{}, nil)
+	if assert.Len(t, ev, 1) {
+		assert.Equal(t, lm.EventBatteryMode, ev[0].Type)
+		assert.Equal(t, changed, ev[0].At)
+	}
+}
+
+// TestPeakStatusStorageBack: a failed write is over when the entity shows what was
+// to be written, though nothing is written then
+func TestPeakStatusStorageBack(t *testing.T) {
+	sc, ha := newBydStatus(t)
+	site := sc.site
+	clk := mockClock(sc)
+
+	sc.cycle(25, 3000, 0)
+	require.True(t, site.peakStatusNow().StorageOk)
+
+	// switching on fails (a timeout in Home Assistant), the switch stays off
+	ha.set(haBydSwitch, "off")
+	delete(site.peak().writeErr, "byd peak shaving switch")
+	ha.fail["switch/turn_on"] = http.StatusInternalServerError
+	site.peak().protOwned = false
+	sc.cycle(25, 3000, 0)
+	require.False(t, site.peakStatusNow().StorageOk)
+
+	clk.Add(61 * time.Second)
+	site.publishPeakStatus()
+	require.Equal(t, 1, eventTypes(site)[lm.EventStorage])
+
+	// the next cycle reads it on (the call got through after all): nothing to write
+	delete(ha.fail, "switch/turn_on")
+	ha.set(haBydSwitch, "on")
+	ha.take()
+	sc.cycle(25, 3000, 0)
+	assert.NotContains(t, ha.take(), "turn_on "+haBydSwitch, "nothing written")
+	assert.True(t, site.peakStatusNow().StorageOk)
+
+	clk.Add(61 * time.Second)
+	site.publishPeakStatus()
+	assert.Equal(t, 2, eventTypes(site)[lm.EventStorage], "storage back")
+}
+
+// TestPeakStatusWindowCurrent: the quarter hour shows only while it is the running
+// one, as the control takes it
+func TestPeakStatusWindowCurrent(t *testing.T) {
+	sc, _ := newBydStatus(t)
+	clk := mockClock(sc)
+
+	sc.cycle(25, 3000, 0)
+	assert.NotNil(t, sc.site.peakStatusNow().Window)
+
+	// the counter fails: no cycle renews the window, the next quarter hour begins
+	clk.Add(16 * time.Minute)
+	assert.Nil(t, sc.site.peakStatusNow().Window, "the old window is no longer shown")
+
+	sc.cycle(25, 3000, 0)
+	assert.NotNil(t, sc.site.peakStatusNow().Window)
+}
+
+// TestPeakStatusApiPath: switching from the api asks Home Assistant nothing and a
+// status derived there does not stay under an older one of the cycle
+func TestPeakStatusApiPath(t *testing.T) {
+	sc, ha := newBydStatus(t)
+	site := sc.site
+
+	sc.cycle(25, 3000, 0)
+	ha.take()
+
+	// the sensor says no soc; the cycle read it
+	ha.set(haBydStatus, bydStatusNoSoc)
+	site.publishPeakStatus()
+	assert.Equal(t, peakHintNoSoc, site.peakStatusNow().StorageHint)
+
+	// the api path: the sensor changed meanwhile, it is not read, the last value stays
+	ha.set(haBydStatus, bydStatusNoEvcc)
+	site.publishPeakStatusCached()
+	assert.Equal(t, peakStateSaving, site.peakStatusNow().State, "no_evcc not read")
+	assert.True(t, site.peakStatusNow().StorageOk)
+
+	// the last publication is the newest state
+	site.peak().enabled = false
+	site.publishPeakStatusCached()
+	assert.Equal(t, peakStateOff, site.peak().status.last.State)
+}
+
+// TestPeakStatusHoldReason: only a hold the peak path makes limits the discharge;
+// grid discharge is no free battery
+func TestPeakStatusHoldReason(t *testing.T) {
+	sc, _ := newBydStatus(t)
+	site := sc.site
+
+	// above the reserve, held for another reason (vehicle, api)
+	sc.cycle(50, 3000, 0)
+	site.batteryMode = api.BatteryHold
+	st := site.peakStatusNow()
+	assert.Equal(t, peakStateHold, st.State)
+	assert.True(t, st.Held)
+	assert.False(t, st.Limited, "no discharge limit from a hold of another kind")
+
+	// below the reserve the reserve limits
+	sc.cycle(25, 3000, 0)
+	site.batteryMode = api.BatteryHold
+	assert.True(t, site.peakStatusNow().Limited)
+
+	site.batteryMode = api.BatteryDischarge
+	st = site.peakStatusNow()
+	assert.Equal(t, peakStateGridDischarge, st.State)
+	assert.False(t, st.Held)
+}
+
+// TestPeakStatusBydSensorOnlyWhileOn: with peak shaving off the integration is asked nothing
+func TestPeakStatusBydSensorOnlyWhileOn(t *testing.T) {
+	sc, ha := newBydStatus(t)
+	site := sc.site
+
+	ha.set(haBydStatus, bydStatusNoSoc)
+	site.peak().enabled = false
+	ha.take()
+	assert.Empty(t, site.readBydStatus())
+
+	site.peak().enabled = true
+	assert.Equal(t, bydStatusNoSoc, site.readBydStatus())
 }
 
 // TestPeakStatusNotSetUp: without the entities of the controller there is nothing

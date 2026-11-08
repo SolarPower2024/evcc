@@ -1113,7 +1113,7 @@ func (site *Site) SetPeakShaving(val bool) error {
 			site.applyOmni()
 		}
 
-		site.publishPeakStatus()
+		site.publishPeakStatusCached() // from the api: Home Assistant is asked by the cycle only
 	}
 
 	return nil

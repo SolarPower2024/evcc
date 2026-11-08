@@ -1,11 +1,13 @@
 package core
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm"
+	"github.com/evcc-io/evcc/db"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,7 +51,7 @@ func TestLmEventsSurviveRestart(t *testing.T) {
 	again.custom.peak.clock = clk
 	again.restoreLmEvents()
 
-	events := again.lmm().AllEvents(nil)
+	events := again.lmm().AllEvents(time.Time{}, nil)
 	if assert.Len(t, events, 4) {
 		assert.Equal(t, lm.EventStorage, events[0].Type, "newest first")
 	}
@@ -59,4 +61,45 @@ func TestLmEventsSurviveRestart(t *testing.T) {
 	for _, e := range peak {
 		assert.NotEqual(t, lm.EventShed, e.Type)
 	}
+}
+
+// TestLmEventsStopPersists: stopping writes the log to the database itself, the
+// function that persists the settings runs in parallel and may be done before
+func TestLmEventsStopPersists(t *testing.T) {
+	noSettingsDB(t)
+
+	before := settings.All()
+	t.Cleanup(func() {
+		if db.Instance != nil {
+			if sqlDB, err := db.Instance.DB(); err == nil {
+				sqlDB.Close()
+			}
+		}
+		db.Instance = nil
+		for _, s := range settings.All() {
+			_ = settings.Delete(s.Key)
+		}
+		for _, s := range before {
+			settings.SetString(s.Key, s.Value)
+		}
+	})
+
+	path := filepath.Join(t.TempDir(), "evcc.db")
+	require.NoError(t, db.NewInstance("sqlite", path))
+
+	site, clk := peakWindowSite(t, 0)
+	site.lmm().AddEvent(lm.Event{At: clk.Now(), Type: lm.EventPeakEnd, A: 1600, B: 180})
+	site.saveLmEvents(false) // stored in memory only, the database comes with the next flush
+	site.lmm().AddEvent(lm.Event{At: clk.Now(), Type: lm.EventMeter, A: 1})
+	site.saveLmEvents(true)
+
+	// the restart without the flush of the settings
+	sqlDB, err := db.Instance.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+	require.NoError(t, db.NewInstance("sqlite", path))
+
+	var saved []lm.Event
+	require.NoError(t, settings.Json(keys.LmEvents, &saved))
+	assert.Len(t, saved, 2)
 }

@@ -6,6 +6,7 @@ package lm
 // here feeds back into the decisions themselves.
 
 import (
+	"slices"
 	"sync"
 	"time"
 )
@@ -58,9 +59,12 @@ type Event struct {
 }
 
 const (
-	// maxEvents and maxEventAge are what the log keeps; it survives a restart
-	maxEvents   = 300
-	maxEventAge = 7 * 24 * time.Hour
+	// maxPeakEvents and maxEventAge are what the log keeps of the peak related
+	// events; it survives a restart. The other events keep maxOtherEvents, so a
+	// shed or throttled load cannot push the peak events out.
+	maxPeakEvents  = 300
+	maxOtherEvents = 20
+	maxEventAge    = 7 * 24 * time.Hour
 
 	// overviewEvents is how many events the overview publishes
 	overviewEvents = 20
@@ -98,7 +102,7 @@ func (m *Manager) LastDecision(l Load) (Decision, bool) {
 	return d, ok
 }
 
-// AddEvent adds an event to the log, dropping the oldest beyond maxEvents and
+// AddEvent adds an event to the log, dropping the oldest beyond the limits and
 // those older than maxEventAge
 func (m *Manager) AddEvent(e Event) {
 	m.statusMu.Lock()
@@ -108,41 +112,56 @@ func (m *Manager) AddEvent(e Event) {
 	m.dirty = true
 }
 
-// trimEvents drops the events older than maxEventAge before now and the oldest
-// beyond maxEvents. Without a time only the number counts.
+// trimEvents drops the events older than maxEventAge before now, then the oldest
+// beyond the limit of their kind: the peak related events and the others are
+// counted apart. Without a time only the numbers count.
 func trimEvents(events []Event, now time.Time) []Event {
 	if !now.IsZero() {
-		i := 0
-		for i < len(events) && now.Sub(events[i].At) > maxEventAge {
-			i++
+		events = slices.DeleteFunc(slices.Clone(events), func(e Event) bool { return now.Sub(e.At) > maxEventAge })
+	}
+
+	var peak, other int
+	for _, e := range events {
+		if PeakEvent(e.Type) {
+			peak++
+		} else {
+			other++
 		}
-		events = events[i:]
 	}
 
-	if len(events) > maxEvents {
-		events = events[len(events)-maxEvents:]
-	}
+	// the oldest first: events are in the order they were logged
+	return slices.DeleteFunc(slices.Clone(events), func(e Event) bool {
+		if PeakEvent(e.Type) {
+			peak--
+			return peak >= maxPeakEvents
+		}
 
-	return events
+		other--
+		return other >= maxOtherEvents
+	})
 }
 
 // Events returns the newest events for the overview, newest first
 func (m *Manager) Events() []Event {
-	return m.newest(overviewEvents, nil)
+	return m.newest(overviewEvents, time.Time{}, nil)
 }
 
-// AllEvents returns the whole log, newest first. With a filter only the events
-// it accepts.
-func (m *Manager) AllEvents(accept func(Event) bool) []Event {
-	return m.newest(maxEvents, accept)
+// AllEvents returns the whole log, newest first, without the events older than
+// maxEventAge before now. With a filter only the events it accepts.
+func (m *Manager) AllEvents(now time.Time, accept func(Event) bool) []Event {
+	return m.newest(maxPeakEvents+maxOtherEvents, now, accept)
 }
 
-func (m *Manager) newest(limit int, accept func(Event) bool) []Event {
+func (m *Manager) newest(limit int, now time.Time, accept func(Event) bool) []Event {
 	m.statusMu.Lock()
 	defer m.statusMu.Unlock()
 
 	res := make([]Event, 0, min(limit, len(m.events)))
 	for i := len(m.events) - 1; i >= 0 && len(res) < limit; i-- {
+		if !now.IsZero() && now.Sub(m.events[i].At) > maxEventAge {
+			continue
+		}
+
 		if accept == nil || accept(m.events[i]) {
 			res = append(res, m.events[i])
 		}
@@ -161,6 +180,14 @@ func (m *Manager) Snapshot() ([]Event, bool) {
 	m.dirty = false
 
 	return append([]Event(nil), m.events...), changed
+}
+
+// Unsaved marks the log as changed again, after storing it failed
+func (m *Manager) Unsaved() {
+	m.statusMu.Lock()
+	defer m.statusMu.Unlock()
+
+	m.dirty = true
 }
 
 // Restore loads a stored log, oldest first. What was logged before stays on top.

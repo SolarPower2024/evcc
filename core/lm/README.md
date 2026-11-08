@@ -301,8 +301,10 @@ events. Published as `lmStatus` at the end of every cycle
 (`core/site_lm_status.go`, records in `core/lm/status.go`); it never feeds back
 into decisions.
 
-The event log keeps 7 days, at most 300 events, and survives a restart (setting
-`lmEvents`, stored every 5 minutes and when evcc stops, `core/site_lm_events.go`,
+The event log keeps 7 days (also when read), at most 300 peak related events and 20 others
+(a shed load cannot push peak events out), and survives a restart (setting
+`lmEvents`, stored every 5 minutes and when evcc stops, then written to the database at once
+as the function that persists the settings may be done earlier (`TestLmEventsStopPersists`), `core/site_lm_events.go`,
 `TestLmEventsSurviveRestart`, `TestEventLogKeeps`); the overview publishes the newest
 20. `GET /api/peakshaving/events` (open) answers the whole log of the peak related
 events for the peak status dialog, newest first (`TestPeakEventsRoute`), see [11](#peak-status-dialog).
@@ -779,7 +781,8 @@ the status) and when peak shaving is switched, only when it changed. Empty `stat
 States, checked in this order: `off` (peak shaving off), `storage` (not reachable),
 `meter` (no grid values for longer than `peak.MaxGap`), `gridCharge` (battery mode
 charge), `holdShaving` (hold, a peak is covered), `hold`, `shaving` (below the reserve,
-setpoint > 0), `saving` (below the reserve), `free`. Tests: `TestPeakStatusStates` (each
+setpoint > 0), `saving` (below the reserve), `free`; `gridDischarge` (battery mode
+discharge) comes after `gridCharge`. Tests: `TestPeakStatusStates` (each
 state, Marstek and BYD), `TestPeakStatusOrder`, `TestPeakStatusValues`.
 
 - *Storage connected*: the outputs written in every cycle (connect, soc threshold,
@@ -794,10 +797,18 @@ state, Marstek and BYD), `TestPeakStatusOrder`, `TestPeakStatusValues`.
   `noSoc` (the integration sees no soc), `modeStuck` (the status differs from the hold
   or charge mode evcc set for longer than a minute).
 - `freeAt` (reserve plus 2 %) only for BYD; Marstek has no hysteresis.
+- A failed write is over when the entity shows what was to be written and nothing is
+  written (`TestPeakStatusStorageBack`); the quarter hour shows while it is the running
+  window (`TestPeakStatusWindowCurrent`); `limited` (discharge max.) only below the reserve
+  or while the optimizer's hold gives way, a hold of another kind sets `held` only
+  (`TestPeakStatusHoldReason`); grid discharge is its own state `gridDischarge`; the api path
+  publishes without asking Home Assistant, each publication derives the status anew under a
+  lock (`TestPeakStatusApiPath`); the integration's sensor is read only while peak shaving is on.
 - Events (`TestPeakStatusEvents`, one per change, the start sets the reference only):
   `reserveBelow`/`reserveAbove`, `batteryMode`, `peakSwitch`, `meter`, `storage`,
   `peakEnd` (with the most the battery gave and the duration), next to the existing
-  `peak` and `gridChargePaused`. Kept 7 days, see [8](#8-overview).
+  `peak` and `gridChargePaused`. A change of the mode, the meter or the storage is logged
+  when it stayed for a minute, with the time of the change (`TestPeakStatusEventsDebounced`). Kept 7 days, see [8](#8-overview).
 
 The dialog (*Hausbatterie*, tap the symbol or the percentage of a battery card, also
 with several batteries; the same dialog for all): a tile (color, icon, title, one

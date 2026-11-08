@@ -144,6 +144,11 @@ func (site *Site) applyOmniProtection() {
 		return
 	}
 
+	if strings.EqualFold(state, "on") {
+		// nothing to write, the switch is on: an earlier failed write is over, see peakStatus
+		site.logWrite(site.extName()+" peak shaving switch", "switch is on", nil)
+	}
+
 	if !strings.EqualFold(state, "on") &&
 		!site.logWrite(site.extName()+" peak shaving switch", "switch on", conn.CallSwitchService(sw, true)) {
 		return
@@ -178,6 +183,8 @@ func (site *Site) omniWriteLimit(conn *homeassistant.Connection, entity string, 
 
 	limit = r.Fit(math.Floor(max(limit, floor)), false)
 	if v, perr := strconv.ParseFloat(current, 64); perr == nil && limit >= v && limit < v+minOmniLimitRise && !(zero && v == 0) {
+		// nothing to write, the entity shows the limit: an earlier failed write is over, see peakStatus
+		site.logWrite("peak shaving limit", "limit in place", nil)
 		return true
 	}
 
