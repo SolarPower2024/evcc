@@ -1,10 +1,7 @@
 package core
 
 import (
-	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,7 +14,7 @@ import (
 )
 
 // TestLmEventsSurviveRestart: the event log is stored every 5 minutes and when
-// evcc stops, and comes back after a restart; PeakEvents leaves the others out
+// evcc stops, and comes back after a restart; PeakEvents gives all of them
 func TestLmEventsSurviveRestart(t *testing.T) {
 	keepSettings(t)
 
@@ -59,11 +56,9 @@ func TestLmEventsSurviveRestart(t *testing.T) {
 		assert.Equal(t, lm.EventStorage, events[0].Type, "newest first")
 	}
 
-	peak := again.PeakEvents()
-	assert.Len(t, peak, 3, "the shed is not a peak event")
-	for _, e := range peak {
-		assert.NotEqual(t, lm.EventShed, e.Type)
-	}
+	all := again.PeakEvents()
+	assert.Len(t, all, 4, "the shed is part of the dialog's list")
+	assert.Equal(t, lm.EventStorage, all[0].Type, "newest first")
 }
 
 // TestLmEventsStopPersists: stopping writes the log to the database itself, the
@@ -105,40 +100,4 @@ func TestLmEventsStopPersists(t *testing.T) {
 	var saved []lm.Event
 	require.NoError(t, settings.Json(keys.LmEvents, &saved))
 	assert.Len(t, saved, 2)
-}
-
-// TestPeakEventListsMatch: the ui lists the peak related event types by hand
-// (PEAK_EVENTS in peakStatus.ts), they have to be the ones of lm.PeakEvent
-func TestPeakEventListsMatch(t *testing.T) {
-	src, err := os.ReadFile(filepath.Join("..", "assets", "js", "components", "Battery", "peakStatus.ts"))
-	require.NoError(t, err)
-
-	m := regexp.MustCompile(`(?s)PEAK_EVENTS = new Set<string>\(\[(.*?)\]\)`).FindSubmatch(src)
-	require.NotNil(t, m, "PEAK_EVENTS in peakStatus.ts")
-
-	ui := make(map[string]bool)
-	for _, name := range regexp.MustCompile(`"(\w+)"`).FindAllStringSubmatch(string(m[1]), -1) {
-		ui[name[1]] = true
-	}
-
-	// every event type there is
-	for _, typ := range []string{
-		lm.EventShed, lm.EventThrottled, lm.EventGridChargePaused, lm.EventGridChargeDenied, lm.EventPeak,
-		lm.EventNotFollowing, lm.EventPeakEnd, lm.EventReserveBelow, lm.EventReserveAbove, lm.EventBatteryMode,
-		lm.EventPeakSwitch, lm.EventMeter, lm.EventStorage,
-	} {
-		assert.Equal(t, lm.PeakEvent(typ), ui[typ], "event type %s", typ)
-		delete(ui, typ)
-	}
-
-	assert.Empty(t, ui, "types in the ui list that the backend does not know: %s", strings.Join(keysOf(ui), ", "))
-}
-
-func keysOf(m map[string]bool) []string {
-	var res []string
-	for k := range m {
-		res = append(res, k)
-	}
-
-	return res
 }

@@ -403,7 +403,7 @@ func TestPatternShape(t *testing.T) {
 	assert.Equal(t, "/a/{b}", patternShape("/a/{b}"))
 }
 
-// TestPeakEventsRoute: the peak status asks for its events, a list even when empty
+// TestPeakEventsRoute: the peak shaving dialog asks for its events, a list even when empty
 func TestPeakEventsRoute(t *testing.T) {
 	site := core.NewSite()
 

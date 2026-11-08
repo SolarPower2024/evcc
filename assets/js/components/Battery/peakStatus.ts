@@ -6,9 +6,11 @@ import type { LmEvent, PeakState, PeakStatus } from "@/types/evcc-lm";
 
 export type Translate = (key: string, params?: Record<string, unknown>) => string;
 
-/** Number formats of the dialog: power (kW with unit) and percent, as the battery card formats them. */
+/** Number formats of the dialog: power (kW with unit, without) and percent, as the battery card formats them. */
 export interface Fmt {
   w: (watt: number) => string;
+  /** Power in kW without the unit. */
+  bare: (watt: number) => string;
   pct: (percent: number) => string;
 }
 
@@ -18,8 +20,12 @@ const NBSP = " ";
 const nb = (text: string): string => text.replace(/(\d) (?=%|[kMG]?W\b)/g, `$1${NBSP}`);
 
 /** Formats for the dialog from the formatter of the app. */
-export function makeFmt(fmtW: (watt: number) => string, fmtPercentage: (p: number) => string): Fmt {
-  return { w: (watt) => nb(fmtW(watt)), pct: (p) => nb(fmtPercentage(p)) };
+export function makeFmt(
+  fmtW: (watt: number) => string,
+  fmtPercentage: (p: number) => string,
+  fmtBare: (watt: number) => string
+): Fmt {
+  return { w: (watt) => nb(fmtW(watt)), bare: fmtBare, pct: (p) => nb(fmtPercentage(p)) };
 }
 
 const P = "battery.peakStatus";
@@ -202,31 +208,34 @@ export function windowInfo(st: PeakStatus, now: number): WindowInfo | null {
   };
 }
 
-/**
- * Event types shown in the dialog. The same list as lm.PeakEvent in
- * core/lm/status.go; core/site_lm_events_test.go (TestPeakEventListsMatch) checks them.
- */
-const PEAK_EVENTS = new Set<string>([
-  "peak",
-  "peakEnd",
-  "reserveBelow",
-  "reserveAbove",
-  "batteryMode",
-  "peakSwitch",
-  "meter",
-  "storage",
-  "gridChargePaused",
-]);
-
+/** The events of the dialog, peak shaving and load management, newest first as the backend sends them. */
 export function peakEvents(events: LmEvent[] = []): LmEvent[] {
-  return events.filter((e) => PEAK_EVENTS.has(e.type));
+  return [...events].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 }
 
-/** The text of the event types of the peak status; undefined for the others. */
-export function eventText(e: LmEvent, t: Translate, f: Fmt): string | undefined {
+/** The text of an event; the type itself for one without text. */
+export function eventText(e: LmEvent, t: Translate, f: Fmt): string {
   const k = (name: string, p?: Record<string, unknown>) => t(`lmoverview.event.${name}`, p);
 
   switch (e.type) {
+    case "shed":
+      return e.a > 0
+        ? k("shedGuard", { load: e.load, power: f.w(e.b), minutes: Math.round(e.a) })
+        : k("shed", { load: e.load, power: f.w(e.b) });
+    case "throttled":
+      return k("throttled", { load: e.load, requested: f.bare(e.a), allowed: f.w(e.b) });
+    case "gridChargePaused":
+      return k("gridChargePaused", { demand: f.w(e.a), limit: f.w(e.b) });
+    case "gridChargeDenied":
+      return k("gridChargeDenied", { allowed: f.w(e.a), wanted: f.w(e.b) });
+    case "peak":
+      return k("peak", { demand: f.w(e.a), limit: f.w(e.b) });
+    case "notFollowing":
+      return k("notFollowing", {
+        load: e.load === "battery" ? t("lmoverview.battery") : e.load,
+        power: f.w(e.a),
+        allowed: f.w(e.b),
+      });
     case "peakEnd":
       return k("peakEnd", { power: f.w(e.a), minutes: Math.max(1, Math.round(e.b / 60)) });
     case "reserveBelow":
@@ -242,6 +251,6 @@ export function eventText(e: LmEvent, t: Translate, f: Fmt): string | undefined 
     case "storage":
       return k(e.a ? "storageLost" : "storageBack");
     default:
-      return undefined;
+      return String((e as LmEvent).type);
   }
 }

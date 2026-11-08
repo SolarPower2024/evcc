@@ -184,6 +184,7 @@
         }
       },
       "title": "Peak shaving",
+      "titleLm": "Load management",
       "window": {
         "allowed": "still allows {power}",
         "avg": "Average so far",
@@ -2027,7 +2028,7 @@
       "throttled": "{load} throttled {requested} → {allowed}"
     },
     "events": "Recent events",
-    "loads": "Loads by priority · throttled/switched off from the bottom up",
+    "loads": "Loads · throttled from the bottom up",
     "menu": "Load management (peak)",
     "menuOff": "off",
     "noEvents": "No events since the start.",

@@ -184,6 +184,7 @@
         }
       },
       "title": "Peak Shaving",
+      "titleLm": "Lastmanagement",
       "window": {
         "allowed": "erlaubt noch {power}",
         "avg": "Schnitt bisher",
@@ -2027,7 +2028,7 @@
       "throttled": "{load} gedrosselt {requested} → {allowed}"
     },
     "events": "Letzte Ereignisse",
-    "loads": "Verbraucher nach Priorität · dimmen/abschalten von unten nach oben",
+    "loads": "Verbraucher · drosseln von unten nach oben",
     "menu": "Lastmanagement (Peak)",
     "menuOff": "aus",
     "noEvents": "Noch keine Ereignisse seit dem Start.",

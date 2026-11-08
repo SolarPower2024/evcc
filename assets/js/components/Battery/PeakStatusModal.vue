@@ -1,16 +1,16 @@
 <template>
 	<GenericModal
 		id="peakStatusModal"
-		:title="$t('battery.peakStatus.title')"
+		:title="$t(titleKey)"
 		size="md"
 		data-testid="peak-status-modal"
 		@open="onOpen"
 		@closed="onClosed"
 	>
-		<div v-if="visible && status" class="d-flex flex-column gap-3">
-			<PeakStatusHero :status="status" />
+		<div v-if="visible" class="d-flex flex-column gap-3">
+			<PeakStatusHero v-if="status" :status="status" />
 
-			<section>
+			<section v-if="status">
 				<h6 class="section-title">{{ $t("battery.peakStatus.now") }}</h6>
 				<p class="mb-2" data-testid="peak-status-detail">{{ detail }}</p>
 				<div class="d-flex flex-wrap gap-2" data-testid="peak-status-notes">
@@ -24,7 +24,7 @@
 				</div>
 			</section>
 
-			<section v-if="windowData" data-testid="peak-status-window">
+			<section v-if="status && windowData" data-testid="peak-status-window">
 				<h6 class="section-title">
 					{{ $t("battery.peakStatus.window.title") }}
 					{{ windowRange }} ·
@@ -52,7 +52,7 @@
 				</div>
 			</section>
 
-			<section class="tiles" data-testid="peak-status-month">
+			<section v-if="status" class="tiles" data-testid="peak-status-month">
 				<div class="tile" data-testid="peak-status-month-peak">
 					<div class="section-title">{{ $t("battery.peakStatus.month.title") }}</div>
 					<div class="tile-value">{{ monthPeak.value }}</div>
@@ -64,6 +64,8 @@
 					<div class="tile-sub">{{ $t("battery.peakStatus.month.thisMonth") }}</div>
 				</div>
 			</section>
+
+			<PeakStatusLoads v-if="showLoads" />
 
 			<section data-testid="peak-status-events">
 				<h6 class="section-title">{{ $t("battery.peakStatus.recent") }}</h6>
@@ -101,16 +103,20 @@ import formatter from "@/mixins/formatter";
 import type { LmEvent, PeakStatus } from "@/types/evcc-lm";
 import GenericModal from "../Helper/GenericModal.vue";
 import PeakStatusHero from "./PeakStatusHero.vue";
+import PeakStatusLoads from "./PeakStatusLoads.vue";
+import { dialogTitleKey, loadsShown } from "./peakDialog";
 import { detailText, eventText, makeFmt, notes, peakEvents, windowInfo } from "./peakStatus";
 
 const FEW = 5;
 const TICK = 15_000;
 
 // Custom extension: what peak shaving does with the battery and why, see
-// core/site_peak_status.go. Opened from the "more" menu (MoreMenuItems.vue).
+// core/site_peak_status.go, and the loads and events of the load management.
+// Without peak shaving only the loads and events show. Opened from the "more"
+// menu (MoreMenuItems.vue).
 export default defineComponent({
 	name: "PeakStatusModal",
-	components: { GenericModal, PeakStatusHero },
+	components: { GenericModal, PeakStatusHero, PeakStatusLoads },
 	mixins: [formatter],
 	data() {
 		return {
@@ -127,10 +133,17 @@ export default defineComponent({
 			const st = store.state.peakStatus;
 			return st?.state ? st : undefined;
 		},
+		titleKey(): string {
+			return dialogTitleKey(store.state);
+		},
+		showLoads(): boolean {
+			return loadsShown(store.state);
+		},
 		fmt() {
 			return makeFmt(
 				(watt: number) => this.fmtW(watt),
-				(percent: number) => this.fmtPercentage(percent)
+				(percent: number) => this.fmtPercentage(percent),
+				(watt: number) => this.fmtW(watt, this.POWER_UNIT.KW, false)
 			);
 		},
 		detail(): string {
@@ -157,7 +170,7 @@ export default defineComponent({
 		},
 		events(): LmEvent[] {
 			// the whole list from the api, until it is there what the status publishes
-			return this.fetched ?? peakEvents(store.state.lmStatus?.events);
+			return peakEvents(this.fetched ?? store.state.lmStatus?.events);
 		},
 		shownEvents(): LmEvent[] {
 			return this.all ? this.events : this.events.slice(0, FEW);
@@ -182,19 +195,7 @@ export default defineComponent({
 			return today ? this.fmtHourMinute(at) : this.fmtWeekdayDayTime(at);
 		},
 		eventLine(e: LmEvent): string {
-			return eventText(e, this.tr, this.fmt) ?? this.lmEventText(e);
-		},
-		// the older types: the same texts as the load management overview
-		lmEventText(e: LmEvent): string {
-			const k = (name: string, p: Record<string, string>) =>
-				this.$t(`lmoverview.event.${name}`, p);
-			if (e.type === "peak") {
-				return k("peak", { demand: this.fmt.w(e.a), limit: this.fmt.w(e.b) });
-			}
-			if (e.type === "gridChargePaused") {
-				return k("gridChargePaused", { demand: this.fmt.w(e.a), limit: this.fmt.w(e.b) });
-			}
-			return e.type;
+			return eventText(e, this.tr, this.fmt);
 		},
 		async load() {
 			try {
