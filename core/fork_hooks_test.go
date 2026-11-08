@@ -101,6 +101,7 @@ var forkUiHooks = []struct {
 	{"assets/js/components/Config/DeviceTags.vue", []string{"case \"stages\": // custom"}},
 	{"assets/js/components/Config/TariffCard.vue", []string{"<FeedInEegSummary"}},
 	{"assets/js/components/Config/TariffModal.vue", []string{"feedInEeg", "tariff-planner-optimizer"}},
+	{"assets/js/components/Config/PropertyField.vue", []string{"<GridFeeZonesField", "GridFeeZonesField, // custom", "<!-- custom: split grid tariff -->"}},
 	{"assets/js/views/Energy.vue", []string{"gridChartSeries", ":feed-in-eeg=\"feedInEeg\"", "loadFeedInSplit(requestKey)", "withoutFeedInEeg(", "importEegLegends("}},
 	{"assets/js/components/Energy/GroupChart.vue", []string{"this.series.some((s) => s.color)", "ownSeriesColors("}},
 	{"assets/js/components/Energy/GridStats.vue", []string{"feedInEegStats(this.feedInEeg"}},

@@ -755,6 +755,14 @@
         "optimizer": "Optimizer"
       }
     },
+    "lmgridfee": {
+      "mode": "Type",
+      "modeAbs": "Grid fee",
+      "modePct": "Minus percent",
+      "summaryPct": "−{value} % grid fee",
+      "valueAbs": "Grid fee",
+      "valuePct": "Reduction"
+    },
     "lmpriorities": {
       "battery": "Battery (grid charging)",
       "description": "The most important load on top. If the power is not enough, loads are throttled or switched off from the bottom up; with equal priority, the first to arrive wins. For loadpoints it is their regular priority, which also applies to solar surplus and the planner. The battery has its own value.",
