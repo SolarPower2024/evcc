@@ -25,7 +25,9 @@ type lmAdvanced struct {
 	Timeout    *float64 `json:"timeout,omitempty"`    // unserved demand expiry in minutes
 	Phases     *float64 `json:"phases,omitempty"`     // battery phases for current accounting
 	PeakFreeze *float64 `json:"peakFreeze,omitempty"` // minute of the window from which the peak budget no longer grows
-	PeakCap    *float64 `json:"peakCap,omitempty"`    // allowed grid power at most this multiple of the peak limit
+	// allowed grid power at most this multiple of the peak limit, fixed now (peak.DefaultCap):
+	// only read from the stored settings, restoreLmAdvanced drops it at start
+	PeakCap *float64 `json:"peakCap,omitempty"`
 	// smallest change in W that is written to a peak shaving entity, see numberSetter
 	WriteTolerance *float64 `json:"writeTolerance,omitempty"`
 	// cycles after which a load not following its limit is no longer counted on, 0 = never
@@ -60,7 +62,6 @@ type lmAdvancedState struct {
 	Timeout              float64 `json:"timeout"`
 	Phases               int     `json:"phases"`
 	PeakFreeze           float64 `json:"peakFreeze"`
-	PeakCap              float64 `json:"peakCap"`
 	WriteTolerance       float64 `json:"writeTolerance"`
 	FollowCycles         int     `json:"followCycles"`
 	GridChargeWindow     float64 `json:"gridChargeWindow"`
@@ -83,7 +84,7 @@ var lmAdvancedLimits = map[string]lmAdvancedLimit{
 	"timeout":          {1, 60, true},
 	"phases":           {1, 3, true},
 	"peakFreeze":       {1, 14, true},
-	"peakCap":          {1, 10, false},
+	"peakCap":          {1, 10, false}, // no longer used, still accepted: dropped at start
 	"writeTolerance":   {0, 1000, true},
 	"followCycles":     {0, 20, true},
 	"gridChargeWindow": {1, 24, true},
@@ -102,6 +103,9 @@ func (site *Site) restoreLmAdvanced() {
 		// no setting any more, see bydHysteresis
 		gone := adv.Hysteresis != nil
 		adv.Hysteresis = nil
+		// no setting any more, see peak.DefaultCap
+		gone = gone || adv.PeakCap != nil
+		adv.PeakCap = nil
 		if adv.CircuitFromPeak {
 			site.log.INFO.Println("setting \"limit = peak shaving limit\" removed: the circuits limit with their configured value")
 		}
@@ -155,7 +159,6 @@ func (site *Site) publishLmAdvanced() {
 		Timeout:              site.lmTimeout().Minutes(),
 		Phases:               site.lmBatteryPhases(),
 		PeakFreeze:           site.peakFreeze().Minutes(),
-		PeakCap:              site.peakCap(),
 		WriteTolerance:       site.peakWriteTolerance(),
 		FollowCycles:         site.lmFollowCycles(),
 		GridChargeWindow:     site.gridChargeWindow().Hours(),
@@ -216,8 +219,6 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 		s.adv.Phases = &v
 	case "peakFreeze":
 		s.adv.PeakFreeze = &v
-	case "peakCap":
-		s.adv.PeakCap = &v
 	case "writeTolerance":
 		s.adv.WriteTolerance = &v
 	case "followCycles":

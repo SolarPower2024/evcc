@@ -1138,7 +1138,7 @@ values are not stored, so a changed default applies.
 | `timeout` | expiry of unserved demand | 10 min | 1-60 |
 | `phases` | battery phases for current accounting, set under *Batterie → Stromkreis* (same key) | not set, accounting uses 3; required with a current limit, see [2](#2-battery-in-load-management) | 1-3 |
 | `peakFreeze` | minute from which the peak budget no longer grows | 12 | 1-14 |
-| `peakCap` | allowed grid power at most × limit | 2 | 1-10 |
+| `peakCap` | no longer used (the cap on the peak budget is fixed at 2 × limit, `peak.DefaultCap`): still accepted, without effect, and dropped at start | – | 1-10 |
 | `followCycles` | cycles until a load not following is ignored | 3 | 0-20, 0 = off |
 | `gridChargeWindow` | hours to reach the stop soc in the plan; it only moves the stop soc forward without peak shaving and only if the fork's charge time is longer than the window, otherwise it has no effect (no harm done) | 3 | 1-24 |
 | `homeForecast` | home forecast: evcc, per weekday, manual. The old name `homeWeekday` (0/1) is still accepted; a stored `homeWeekday` moves into `homeForecast` at start | 0 | 0-2 |
@@ -1149,7 +1149,7 @@ Also there: evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
 
 The dialog shows the settings in four closed groups, so it stays short on a
 phone: *Lastmanagement* (`timeout`, `followCycles`), *Peak Shaving*
-(`peakFreeze`, `peakCap`), *Batterie-Netzladen*
+(`peakFreeze`), *Batterie-Netzladen*
 (`holdOff`, `gridChargeWindow`) and *Optimizer* (`homeForecast`, load
 profile, `profilePercentile`, `exportForecastEntity`). A rejected value opens its group.
 

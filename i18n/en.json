@@ -714,8 +714,6 @@
       "holdOffHelp": "Battery grid charging stays off this long after a peak or the circuit stopped it.",
       "holdOffLabel": "Hold-off after battery grid charging stopped",
       "invalid": "{label}: enter a value from {min} to {max}.",
-      "peakCapHelp": "The peak shaving budget (grid draw allowed until the quarter hour ends) rises to at most this multiple of the peak limit.",
-      "peakCapLabel": "Cap on the peak shaving budget",
       "peakFreezeHelp": "From this minute of the quarter hour on, the peak shaving budget (grid draw allowed until the quarter hour ends) no longer grows.",
       "peakFreezeLabel": "Freeze the peak shaving budget from minute",
       "phases1": "1 phase",

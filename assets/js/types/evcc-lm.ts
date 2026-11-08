@@ -34,8 +34,6 @@ export interface LmAdvanced {
   phases: number;
   /** Minute of the quarter hour from which the peak budget no longer grows. */
   peakFreeze: number;
-  /** Allowed grid draw at most this multiple of the peak limit. */
-  peakCap: number;
   /** Smallest change in W written to a peak shaving entity. */
   writeTolerance: number;
   /** Home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load profile. */

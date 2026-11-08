@@ -477,14 +477,6 @@ func (site *Site) peakFreeze() time.Duration {
 	return peak.DefaultFreeze
 }
 
-// peakCap returns the maximum allowed power as a multiple of the limit
-func (site *Site) peakCap() float64 {
-	if v := site.advanced().PeakCap; v != nil {
-		return *v
-	}
-	return peak.DefaultCap
-}
-
 // peakHysteresis returns the soc band of the reserve. The battery type Marstek
 // has none: Omnibattery switches exactly at the threshold, and evcc's state of
 // the reserve has to change there as well. The battery type BYD has the fixed band
@@ -870,7 +862,7 @@ func (site *Site) setPeakGridEnergy(kWh *float64, powerRead bool) {
 func (site *Site) updatePeakWindow(gridPower, batteryPower float64) {
 	s := site.peak()
 	energy, source := site.peakEnergy()
-	set := peak.Settings{Freeze: site.peakFreeze(), Cap: site.peakCap()}
+	set := peak.Settings{Freeze: site.peakFreeze(), Cap: peak.DefaultCap}
 
 	s.mu.Lock()
 	set.Limit = s.limit

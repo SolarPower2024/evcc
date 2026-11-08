@@ -261,7 +261,6 @@ const FIELDS = [
 		default: 3,
 	},
 	{ name: "peakFreeze", group: "peak", unit: "min", min: 1, max: 14, integer: true, default: 12 },
-	{ name: "peakCap", group: "peak", unit: "×", min: 1, max: 10, integer: false, default: 2 },
 	{
 		name: "holdOff",
 		group: "gridCharge",
