@@ -10,6 +10,8 @@
 						:battery-mode="state.batteryMode"
 					/>
 
+					<PeakStatusModal /><!-- custom: peak status dialog, opened from the battery cards -->
+
 					<BatteryHistoryCard
 						class="mb-4 box-pull-out"
 						:batteries="chartBatteries"
@@ -103,6 +105,7 @@ import BatterySocGridChargeCard from "../components/Battery/BatterySocGridCharge
 import BatteryGridChargeOnceCard from "../components/Battery/BatteryGridChargeOnceCard.vue"; // custom
 import BatteryPeakShavingCard from "../components/Battery/BatteryPeakShavingCard.vue"; // custom
 import BatteryProfileCard from "../components/Battery/BatteryProfileCard.vue"; // custom
+import PeakStatusModal from "../components/Battery/PeakStatusModal.vue"; // custom
 import { onceCardVisible, priceCardVisible, socCardVisible } from "@/utils/gridChargeMode"; // custom
 import {
 	historyToSeries,
@@ -127,6 +130,7 @@ export default defineComponent({
 		BatteryGridChargeOnceCard, // custom
 		BatteryPeakShavingCard, // custom
 		BatteryProfileCard, // custom
+		PeakStatusModal, // custom
 	},
 	head() {
 		return { title: this.$t("batterySettings.modalTitle") };

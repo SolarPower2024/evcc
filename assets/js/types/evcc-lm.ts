@@ -136,10 +136,64 @@ export interface LmLoadStatus {
 
 export interface LmEvent {
   at: string;
-  type: "shed" | "throttled" | "gridChargePaused" | "gridChargeDenied" | "peak" | "notFollowing";
+  type:
+    | "shed"
+    | "throttled"
+    | "gridChargePaused"
+    | "gridChargeDenied"
+    | "peak"
+    | "notFollowing"
+    | "peakEnd"
+    | "reserveBelow"
+    | "reserveAbove"
+    | "batteryMode"
+    | "peakSwitch"
+    | "meter"
+    | "storage";
   load?: string;
   a: number;
   b: number;
+}
+
+/** What peak shaving does with the battery, see core/site_peak_status.go. */
+export type PeakState =
+  | "off"
+  | "storage"
+  | "meter"
+  | "gridCharge"
+  | "holdShaving"
+  | "hold"
+  | "shaving"
+  | "saving"
+  | "free";
+
+export interface PeakStatus {
+  /** Empty = peak shaving is not set up. */
+  state: PeakState | "";
+  type?: "byd" | "marstek";
+  soc: number;
+  /** Reserve in %. */
+  reserve: number;
+  /** Soc from which the battery is free again (hysteresis, byd only). */
+  freeAt?: number;
+  /** Peak limit in W. */
+  limit: number;
+  /** Grid power in W. */
+  grid: number;
+  /** Grid power plus battery power in W. */
+  house: number;
+  /** Battery power in W, + discharging. */
+  battery: number;
+  /** Discharge power evcc passes on in W. */
+  setpoint: number;
+  /** The discharge is limited to the setpoint. */
+  limited: boolean;
+  chargePower?: number;
+  batteryMode: string;
+  storageOk: boolean;
+  storageHint?: "noSoc" | "modeStuck";
+  window?: { avg: number; allowed: number; start: string; end: string };
+  month?: { peak: number; peakAt: string; interventions: number };
 }
 
 export interface LmStatus {
@@ -270,6 +324,8 @@ export interface LmState {
   tariffFeedInEeg?: number;
   /** Load management overview, only while circuits are configured. */
   lmStatus?: LmStatus;
+  /** What peak shaving does with the battery, shown in the dialog of the battery page. */
+  peakStatus?: PeakStatus;
   /** Battery profiles. */
   lmProfiles?: LmProfile[];
   /** Id of the profile applied last, empty = none. */

@@ -92,6 +92,102 @@
       "raised": "Raised to the month's peak this month, set {limit}.",
       "shaving": "Reserve active, capping peaks"
     },
+    "peakStatus": {
+      "freeAt": "Free from {freeAt}.",
+      "hint": {
+        "modeStuck": "Fronius does not take the mode",
+        "noSoc": "Fronius sees no soc"
+      },
+      "less": "Less",
+      "mini": {
+        "battery": "Battery",
+        "grid": "Grid",
+        "quarter": "Quarter hour",
+        "soc": "Storage"
+      },
+      "mode": {
+        "charge": "grid charging",
+        "discharge": "discharge",
+        "hold": "hold",
+        "holdcharge": "hold",
+        "normal": "normal",
+        "unknown": "unknown"
+      },
+      "month": {
+        "interventions": "Peaks covered: {count}",
+        "none": "none yet",
+        "peak": "{power} on {date}",
+        "title": "Monthly peak"
+      },
+      "more": "More",
+      "noEvents": "No events yet.",
+      "notes": {
+        "connected": "Storage connected",
+        "dischargeFree": "Discharge free",
+        "dischargeMax": "Discharge max. {power}",
+        "mode": "Mode: {mode}",
+        "notConnected": "Storage not reachable"
+      },
+      "now": "What is happening",
+      "open": "Show peak status",
+      "recent": "Recent",
+      "reserveLimit": "Reserve {reserve} · Limit {limit}",
+      "state": {
+        "free": {
+          "detail": "Storage {soc} is above the reserve {reserve}. The battery regulates itself, peak shaving only acts below.",
+          "text": "Above the reserve, the battery regulates itself.",
+          "title": "Battery free"
+        },
+        "gridCharge": {
+          "detail": "evcc charges the battery from the grid with {power}. If demand rises above {limit}, charging pauses.",
+          "text": "evcc charges the battery from the grid with {power}.",
+          "title": "Grid charging"
+        },
+        "hold": {
+          "detail": "evcc holds the battery, storage {soc}. It helps only when grid draw rises above {limit}.",
+          "text": "evcc holds the battery. It helps only when grid draw rises above {limit}.",
+          "title": "Hold"
+        },
+        "holdShaving": {
+          "detail": "evcc holds the battery. Demand of {house} is above {limit}, so it gives {battery} against the peak.",
+          "text": "The battery is held and gives only {battery} against the peak.",
+          "title": "Hold – covering a peak"
+        },
+        "meter": {
+          "detail": "The grid value has been missing for over 2 minutes. The battery discharges freely and grid charging pauses until it is back.",
+          "text": "The grid value is missing. The battery is free for safety.",
+          "title": "Meter outage"
+        },
+        "off": {
+          "detail": "Peak shaving is switched off. The battery works as without peak shaving.",
+          "text": "The battery works as without peak shaving.",
+          "title": "Peak shaving off"
+        },
+        "saving": {
+          "detail": "Storage {soc} is below the reserve {reserve}. The battery discharges only what exceeds {limit} grid draw. Right now it is {grid}, so it does not discharge.",
+          "text": "Storage below the reserve. The battery helps only from {limit} grid draw.",
+          "title": "Saving for peaks"
+        },
+        "shaving": {
+          "detail": "Storage {soc} is below the reserve {reserve}. The house needs {house}, {limit} is allowed from the grid. The battery gives the rest: {battery}.",
+          "text": "The house needs {house}. The battery adds {battery}, the grid stays at {limit}.",
+          "title": "Covering a peak"
+        },
+        "storage": {
+          "detail": "evcc cannot reach the battery control in Home Assistant or gets no battery values. Peak shaving has no effect meanwhile.",
+          "text": "evcc cannot reach the battery control. The battery works as without peak shaving.",
+          "title": "Storage not reachable"
+        }
+      },
+      "title": "Peak shaving",
+      "window": {
+        "allowed": "still allows {power}",
+        "avg": "Average so far",
+        "left": "{minutes} min left",
+        "limit": "Limit",
+        "title": "Quarter hour"
+      }
+    },
     "socGridCharge": {
       "active": "Grid charging is running",
       "enable": "Charge the home battery from the grid based on its state of charge.",
@@ -1897,12 +1993,22 @@
     "enabled": "Load management",
     "enabledHelp": "The circuits' power limits (peak) throttle wallboxes, heaters and battery grid charging.",
     "event": {
+      "batteryMode": "evcc: mode {mode}",
       "gridChargeDenied": "Grid charging blocked · circuit allows {allowed} of {wanted}",
       "gridChargePaused": "Grid charging paused · demand {demand} above allowed grid draw {limit}",
+      "meterBack": "Meter back",
+      "meterLost": "Meter outage · battery free",
       "notFollowing": "{load} ignores its limit · {power} instead of {allowed}",
       "peak": "Peak covered · demand {demand}, limit {limit}",
+      "peakEnd": "Peak over · battery covered up to {power}, {minutes} min",
+      "peakSwitchOff": "Peak shaving off",
+      "peakSwitchOn": "Peak shaving on",
+      "reserveAbove": "Above {reserve}: battery free",
+      "reserveBelow": "Below {reserve}: now saving for peaks",
       "shed": "{load} shed · circuit at {power}",
       "shedGuard": "{load} shed · circuit at {power}, held off {minutes} min",
+      "storageBack": "Storage connected again",
+      "storageLost": "Storage not reachable",
       "throttled": "{load} throttled {requested} → {allowed}"
     },
     "events": "Recent events",
