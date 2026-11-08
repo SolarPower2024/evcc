@@ -67,10 +67,11 @@ describe("menu entry and title", () => {
 });
 
 describe("the loads section", () => {
-  test("needs a circuit with a power limit and loads", () => {
+  test("needs a circuit with a power or current limit and loads", () => {
     const circuits = { main: { maxPower: 10000 } };
     expect(loadsShown({ ...withLoads, circuits })).toBe(true);
-    expect(loadsShown({ ...withLoads, circuits: { main: { maxPower: 0 } } })).toBe(false);
+    expect(loadsShown({ ...withLoads, circuits: { main: { maxCurrent: 35 } } })).toBe(true);
+    expect(loadsShown({ ...withLoads, circuits: { main: { maxPower: 0, maxCurrent: 0 } } })).toBe(false);
     expect(loadsShown({ ...withLoads, circuits: {} })).toBe(false);
     expect(loadsShown({ ...withLoads })).toBe(false);
     expect(loadsShown({ circuits, lmStatus: { loads: [], events: [] } })).toBe(false);

@@ -5,7 +5,7 @@ import type { LmLoadStatus, LmState } from "@/types/evcc-lm";
 import type { Fmt, Translate } from "./peakStatus";
 
 type DialogState = Pick<LmState, "peakStatus" | "lmStatus"> & {
-  circuits?: Record<string, { maxPower?: number }>;
+  circuits?: Record<string, { maxPower?: number; maxCurrent?: number }>;
 };
 
 /** Peak shaving is set up, also while off. */
@@ -23,9 +23,11 @@ export function dialogTitleKey(state: DialogState | undefined): string {
   return hasPeakStatus(state) ? "battery.peakStatus.title" : "battery.peakStatus.titleLm";
 }
 
-/** The loads section: a circuit has a power limit and there are loads. */
+/** The loads section: a circuit has a power or current limit and there are loads. */
 export function loadsShown(state: DialogState | undefined): boolean {
-  const limited = Object.values(state?.circuits || {}).some((c) => (c.maxPower ?? 0) > 0);
+  const limited = Object.values(state?.circuits || {}).some(
+    (c) => (c.maxPower ?? 0) > 0 || (c.maxCurrent ?? 0) > 0
+  );
   return limited && !!state?.lmStatus?.loads?.length;
 }
 
