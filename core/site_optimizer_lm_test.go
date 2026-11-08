@@ -317,6 +317,30 @@ func TestLmForecastLowest(t *testing.T) {
 	assert.Nil(t, site.lmForecastLowest(nil))
 }
 
+// A request that fails after the fork added its inputs keeps the floor and the
+// plan of the solve still applied; the optimizer answer takes over the new ones.
+func TestLmOptimizerInputsCommit(t *testing.T) {
+	site := &Site{log: util.NewLogger("test")}
+	s := site.lms()
+	old := &lmPlan{}
+	s.floorRaised, s.plan = true, old
+
+	var req optimizer.OptimizationInput
+	site.applyLmOptimizerInputs(&req, nil)
+
+	assert.True(t, s.floorRaised, "kept until the optimizer answered")
+	assert.Same(t, old, s.plan)
+
+	site.commitLmOptimizerInputs()
+	assert.False(t, s.floorRaised)
+	assert.Nil(t, s.plan)
+
+	// nothing pending: a second commit changes nothing
+	s.floorRaised, s.plan = true, old
+	site.commitLmOptimizerInputs()
+	assert.True(t, s.floorRaised)
+	assert.Same(t, old, s.plan)
+}
 
 // Grid charging only enters the request while it is switched on and allowed;
 // the reserve stays a hard minimum above the stop soc.

@@ -344,6 +344,7 @@ func TestLmPlanEtaFollowsRequest(t *testing.T) {
 	req, res, _ := floorCase()
 	bat := &req.Batteries[0]
 	site.applyLmBatteryInputs(bat, req, true, 2000, 35, 1)
+	site.commitLmOptimizerInputs()
 
 	plan := site.lmPlanInputs()
 	require.NotNil(t, plan)
@@ -417,6 +418,7 @@ func TestLmOptimizerInputsTwoBatteries(t *testing.T) {
 		s := site.lms()
 		s.socChargeEnabled, s.socChargeStart, s.socChargeStop, s.socChargeRunning = true, 20, 80, true
 		site.applyLmOptimizerInputs(newReq(), batteries)
+		site.commitLmOptimizerInputs()
 		return site
 	}
 

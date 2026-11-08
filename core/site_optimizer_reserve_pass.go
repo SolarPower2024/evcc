@@ -473,6 +473,8 @@ func (site *Site) lmOptimizerPasses(client *optimizer.ClientWithResponses, req *
 		return
 	}
 
+	site.commitLmOptimizerInputs()
+
 	plan := site.lmPlanInputs()
 	home := lmHomeBattery(details, req, res)
 	if plan == nil {
