@@ -184,6 +184,21 @@
       "keywords": ["peakStatus", "PeakStatus", "peakStatusModal"]
     },
     {
+      "name": "Netztarif: fester Preis aus Arbeitspreis, Netzgebühr und Abgaben",
+      "files": [
+        "templates/definition/tariff/fixed-netz.yaml",
+        "assets/js/components/Config/GridFeeZonesField.vue",
+        "assets/js/components/Config/GridFeeZoneForm.vue"
+      ],
+      "keywords": ["chargesZones", "grid fee", "gridfee"],
+      "paths": [
+        "tariff/embed.go",
+        "tariff/fixed.go",
+        "util/templates/defaults.yaml",
+        "assets/js/components/Config/PropertyZoneForm.vue"
+      ]
+    },
+    {
       "name": "Grundlagen, auf denen der Fork aufbaut",
       "files": ["core/loadpoint_lm.go"],
       "prs": [30367, 33463]

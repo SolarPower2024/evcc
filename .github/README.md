@@ -27,6 +27,7 @@ The original evcc description is in [README.md](../README.md).
 - Advanced settings
 - Log file
 - Snow on PV
+- Split grid tariff
 
 Everything is set up in the evcc ui, nothing in `evcc.yaml`. Without
 configuration the fork behaves exactly like evcc.

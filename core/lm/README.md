@@ -29,6 +29,7 @@ Part 1 describes the features, part 2 how the fork is kept maintainable.
 17. [Advanced settings](#17-advanced-settings)
 18. [Log file](#18-log-file)
 19. [Snow on PV](#19-snow-on-pv)
+20. [Split grid tariff](#20-split-grid-tariff)
 
 **Part 2: maintenance**
 
@@ -1287,6 +1288,31 @@ State `snowAuto` (setting), `snowCoverAuto`, `snowAutoAvailable`. Saved:
 
 ---
 
+## 20. Split grid tariff
+
+The grid price is entered in parts: *Configuration → Tariffs → Grid price →
+Fixed price (split)* (`fixed-netz`) replaces *Fixed price* for a new grid
+tariff. Existing tariffs keep the template they were saved with. Not offered for
+feed-in, planner or the other tariff types.
+
+- fields: energy price, grid fee (default 0), levies (default 0), sales tax in
+  percent (optional), zones for the grid fee
+- empty or 0 tax: the amounts are gross, final price = sum; with a value (20) the
+  amounts are net, final price = (energy price + grid fee + levies) × (1 + tax)
+- a zone changes only the grid fee: *Grid fee* sets a new value, *Minus percent*
+  takes the grid fee × (1 − p/100); months, days and time as in evcc's zones. A
+  later matching zone wins, as in evcc
+- no new calculation: the template renders evcc's `fixed` tariff (`price` = energy
+  price, `charges` = grid fee + levies, `chargesZones` per zone, `tax` = percent / 100).
+  A percent zone follows a changed grid fee without being entered again; without
+  zones the tariff stays static
+
+See `templates/definition/tariff/fixed-netz.yaml`, `GridFeeZonesField.vue`,
+`utils/lmGridTariff.ts`; tests `tariff/fixed_netz_test.go`, `TestGridFeeZonesHook`,
+`TestGridFeeTemplateChoice`.
+
+---
+
 ## Rules
 
 Every fork feature follows these, so taking in a new evcc version stays cheap:
@@ -1394,6 +1420,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | peak from the circuit meter | `core/site_peak_circuit.go`, `core/metrics/grid_peak_custom.go` |
 | log file | `util/logstash/file_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
+| split grid tariff | `templates/definition/tariff/fixed-netz.yaml`, `tariff/fixed_netz_test.go`, `assets/js/utils/lmGridTariff.ts`, `assets/js/components/Config/GridFeeZonesField.vue`, `GridFeeZoneForm.vue`, `GridFeeZoneSummary.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
 | ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/utils/optimizerAutomatic.ts`, `assets/js/components/LoadManagement/`, the battery cards in `assets/js/components/Battery/` (`PeakStatusModal`, `PeakStatusHero`, `peakStatus.ts`, `BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
