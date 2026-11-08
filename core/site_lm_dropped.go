@@ -83,4 +83,8 @@ func (site *Site) dropLmCircuit() {
 	}
 
 	site.dropLmOff()
+
+	if err := settings.Persist(); err != nil {
+		site.log.ERROR.Printf("load management circuit: persist: %v", err)
+	}
 }
