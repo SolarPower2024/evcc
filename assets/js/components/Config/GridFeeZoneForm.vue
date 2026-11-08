@@ -40,7 +40,7 @@
 				{{ pctResult }}
 			</div>
 			<div v-if="isValueInvalid" class="invalid-feedback d-block">
-				{{ $t("config.tariff.zones.priceRequired") }}
+				{{ isPct ? $t("config.lmgridfee.pctRange") : $t("config.tariff.zones.priceRequired") }}
 			</div>
 		</div>
 
@@ -196,7 +196,8 @@ export default {
 		},
 		isValidValue() {
 			const value = this.uiZone.value;
-			return value !== null && (value as unknown) !== "" && !isNaN(value);
+			if (value === null || (value as unknown) === "" || isNaN(value)) return false;
+			return !this.isPct || (value >= 0 && value <= 100);
 		},
 		isValidTimeRange() {
 			const { timeFrom, timeTo } = this.uiZone;

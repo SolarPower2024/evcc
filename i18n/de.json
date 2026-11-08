@@ -759,6 +759,7 @@
       "mode": "Art",
       "modeAbs": "Netzgebühr",
       "modePct": "Minus Prozent",
+      "pctRange": "Bitte 0 bis 100 % eingeben.",
       "pctResult": "{fee} − {value} % = {result} Netzgebühr",
       "summaryPct": "−{value} % Netzgebühr",
       "valueAbs": "Netzgebühr",
