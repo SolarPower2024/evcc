@@ -38,6 +38,7 @@ const (
 	PeakShavingSource               = "peakShavingSource"         // where the window's energy comes from: meter, entity or power
 	PeakShavingEnergyEntity         = "peakShavingEnergyEntity"   // Home Assistant grid import counter
 	PeakMonths                      = "peakMonths"                // monthly peak statistics
+	PeakStatus                      = "peakStatus"                // what peak shaving does with the battery and why, see core/site_peak_status.go
 	PeakShavingChargeEntity         = "peakShavingChargeEntity"   // grid charge power target
 	PeakShavingChargeSetpoint       = "peakShavingChargeSetpoint" // grid charge power written, 0 = not charging
 	PeakFollow                      = "peakFollow"                // gone, removed on start, see core/site_peak_limit.go

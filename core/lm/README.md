@@ -767,6 +767,38 @@ POST   /api/peakshavingprotsoc/{entity}
 DELETE /api/peakshavingprotsoc
 ```
 
+### Peak status dialog
+
+What peak shaving does with the battery right now and why, for both battery types.
+Display only, the control stays as it is. `peakStatus` is derived in Go
+(`core/site_peak_status.go`: `peakStatusNow`) and published at the end of the
+fork's part of the cycle (after the outputs were written, their failures are part of
+the status) and when peak shaving is switched, only when it changed. Empty `state`
+= not set up (the entities of the controller or a battery missing): nothing to show.
+
+States, checked in this order: `off` (peak shaving off), `storage` (not reachable),
+`meter` (no grid values for longer than `peak.MaxGap`), `gridCharge` (battery mode
+charge), `holdShaving` (hold, a peak is covered), `hold`, `shaving` (below the reserve,
+setpoint > 0), `saving` (below the reserve), `free`. Tests: `TestPeakStatusStates` (each
+state, Marstek and BYD), `TestPeakStatusOrder`, `TestPeakStatusValues`.
+
+- *Storage connected*: the outputs written in every cycle (connect, soc threshold,
+  limit, switch) did not fail the last time, a battery delivered a soc and the battery
+  power could be read, and for BYD the integration's status is not `no_evcc`
+  (`TestPeakStatusStorage`). evcc has no age of the battery values, so "delivers
+  values" is the result of the last read.
+- BYD: the status sensor of the integration is read once per cycle through the shared
+  connection (guarded like every call). It is derived from the switch,
+  `switch.<x>_peak_shaving` has `sensor.<x>_status`; without it or with another
+  name only the extra hints are missing, no error (`TestPeakStatusBydSensor`). Hints:
+  `noSoc` (the integration sees no soc), `modeStuck` (the status differs from the hold
+  or charge mode evcc set for longer than a minute).
+- `freeAt` (reserve plus 2 %) only for BYD; Marstek has no hysteresis.
+- Events (`TestPeakStatusEvents`, one per change, the start sets the reference only):
+  `reserveBelow`/`reserveAbove`, `batteryMode`, `peakSwitch`, `meter`, `storage`,
+  `peakEnd` (with the most the battery gave and the duration), next to the existing
+  `peak` and `gridChargePaused`. Kept 7 days, see [8](#8-overview).
+
 ## 12. Battery profiles
 
 Named sets of settings (e.g. summer, winter) under *Lastmanagement-Details →
@@ -1333,7 +1365,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
-| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go`, `core/site_lm_events.go` |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go`, `core/site_lm_events.go`, `core/site_peak_status.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
