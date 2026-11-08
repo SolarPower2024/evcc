@@ -139,8 +139,15 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 				// below the minimum the circuit cannot charge it at all
 				if float32(power) < b.cfg.CMin {
 					b.cfg.CMin, b.cfg.CMax = 0, 0
+					b.cfg.PDemand = nil
 				} else {
 					b.cfg.CMax = float32(power)
+					// a planned fixed demand cannot exceed what the circuit lets it charge
+					for j, dt := range req.TimeSeries.Dt {
+						if j < len(b.cfg.PDemand) {
+							b.cfg.PDemand[j] = min(b.cfg.PDemand[j], b.cfg.CMax*float32(dt)/3600)
+						}
+					}
 				}
 			}
 
