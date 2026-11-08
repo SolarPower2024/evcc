@@ -136,7 +136,7 @@
       ],
       "prs": [32881, 34044],
       "keywords": ["automatic", "ledger", "requiredBatteryMode", "batterySuggestionMode", "suggestionMaxAge"],
-      "paths": ["core/site_optimizer.go", "core/site_optimizer_request.go", "core/site_optimizer_result.go", "core/planner/"]
+      "paths": ["core/site_optimizer.go", "core/site_optimizer_request.go", "core/site_optimizer_result.go", "core/site_optimizer_suggestions.go", "core/planner/"]
     },
     {
       "name": "Log-Datei (Tagesdateien)",
