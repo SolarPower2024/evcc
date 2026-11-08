@@ -1291,8 +1291,9 @@ State `snowAuto` (setting), `snowCoverAuto`, `snowAutoAvailable`. Saved:
 ## 20. Split grid tariff
 
 The grid price is entered in parts: *Configuration → Tariffs → Grid price →
-Fixed price (split)* (`fixed-netz`) replaces *Fixed price* for a new grid
-tariff. Existing tariffs keep the template they were saved with. Not offered for
+Fixed price (split)* (`fixed-netz`) is offered next to *Fixed price* and
+preselected for a new grid tariff (*Fixed price* stays, evcc's e2e tests use it).
+Existing tariffs keep the template they were saved with. Not offered for
 feed-in, planner or the other tariff types.
 
 - fields: energy price, grid fee (default 0), levies (default 0), sales tax in
@@ -1394,7 +1395,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/components/Loadpoints/Loadpoint.vue`, `Mode.vue` | `chargerStages` prop, mode labels Aus/Smart/Ein for a heater in stages; `chargePowerEstimate` shown as "≈ 6 kW" (whole kW, fits a phone), formatted by `fmtPowerEstimate` (`utils/lmEnergyflow.ts`) |
 | `assets/js/components/Site/Site.vue` | energy flow gets `measuredLoadpoints(…)` (`utils/lmEnergyflow.ts`): a loadpoint with `chargePowerEstimated` is left out |
 | `assets/js/components/Config/DeviceTags.vue` | value `stages` shown as "ein · ein · aus" |
-| `assets/js/components/Config/TariffCard.vue`, `TariffModal.vue` | EEG counter in the EEG card, price templates for `feedInEeg`, planner price hint; `fixed-netz` after `fixed` in the generic list, `defaultPriceTemplate` and `priceTemplatesFor` (`utils/lmGridTariff.ts`): a new grid tariff offers `fixed-netz` instead of `fixed` and starts with it, other types never offer it (contract test `TestGridFeeTemplateChoice`); `ref="lmBase"`, `provide` `lmGridFee` and `mounted` hand the entered grid fee to the zone form and summary, which show e.g. "10.2 ct − 20 % = 8.16 ct" |
+| `assets/js/components/Config/TariffCard.vue`, `TariffModal.vue` | EEG counter in the EEG card, price templates for `feedInEeg`, planner price hint; `fixed-netz` after `fixed` in the generic list, `defaultPriceTemplate` and `priceTemplatesFor` (`utils/lmGridTariff.ts`): grid offers `fixed-netz` next to `fixed` and a new grid tariff starts with it, other types never offer it (contract test `TestGridFeeTemplateChoice`); `ref="lmBase"`, `provide` `lmGridFee` and `mounted` hand the entered grid fee to the zone form and summary, which show e.g. "10.2 ct − 20 % = 8.16 ct" |
 | `assets/js/components/Config/PropertyField.vue` | `GridFeeZonesField` (`GridFeeZonesField.vue`) for the param `gridfeeZones` of the template `fixed-netz`, before evcc's zones field (contract test `TestGridFeeZonesHook`) |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label (`batteryChargeLabelKey` in `utils/lmEnergyflow.ts`) |
 | `assets/js/views/Energy.vue`, `assets/js/components/Energy/GridStats.vue` | EEG split of the grid revenue tiles, meters without the EEG counters, the EEG import as a series and legend entry of the grid chart (`gridChartSeries`, `importEegLegends`; chart and legend of the export as upstream); the logic (`feedInEegStats`, `importEegSeries`, `importEegLegends`, `loadFeedInSplit`) is in `feedInEeg.ts`, the files only call it |

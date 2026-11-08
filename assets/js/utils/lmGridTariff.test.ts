@@ -5,11 +5,8 @@ const generic = [{ template: "fixed" }, { template: "fixed-netz" }, { template: 
 const names = (list: { template: string }[]) => list.map((p) => p.template);
 
 describe("priceTemplatesFor", () => {
-  test("new grid tariff gets the split template instead of fixed price", () => {
-    expect(names(priceTemplatesFor(generic, "grid", true))).toEqual(["fixed-netz", "fixed-zones"]);
-  });
-  test("editing a grid tariff keeps both", () => {
-    expect(names(priceTemplatesFor(generic, "grid", false))).toEqual([
+  test("grid tariff offers both fixed prices", () => {
+    expect(names(priceTemplatesFor(generic, "grid"))).toEqual([
       "fixed",
       "fixed-netz",
       "fixed-zones",
@@ -17,9 +14,7 @@ describe("priceTemplatesFor", () => {
   });
   test("other tariff types never see the split template", () => {
     for (const type of ["feedIn", "feedInEeg", "planner", "co2", undefined]) {
-      for (const isNew of [true, false]) {
-        expect(names(priceTemplatesFor(generic, type, isNew))).toEqual(["fixed", "fixed-zones"]);
-      }
+      expect(names(priceTemplatesFor(generic, type))).toEqual(["fixed", "fixed-zones"]);
     }
   });
 });

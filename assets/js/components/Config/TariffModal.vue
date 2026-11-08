@@ -201,11 +201,7 @@ export default defineComponent({
 			const co2Products = filterByGroup("co2");
 			const solarProducts = filterByGroup("solar");
 			const temperatureProducts = filterByGroup("temperature");
-			const priceGeneric = priceTemplatesFor(
-				extractGeneric("price"),
-				this.tariffType,
-				this.isNew
-			); // custom: split grid tariff
+			const priceGeneric = priceTemplatesFor(extractGeneric("price"), this.tariffType); // custom: split grid tariff
 			const co2Generic = extractGeneric("co2");
 			const solarGeneric = extractGeneric("solar");
 			const temperatureGeneric = extractGeneric("temperature");

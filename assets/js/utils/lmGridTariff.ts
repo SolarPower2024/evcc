@@ -1,8 +1,8 @@
 import type { Product } from "@/components/Config/DeviceModal";
 
-// Custom extension: the split fixed price (fixed-netz) replaces "Fixed Price" for a new
-// grid tariff, see TariffModal.vue. Existing tariffs keep the template they were saved
-// with, so while editing both stay in the list.
+// Custom extension: grid import offers the split fixed price (fixed-netz) next to
+// "Fixed Price" and starts with it, see TariffModal.vue. "Fixed Price" stays in the
+// list, evcc's e2e tests pick it.
 export const SPLIT_TEMPLATE = "fixed-netz";
 
 // grid fee left after a percent zone, in the same unit as fee
@@ -17,9 +17,8 @@ export function defaultPriceTemplate(tariffType: string | null | undefined): str
 
 export function priceTemplatesFor<T extends Pick<Product, "template">>(
   generic: T[],
-  tariffType: string | null | undefined,
-  isNew: boolean
+  tariffType: string | null | undefined
 ): T[] {
-  if (tariffType !== "grid") return generic.filter((p) => p.template !== SPLIT_TEMPLATE);
-  return isNew ? generic.filter((p) => p.template !== "fixed") : generic;
+  if (tariffType === "grid") return generic;
+  return generic.filter((p) => p.template !== SPLIT_TEMPLATE);
 }
