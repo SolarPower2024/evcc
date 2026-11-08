@@ -136,7 +136,7 @@
       ],
       "prs": [32881, 34044],
       "keywords": ["automatic", "ledger", "requiredBatteryMode", "batterySuggestionMode", "suggestionMaxAge"],
-      "paths": ["core/site_optimizer.go", "core/planner/"]
+      "paths": ["core/site_optimizer.go", "core/site_optimizer_request.go", "core/site_optimizer_result.go", "core/planner/"]
     },
     {
       "name": "Log-Datei (Tagesdateien)",
@@ -149,7 +149,7 @@
       "name": "Schnee auf PV (Schalter, Optimizer ohne PV-Ertrag, Erkennung aus dem Wetter)",
       "files": ["core/site_snow.go", "core/site_snow_auto.go", "assets/js/components/Forecast/SnowCoverSwitch.vue"],
       "keywords": ["Schnee", "snowCover", "snowfall"],
-      "paths": ["core/site_tariffs.go", "core/site_optimizer.go", "assets/js/views/Forecast.vue"]
+      "paths": ["core/site_tariffs.go", "core/site_optimizer.go", "core/site_optimizer_request.go", "core/site_optimizer_result.go", "assets/js/views/Forecast.vue"]
     },
     {
       "name": "Einspeise-Prognose über Home Assistant (Optimizer schreibt, zweite Instanz liest)",
@@ -164,7 +164,7 @@
       "name": "Optimizer: Planer-Tarif als Preisreihe",
       "files": ["core/site_optimizer_lm.go"],
       "keywords": ["TariffUsagePlanner"],
-      "paths": ["core/site_optimizer.go"]
+      "paths": ["core/site_optimizer.go", "core/site_optimizer_request.go", "core/site_optimizer_result.go"]
     },
     {
       "name": "Peak-Status-Dialog (Mehr → Peak Shaving)",
