@@ -92,8 +92,10 @@ func (site *Site) applyCircuitLimits() {
 	changed := !s.offPublished
 	s.offPublished = true
 
+	exists := make(map[string]bool)
 	for _, dev := range config.Circuits().Devices() {
 		name, c := dev.Config().Name, dev.Instance()
+		exists[name] = true
 
 		configured, touched := s.offLimits[name]
 		if !touched {
@@ -141,6 +143,20 @@ func (site *Site) applyCircuitLimits() {
 			site.log.INFO.Printf("circuit %s: power limit %s (configured %.1f kW)", name, limitText(wanted), configured/1e3)
 		}
 		changed = true
+	}
+
+	// a circuit that is gone takes its entries with it
+	for name := range s.offLimits {
+		if !exists[name] {
+			delete(s.offLimits, name)
+			changed = true
+		}
+	}
+	for name := range s.offDynamic {
+		if !exists[name] {
+			delete(s.offDynamic, name)
+			changed = true
+		}
 	}
 
 	if peakCircuit == "" && len(s.offDynamic) > 0 {

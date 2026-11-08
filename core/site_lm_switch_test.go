@@ -332,7 +332,11 @@ func TestLmCircuitDeleted(t *testing.T) {
 
 	sub.SetMaxPower(7000)
 	require.NoError(t, config.Circuits().Delete("garage"))
+	site.lms().offDynamic = map[string]bool{"garage": true}
+	require.Contains(t, site.lms().offLimits, "garage")
 	site.applyCircuitLimits()
+	assert.Empty(t, site.lms().offLimits, "the entry of the deleted circuit is gone")
+	assert.Empty(t, site.lms().offDynamic, "so is its plugin mark")
 	assert.Equal(t, 10000.0, main.GetMaxPower(), "nothing changed")
 	assert.Equal(t, "garage", site.GetLmCircuit(), "the stored name stays until the cycle")
 
