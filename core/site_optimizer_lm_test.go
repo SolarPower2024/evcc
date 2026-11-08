@@ -165,6 +165,13 @@ func TestLmOptimizerInputsLoadpoint(t *testing.T) {
 	assert.Equal(t, float32(7000), batteries[0].cfg.CMax)
 	assert.Equal(t, 2, batteries[0].cfg.CPriority)
 
+	// a planned fixed demand at the loadpoint power is capped to the circuit:
+	// 11 kW for a quarter hour is 2750 Wh, the garage allows 1750 Wh
+	batteries[0].cfg.CMax = 11000
+	batteries[0].cfg.PDemand = []float32{2750, 1000, 2750, 0}
+	site.applyLmOptimizerInputs(&req, batteries)
+	assert.Equal(t, []float32{1750, 1000, 1750, 0}, batteries[0].cfg.PDemand)
+
 	for prio, want := range map[int]int{0: 0, 3: 0, 4: 1, 6: 1, 7: 2, 10: 2} {
 		assert.Equal(t, want, optimizerPriority(prio), "priority %d", prio)
 	}
@@ -309,6 +316,7 @@ func TestLmForecastLowest(t *testing.T) {
 	assert.False(t, site.lmForecastLowest(low).limit)
 	assert.Nil(t, site.lmForecastLowest(nil))
 }
+
 
 // Grid charging only enters the request while it is switched on and allowed;
 // the reserve stays a hard minimum above the stop soc.
