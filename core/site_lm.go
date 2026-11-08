@@ -57,8 +57,7 @@ type lmState struct {
 
 	prios map[string]int // shed priorities set in the ui, by load name
 
-	// load management switched off, see site_lm_switch.go
-	off          bool
+	// circuit limits changed at runtime, see site_lm_switch.go
 	offLimits    map[string]float64 // lifted power limits by circuit name
 	offDynamic   map[string]bool    // circuits with a plugin limit that stays
 	offPublished bool

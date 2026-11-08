@@ -18,69 +18,45 @@ import (
 
 func TestCircuitLimitWanted(t *testing.T) {
 	noSettingsDB(t)
-	assert.Equal(t, 10000.0, circuitLimitWanted(10000, false, false, 0), "as configured")
-	assert.Equal(t, 0.0, circuitLimitWanted(10000, true, true, 11300), "off: lifted")
-	assert.Equal(t, 3500.0, circuitLimitWanted(10000, false, true, 3500), "the peak limit, below the configured value")
+	assert.Equal(t, 10000.0, circuitLimitWanted(10000, false, 0), "as configured")
+	assert.Equal(t, 3500.0, circuitLimitWanted(10000, true, 3500), "the peak limit, below the configured value")
 }
 
-// Switching load management off lifts the power limits and keeps the current
-// limits and returns to the configured values.
-func TestLmSwitchCircuit(t *testing.T) {
-	noSettingsDB(t)
-	config.Reset()
-	t.Cleanup(config.Reset)
-	t.Cleanup(func() { _ = settings.Delete(keys.LmCircuit) })
+// The circuits keep their configured power limits, also with a load
+// management circuit chosen.
+func TestLmCircuitConfiguredLimits(t *testing.T) {
+	site, main, sub := lmSwitchCircuits(t, 10000)
 
-	log := util.NewLogger("test")
-	main, err := circuit.New(log, "peak", 32, 10000, nil, 0)
-	require.NoError(t, err)
-	require.NoError(t, config.Circuits().Add(config.NewStaticDevice(config.Named{Name: "main"}, api.Circuit(main))))
-	sub, err := circuit.New(log, "garage", 0, 7000, nil, 0)
-	require.NoError(t, err)
-	require.NoError(t, config.Circuits().Add(config.NewStaticDevice(config.Named{Name: "garage"}, api.Circuit(sub))))
-
-	clk := clock.NewMock()
-	clk.Set(time.Date(2026, 9, 20, 12, 0, 0, 0, time.Local))
-	site := &Site{log: log}
-	p := site.peak()
-	p.clock = clk
-	setPeakShaving(site, 10000, 20)
-
-	// off: power limits lifted, the fuse stays
-	require.NoError(t, site.SetLmEnabled(false))
-	assert.Zero(t, main.GetMaxPower())
-	assert.Zero(t, sub.GetMaxPower())
-	assert.Equal(t, 32.0, main.GetMaxCurrent())
-	assert.Equal(t, 20000.0, sub.ValidatePower(0, 20000), "power no longer capped")
-	assert.Less(t, main.ValidateCurrent(0, 40), 40.0, "fuse still caps the current")
-
-	// on again
-	require.NoError(t, site.SetLmEnabled(true))
+	require.NoError(t, site.SetLmCircuit("main"))
 	assert.Equal(t, 10000.0, main.GetMaxPower())
 	assert.Equal(t, 7000.0, sub.GetMaxPower())
-
-	// main as the load management circuit: off lifts it only, on returns to the configured value
-	require.NoError(t, site.SetLmCircuit("main"))
-	require.NoError(t, site.SetLmEnabled(false))
-	assert.Zero(t, main.GetMaxPower())
-	assert.Equal(t, 7000.0, sub.GetMaxPower(), "not the load management circuit")
-	require.NoError(t, site.SetLmEnabled(true))
-	assert.Equal(t, 10000.0, main.GetMaxPower())
+	assert.Equal(t, 32.0, main.GetMaxCurrent())
+	assert.Empty(t, site.lms().offLimits)
 
 	require.Error(t, site.SetLmCircuit("unknown"))
+	assert.Equal(t, "main", site.GetLmCircuit())
+}
 
-	// no load management circuit while off: all lifted again
-	require.NoError(t, site.SetLmEnabled(false))
-	require.NoError(t, site.SetLmCircuit(""))
-	assert.Zero(t, main.GetMaxPower())
-	assert.Zero(t, sub.GetMaxPower())
+// A stored switch "load management off" of an earlier version is removed at the
+// start: the circuits keep their configured limits.
+func TestLmOffDropped(t *testing.T) {
+	site, main, sub := lmSwitchCircuits(t, 3500)
+	settings.SetBool(keys.LmOff, true)
 
-	// another one while off: the previous one returns
-	require.NoError(t, site.SetLmCircuit("garage"))
+	site = &Site{log: site.log}
+	site.restoreLmSwitch()
 	assert.Equal(t, 10000.0, main.GetMaxPower())
-	assert.Zero(t, sub.GetMaxPower())
-	require.NoError(t, site.SetLmEnabled(true))
 	assert.Equal(t, 7000.0, sub.GetMaxPower())
+
+	_, err := settings.Bool(keys.LmOff)
+	assert.Error(t, err, "setting removed")
+
+	// off or not stored: nothing to do
+	settings.SetBool(keys.LmOff, false)
+	site.restoreLmSwitch()
+	_, err = settings.Bool(keys.LmOff)
+	assert.Error(t, err)
+	site.restoreLmSwitch()
 }
 
 // The circuit chosen for follow the peak in lm3/lm4 becomes the load
@@ -148,7 +124,7 @@ func lmSwitchCircuits(t *testing.T, limit float64) (*Site, *circuit.Circuit, *ci
 
 // The peak limit as the load management (peak) circuit's limit: off by default,
 // on it replaces the configured value, also below it, follows every change of
-// the peak limit and is lifted with load management. Peak shaving off returns
+// the peak limit. Peak shaving off returns
 // the configured value.
 func TestLmCircuitFromPeak(t *testing.T) {
 	site, main, sub := lmSwitchCircuits(t, 3500)
@@ -199,13 +175,6 @@ func TestLmCircuitFromPeak(t *testing.T) {
 	site.applyCircuitLimits()
 	assert.Equal(t, 5000.0, main.GetMaxPower(), "below the configured value as well")
 
-	// load management off lifts it, on returns to the peak limit
-	require.NoError(t, site.SetLmEnabled(false))
-	assert.Zero(t, main.GetMaxPower())
-	assert.Equal(t, 7000.0, sub.GetMaxPower())
-	require.NoError(t, site.SetLmEnabled(true))
-	assert.Equal(t, 5000.0, main.GetMaxPower())
-
 	// peak shaving off: the configured value returns, on again the peak limit
 	require.NoError(t, site.SetPeakShaving(false))
 	assert.Equal(t, 10000.0, main.GetMaxPower())
@@ -254,11 +223,6 @@ func TestLmCircuitFromPeakState(t *testing.T) {
 	require.NoError(t, site.SetPeakShavingLimit(10000))
 	assert.True(t, site.lms().offFromPeak)
 	assert.Empty(t, site.lms().offLimits)
-	assert.True(t, state().FromPeak)
-
-	require.NoError(t, site.SetLmEnabled(false))
-	assert.False(t, state().FromPeak, "lifted")
-	require.NoError(t, site.SetLmEnabled(true))
 	assert.True(t, state().FromPeak)
 
 	require.NoError(t, site.SetPeakShaving(false))
@@ -356,57 +320,42 @@ func TestLmCircuitOldKeyLeftOver(t *testing.T) {
 	assert.Equal(t, "main", v)
 }
 
-// A deleted load management circuit lifts nothing: with load management off the
-// power limits stay, and the cycle removes the name and switches load
-// management on again.
+// A deleted load management circuit takes no peak limit: the cycle removes the
+// name, the circuit that is gone does not widen anything.
 func TestLmCircuitDeleted(t *testing.T) {
 	site, main, sub := lmSwitchCircuits(t, 3500)
 
 	require.NoError(t, site.SetLmCircuit("garage"))
-	require.NoError(t, site.SetLmEnabled(false))
-	assert.Zero(t, sub.GetMaxPower())
+	require.NoError(t, site.SetLmAdvanced("circuitFromPeak", 1))
+	assert.Equal(t, 3500.0, sub.GetMaxPower())
 	assert.Equal(t, 10000.0, main.GetMaxPower())
 
-	// the circuit goes while load management is off: the limit stays as it is,
-	// the other circuit is not lifted
 	sub.SetMaxPower(7000)
 	require.NoError(t, config.Circuits().Delete("garage"))
 	site.applyCircuitLimits()
-	assert.Equal(t, 10000.0, main.GetMaxPower(), "nothing lifted")
+	assert.Equal(t, 10000.0, main.GetMaxPower(), "nothing changed")
 	assert.Equal(t, "garage", site.GetLmCircuit(), "the stored name stays until the cycle")
 
 	site.updateCustom(siteState{})
 	assert.Empty(t, site.GetLmCircuit())
-	assert.True(t, site.GetLmEnabled(), "on again")
 	assert.Equal(t, 10000.0, main.GetMaxPower())
 	_, err := settings.String(keys.LmCircuit)
 	assert.Error(t, err, "key removed")
-
-	// without a circuit chosen, off lifts all as documented
-	require.NoError(t, site.SetLmEnabled(false))
-	assert.Zero(t, main.GetMaxPower())
-	require.NoError(t, site.SetLmEnabled(true))
 }
 
-// A stored name of a circuit that is gone does not lift anything at the start
-// and is cleaned up.
+// A stored name of a circuit that is gone is cleaned up at the start.
 func TestLmCircuitDeletedAtStart(t *testing.T) {
 	site, main, _ := lmSwitchCircuits(t, 3500)
 	settings.SetString(keys.LmCircuit, "gone")
-	settings.SetBool(keys.LmOff, true)
 
 	site = &Site{log: site.log}
 	site.restoreLmSwitch()
-	assert.Equal(t, 10000.0, main.GetMaxPower(), "nothing lifted while the name is unknown")
+	assert.Equal(t, 10000.0, main.GetMaxPower())
 	assert.Equal(t, "gone", site.GetLmCircuit())
 
 	site.dropOrphanCircuits()
 	assert.Empty(t, site.GetLmCircuit())
-	assert.True(t, site.GetLmEnabled())
 	assert.Equal(t, 10000.0, main.GetMaxPower())
-	v, err := settings.Bool(keys.LmOff)
-	require.NoError(t, err)
-	assert.False(t, v)
 }
 
 // The setters run on API goroutines and must not publish the circuits: that
@@ -419,8 +368,8 @@ func TestCircuitLimitSettersDoNotPublish(t *testing.T) {
 	ch := make(chan util.Param, 1000)
 	site.valueChan = ch
 
-	require.NoError(t, site.SetLmEnabled(false))
-	require.NoError(t, site.SetLmEnabled(true))
+	require.NoError(t, site.SetLmCircuit("main"))
+	require.NoError(t, site.SetLmAdvanced("circuitFromPeak", 1))
 
 	close(ch)
 	var lmOff bool
@@ -428,7 +377,7 @@ func TestCircuitLimitSettersDoNotPublish(t *testing.T) {
 		assert.NotEqual(t, keys.Circuits, p.Key, "a setter published the circuits")
 		lmOff = lmOff || p.Key == keys.LmOff
 	}
-	assert.True(t, lmOff, "the switch itself is still published")
+	assert.True(t, lmOff, "the circuit state itself is still published")
 
 	// cycle against setters
 	site.valueChan = nil
@@ -440,7 +389,7 @@ func TestCircuitLimitSettersDoNotPublish(t *testing.T) {
 		}
 	}()
 	for i := range 200 {
-		_ = site.SetLmEnabled(i%2 == 0)
+		_ = site.SetLmCircuit([]string{"", "main"}[i%2])
 		_ = site.SetPeakShavingLimit(float64(5000 + i))
 	}
 	<-done

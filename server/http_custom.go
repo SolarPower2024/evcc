@@ -57,7 +57,7 @@ var customConfigRoutes = []string{
 var customOperateRoutes = []string{
 	"batterysocgridcharge", "batterysocgridchargestart", "batterysocgridchargestop",
 	"batterygridchargeonce", "batterygridchargeonceuntil", "batterygridchargeoncecancel",
-	"lmenabled", "lmprofileapply", "snowcover", "snowauto",
+	"lmprofileapply", "snowcover", "snowauto",
 	"peakshaving", "peakshavingreserve", "peakshavingevents", "feedinsplit",
 }
 
@@ -178,7 +178,6 @@ func customSiteRoutes(site site.API) map[string]route {
 		"lmshedprotect": {"POST", "/lmshedprotect/{name:" + namePattern + "}/{value:[01truefalse]+}", lmShedProtectHandler(site)},
 
 		// load management switch, see core/site_lm_switch.go
-		"lmenabled":       {"POST", "/lmenabled/{value:[01truefalse]+}", boolHandler(site.SetLmEnabled, site.GetLmEnabled)},
 		"lmcircuit":       {"POST", "/lmcircuit/{value:" + namePattern + "}", stringHandler(site.SetLmCircuit, site.GetLmCircuit)},
 		"lmcircuitdelete": {"DELETE", "/lmcircuit", stringHandler(site.SetLmCircuit, site.GetLmCircuit)},
 

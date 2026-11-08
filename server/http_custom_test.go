@@ -107,7 +107,6 @@ var customRouteSamples = map[string]string{
 	"lmpriority":                    "/lmpriority/db%3A3/7",
 	"lmshedguard":                   "/lmshedguard/10",
 	"lmshedprotect":                 "/lmshedprotect/db:3/true",
-	"lmenabled":                     "/lmenabled/false",
 	"lmcircuit":                     "/lmcircuit/db:1",
 	"lmcircuitdelete":               "/lmcircuit",
 	"batteryidentuse":               "/batteryidentuse/true",
@@ -198,7 +197,6 @@ func TestCustomRoutesMatch(t *testing.T) {
 	assert.Equal(t, 40.0, site.GetPeakShavingReserve())
 	assert.Equal(t, 4000.0, site.GetPeakShavingChargePower())
 	assert.Equal(t, "marstek", site.GetPeakShavingBatteryType())
-	assert.False(t, site.GetLmEnabled())
 	// the snow switch is not checked: the detection takes it off when turned on
 	// after it, and the routes come in map order (core: TestSnowAutoHandOff)
 	assert.True(t, site.GetSnowAuto())
@@ -421,4 +419,19 @@ func TestPeakEventsRoute(t *testing.T) {
 
 	// the switch of peak shaving keeps its own route
 	assert.NotContains(t, rt.Pattern, "{value")
+}
+
+// TestLmEnabledRouteGone: the switch "load management on/off" is gone
+func TestLmEnabledRouteGone(t *testing.T) {
+	site := core.NewSite()
+
+	r := mux.NewRouter()
+	for _, rt := range customSiteRoutes(site) {
+		r.Methods(rt.Methods()...).Path(rt.Pattern).Handler(rt.HandlerFunc)
+	}
+
+	req := httptest.NewRequest("POST", "/lmenabled/false", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }

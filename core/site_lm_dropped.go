@@ -3,7 +3,9 @@ package core
 import (
 	"maps"
 
+	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/loadpoint"
+	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util/config"
 )
 
@@ -39,4 +41,19 @@ func (site *Site) dropStoredLoadpointKeys() {
 
 		site.log.INFO.Printf("loadpoint %s: removed unused config %v", conf.Name, dropped)
 	}
+}
+
+// dropLmOff removes the stored switch "load management off", which is gone: the
+// circuits limit with their configured value. A switch left on "off" is noted
+// in the log.
+func (site *Site) dropLmOff() {
+	off, err := settings.Bool(keys.LmOff)
+	if err != nil {
+		return
+	}
+
+	if off {
+		site.log.INFO.Println("load management switch removed, it was off: the circuits limit with their configured value again")
+	}
+	_ = settings.Delete(keys.LmOff)
 }

@@ -36,8 +36,6 @@ type CustomAPI interface {
 	SetLmShedProtected(name string, protected bool) error
 
 	// load management switch, see core/site_lm_switch.go
-	GetLmEnabled() bool
-	SetLmEnabled(bool) error
 	GetLmCircuit() string
 	SetLmCircuit(string) error
 

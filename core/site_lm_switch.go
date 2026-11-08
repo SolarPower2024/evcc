@@ -1,23 +1,18 @@
 package core
 
-// Custom extension: runtime changes to the circuits' power limits, from two
-// sources, without touching the configuration:
-//
-//   - load management off (Mehr → Lastmanagement (Peak)): the power limit of
-//     the load management (peak) circuit is lifted, so wallboxes, heaters and
-//     the battery's grid charging are no longer throttled or shed for it.
-//     Without that circuit chosen, the power limits of all circuits.
-//   - the peak limit as the circuit's limit (Erweitert → Grenze =
-//     Peak-Shaving-Grenze): while peak shaving is on, the load management (peak)
-//     circuit's limit is the peak limit, also below the configured value. Needs the circuit chosen; the configured value applies
-//     again once peak shaving is off.
+// Custom extension: runtime change to a circuit's power limit without touching
+// the configuration: the peak limit as the circuit's limit (Erweitert → Grenze =
+// Peak-Shaving-Grenze). While peak shaving is on, the load management (peak)
+// circuit's limit is the peak limit, also below the configured value. Needs the
+// circuit chosen; the configured value applies again once peak shaving is off.
+// Otherwise the circuits limit with their configured value, as in evcc.
 //
 // The load management (peak) circuit is chosen under Lastmanagement-Details →
 // Erweitert, so a circuit for the fuse can sit beside it untouched.
 //
 // The current limits (fuses) and a HEMS consumption limit (§14a) always apply.
 // The configured value is kept when a circuit is first changed and put back
-// once no source needs a change. Circuits whose limit comes from a plugin
+// once the change is not needed any more. Circuits whose limit comes from a plugin
 // are left alone. Battery peak shaving is separate and keeps running.
 
 import (
@@ -31,7 +26,6 @@ import (
 
 // lmSwitchState is what the ui shows
 type lmSwitchState struct {
-	Enabled bool               `json:"enabled"`
 	Limits  map[string]float64 `json:"limits"`  // W, the configured power limits of the changed circuits
 	Dynamic []string           `json:"dynamic"` // circuits whose limit comes from a plugin and stays
 	Circuit string             `json:"circuit"` // the load management (peak) circuit, empty = all
@@ -39,7 +33,7 @@ type lmSwitchState struct {
 	FromPeak bool `json:"fromPeak"`
 }
 
-// restoreLmSwitch continues switched off load management across a restart
+// restoreLmSwitch brings the load management (peak) circuit back after a restart
 func (site *Site) restoreLmSwitch() {
 	s := site.lms()
 
@@ -54,25 +48,20 @@ func (site *Site) restoreLmSwitch() {
 
 	s.mu.Lock()
 	s.circuit = circuit
-	if v, err := settings.Bool(keys.LmOff); err == nil && v {
-		s.off = true
-	}
 	s.mu.Unlock()
+
+	site.dropLmOff()
 
 	site.applyCircuitLimits()
 }
 
 // circuitLimitWanted returns the power limit a circuit should have for its
 // configured value, 0 = unlimited.
-func circuitLimitWanted(configured float64, off, fromPeak bool, peakLimit float64) float64 {
-	switch {
-	case off:
-		return 0
-	case fromPeak:
+func circuitLimitWanted(configured float64, fromPeak bool, peakLimit float64) float64 {
+	if fromPeak {
 		return peakLimit
-	default:
-		return configured
 	}
+	return configured
 }
 
 // applyCircuitLimits sets the circuits' power limits, once per cycle and on
@@ -87,9 +76,9 @@ func (site *Site) applyCircuitLimits() {
 	s := site.lms()
 
 	s.mu.Lock()
-	off, lmCircuit := s.off, s.circuit
+	lmCircuit := s.circuit
 
-	// a chosen circuit that no longer exists: nothing is lifted,
+	// a chosen circuit that no longer exists: it takes no peak limit,
 	// see dropOrphanCircuits
 	orphan := lmCircuit != "" && !circuitExists(lmCircuit)
 	peakCircuit := ""
@@ -111,8 +100,7 @@ func (site *Site) applyCircuitLimits() {
 			configured = c.GetMaxPower()
 		}
 
-		lift := off && !orphan && (lmCircuit == "" || name == lmCircuit)
-		wanted := circuitLimitWanted(configured, lift, name == peakCircuit, peakLimit)
+		wanted := circuitLimitWanted(configured, name == peakCircuit, peakLimit)
 		if name == peakCircuit {
 			peakConfigured = configured
 		}
@@ -155,19 +143,19 @@ func (site *Site) applyCircuitLimits() {
 		changed = true
 	}
 
-	if !off && peakCircuit == "" && len(s.offDynamic) > 0 {
+	if peakCircuit == "" && len(s.offDynamic) > 0 {
 		s.offDynamic = nil
 		changed = true
 	}
 
 	// a circuit without a power limit is left alone, one with a plugin limit stays
-	fromPeakNow := peakCircuit != "" && !off && peakConfigured > 0 && !s.offDynamic[peakCircuit]
+	fromPeakNow := peakCircuit != "" && peakConfigured > 0 && !s.offDynamic[peakCircuit]
 	if fromPeakNow != s.offFromPeak {
 		s.offFromPeak = fromPeakNow
 		changed = true
 	}
 
-	res := lmSwitchState{Enabled: !off, Limits: make(map[string]float64, len(s.offLimits)), Dynamic: make([]string, 0), Circuit: s.circuit, FromPeak: fromPeakNow}
+	res := lmSwitchState{Limits: make(map[string]float64, len(s.offLimits)), Dynamic: make([]string, 0), Circuit: s.circuit, FromPeak: fromPeakNow}
 	for name, v := range s.offLimits {
 		res.Limits[name] = v
 	}
@@ -189,36 +177,6 @@ func limitText(w float64) string {
 		return "lifted"
 	}
 	return fmt.Sprintf("%.1f kW", w/1e3)
-}
-
-// GetLmEnabled reports whether load management limits the circuits' power
-func (site *Site) GetLmEnabled() bool {
-	s := site.lms()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return !s.off
-}
-
-// SetLmEnabled switches load management on or off
-func (site *Site) SetLmEnabled(enabled bool) error {
-	s := site.lms()
-
-	s.mu.Lock()
-	changed := s.off == enabled
-	s.off = !enabled
-	s.offPublished = false
-	s.mu.Unlock()
-
-	if changed {
-		site.log.INFO.Println("load management:", map[bool]string{true: "on", false: "off"}[enabled])
-		settings.SetBool(keys.LmOff, !enabled)
-	}
-
-	site.applyCircuitLimits()
-
-	return nil
 }
 
 // GetLmCircuit returns the load management (peak) circuit, empty = all
