@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"maps"
 
 	"github.com/evcc-io/evcc/core/keys"
@@ -45,15 +46,19 @@ func (site *Site) dropStoredLoadpointKeys() {
 
 // dropLmOff removes the stored switch "load management off", which is gone: the
 // circuits limit with their configured value. A switch left on "off" is noted
-// in the log.
+// in the log; a value that cannot be read is logged and removed as well.
 func (site *Site) dropLmOff() {
 	off, err := settings.Bool(keys.LmOff)
-	if err != nil {
+	switch {
+	case errors.Is(err, settings.ErrNotFound):
 		return
-	}
-
-	if off {
+	case err != nil:
+		site.log.WARN.Printf("load management switch removed, stored value unreadable: %v", err)
+	case off:
 		site.log.INFO.Println("load management switch removed, it was off: the circuits limit with their configured value again")
 	}
-	_ = settings.Delete(keys.LmOff)
+
+	if err := settings.Delete(keys.LmOff); err != nil {
+		site.log.ERROR.Printf("load management switch: remove stored value: %v", err)
+	}
 }

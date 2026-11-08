@@ -57,6 +57,13 @@ func TestLmOffDropped(t *testing.T) {
 	_, err = settings.Bool(keys.LmOff)
 	assert.Error(t, err)
 	site.restoreLmSwitch()
+
+	// a value that cannot be read is removed as well
+	settings.SetString(keys.LmOff, "maybe")
+	site.restoreLmSwitch()
+	_, err = settings.String(keys.LmOff)
+	assert.ErrorIs(t, err, settings.ErrNotFound, "unreadable value removed")
+	assert.Equal(t, 10000.0, main.GetMaxPower())
 }
 
 // The circuit chosen for follow the peak in lm3/lm4 becomes the load
