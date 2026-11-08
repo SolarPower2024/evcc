@@ -3,17 +3,13 @@
 		<div class="values">
 			<LabelAndValue :label="title" :color="color" align="start">
 				<h3 class="value m-0 fw-bold d-flex align-items-center gap-2" :style="{ color }">
-					<!-- custom: peak status dialog, see core/site_peak_status.go -->
-					<PeakStatusLink>
-						<SocGauge
-							:soc="soc"
-							:color="color"
-							:power="power"
-							:mode="controllable ? batteryMode : undefined"
-						/>
-						{{ fmtPercentage(soc) }}
-					</PeakStatusLink>
-					<!-- custom -->
+					<SocGauge
+						:soc="soc"
+						:color="color"
+						:power="power"
+						:mode="controllable ? batteryMode : undefined"
+					/>
+					{{ fmtPercentage(soc) }}
 				</h3>
 			</LabelAndValue>
 
@@ -51,12 +47,11 @@ import Card from "../Helper/Card.vue";
 import LabelAndValue from "../Helper/LabelAndValue.vue";
 import SocGauge from "./SocGauge.vue";
 import OptimizerInfo from "./OptimizerInfo.vue";
-import PeakStatusLink from "./PeakStatusLink.vue"; // custom
 import { BATTERY_MODE, type BatteryForecast, type BatterySuggestion } from "@/types/evcc";
 
 export default defineComponent({
 	name: "BatteryStatusCard",
-	components: { Card, LabelAndValue, SocGauge, OptimizerInfo, PeakStatusLink }, // custom
+	components: { Card, LabelAndValue, SocGauge, OptimizerInfo },
 	mixins: [formatter],
 	inheritAttrs: false,
 	props: {

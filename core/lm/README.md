@@ -572,22 +572,19 @@ stored before moves to evcc's on start if that has none and peak shaving is on
 (`peakShavingLimit`, `peakFollow`, `peakFollowBase`, `peakFollowBuffer` are removed
 from the database). See `core/site_peak_limit.go`.
 
-**Statistics** (*Mehr → Peak Shaving*): per month the highest quarter hour with
+**Statistics** (collected, no dialog at the moment; *Mehr → Peak Shaving* shows the peak status): per month the highest quarter hour with
 and without the battery and how often it covered a peak; only quarter hours
 metered from their start count, kept for 24 months (`peakMonths`,
 `core/site_peak_stats.go`). "Without the battery" adds back only what the
 battery gave to the house, not what it fed into the grid (`TestMeterCompleted`;
 with a counter an approximation, as the import counter knows no export). Each month also keeps its baseline, the highest
 limit set by hand in it (the base while following the peak); months from before
-get the current one at the start. A month is looked up, never assumed to be the first entry; one entered late (a window of the month before) is put in its place with no baseline, and a list with a month twice is merged at start. The dialog shows the current month in two
-tiles (highest quarter hour with and without the battery next to each other
-and the limit; the month's saving, the total since the first month and the
-interventions), below one row per month.
+get the current one at the start. A month is looked up, never assumed to be the first entry; one entered late (a window of the month before) is put in its place with no baseline, and a list with a month twice is merged at start.
 
 **Capacity tariff** (*Lastmanagement-Details → Leistungstarif*): price per kW
 and year up to a threshold, a higher one above, at least a minimum and a share
 of the agreed power; zero price = off. Each month's cost with and without the
-battery and the saving are shown with the statistics; the saving only counts
+battery and the saving are kept with the statistics (not shown at the moment); the saving only counts
 above the month's baseline, as the grid draw up to it is allowed anyway. Prefilled with the
 Austrian draft for 2027 (33.82 EUR/kW/year up to 10 kW, double above, at least
 20 % of the agreed power and 2 kW). See `core/site_peak_tariff.go`.
@@ -810,19 +807,16 @@ state, Marstek and BYD), `TestPeakStatusOrder`, `TestPeakStatusValues`.
   `peak` and `gridChargePaused`. A change of the mode, the meter or the storage is logged
   when it stayed for a minute, with the time of the change (`TestPeakStatusEventsDebounced`). Kept 7 days, see [8](#8-overview).
 
-The dialog (*Hausbatterie*, tap the symbol or the percentage of a battery card, also
-with several batteries; the same dialog for all): a tile (color, icon, title, one
+The dialog (*Mehr → Peak Shaving*, shown with peak shaving set up, also while off): a tile (color, icon, title, one
 sentence, storage / grid / quarter hour or battery as bars, reserve and limit) and
 below it what is happening in a longer sentence, notes (mode, storage connected,
 discharge, hints of the integration), the running quarter hour (bar, time mark,
 what it still allows, orange while that is less than the grid draw now), the month's
 peak with the interventions and the last events (5, *Mehr* shows all from
-`GET /api/peakshaving/events`). It also opens with peak shaving off (`off`). Without
-peak shaving set up nothing is tappable and the card is as in evcc. Components
-`PeakStatusModal`, `PeakStatusHero`, `PeakStatusLink`, texts and numbers in
+`GET /api/peakshaving/events`). Peak shaving off shows `off`. Components
+`PeakStatusModal` (mounted by `GlobalModals.vue`), `PeakStatusHero`, texts and numbers in
 `peakStatus.ts` (`peakStatus.test.ts`); texts `battery.peakStatus.*` and
-`lmoverview.event.*` (the overview menu shows the new event types as well). Hooks: see
-the touch points of `BatteryStatusCard.vue` and `Battery.vue`; watched in `watch.json`.
+`lmoverview.event.*` (the overview menu shows the new event types as well). No hook of its own; watched in `watch.json`.
 
 ## 12. Battery profiles
 
@@ -1363,8 +1357,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `server/http_config_helper.go` | `customTestResults` in `testInstance`: the config page shows the switch of each stage of a heater in stages (`server/http_config_custom.go`) |
 | `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes (`server/http_custom_db.go`), a colliding route is left out and logged |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
-| `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection; `gridChargeVisible` passes evcc's own condition through `priceCardVisible` (`utils/gridChargeMode.ts`): the price card is hidden for grid charging by soc only; the soc card has a `v-if` (`socCardShown`) and, like one-time charging, needs a battery that offers the charge mode (`chargeSupported`) and one-time charging a card of its own (`BatteryGridChargeOnceCard`) for price only; contract test: `utils/gridChargeMode.test.ts` and `TestForkHooksInPlace`; mounts `<PeakStatusModal />` (peak status dialog, see [11](#peak-status-dialog)) |
-| `assets/js/components/Battery/BatteryStatusCard.vue` | the ring and the percentage in the first value sit in `<PeakStatusLink>` (the info symbol stands right of the percentage): with peak shaving set up (`peakStatus.state`) it is tappable and opens the dialog, without it the link renders its content unchanged (contract tests: `PeakStatusLink.test.ts`, `TestForkHooksInPlace`) |
+| `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection; `gridChargeVisible` passes evcc's own condition through `priceCardVisible` (`utils/gridChargeMode.ts`): the price card is hidden for grid charging by soc only; the soc card has a `v-if` (`socCardShown`) and, like one-time charging, needs a battery that offers the charge mode (`chargeSupported`) and one-time charging a card of its own (`BatteryGridChargeOnceCard`) for price only; contract test: `utils/gridChargeMode.test.ts` and `TestForkHooksInPlace` |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
 | `assets/js/views/Forecast.vue` | `<SnowCoverSwitch />` under the solar chart (snow on pv as one choice); evcc's *adjust* switch stays in the card header |
 | `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
@@ -1402,7 +1395,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
-| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/utils/optimizerAutomatic.ts`, `assets/js/components/LoadManagement/`, `assets/js/components/PeakShaving/`, the battery cards in `assets/js/components/Battery/` (`PeakStatusModal`, `PeakStatusHero`, `PeakStatusLink`, `peakStatus.ts`, `BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
+| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/utils/optimizerAutomatic.ts`, `assets/js/components/LoadManagement/`, the battery cards in `assets/js/components/Battery/` (`PeakStatusModal`, `PeakStatusHero`, `peakStatus.ts`, `BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `CircuitPeakHint`), `assets/js/utils/circuitFromPeak.ts` |
 | build | `.github/workflows/custom-image.yml` |
 | start page | `.github/README.md` (GitHub shows it instead of the evcc `README.md`; its feature list follows part 1) |
 

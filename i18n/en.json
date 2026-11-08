@@ -129,7 +129,6 @@
         "notConnected": "Storage not reachable"
       },
       "now": "What is happening",
-      "open": "Show peak status",
       "recent": "Recent",
       "reserveLimit": "Reserve {reserve} · Limit {limit}",
       "state": {
@@ -2484,27 +2483,6 @@
     "noMatch": "Passwords do not match",
     "titleUpdate": "Update Administrator Password",
     "updatePassword": "Update password"
-  },
-  "peakstats": {
-    "cost": "Capacity cost",
-    "costShort": "Cost",
-    "description": "The capacity price follows the highest quarter hour of the month. Measured with the battery, calculated without. Savings count only above the limit.",
-    "empty": "No complete quarter hour recorded yet.",
-    "extraCost": "extra cost {cost}",
-    "interventionsCount": "Interventions: {count}",
-    "limitShort": "Limit {limit}",
-    "menu": "Peak Shaving",
-    "month": "Month",
-    "monthly": "Per month",
-    "peakIn": "Highest quarter hour in {month}",
-    "savingIn": "Savings in {month}",
-    "savingShort": "saved {saving}",
-    "savingSince": "since {month}: {total}",
-    "title": "Peak Shaving",
-    "withBattery": "With battery",
-    "withShort": "with {power}",
-    "withoutBattery": "Without battery",
-    "withoutShort": "without {power}"
   },
   "session": {
     "addOdometer": "Add value",

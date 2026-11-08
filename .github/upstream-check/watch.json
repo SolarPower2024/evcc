@@ -179,14 +179,9 @@
       "paths": ["core/site_optimizer.go"]
     },
     {
-      "name": "Peak-Status-Dialog auf der Batterieseite",
-      "files": [
-        "core/site_peak_status.go",
-        "assets/js/components/Battery/PeakStatusModal.vue",
-        "assets/js/components/Battery/PeakStatusLink.vue"
-      ],
-      "keywords": ["peakStatus", "PeakStatus", "peakStatusModal"],
-      "paths": ["assets/js/components/Battery/BatteryStatusCard.vue", "assets/js/views/Battery.vue"]
+      "name": "Peak-Status-Dialog (Mehr → Peak Shaving)",
+      "files": ["core/site_peak_status.go", "assets/js/components/Battery/PeakStatusModal.vue"],
+      "keywords": ["peakStatus", "PeakStatus", "peakStatusModal"]
     },
     {
       "name": "Grundlagen, auf denen der Fork aufbaut",

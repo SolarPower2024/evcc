@@ -106,8 +106,8 @@ import { detailText, eventText, makeFmt, notes, peakEvents, windowInfo } from ".
 const FEW = 5;
 const TICK = 15_000;
 
-// Custom extension: the dialog of the battery page, what peak shaving does with
-// the battery and why, see core/site_peak_status.go. Opened from PeakStatusLink.
+// Custom extension: what peak shaving does with the battery and why, see
+// core/site_peak_status.go. Opened from the "more" menu (MoreMenuItems.vue).
 export default defineComponent({
 	name: "PeakStatusModal",
 	components: { GenericModal, PeakStatusHero },

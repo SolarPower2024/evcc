@@ -129,7 +129,6 @@
         "notConnected": "Speicher nicht erreichbar"
       },
       "now": "Was gerade passiert",
-      "open": "Peak-Status anzeigen",
       "recent": "Zuletzt",
       "reserveLimit": "Reserve {reserve} · Grenze {limit}",
       "state": {
@@ -2484,27 +2483,6 @@
     "noMatch": "Passwörter stimmen nicht überein",
     "titleUpdate": "Administrator Passwort ändern",
     "updatePassword": "Passwort ändern"
-  },
-  "peakstats": {
-    "cost": "Leistungspreis",
-    "costShort": "Kosten",
-    "description": "Der Leistungspreis richtet sich nach der höchsten Viertelstunde im Monat. Gemessen mit Batterie, berechnet ohne. Gespart wird nur über der Grenze.",
-    "empty": "Noch keine vollständige Viertelstunde erfasst.",
-    "extraCost": "Mehrkosten {cost}",
-    "interventionsCount": "Eingriffe: {count}",
-    "limitShort": "Grenze {limit}",
-    "menu": "Peak Shaving",
-    "month": "Monat",
-    "monthly": "Je Monat",
-    "peakIn": "Höchste Viertelstunde im {month}",
-    "savingIn": "Ersparnis im {month}",
-    "savingShort": "gespart {saving}",
-    "savingSince": "seit {month}: {total}",
-    "title": "Peak Shaving",
-    "withBattery": "Mit Batterie",
-    "withShort": "mit {power}",
-    "withoutBattery": "Ohne Batterie",
-    "withoutShort": "ohne {power}"
   },
   "session": {
     "addOdometer": "Wert eintragen",
