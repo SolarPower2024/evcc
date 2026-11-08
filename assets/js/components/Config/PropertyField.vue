@@ -89,6 +89,13 @@
 		:has-device-error="hasDeviceError"
 		:required="required"
 	/>
+	<!-- custom: split grid tariff -->
+	<GridFeeZonesField
+		v-else-if="property === 'gridfeeZones'"
+		:id="id"
+		v-model="value"
+		:currency="currency"
+	/>
 	<PropertyZonesField
 		v-else-if="zones"
 		:id="id"
@@ -177,6 +184,7 @@ import SelectGroup from "../Helper/SelectGroup.vue";
 import CustomSelect from "../Helper/CustomSelect.vue";
 import Combobox from "../Helper/Combobox.vue";
 import PropertyZonesField from "./PropertyZonesField.vue";
+import GridFeeZonesField from "./GridFeeZonesField.vue"; // custom: split grid tariff
 import PropertyDeviceField from "./PropertyDeviceField.vue";
 import formatter from "@/mixins/formatter";
 import parseGoDuration, {
@@ -196,6 +204,7 @@ export default {
 		CustomSelect,
 		Combobox,
 		PropertyZonesField,
+		GridFeeZonesField, // custom
 		PropertyDeviceField,
 	},
 	mixins: [formatter],

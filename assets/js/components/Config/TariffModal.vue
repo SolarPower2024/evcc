@@ -1,5 +1,6 @@
 <template>
 	<DeviceModalBase
+		ref="lmBase"
 		:id="id"
 		:name="name"
 		device-type="tariff"
@@ -66,7 +67,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, type PropType } from "vue";
+import { computed, defineComponent, markRaw, type PropType } from "vue"; // custom: computed, markRaw
 import DeviceModalBase from "./DeviceModal/DeviceModalBase.vue";
 import NewDeviceButton from "./NewDeviceButton.vue";
 import FormRow from "./FormRow.vue";
@@ -79,6 +80,7 @@ import tariffPriceYaml from "./defaultYaml/tariffPrice.yaml?raw";
 import tariffCo2Yaml from "./defaultYaml/tariffCo2.yaml?raw";
 import tariffSolarYaml from "./defaultYaml/tariffSolar.yaml?raw";
 import tariffTemperatureYaml from "./defaultYaml/tariffTemperature.yaml?raw";
+import { defaultPriceTemplate, priceTemplatesFor } from "@/utils/lmGridTariff"; // custom
 
 const initialValues = {
 	type: ConfigType.Template,
@@ -103,11 +105,19 @@ export default defineComponent({
 		hasDeviceError: Function as PropType<(type: DeviceType, name: string) => boolean>,
 	},
 	emits: ["changed", "disable", "close"],
+	// custom: grid fee for the split tariff zones (GridFeeZoneForm/Summary)
+	provide() {
+		return { lmGridFee: computed(() => (this.lmBaseRef as any)?.values?.gridfee) };
+	},
 	data() {
 		return {
+			lmBaseRef: null as object | null, // custom
 			initialValues,
 			preserveFields: ["deviceTitle"],
 		};
+	},
+	mounted() {
+		this.lmBaseRef = markRaw(this.$refs["lmBase"] as object); // custom
 	},
 	computed: {
 		id(): number | undefined {
@@ -127,7 +137,7 @@ export default defineComponent({
 		},
 		// a fixed price is the common case for grid import and export
 		defaultTemplate(): string | undefined {
-			return this.tariffType === "grid" || this.tariffType === "feedIn" ? "fixed" : undefined;
+			return defaultPriceTemplate(this.tariffType); // custom: split grid tariff
 		},
 		modalTitle(): string {
 			if (this.name !== "tariff") {
@@ -162,6 +172,7 @@ export default defineComponent({
 			// Separate demo/generic templates from real services
 			const genericTemplates = [
 				"fixed",
+				"fixed-netz", // custom: split grid tariff
 				"fixed-zones",
 				"merged",
 				"demo-co2-forecast",
@@ -190,7 +201,7 @@ export default defineComponent({
 			const co2Products = filterByGroup("co2");
 			const solarProducts = filterByGroup("solar");
 			const temperatureProducts = filterByGroup("temperature");
-			const priceGeneric = extractGeneric("price");
+			const priceGeneric = priceTemplatesFor(extractGeneric("price"), this.tariffType); // custom: split grid tariff
 			const co2Generic = extractGeneric("co2");
 			const solarGeneric = extractGeneric("solar");
 			const temperatureGeneric = extractGeneric("temperature");

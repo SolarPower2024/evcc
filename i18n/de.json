@@ -755,6 +755,17 @@
         "optimizer": "Optimizer"
       }
     },
+    "lmgridfee": {
+      "mode": "Art",
+      "modeAbs": "Netzgebühr",
+      "modePct": "Minus Prozent",
+      "pctRange": "Bitte 0 bis 100 % eingeben.",
+      "pctResult": "{fee} − {value} % = {result} Netzgebühr",
+      "summaryPct": "−{value} % Netzgebühr",
+      "timeSame": "Start und Ende dürfen nicht gleich sein.",
+      "valueAbs": "Netzgebühr",
+      "valuePct": "Abzug"
+    },
     "lmpriorities": {
       "battery": "Batterie (Netzladen)",
       "description": "Oben der wichtigste Verbraucher. Reicht die Leistung nicht, wird von unten her gedrosselt oder abgeschaltet, bei gleicher Priorität zählt, wer zuerst da ist. Bei Ladepunkten ist es ihre normale Priorität, sie gilt auch für PV-Überschuss und Planer. Die Batterie hat einen eigenen Wert.",
