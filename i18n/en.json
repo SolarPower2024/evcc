@@ -759,6 +759,7 @@
       "mode": "Type",
       "modeAbs": "Grid fee",
       "modePct": "Minus percent",
+      "pctResult": "{fee} − {value} % = {result} grid fee",
       "summaryPct": "−{value} % grid fee",
       "valueAbs": "Grid fee",
       "valuePct": "Reduction"

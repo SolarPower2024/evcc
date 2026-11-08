@@ -1,5 +1,6 @@
 <template>
 	<DeviceModalBase
+		ref="lmBase"
 		:id="id"
 		:name="name"
 		device-type="tariff"
@@ -66,7 +67,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, type PropType } from "vue";
+import { computed, defineComponent, markRaw, type PropType } from "vue";
 import DeviceModalBase from "./DeviceModal/DeviceModalBase.vue";
 import NewDeviceButton from "./NewDeviceButton.vue";
 import FormRow from "./FormRow.vue";
@@ -104,11 +105,19 @@ export default defineComponent({
 		hasDeviceError: Function as PropType<(type: DeviceType, name: string) => boolean>,
 	},
 	emits: ["changed", "disable", "close"],
+	// custom: grid fee for the split tariff zones (GridFeeZoneForm/Summary)
+	provide() {
+		return { lmGridFee: computed(() => (this.lmBaseRef as any)?.values?.gridfee) };
+	},
 	data() {
 		return {
+			lmBaseRef: null as object | null, // custom
 			initialValues,
 			preserveFields: ["deviceTitle"],
 		};
+	},
+	mounted() {
+		this.lmBaseRef = markRaw(this.$refs["lmBase"] as object); // custom
 	},
 	computed: {
 		id(): number | undefined {

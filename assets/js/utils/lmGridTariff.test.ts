@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
-import { defaultPriceTemplate, priceTemplatesFor } from "./lmGridTariff";
+import { defaultPriceTemplate, priceTemplatesFor, gridFeeAfterPct } from "./lmGridTariff";
 
 const generic = [{ template: "fixed" }, { template: "fixed-netz" }, { template: "fixed-zones" }];
 const names = (list: { template: string }[]) => list.map((p) => p.template);
@@ -30,5 +30,13 @@ describe("defaultPriceTemplate", () => {
     expect(defaultPriceTemplate("feedIn")).toBe("fixed");
     expect(defaultPriceTemplate("feedInEeg")).toBeUndefined();
     expect(defaultPriceTemplate(null)).toBeUndefined();
+  });
+});
+
+describe("gridFeeAfterPct", () => {
+  test("deducts the percentage from the grid fee", () => {
+    expect(gridFeeAfterPct(0.102, 20)).toBeCloseTo(0.0816, 6);
+    expect(gridFeeAfterPct(0.085, 0)).toBeCloseTo(0.085, 6);
+    expect(gridFeeAfterPct(0.085, 100)).toBeCloseTo(0, 6);
   });
 });

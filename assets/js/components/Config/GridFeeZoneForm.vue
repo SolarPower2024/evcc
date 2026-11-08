@@ -36,6 +36,9 @@
 					>{{ valueUnit }}</span
 				>
 			</div>
+			<div v-if="pctResult" class="form-text evcc-gray" data-testid="gridfee-pct-result">
+				{{ pctResult }}
+			</div>
 			<div v-if="isValueInvalid" class="invalid-feedback d-block">
 				{{ $t("config.tariff.zones.priceRequired") }}
 			</div>
@@ -121,6 +124,7 @@ import zoneUtils from "@/mixins/zoneUtils";
 import MultiSelect from "../Helper/MultiSelect.vue";
 import SelectGroup from "../Helper/SelectGroup.vue";
 import { CURRENCY } from "@/types/evcc";
+import { gridFeeAfterPct } from "@/utils/lmGridTariff";
 
 // abs: grid fee in currency per kWh, pct: percent deducted from the grid fee
 export type GridFeeZone = {
@@ -149,6 +153,7 @@ export default {
 		currency: { type: String as PropType<CURRENCY>, required: true },
 		index: { type: Number, required: true },
 	},
+	inject: { lmGridFee: { default: undefined } },
 	emits: ["save", "cancel"],
 	data() {
 		return {
@@ -168,6 +173,20 @@ export default {
 		},
 		valueLabel() {
 			return this.$t(this.isPct ? "config.lmgridfee.valuePct" : "config.lmgridfee.valueAbs");
+		},
+		pctResult(): string {
+			const fee = Number(this.lmGridFee);
+			if (!this.isPct || this.lmGridFee == null || isNaN(fee) || !this.isValidValue)
+				return "";
+			return this.$t("config.lmgridfee.pctResult", {
+				fee: this.fmtPricePerKWh(fee, this.currency, true),
+				value: this.uiZone.value,
+				result: this.fmtPricePerKWh(
+					gridFeeAfterPct(fee, this.uiZone.value as number),
+					this.currency,
+					true
+				),
+			});
 		},
 		dayOptions() {
 			return this.getWeekdaysList("long");

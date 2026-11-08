@@ -5,6 +5,11 @@ import type { Product } from "@/components/Config/DeviceModal";
 // with, so while editing both stay in the list.
 export const SPLIT_TEMPLATE = "fixed-netz";
 
+// grid fee left after a percent zone, in the same unit as fee
+export function gridFeeAfterPct(fee: number, pct: number): number {
+  return fee * (1 - pct / 100);
+}
+
 export function defaultPriceTemplate(tariffType: string | null | undefined): string | undefined {
   if (tariffType === "grid") return SPLIT_TEMPLATE;
   return tariffType === "feedIn" ? "fixed" : undefined;

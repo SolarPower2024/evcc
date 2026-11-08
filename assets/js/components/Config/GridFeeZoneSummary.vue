@@ -32,6 +32,7 @@ import "@h2d2/shopicons/es/regular/edit";
 import zoneUtils from "@/mixins/zoneUtils";
 import { CURRENCY } from "@/types/evcc";
 import type { GridFeeZone } from "./GridFeeZoneForm.vue";
+import { gridFeeAfterPct } from "@/utils/lmGridTariff";
 
 export default {
 	name: "GridFeeZoneSummary",
@@ -40,11 +41,24 @@ export default {
 		zone: { type: Object as PropType<GridFeeZone>, required: true },
 		currency: { type: String as PropType<CURRENCY>, required: true },
 	},
+	inject: { lmGridFee: { default: undefined } },
 	emits: ["edit", "remove"],
 	computed: {
 		formattedValue() {
 			if (this.zone.value == null) return "—";
 			if (this.zone.mode === "pct") {
+				const fee = Number(this.lmGridFee);
+				if (this.lmGridFee != null && !isNaN(fee)) {
+					return this.$t("config.lmgridfee.pctResult", {
+						fee: this.fmtPricePerKWh(fee, this.currency, true),
+						value: this.zone.value,
+						result: this.fmtPricePerKWh(
+							gridFeeAfterPct(fee, this.zone.value),
+							this.currency,
+							true
+						),
+					});
+				}
 				return this.$t("config.lmgridfee.summaryPct", { value: this.zone.value });
 			}
 			return this.fmtPricePerKWh(this.zone.value, this.currency, true);

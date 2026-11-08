@@ -49,7 +49,7 @@ func TestGridFeeZonesHook(t *testing.T) {
 func TestGridFeeI18n(t *testing.T) {
 	for _, lang := range []string{"de", "en"} {
 		s := readRepoFile(t, "i18n/"+lang+".json")
-		for _, key := range []string{"\"lmgridfee\"", "\"modeAbs\"", "\"modePct\"", "\"summaryPct\"", "\"valueAbs\"", "\"valuePct\""} {
+		for _, key := range []string{"\"lmgridfee\"", "\"modeAbs\"", "\"modePct\"", "\"summaryPct\"", "\"pctResult\"", "\"valueAbs\"", "\"valuePct\""} {
 			assert.Contains(t, s, key, lang)
 		}
 	}
