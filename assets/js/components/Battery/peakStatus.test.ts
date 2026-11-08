@@ -187,10 +187,12 @@ describe("notes", () => {
     expect(free[1].tone).toBe("bad");
   });
 
-  test("no mode chip before evcc has set a mode", () => {
+  test("mode normal before evcc has set a mode", () => {
     const n = notes({ ...base, batteryMode: "unknown", limited: false }, tDe, kw);
-    expect(n.map((x) => x.text)).toEqual(["Speicher verbunden", "Entladen frei"]);
-    expect(notes({ ...base, batteryMode: "" }, tDe, kw)).toHaveLength(2);
+    expect(n.map((x) => x.text)).toEqual(["Modus: normal", "Speicher verbunden", "Entladen frei"]);
+    expect(notes({ ...base, batteryMode: "", limited: false }, tDe, kw)[0].text).toBe(
+      "Modus: normal"
+    );
   });
 
   test("a hold of another kind says nothing on the discharge", () => {
@@ -204,8 +206,10 @@ describe("notes", () => {
 
   test("grid charge and discharge say nothing on the discharge either", () => {
     for (const state of ["gridCharge", "gridDischarge"] as const) {
-      const n = notes({ ...base, state, limited: false }, tEn, kw);
-      expect(n.map((x) => x.text)).not.toContain("Discharge free");
+      for (const limited of [false, true]) {
+        const n = notes({ ...base, state, limited }, tEn, kw);
+        expect(n.some((x) => x.text.startsWith("Discharge"))).toBe(false);
+      }
     }
   });
 

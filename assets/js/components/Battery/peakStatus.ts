@@ -144,13 +144,12 @@ export interface Note {
 export function notes(st: PeakStatus, t: Translate, f: Fmt): Note[] {
   const res: Note[] = [];
 
-  // the mode once evcc has set one
-  if (st.batteryMode && st.batteryMode !== "unknown") {
-    res.push({
-      text: t(`${P}.notes.mode`, { mode: t(`${P}.mode.${st.batteryMode}`) }),
-      tone: "plain",
-    });
-  }
+  // before evcc has set a mode the battery runs as in normal
+  const mode = st.batteryMode && st.batteryMode !== "unknown" ? st.batteryMode : "normal";
+  res.push({
+    text: t(`${P}.notes.mode`, { mode: t(`${P}.mode.${mode}`) }),
+    tone: "plain",
+  });
 
   res.push(
     st.storageOk
@@ -161,7 +160,7 @@ export function notes(st: PeakStatus, t: Translate, f: Fmt): Note[] {
   // no word on the discharge where it is not evcc's call: grid charging and
   // discharge, a hold of another kind
   const other = st.state === "gridCharge" || st.state === "gridDischarge";
-  if (st.limited) {
+  if (st.limited && !other) {
     res.push({ text: t(`${P}.notes.dischargeMax`, { power: f.w(st.setpoint) }), tone: "plain" });
   } else if (!st.held && !other) {
     res.push({ text: t(`${P}.notes.dischargeFree`), tone: "plain" });
