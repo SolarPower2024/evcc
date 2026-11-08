@@ -93,8 +93,9 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 
 	s := site.lms()
 	s.mu.Lock()
-	s.floorRaised = false
-	s.plan = nil
+	s.pending = true
+	s.pendingFloorRaised = false
+	s.pendingPlan = nil
 	s.mu.Unlock()
 
 	if peakOn && limit > 0 && (req.Grid.PMaxImp == 0 || float32(limit) < req.Grid.PMaxImp) {
@@ -139,8 +140,15 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 				// below the minimum the circuit cannot charge it at all
 				if float32(power) < b.cfg.CMin {
 					b.cfg.CMin, b.cfg.CMax = 0, 0
+					b.cfg.PDemand = nil
 				} else {
 					b.cfg.CMax = float32(power)
+					// a planned fixed demand cannot exceed what the circuit lets it charge
+					for j, dt := range req.TimeSeries.Dt {
+						if j < len(b.cfg.PDemand) {
+							b.cfg.PDemand[j] = min(b.cfg.PDemand[j], b.cfg.CMax*float32(dt)/3600)
+						}
+					}
 				}
 			}
 
@@ -276,14 +284,27 @@ func (site *Site) applyLmBatteryInputs(bat *optimizer.BatteryConfig, req *optimi
 		bat.SMin = floor
 
 		s.mu.Lock()
-		s.floorRaised = true
+		s.pending, s.pendingFloorRaised = true, true
 		s.mu.Unlock()
 	}
 	plan.floor0 = bat.SMin
 
 	s.mu.Lock()
-	s.plan = &plan
+	s.pending, s.pendingPlan = true, &plan
 	s.mu.Unlock()
+}
+
+// commitLmOptimizerInputs takes over floorRaised and plan of the request the
+// optimizer just answered, see applyLmOptimizerInputs
+func (site *Site) commitLmOptimizerInputs() {
+	s := site.lms()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.pending {
+		s.floorRaised, s.plan = s.pendingFloorRaised, s.pendingPlan
+		s.pending, s.pendingPlan = false, nil
+	}
 }
 
 // lmForecastLowest keeps the forecast from calling the battery empty when it

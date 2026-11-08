@@ -191,8 +191,8 @@ func TestLmGateOptimizerHoldWithoutPeakShaving(t *testing.T) {
 // run in the background that reads and changes the site while the test does
 func holdOptimizer(t *testing.T, site *Site) {
 	t.Helper()
-	site.optimizerMu.Lock()
-	t.Cleanup(site.optimizerMu.Unlock)
+	site.optimizer.mu.Lock()
+	t.Cleanup(site.optimizer.mu.Unlock)
 }
 
 func automaticSite(t *testing.T, action string) *Site {

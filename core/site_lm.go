@@ -83,6 +83,13 @@ type lmState struct {
 	// site_optimizer_reserve_pass.go
 	plan *lmPlan
 
+	// floorRaised and plan of the request being assembled, taken over by
+	// commitLmOptimizerInputs once the optimizer answered: a request that fails
+	// (e.g. evcc rejects the demand) keeps those of the plan still applied
+	pending            bool
+	pendingFloorRaised bool
+	pendingPlan        *lmPlan
+
 	// battery identification, see site_battery_ident.go
 	identUse bool
 	ident    []batteryIdentResult

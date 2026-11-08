@@ -32,9 +32,9 @@ var forkHooks = []struct {
 	{"core/site_circuits.go", "Site.updateCircuits", []string{"circuitLoads"}},
 	{"core/site_load_predictor.go", "Site.homeProfile", []string{"homeProfileCustom"}},
 	{"core/site_gridpeak.go", "Site.updateGridPeak", []string{"gridPeakCollector"}},
-	{"core/site_optimizer.go", "Site.optimizerRequest", []string{"optimizerGridTariff", "applyLmOptimizerInputs"}},
+	{"core/site_optimizer_request.go", "Site.optimizerRequest", []string{"optimizerGridTariff", "applyLmOptimizerInputs"}},
 	{"core/site_optimizer.go", "Site.optimizerUpdate", []string{"lmOptimizerResult"}},
-	{"core/site_optimizer.go", "Site.addBatteryForecastTotals", []string{"lmForecastLowest"}},
+	{"core/site_optimizer_result.go", "Site.addBatteryForecastTotals", []string{"lmForecastLowest"}},
 	{"core/loadpoint.go", "Loadpoint.restoreSettings", []string{"restorePhaseSwitch"}},
 	{"core/loadpoint.go", "Loadpoint.pvEnablePhases", []string{"enablePhaseCurrents", "PeekCurrent"}},
 	{"core/loadpoint.go", "Loadpoint.Prepare", []string{"publishPhaseSwitch", "publishStages"}},
@@ -351,7 +351,7 @@ func mentions(n ast.Node, name string) bool {
 // them into the request. No test runs optimizerRequest (it needs tariffs, home
 // profile, loadpoints and meters), so the order is checked in the syntax tree.
 func TestForkOptimizerRequestOrder(t *testing.T) {
-	body := funcBody(t, "core/site_optimizer.go", "Site.optimizerRequest")
+	body := funcBody(t, "core/site_optimizer_request.go", "Site.optimizerRequest")
 
 	build, limit, hook, move := -1, -1, -1, -1
 	for i, st := range body.List {
