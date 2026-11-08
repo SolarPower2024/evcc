@@ -89,7 +89,6 @@ var forkUiHooks = []struct {
 	{"assets/js/views/Config.vue", []string{"<PeakShavingConfig", "<LmConfigModals", "feedInEegTariff"}},
 	{"assets/js/views/Battery.vue", []string{"<!-- custom: soc grid charging and peak shaving", "<BatterySocGridChargeCard", "socCardShown", "chargeSupported", "<BatteryGridChargeOnceCard", "<BatteryPeakShavingCard", "<BatteryProfileCard", "priceCardVisible("}},
 	{"assets/js/components/BottomTabs/MoreMenu.vue", []string{"<LmMoreMenuItems"}},
-	{"assets/js/components/BottomTabs/MoreItem.vue", []string{"lmOffBadge()"}},
 	{"assets/js/components/Config/CircuitModal.vue", []string{"<CircuitPeakHint", "CircuitPeakHint,"}},
 	{"assets/js/components/Config/LoadpointModal.vue", []string{"<PhaseSwitchFields", "emptyUnsetPhaseSwitch(this.values)", "config.loadpoint.minCurrent${showCurrent1p ? '3p' : ''}Label", "chargerIsStages"}},
 	{"assets/js/components/Energyflow/Energyflow.vue", []string{"batteryChargeLabelKey(this.batteryChargeHold"}},

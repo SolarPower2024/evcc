@@ -4,6 +4,7 @@ import de from "../../../../i18n/de.json";
 import en from "../../../../i18n/en.json";
 import {
   type Fmt,
+  actionEvents,
   detailText,
   eventText,
   heroText,
@@ -32,6 +33,7 @@ const tDe = translate(de);
 // plain spaces, so the expected texts read as they are; makeFmt is tested below
 const f: Fmt = {
   w: (w) => `${(w / 1000).toFixed(1)} kW`,
+  bare: (w) => (w / 1000).toFixed(1),
   pct: (p) => `${Math.round(p)} %`,
 };
 const kw = f;
@@ -229,11 +231,13 @@ describe("notes", () => {
 describe("number and unit stay together", () => {
   const fmt = makeFmt(
     (w) => `${(w / 1000).toFixed(1).replace(".", ",")} kW`,
-    (p) => `${Math.round(p)} %`
+    (p) => `${Math.round(p)} %`,
+    (w) => (w / 1000).toFixed(1).replace(".", ",")
   );
 
   test("makeFmt", () => {
     expect(fmt.w(4000)).toBe("4,0 kW");
+    expect(fmt.bare(4000)).toBe("4,0");
     expect(fmt.pct(25)).toBe("25 %");
     expect(fmt.pct(25)).not.toContain(" ");
   });
@@ -246,8 +250,8 @@ describe("number and unit stay together", () => {
       limitsText(st, tDe, fmt),
       ...miniValues(st, tDe, fmt).map((m) => m.value),
       ...notes(st, tDe, fmt).map((n) => n.text),
-      eventText({ at: "", type: "reserveBelow", a: 24, b: 25 }, tDe, fmt) ?? "",
-      eventText({ at: "", type: "peakEnd", a: 1600, b: 180 }, tDe, fmt) ?? "",
+      eventText({ at: "", type: "reserveBelow", a: 24, b: 25 }, tDe, fmt),
+      eventText({ at: "", type: "peakEnd", a: 1600, b: 180 }, tDe, fmt),
     ].join(" | ");
 
     expect(all).not.toMatch(/\d (%|kW)/);
@@ -322,15 +326,86 @@ describe("events", () => {
     expect(eventText(ev("peakEnd", 1000, 20), tEn, kw)).toContain("1 min");
   });
 
-  test("the older types are left to their own texts", () => {
-    expect(eventText(ev("shed"), tEn, kw)).toBeUndefined();
-    expect(eventText(ev("peak", 5600, 4000), tEn, kw)).toBeUndefined();
+  test("the load management types have their texts", () => {
+    const cases: [LmEvent, string, string][] = [
+      [
+        ev("shed", 0, 9000, "Garage"),
+        "Garage shed · circuit at 9.0 kW",
+        "Garage abgeworfen · Stromkreis bei 9.0 kW",
+      ],
+      [
+        ev("shed", 10, 9000, "Garage"),
+        "Garage shed · circuit at 9.0 kW, held off 10 min",
+        "Garage abgeworfen · Stromkreis bei 9.0 kW, 10 min gesperrt",
+      ],
+      [
+        ev("throttled", 11000, 6000, "Garage"),
+        "Garage throttled 11.0 → 6.0 kW",
+        "Garage gedrosselt 11.0 → 6.0 kW",
+      ],
+      [
+        ev("peak", 5600, 4000),
+        "Peak covered · demand 5.6 kW, limit 4.0 kW",
+        "Peak abgefangen · Bedarf 5.6 kW, Grenze 4.0 kW",
+      ],
+    ];
+
+    for (const [e, textEn, textDe] of cases) {
+      expect(eventText(e, tEn, kw), e.type).toBe(textEn);
+      expect(eventText(e, tDe, kw), e.type).toBe(textDe);
+    }
   });
 
-  test("the dialog shows the peak related ones only", () => {
-    const list = [ev("shed"), ev("peak"), ev("throttled"), ev("meter"), ev("gridChargePaused")];
-    expect(peakEvents(list).map((e) => e.type)).toEqual(["peak", "meter", "gridChargePaused"]);
+  test("every type has a text, not the type name", () => {
+    const types: LmEvent["type"][] = [
+      "shed",
+      "throttled",
+      "gridChargePaused",
+      "gridChargeDenied",
+      "peak",
+      "notFollowing",
+      "peakEnd",
+      "reserveBelow",
+      "reserveAbove",
+      "batteryMode",
+      "peakSwitch",
+      "meter",
+      "storage",
+    ];
+    for (const type of types) {
+      for (const t of [tEn, tDe]) {
+        const text = eventText(ev(type, 1, 2, "x"), t, kw);
+        expect(text, type).not.toBe(type);
+        expect(text, type).not.toMatch(/^\?|\{\w+\}/);
+      }
+    }
+  });
+
+  test("peak shaving and load management events are told apart", () => {
+    const list = [
+      ev("shed"),
+      ev("peak"),
+      ev("throttled"),
+      ev("meter"),
+      ev("gridChargePaused"),
+      ev("gridChargeDenied"),
+      ev("notFollowing"),
+      ev("storage"),
+    ];
+    expect(peakEvents(list).map((e) => e.type)).toEqual([
+      "peak",
+      "meter",
+      "gridChargePaused",
+      "storage",
+    ]);
+    expect(actionEvents(list).map((e) => e.type)).toEqual([
+      "shed",
+      "throttled",
+      "gridChargeDenied",
+      "notFollowing",
+    ]);
     expect(peakEvents(undefined)).toEqual([]);
+    expect(actionEvents(undefined)).toEqual([]);
   });
 });
 

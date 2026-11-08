@@ -1,16 +1,16 @@
 <template>
 	<GenericModal
 		id="peakStatusModal"
-		:title="$t('battery.peakStatus.title')"
+		:title="$t(titleKey)"
 		size="md"
 		data-testid="peak-status-modal"
 		@open="onOpen"
 		@closed="onClosed"
 	>
-		<div v-if="visible && status" class="d-flex flex-column gap-3">
-			<PeakStatusHero :status="status" />
+		<div v-if="visible" class="d-flex flex-column gap-3">
+			<PeakStatusHero v-if="status" :status="status" />
 
-			<section>
+			<section v-if="status">
 				<h6 class="section-title">{{ $t("battery.peakStatus.now") }}</h6>
 				<p class="mb-2" data-testid="peak-status-detail">{{ detail }}</p>
 				<div class="d-flex flex-wrap gap-2" data-testid="peak-status-notes">
@@ -24,7 +24,7 @@
 				</div>
 			</section>
 
-			<section v-if="windowData" data-testid="peak-status-window">
+			<section v-if="status && windowData" data-testid="peak-status-window">
 				<h6 class="section-title">
 					{{ $t("battery.peakStatus.window.title") }}
 					{{ windowRange }} ·
@@ -52,7 +52,7 @@
 				</div>
 			</section>
 
-			<section class="tiles" data-testid="peak-status-month">
+			<section v-if="status" class="tiles" data-testid="peak-status-month">
 				<div class="tile" data-testid="peak-status-month-peak">
 					<div class="section-title">{{ $t("battery.peakStatus.month.title") }}</div>
 					<div class="tile-value">{{ monthPeak.value }}</div>
@@ -65,30 +65,28 @@
 				</div>
 			</section>
 
-			<section data-testid="peak-status-events">
-				<h6 class="section-title">{{ $t("battery.peakStatus.recent") }}</h6>
-				<p v-if="!events.length" class="text-muted mb-0">
-					{{ $t("battery.peakStatus.noEvents") }}
-				</p>
-				<div
-					v-for="(e, i) in shownEvents"
-					:key="i"
-					class="event"
-					data-testid="peak-status-event"
-				>
-					<span class="evcc-gray text-nowrap">{{ eventTime(e) }}</span>
-					<span class="event-text">{{ eventLine(e) }}</span>
-				</div>
-				<button
-					v-if="events.length > FEW"
-					type="button"
-					class="btn btn-link btn-sm p-0 mt-1"
-					data-testid="peak-status-more"
-					@click="all = !all"
-				>
-					{{ $t(all ? "battery.peakStatus.less" : "battery.peakStatus.more") }}
-				</button>
-			</section>
+			<PeakStatusLoads v-if="showLoads" />
+
+			<PeakStatusEventList
+				v-if="actions.length"
+				:events="actions"
+				:title="$t('battery.peakStatus.actions')"
+				:now="now"
+				section="peak-status-actions"
+				row="peak-status-action"
+				more="peak-status-actions-more"
+			/>
+
+			<PeakStatusEventList
+				v-if="status"
+				:events="events"
+				:title="$t('battery.peakStatus.recent')"
+				:empty="$t('battery.peakStatus.noEvents')"
+				:now="now"
+				section="peak-status-events"
+				row="peak-status-event"
+				more="peak-status-more"
+			/>
 		</div>
 	</GenericModal>
 </template>
@@ -101,25 +99,27 @@ import formatter from "@/mixins/formatter";
 import type { LmEvent, PeakStatus } from "@/types/evcc-lm";
 import GenericModal from "../Helper/GenericModal.vue";
 import PeakStatusHero from "./PeakStatusHero.vue";
-import { detailText, eventText, makeFmt, notes, peakEvents, windowInfo } from "./peakStatus";
+import PeakStatusLoads from "./PeakStatusLoads.vue";
+import PeakStatusEventList from "./PeakStatusEventList.vue";
+import { dialogTitleKey, loadsShown } from "./peakDialog";
+import { actionEvents, detailText, makeFmt, notes, peakEvents, windowInfo } from "./peakStatus";
 
-const FEW = 5;
 const TICK = 15_000;
 
 // Custom extension: what peak shaving does with the battery and why, see
-// core/site_peak_status.go. Opened from the "more" menu (MoreMenuItems.vue).
+// core/site_peak_status.go, and the loads and events of the load management.
+// Without peak shaving only the loads and events show. Opened from the "more"
+// menu (MoreMenuItems.vue).
 export default defineComponent({
 	name: "PeakStatusModal",
-	components: { GenericModal, PeakStatusHero },
+	components: { GenericModal, PeakStatusHero, PeakStatusLoads, PeakStatusEventList },
 	mixins: [formatter],
 	data() {
 		return {
 			visible: false,
-			all: false,
 			now: Date.now(),
 			fetched: null as LmEvent[] | null,
 			timer: undefined as ReturnType<typeof setInterval> | undefined,
-			FEW,
 		};
 	},
 	computed: {
@@ -127,10 +127,17 @@ export default defineComponent({
 			const st = store.state.peakStatus;
 			return st?.state ? st : undefined;
 		},
+		titleKey(): string {
+			return dialogTitleKey(store.state);
+		},
+		showLoads(): boolean {
+			return loadsShown(store.state);
+		},
 		fmt() {
 			return makeFmt(
 				(watt: number) => this.fmtW(watt),
-				(percent: number) => this.fmtPercentage(percent)
+				(percent: number) => this.fmtPercentage(percent),
+				(watt: number) => this.fmtW(watt, this.POWER_UNIT.KW, false)
 			);
 		},
 		detail(): string {
@@ -155,17 +162,31 @@ export default defineComponent({
 				sub: this.fmtWeekdayDayTime(new Date(m.peakAt)),
 			};
 		},
-		events(): LmEvent[] {
-			// the whole list from the api, until it is there what the status publishes
-			return this.fetched ?? peakEvents(store.state.lmStatus?.events);
+		// the newest event the status reports, changes with every new line
+		newestEvent(): string {
+			const e = store.state.lmStatus?.events?.[0];
+			return e ? `${e.at}${e.type}` : "";
 		},
-		shownEvents(): LmEvent[] {
-			return this.all ? this.events : this.events.slice(0, FEW);
+		// the whole list from the api, until it is there what the status publishes
+		allEvents(): LmEvent[] {
+			return this.fetched ?? store.state.lmStatus?.events ?? [];
+		},
+		// peak shaving: "Zuletzt"
+		events(): LmEvent[] {
+			return peakEvents(this.allEvents);
+		},
+		// load management: "Letzte Eingriffe"
+		actions(): LmEvent[] {
+			return actionEvents(this.allEvents);
 		},
 	},
 	watch: {
 		// a change of the state: the list has a new line
 		"status.state"() {
+			if (this.visible) this.load();
+		},
+		// a new event while the dialog is open (also one of the load management)
+		newestEvent() {
 			if (this.visible) this.load();
 		},
 	},
@@ -175,26 +196,6 @@ export default defineComponent({
 	methods: {
 		tr(key: string, params?: Record<string, unknown>): string {
 			return this.$t(key, params as Record<string, string>);
-		},
-		eventTime(e: LmEvent): string {
-			const at = new Date(e.at);
-			const today = new Date(this.now).toDateString() === at.toDateString();
-			return today ? this.fmtHourMinute(at) : this.fmtWeekdayDayTime(at);
-		},
-		eventLine(e: LmEvent): string {
-			return eventText(e, this.tr, this.fmt) ?? this.lmEventText(e);
-		},
-		// the older types: the same texts as the load management overview
-		lmEventText(e: LmEvent): string {
-			const k = (name: string, p: Record<string, string>) =>
-				this.$t(`lmoverview.event.${name}`, p);
-			if (e.type === "peak") {
-				return k("peak", { demand: this.fmt.w(e.a), limit: this.fmt.w(e.b) });
-			}
-			if (e.type === "gridChargePaused") {
-				return k("gridChargePaused", { demand: this.fmt.w(e.a), limit: this.fmt.w(e.b) });
-			}
-			return e.type;
 		},
 		async load() {
 			try {
@@ -206,7 +207,6 @@ export default defineComponent({
 		},
 		onOpen() {
 			this.visible = true;
-			this.all = false;
 			this.now = Date.now();
 			this.timer = setInterval(() => (this.now = Date.now()), TICK);
 			this.load();
@@ -292,17 +292,5 @@ export default defineComponent({
 	height: 14px;
 	margin-left: -1px;
 	background: var(--evcc-default-text);
-}
-.event {
-	display: grid;
-	grid-template-columns: 5rem minmax(0, 1fr);
-	column-gap: 0.75rem;
-	font-size: 0.9rem;
-	line-height: 1.6;
-	padding: 0.1rem 0;
-}
-.event-text {
-	min-width: 0;
-	overflow-wrap: anywhere;
 }
 </style>

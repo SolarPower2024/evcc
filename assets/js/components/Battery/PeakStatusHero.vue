@@ -86,7 +86,8 @@ export default defineComponent({
 		fmt() {
 			return makeFmt(
 				(watt: number) => this.fmtW(watt),
-				(percent: number) => this.fmtPercentage(percent)
+				(percent: number) => this.fmtPercentage(percent),
+				(watt: number) => this.fmtW(watt, this.POWER_UNIT.KW, false)
 			);
 		},
 		title(): string {

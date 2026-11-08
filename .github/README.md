@@ -14,8 +14,8 @@ The original evcc description is in [README.md](../README.md).
 - Heater in stages
 - Shed guard
 - Loads not following their limit
-- Load management circuit and switch
-- Load management overview
+- Load management circuit
+- Loads and events in the peak shaving dialog
 - Phase switching: 1p currents and delays
 - Battery grid charging by soc and one-time
 - Peak shaving, also for a Marstek battery behind Omnibattery and a BYD battery on a Fronius inverter (integration evcc Peak Fronius), set in one area of the peak shaving dialog for both

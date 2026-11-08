@@ -17,7 +17,7 @@ import (
 )
 
 // TestLmEventsSurviveRestart: the event log is stored every 5 minutes and when
-// evcc stops, and comes back after a restart; PeakEvents leaves the others out
+// evcc stops, and comes back after a restart; PeakEvents gives all of them
 func TestLmEventsSurviveRestart(t *testing.T) {
 	keepSettings(t)
 
@@ -59,11 +59,9 @@ func TestLmEventsSurviveRestart(t *testing.T) {
 		assert.Equal(t, lm.EventStorage, events[0].Type, "newest first")
 	}
 
-	peak := again.PeakEvents()
-	assert.Len(t, peak, 3, "the shed is not a peak event")
-	for _, e := range peak {
-		assert.NotEqual(t, lm.EventShed, e.Type)
-	}
+	all := again.PeakEvents()
+	assert.Len(t, all, 4, "the shed is part of the dialog's list")
+	assert.Equal(t, lm.EventStorage, all[0].Type, "newest first")
 }
 
 // TestLmEventsStopPersists: stopping writes the log to the database itself, the
