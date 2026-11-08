@@ -1,0 +1,62 @@
+package core
+
+import (
+	"testing"
+	"time"
+
+	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/core/lm"
+	"github.com/evcc-io/evcc/db/settings"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestLmEventsSurviveRestart: the event log is stored every 5 minutes and when
+// evcc stops, and comes back after a restart; PeakEvents leaves the others out
+func TestLmEventsSurviveRestart(t *testing.T) {
+	keepSettings(t)
+
+	site, clk := peakWindowSite(t, 0)
+
+	site.lmm().AddEvent(lm.Event{At: clk.Now(), Type: lm.EventShed, Load: "wallbox"})
+	site.lmm().AddEvent(lm.Event{At: clk.Now(), Type: lm.EventPeakEnd, A: 1600, B: 180})
+
+	// the first save is due at once, the next after 5 minutes
+	site.saveLmEvents(false)
+	var saved []lm.Event
+	require.NoError(t, settings.Json(keys.LmEvents, &saved))
+	assert.Len(t, saved, 2)
+
+	clk.Add(time.Minute)
+	site.lmm().AddEvent(lm.Event{At: clk.Now(), Type: lm.EventMeter, A: 1})
+	site.saveLmEvents(false)
+	require.NoError(t, settings.Json(keys.LmEvents, &saved))
+	assert.Len(t, saved, 2, "not yet: stored every 5 minutes")
+
+	clk.Add(5 * time.Minute)
+	site.saveLmEvents(false)
+	require.NoError(t, settings.Json(keys.LmEvents, &saved))
+	assert.Len(t, saved, 3)
+
+	// stopping stores at once
+	site.lmm().AddEvent(lm.Event{At: clk.Now(), Type: lm.EventStorage, A: 1})
+	site.saveLmEvents(true)
+	require.NoError(t, settings.Json(keys.LmEvents, &saved))
+	assert.Len(t, saved, 4)
+
+	// the restart
+	again, _ := peakWindowSite(t, 0)
+	again.custom.peak.clock = clk
+	again.restoreLmEvents()
+
+	events := again.lmm().AllEvents(nil)
+	if assert.Len(t, events, 4) {
+		assert.Equal(t, lm.EventStorage, events[0].Type, "newest first")
+	}
+
+	peak := again.PeakEvents()
+	assert.Len(t, peak, 3, "the shed is not a peak event")
+	for _, e := range peak {
+		assert.NotEqual(t, lm.EventShed, e.Type)
+	}
+}

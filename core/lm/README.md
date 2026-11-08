@@ -301,6 +301,11 @@ events. Published as `lmStatus` at the end of every cycle
 (`core/site_lm_status.go`, records in `core/lm/status.go`); it never feeds back
 into decisions.
 
+The event log keeps 7 days, at most 300 events, and survives a restart (setting
+`lmEvents`, stored every 5 minutes and when evcc stops, `core/site_lm_events.go`,
+`TestLmEventsSurviveRestart`, `TestEventLogKeeps`); the overview publishes the newest
+20. `GET /api/peakshaving/events` (open) answers the whole log of the peak related
+events for the peak status dialog, newest first (`TestPeakEventsRoute`), see [11](#peak-status-dialog).
 In the optimizer's automatic mode the battery and the loadpoints it controls
 carry the badge *Optimizer* (`optimizer` in the status, `TestLmStatusOptimizer`)
 and a line says that the optimizer decides and load management limits. The
@@ -1272,7 +1277,7 @@ in a running evcc) they answer 401. The ui opens the login on a 401 by itself.
 
 | List | Routes |
 |---|---|
-| `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmenabled`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakshavingreserve`, `feedinsplit` |
+| `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmenabled`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakshavingreserve`, `peakshavingevents`, `feedinsplit` |
 | `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `lmcircuit(delete)`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `importeegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
 
 ## Upstream touch points
@@ -1328,7 +1333,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
-| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go` |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go`, `core/site_lm_events.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |

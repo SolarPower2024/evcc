@@ -35,7 +35,76 @@ func TestEventLog(t *testing.T) {
 	}
 
 	ev := m.Events()
-	assert.Len(t, ev, 20, "the oldest are dropped")
+	assert.Len(t, ev, 20, "the overview shows the newest")
 	assert.Equal(t, "24", ev[0].Load, "newest first")
 	assert.Equal(t, "5", ev[19].Load)
+
+	all := m.AllEvents(nil)
+	assert.Len(t, all, 25, "the log keeps more than the overview shows")
+	assert.Equal(t, "0", all[24].Load)
+}
+
+func TestEventLogKeeps(t *testing.T) {
+	now := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+
+	t.Run("number", func(t *testing.T) {
+		m := lm.New()
+		for i := range 350 {
+			m.AddEvent(lm.Event{At: now.Add(time.Duration(i) * time.Second), Type: lm.EventPeak, Load: fmt.Sprint(i)})
+		}
+
+		all := m.AllEvents(nil)
+		assert.Len(t, all, 300, "at most 300")
+		assert.Equal(t, "349", all[0].Load)
+		assert.Equal(t, "50", all[299].Load)
+	})
+
+	t.Run("age", func(t *testing.T) {
+		m := lm.New()
+		m.AddEvent(lm.Event{At: now.Add(-8 * 24 * time.Hour), Type: lm.EventPeak, Load: "old"})
+		m.AddEvent(lm.Event{At: now.Add(-6 * 24 * time.Hour), Type: lm.EventPeak, Load: "week"})
+		m.AddEvent(lm.Event{At: now, Type: lm.EventPeak, Load: "new"})
+
+		all := m.AllEvents(nil)
+		assert.Len(t, all, 2, "older than 7 days is dropped")
+		assert.Equal(t, "week", all[1].Load)
+	})
+}
+
+func TestEventFilterAndStore(t *testing.T) {
+	now := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	m := lm.New()
+
+	m.AddEvent(lm.Event{At: now, Type: lm.EventShed, Load: "wallbox"})
+	m.AddEvent(lm.Event{At: now.Add(time.Second), Type: lm.EventReserveBelow, A: 24, B: 25})
+	m.AddEvent(lm.Event{At: now.Add(2 * time.Second), Type: lm.EventPeakEnd, A: 1600, B: 180})
+
+	peak := m.AllEvents(func(e lm.Event) bool { return lm.PeakEvent(e.Type) })
+	if assert.Len(t, peak, 2, "the shed is not a peak event") {
+		assert.Equal(t, lm.EventPeakEnd, peak[0].Type, "newest first")
+	}
+
+	snap, changed := m.Snapshot()
+	assert.True(t, changed)
+	assert.Len(t, snap, 3)
+	assert.Equal(t, lm.EventShed, snap[0].Type, "oldest first")
+
+	_, changed = m.Snapshot()
+	assert.False(t, changed, "unchanged since the last snapshot")
+
+	// a restart: the stored log comes back, what was logged since stays on top
+	m2 := lm.New()
+	m2.AddEvent(lm.Event{At: now.Add(time.Minute), Type: lm.EventMeter, A: 1})
+	m2.Restore(snap, now.Add(time.Minute))
+
+	all := m2.AllEvents(nil)
+	if assert.Len(t, all, 4) {
+		assert.Equal(t, lm.EventMeter, all[0].Type)
+		assert.Equal(t, lm.EventShed, all[3].Type)
+	}
+
+	// stored events older than the age drop on restore
+	m3 := lm.New()
+	m3.Restore(snap, now.Add(8*24*time.Hour))
+	assert.Empty(t, m3.AllEvents(nil))
 }

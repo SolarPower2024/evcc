@@ -75,6 +75,9 @@ const (
 	// load management overview: every load's state and the event log, see core/site_lm_status.go
 	LmStatus = "lmStatus"
 
+	// load management event log, stored as json, see core/site_lm_events.go
+	LmEvents = "lmEvents"
+
 	// battery profiles, see core/site_lm_profiles.go
 	LmProfiles         = "lmProfiles"
 	LmProfileActive    = "lmProfileActive"
