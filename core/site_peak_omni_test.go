@@ -526,20 +526,6 @@ func TestOmniProtectionThreshold(t *testing.T) {
 	}
 }
 
-// TestOmniProtectionThresholdIgnoresWriteTolerance verifies that the write
-// tolerance, a power in W, does not hold back a changed reserve in %
-func TestOmniProtectionThresholdIgnoresWriteTolerance(t *testing.T) {
-	sc, ha := newOmni(t)
-	require.NoError(t, sc.site.SetLmAdvanced("writeTolerance", 100))
-
-	sc.cycle(50, 3000, 0)
-	assert.Equal(t, "30", ha.get(haProtSoc))
-
-	require.NoError(t, sc.site.SetPeakShavingReserve(40))
-	sc.cycle(50, 3000, 0)
-	assert.Equal(t, "40", ha.get(haProtSoc))
-}
-
 // TestOmniProtectionOrder verifies that threshold and limit are written before
 // the switch, each only after the one before landed
 func TestOmniProtectionOrder(t *testing.T) {
@@ -1324,7 +1310,7 @@ func TestOmniNotAvailableKeepsHold(t *testing.T) {
 			sc, ha := newOmni(t)
 			ha.set(haDischargeNum, state)
 
-			set, err := sc.site.numberSetter(haDischargeNum, true, nil)
+			set, err := sc.site.numberSetter(haDischargeNum, true)
 			require.NoError(t, err)
 
 			assert.ErrorIs(t, set(1000), api.ErrNotAvailable)

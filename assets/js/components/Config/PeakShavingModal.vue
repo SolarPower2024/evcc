@@ -112,25 +112,6 @@
 				</FormRow>
 			</template>
 
-			<!-- custom: skip writes below this change, see numberSetter in core/site_peakshaving.go -->
-			<FormRow
-				id="peakShavingWriteTolerance"
-				:label="$t('config.peakshaving.writeToleranceLabel')"
-				:help="$t('config.peakshaving.writeToleranceHelp')"
-			>
-				<div class="input-group">
-					<input
-						id="peakShavingWriteTolerance"
-						v-model.number="tolerance"
-						type="number"
-						step="any"
-						class="form-control"
-						data-testid="peakshaving-write-tolerance"
-					/>
-					<span class="input-group-text">W</span>
-				</div>
-			</FormRow>
-
 			<FormRow
 				id="peakShavingEnergyEntity"
 				:label="$t('config.peakshaving.energyEntityLabel')"
@@ -212,8 +193,6 @@ export default {
 			initialProtSoc: "",
 			energyEntity: "",
 			initialEnergyEntity: "",
-			tolerance: 0,
-			initialTolerance: 0,
 		};
 	},
 	computed: {
@@ -252,16 +231,12 @@ export default {
 		energyEntityChanged() {
 			return this.energyEntity.trim() !== this.initialEnergyEntity;
 		},
-		toleranceChanged() {
-			return this.tolerance !== this.initialTolerance;
-		},
 		changed() {
 			return (
 				this.batteryTypeChanged ||
 				this.marstekChanged ||
 				this.protChanged ||
-				this.energyEntityChanged ||
-				this.toleranceChanged
+				this.energyEntityChanged
 			);
 		},
 		sourceText() {
@@ -294,9 +269,6 @@ export default {
 			this.initialProtSoc = protSoc;
 			this.energyEntity = energyEntity;
 			this.initialEnergyEntity = energyEntity;
-			// stored with the advanced settings, see core/site_lm_advanced.go
-			this.tolerance = store?.state?.lmAdvanced?.writeTolerance ?? 0;
-			this.initialTolerance = this.tolerance;
 		},
 		open() {
 			this.reset();
@@ -310,14 +282,6 @@ export default {
 			}
 		},
 		async save() {
-			if (
-				this.toleranceChanged &&
-				(!Number.isInteger(this.tolerance) || this.tolerance < 0 || this.tolerance > 1000)
-			) {
-				this.error = this.$t("config.peakshaving.writeToleranceInvalid");
-				return;
-			}
-
 			// peak shaving cannot run without the three entities of the controller; the
 			// manual switch and mode (Marstek) are for grid charging
 			if (
@@ -379,10 +343,6 @@ export default {
 					} else {
 						await api.delete("peakshavingenergyentity");
 					}
-				}
-
-				if (this.toleranceChanged) {
-					await api.post(`lmadvanced/writeTolerance/${this.tolerance}`);
 				}
 
 				this.$emit("changed");

@@ -227,7 +227,7 @@ func TestRestoreLiveValuesUnchanged(t *testing.T) {
 	settings.SetString(keys.PeakShavingChargePower, "1800")
 	settings.SetString(keys.BatterySocGridChargeStart, "15")
 	settings.SetString(keys.BatterySocGridChargeStop, "20")
-	settings.SetString(keys.LmAdvanced, `{"freeValue":1800,"phases":1,"writeTolerance":50}`)
+	settings.SetString(keys.LmAdvanced, `{"freeValue":1800,"phases":1}`)
 	settings.SetString(keys.BatteryGridChargeOnce, `{"target":0}`)
 
 	site.restoreLmSettings()
@@ -241,7 +241,6 @@ func TestRestoreLiveValuesUnchanged(t *testing.T) {
 	assert.Equal(t, 20.0, site.GetBatterySocGridChargeStop())
 	assert.Equal(t, peak.DefaultFreeValue, site.peakFreeValue(), "the free value is no setting any more, the start drops it")
 	assert.Equal(t, 1, site.lmBatteryPhases())
-	assert.Equal(t, 50.0, site.peakWriteTolerance())
 
 	assert.Empty(t, buf.String(), "nothing warned or logged")
 	for _, key := range []string{keys.PeakShavingReserve, keys.LmAdvanced, keys.BatteryGridChargeOnce} {

@@ -279,7 +279,7 @@ func (site *Site) rebuildChargeSetter() error {
 
 	if entity != "" {
 		var err error
-		if set, err = site.numberSetter(entity, false, site.peakWriteTolerance); err != nil { // a charge power has to stay within the limits
+		if set, err = site.numberSetter(entity, false); err != nil { // a charge power has to stay within the limits
 			return err
 		}
 	}
@@ -352,14 +352,12 @@ func (site *Site) haConnection() (*homeassistant.Connection, error) {
 // value is fitted to the entity's min, max and step first, see peak.Range.Fit;
 // up rounds to the next step above. These are read on every write, as an
 // integration may only learn them from the device after it started. A value the
-// entity already holds, within the tolerance, is not written again, see
-// peak.Range.Unchanged: a device may store every write. As the comparison is
-// against the entity, a value changed by hand is still corrected. tolerance
-// returns the smallest change written; nil for an entity that is not a power, the
-// write tolerance is in W. An entity that cannot be read is not written: its
+// entity already holds is not written again, see peak.Range.Unchanged: a device
+// may store every write. As the comparison is against the entity, a value changed
+// by hand is still corrected. An entity that cannot be read is not written: its
 // range is unknown, and a write to an entity Home Assistant has not loaded (yet)
 // is answered with success and does nothing.
-func (site *Site) numberSetter(entity string, up bool, tolerance func() float64) (func(float64) error, error) {
+func (site *Site) numberSetter(entity string, up bool) (func(float64) error, error) {
 	conn, err := site.haConnection()
 	if err != nil {
 		return nil, err
@@ -371,12 +369,7 @@ func (site *Site) numberSetter(entity string, up bool, tolerance func() float64)
 			return fmt.Errorf("read %s: %w", entity, err)
 		}
 
-		var tol float64
-		if tolerance != nil {
-			tol = tolerance()
-		}
-
-		val, write := numberWrite(r, current, val, up, tol)
+		val, write := numberWrite(r, current, val, up)
 		if !write {
 			return nil
 		}
@@ -387,21 +380,13 @@ func (site *Site) numberSetter(entity string, up bool, tolerance func() float64)
 
 // numberWrite returns the value fitted to the entity and whether it needs writing
 // given the entity's current state
-func numberWrite(r peak.Range, current string, val float64, up bool, tolerance float64) (float64, bool) {
+func numberWrite(r peak.Range, current string, val float64, up bool) (float64, bool) {
 	val = r.Fit(val, up)
 
 	// a state that is no number has no current value and gets the write
 	v, err := strconv.ParseFloat(current, 64)
 
-	return val, err != nil || !r.Unchanged(v, val, tolerance)
-}
-
-// peakWriteTolerance is the smallest change written to a peak shaving entity
-func (site *Site) peakWriteTolerance() float64 {
-	if v := site.advanced().WriteTolerance; v != nil {
-		return *v
-	}
-	return 0
+	return val, err != nil || !r.Unchanged(v, val, 0)
 }
 
 // notAvailable reports whether the state is that of an entity without a value

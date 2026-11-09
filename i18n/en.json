@@ -1298,10 +1298,7 @@
         "power": "grid power"
       },
       "sourceLabel": "15 minute average metered with",
-      "title": "Peak shaving",
-      "writeToleranceHelp": "Smaller changes of the grid charge power are not written to the entity, which spares the device. 0 = every change, stop and maximum always.",
-      "writeToleranceInvalid": "The tolerance must be between 0 and 1000 W, in whole watts.",
-      "writeToleranceLabel": "Write tolerance"
+      "title": "Peak shaving"
     },
     "pv": {
       "titleAdd": "Add Solar Meter",

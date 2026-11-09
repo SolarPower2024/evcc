@@ -21,7 +21,6 @@ func TestLmAdvancedSettings(t *testing.T) {
 	assert.Equal(t, lm.DefaultTimeout, site.lmTimeout())
 	assert.Equal(t, lm.DefaultPhases, site.lmBatteryPhases())
 	assert.Equal(t, 12*time.Minute, site.peakFreeze())
-	assert.Equal(t, 0.0, site.peakWriteTolerance())
 
 	// set in the ui
 	require.NoError(t, site.SetLmAdvanced("hysteresis", 0)) // accepted, without effect
@@ -30,7 +29,6 @@ func TestLmAdvancedSettings(t *testing.T) {
 	require.NoError(t, site.SetLmAdvanced("phases", 1))
 	require.NoError(t, site.SetLmAdvanced("peakFreeze", 10))
 	require.NoError(t, site.SetLmAdvanced("peakCap", 1.5)) // accepted, without effect
-	require.NoError(t, site.SetLmAdvanced("writeTolerance", 50))
 
 	assert.Nil(t, site.advanced().Hysteresis, "no setting any more")
 	assert.Equal(t, peak.DefaultHysteresis, site.peakHysteresis(), "the band of the integration")
@@ -39,7 +37,6 @@ func TestLmAdvancedSettings(t *testing.T) {
 	assert.Equal(t, 1, site.lmBatteryPhases())
 	assert.Equal(t, 10*time.Minute, site.peakFreeze())
 	assert.Nil(t, site.advanced().PeakCap, "fixed at the default")
-	assert.Equal(t, 50.0, site.peakWriteTolerance())
 
 	// the free value is no setting any more: accepted, without effect
 	require.NoError(t, site.SetLmAdvanced("freeValue", 12000))
@@ -62,8 +59,7 @@ func TestLmAdvancedSettings(t *testing.T) {
 		{"peakFreeze", 12.5},
 		{"peakCap", 0.9},
 		{"peakCap", 11},
-		{"writeTolerance", 1001},
-		{"writeTolerance", 2.5},
+		{"writeTolerance", 50},
 		{"circuitFromPeak", 2},
 		{"circuitFromPeak", 0.5},
 		{"unknown", 1},

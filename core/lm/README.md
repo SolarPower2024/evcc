@@ -420,8 +420,7 @@ output; using the grid alone oscillates (`TestPeakSetpointIsStable`). The charge
 power of grid charging is a number entity (`number` or `input_number`) as before and
 is fitted to the entity's `min`, `max` and `step` on every write and rounded
 down, so it stays within the limits (`TestRangeFit`). A value the entity already
-holds, within the write tolerance (0 W = every change; min and max always land),
-is not written again, as a device may store each write (`TestNumberWrite`). A
+holds is not written again, as a device may store each write (`TestNumberWrite`). A
 charge power entity removed or replaced gets 0 W
 (`TestPeakEntityRemovedHandsBack`). A fixed 2 % hysteresis keeps evcc's state of the
 reserve from flapping across it (BYD only, the band of the integration; the
@@ -634,9 +633,7 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
   (`TestOmniWindowEnded`).
 - **Soc threshold:** the reserve (100 % while the optimizer's automatic mode
   holds the battery, see 16), at least 20 % (the lowest value of the entity),
-  rounded up to the step (`TestOmniProtectionThreshold`), every change written:
-  the write tolerance is in W and does not apply
-  (`TestOmniProtectionThresholdIgnoresWriteTolerance`). The soc selects offer
+  rounded up to the step (`TestOmniProtectionThreshold`), every change written. The soc selects offer
   95 to 20 % in 5 % steps for this type; a lower reserve from a profile or the
   api counts as 20 % everywhere, for evcc's state, the optimizer, Omnibattery and
   the battery page and api, which show 20 %; the value set stays stored for BYD,
@@ -1133,7 +1130,6 @@ values are not stored, so a changed default applies.
 | --- | --- | --- | --- |
 | `hysteresis` | no longer used (fixed 2 % like the integration): still accepted, without effect, and dropped at start | – | 0-20 |
 | `freeValue` | no longer used (the free value of the old BYD way): still accepted, without effect, and dropped at start | – | 1-100000 |
-| `writeTolerance` | smallest change written to the grid charge power entity, set in the *Peak Shaving* dialog | 0 W | 0-1000 |
 | `holdOff` | wait after battery grid charging was stopped | 5 min | 1-60 |
 | `timeout` | expiry of unserved demand | 10 min | 1-60 |
 | `phases` | battery phases for current accounting, set under *Batterie → Stromkreis* (same key) | not set, accounting uses 3; required with a current limit, see [2](#2-battery-in-load-management) | 1-3 |

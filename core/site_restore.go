@@ -152,7 +152,6 @@ func dropInvalidLmAdvanced(log *util.Logger, adv *lmAdvanced) bool {
 	fields := map[string]**float64{
 		"hysteresis": &adv.Hysteresis, "freeValue": &adv.FreeValue, "holdOff": &adv.HoldOff,
 		"timeout": &adv.Timeout, "phases": &adv.Phases, "peakFreeze": &adv.PeakFreeze,
-		"writeTolerance": &adv.WriteTolerance,
 		"gridChargeWindow": &adv.GridChargeWindow,
 		"homeWeekday": &adv.HomeWeekday, "homeForecast": &adv.HomeForecast,
 	}

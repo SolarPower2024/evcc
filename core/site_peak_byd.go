@@ -87,7 +87,7 @@ func (site *Site) migratePeakEntity() {
 		if entity != "" {
 			free := site.peakFreeValue()
 
-			set, err := site.numberSetter(entity, true, nil)
+			set, err := site.numberSetter(entity, true)
 			if err == nil {
 				err = set(free)
 			}

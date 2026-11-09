@@ -1298,10 +1298,7 @@
         "power": "Netzleistung"
       },
       "sourceLabel": "15-Minuten-Mittel gemessen mit",
-      "title": "Peak Shaving",
-      "writeToleranceHelp": "Kleinere Änderungen der Netzladeleistung schreibt evcc nicht in die Entität, das schont das Gerät. 0 = jede Änderung, Stopp und Maximum immer.",
-      "writeToleranceInvalid": "Die Toleranz muss zwischen 0 und 1000 W liegen, in ganzen Watt.",
-      "writeToleranceLabel": "Schreib-Toleranz"
+      "title": "Peak Shaving"
     },
     "pv": {
       "titleAdd": "PV-Anlage hinzufügen",

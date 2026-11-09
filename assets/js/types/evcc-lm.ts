@@ -35,7 +35,6 @@ export interface LmAdvanced {
   /** Minute of the quarter hour from which the peak budget no longer grows. */
   peakFreeze: number;
   /** Smallest change in W written to a peak shaving entity. */
-  writeTolerance: number;
   /** Home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load profile. */
   homeForecast?: number;
   /** Cycles after which a load ignoring its limit is no longer counted on, 0 = off. */
