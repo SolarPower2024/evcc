@@ -14,10 +14,8 @@ import (
 	"github.com/evcc-io/evcc/db/settings"
 )
 
-const (
-	peakLimitRound   = 100.0  // W, the month's peak is rounded down to it
-	defaultPeakLimit = 5000.0 // W, in use with peak shaving on and no limit stored
-)
+// peakLimitRound is what the month's peak is rounded down to, in W
+const peakLimitRound = 100.0
 
 // peakLimitFor is the battery's limit for evcc's limit and the month's peak
 func peakLimitFor(baseline, monthPeak float64) float64 {
@@ -61,43 +59,12 @@ func (site *Site) updatePeakLimit() {
 	site.Optimize() // custom: the optimizer inputs changed, see core/site_optimizer_lm.go
 }
 
-// migratePeakLimit takes the limit stored before there was one over into evcc's,
-// if that has none, and removes the old keys. Only with peak shaving on: evcc's
-// limit also throttles the loads, which a limit never in use must not start doing.
-func (site *Site) migratePeakLimit() {
-	// a failed restore step of evcc's before it must neither lose nor overwrite evcc's limit
+// restoreGridPeakBaseline restores evcc's limit when a failed restore step of evcc's
+// before it left it out: peak shaving would run without a limit until the restart
+func (site *Site) restoreGridPeakBaseline() {
 	if v, err := settings.Float(keys.GridPeakBaseline); err == nil && v > 0 && site.GetGridPeakBaseline() == 0 {
 		if err := site.SetGridPeakBaseline(v); err != nil {
 			site.log.ERROR.Printf("restore %s: %v", keys.GridPeakBaseline, err)
-		}
-	}
-
-	limit, ok := restoreFloat(site.log, keys.PeakShavingLimit, validPeakLimit)
-	if follow, err := settings.Bool(keys.PeakFollow); err == nil && follow {
-		// following the peak, the limit set by hand was the base
-		if v, found := restoreFloat(site.log, keys.PeakFollowBase, validPeakLimit); found {
-			limit, ok = v, true
-		}
-	}
-
-	if !ok {
-		limit = defaultPeakLimit
-	}
-
-	if on, err := settings.Bool(keys.PeakShaving); err == nil && on && site.GetGridPeakBaseline() == 0 {
-		site.log.INFO.Printf("peak shaving: limit %.1f kW taken over as grid import peak limit", limit/1e3)
-		if err := site.SetGridPeakBaseline(limit); err != nil {
-			site.log.ERROR.Printf("restore %s: %v", keys.PeakShavingLimit, err)
-			return
-		}
-	}
-
-	for _, key := range []string{keys.PeakShavingLimit, keys.PeakFollow, keys.PeakFollowBase, keys.PeakFollowBuffer} {
-		if _, err := settings.String(key); err != nil {
-			continue
-		}
-		if err := settings.Delete(key); err != nil {
-			site.log.ERROR.Printf("restore %s: delete: %v", key, err)
 		}
 	}
 }

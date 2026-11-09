@@ -13,9 +13,8 @@ const (
 
 	// battery peak shaving
 	PeakShaving                     = "peakShaving"
-	PeakShavingLimit                = "peakShavingLimit" // published; the stored key is removed on start, see core/site_peak_limit.go
+	PeakShavingLimit                = "peakShavingLimit" // published only, the limit is evcc's, see core/site_peak_limit.go
 	PeakShavingReserve              = "peakShavingReserve"
-	PeakShavingEntity               = "peakShavingEntity"       // removed: the discharge setpoint target of the old battery type BYD, only read to be deleted at start, see core/site_peak_byd.go
 	PeakShavingOwned                = "peakShavingOwned"        // evcc holds the battery: the manual control (marstek), not published
 	PeakShavingBatteryType          = "peakShavingBatteryType"  // byd or marstek, see core/site_peak_omni.go
 	PeakShavingManualEntity         = "peakShavingManualEntity" // Home Assistant switch of the manual control (marstek)
@@ -41,16 +40,10 @@ const (
 	PeakStatus                      = "peakStatus"                // what peak shaving does with the battery and why, see core/site_peak_status.go
 	PeakShavingChargeEntity         = "peakShavingChargeEntity"   // grid charge power target
 	PeakShavingChargeSetpoint       = "peakShavingChargeSetpoint" // grid charge power written, 0 = not charging
-	PeakFollow                      = "peakFollow"                // gone, removed on start, see core/site_peak_limit.go
-	PeakFollowBuffer                = "peakFollowBuffer"
-	PeakFollowBase                  = "peakFollowBase"
-	PeakFollowCircuit               = "peakFollowCircuit" // gone (lm3/lm4), removed on start, see core/site_lm_dropped.go
-	PeakTariff                      = "peakTariff"        // capacity tariff, see core/site_peak_tariff.go
+	PeakTariff                      = "peakTariff"                // capacity tariff, see core/site_peak_tariff.go
 
 	// load management shed priorities
 	LmPriorities = "lmPriorities"
-	// loadpoint load management priorities taken over into the loadpoint priority, see core/site_lm_priority.go
-	LmPrioritiesUnified = "lmPrioritiesUnified"
 
 	// load management shed guard: minutes a shed loadpoint stays off, and which
 	LmShedGuard     = "lmShedGuard"
@@ -64,10 +57,6 @@ const (
 
 	// uploaded load profile for the home consumption forecast, see core/site_load_manual.go
 	LmHomeProfile = "lmHomeProfile"
-
-	// gone, removed on start, see core/site_lm_dropped.go: the switch "load management off"
-	LmOff     = "lmOff"
-	LmCircuit = "lmCircuit" // gone as well: the load management (peak) circuit
 
 	// battery identification, see core/site_battery_ident.go
 	BatteryIdent    = "batteryIdent"    // published: measured capacity and efficiency

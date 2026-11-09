@@ -150,10 +150,10 @@ func restoreSocPair(log *util.Logger, start, stop float64) (float64, float64) {
 // refuse, and reports whether it did
 func dropInvalidLmAdvanced(log *util.Logger, adv *lmAdvanced) bool {
 	fields := map[string]**float64{
-		"hysteresis": &adv.Hysteresis, "freeValue": &adv.FreeValue, "holdOff": &adv.HoldOff,
+		"holdOff": &adv.HoldOff,
 		"timeout": &adv.Timeout, "phases": &adv.Phases, "peakFreeze": &adv.PeakFreeze,
 		"gridChargeWindow": &adv.GridChargeWindow,
-		"homeWeekday": &adv.HomeWeekday, "homeForecast": &adv.HomeForecast,
+		"homeForecast":     &adv.HomeForecast,
 	}
 
 	dropped := false
@@ -181,18 +181,5 @@ func (site *Site) onceTargetValid(o gridChargeOnce) bool {
 		dropInvalid(site.log, keys.BatteryGridChargeOnce, err)
 		return false
 	}
-	return true
-}
-
-// moveHomeWeekday takes a stored homeWeekday over into homeForecast once, unless
-// that is set, and clears it; reports whether adv changed
-func moveHomeWeekday(adv *lmAdvanced) bool {
-	if adv.HomeWeekday == nil {
-		return false
-	}
-	if adv.HomeForecast == nil {
-		adv.HomeForecast = adv.HomeWeekday
-	}
-	adv.HomeWeekday = nil
 	return true
 }

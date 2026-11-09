@@ -1063,7 +1063,6 @@ func TestOmniReleaseAfterRestart(t *testing.T) {
 	settings.SetString(keys.PeakShavingBatteryType, batteryTypeMarstek)
 	settings.SetString(keys.PeakShavingManualEntity, haSwitch)
 	settings.SetString(keys.PeakShavingModeEntity, haSelect)
-	settings.SetString(keys.PeakShavingEntity, haDischargeNum)
 	settings.SetString(keys.PeakShavingChargeEntity, haChargeNum)
 	settings.SetString(keys.PeakShavingProtSwitch, haProtSwitch)
 	settings.SetString(keys.PeakShavingProtLimit, haProtLimit)

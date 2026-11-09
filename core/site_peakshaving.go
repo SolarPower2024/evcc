@@ -148,7 +148,7 @@ func (site *Site) peak() *peakState {
 func (site *Site) restorePeakSettings() {
 	s := site.peak()
 
-	site.migratePeakLimit()
+	site.restoreGridPeakBaseline()
 
 	if v, ok := restoreFloat(site.log, keys.PeakShavingReserve, validPeakReserve); ok {
 		s.mu.Lock()
@@ -243,8 +243,6 @@ func (site *Site) restorePeakSettings() {
 	if err := site.rebuildEnergyGetter(); err != nil {
 		site.log.ERROR.Printf("peak shaving energy: %v", err)
 	}
-
-	site.migratePeakEntity() // the old discharge setpoint way is gone, see site_peak_byd.go
 
 	site.restorePeakMonths()
 	site.updatePeakLimit()
@@ -447,9 +445,6 @@ func (site *Site) publishChargePower() {
 
 // peakFreeValue returns the value signalling unrestricted discharge
 func (site *Site) peakFreeValue() float64 {
-	if v := site.advanced().FreeValue; v != nil {
-		return *v
-	}
 	return peak.DefaultFreeValue
 }
 

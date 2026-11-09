@@ -54,7 +54,6 @@ var forkHooks = []struct {
 	{"core/loadpoint_effective.go", "Loadpoint.EffectiveMinPower", []string{"effectiveMinCurrentFor"}},
 	{"core/loadpoint_effective.go", "Loadpoint.effectiveMaxPower", []string{"effectiveMaxCurrentFor"}},
 	{"core/loadpoint/config.go", "DynamicConfig.Apply", []string{"applyPhaseSwitch"}},
-	{"core/loadpoint/config.go", "SplitConfig", []string{"withoutDroppedKeys"}},
 	{"core/circuit/circuit.go", "Circuit.Update", []string{"overPowerLog"}},
 	{"server/http.go", "HTTPd.RegisterSiteHandlers", []string{"addCustomSiteRoutes"}},
 	{"server/http.go", "HTTPd.RegisterSystemHandler", []string{"setCustomAuth", "addCustomDbRoutes"}},

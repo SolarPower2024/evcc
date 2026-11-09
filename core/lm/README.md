@@ -53,9 +53,7 @@ of its own on the same 0-10 scale. All are set under *Lastmanagement-Details →
 Prioritäten* by drag, top = highest; a drag renumbers the loads from the bottom
 0, 1, 2 and so on, at most 10 (`assets/js/utils/lmPriorityOrder.ts`). A
 loadpoint's value is its regular priority, also editable in the loadpoint
-settings; the battery's is stored in `lmPriorities`. Older versions had a
-separate load management priority per loadpoint; those values were taken over
-into the regular priority once (`core/site_lm_priority.go`).
+settings; the battery's is stored in `lmPriorities` (`core/site_lm_priority.go`).
 
 How it works (`core/lm/lm.go`): a load whose request the circuit denies records
 the denied amount as unserved demand. Loads with a lower priority get that
@@ -262,20 +260,7 @@ them at runtime and there is no switch to lift them: a limit goes by changing
 the circuit. Fuse current limits, a HEMS limit (§14a), the grid import peak
 (evcc's *Netzbezugsspitze*) and peak shaving apply as always.
 
-Gone, each read at the start and removed (`dropLmCircuit`, `dropLmOff` in
-`core/site_lm_dropped.go`, `TestLmCircuitDropped`, `TestLmOffDropped`,
-`TestLmCircuitDroppedAtRestore`):
-
-- the switch *Lastmanagement* (route `lmenabled`, setting `lmOff`), noted in the
-  log if it was off;
-- *Erweitert → Stromkreis Lastmanagement (Peak)* (setting `lmCircuit`, routes
-  `lmcircuit` and `lmcircuitdelete`, key `peakFollowCircuit` of lm3/lm4);
-- *Erweitert → Grenze = Peak-Shaving-Grenze* (`circuitFromPeak`; the number route
-  still accepts it without effect, `TestLmAdvancedCircuitFromPeakIgnored`) and
-  the published state `lmOff`.
-
-A circuit changed at runtime kept its configured value only in memory, so it
-starts with it. To limit loads to the peak, set evcc's *Netzbezugsspitze*
+To limit loads to the peak, set evcc's *Netzbezugsspitze*
 (*Konfiguration → Externe Limits*).
 
 The circuit chosen for the battery stays (§2). One that is deleted afterwards is
@@ -564,10 +549,7 @@ battery mode.
 *Externe Begrenzung → Statische Limits → Netzbezugsspitze*; the value on the battery
 card opens this dialog, its static tab also without experimental and country), which also limits the loads. Once the month has a higher peak, shaving below it saves nothing, so the
 battery's limit (`peakShavingLimit`, no longer stored) is the higher of the two; a
-new month starts at the limit again. Without a limit there is no reserve. A limit
-stored before moves to evcc's on start if that has none and peak shaving is on
-(`peakShavingLimit`, `peakFollow`, `peakFollowBase`, `peakFollowBuffer` are removed
-from the database). See `core/site_peak_limit.go`.
+new month starts at the limit again. Without a limit there is no reserve. See `core/site_peak_limit.go`.
 
 **Statistics** (collected, no dialog at the moment; *Mehr → Peak Shaving* shows the peak status): per month the highest quarter hour with
 and without the battery and how often it covered a peak; only quarter hours
@@ -729,18 +711,8 @@ field *Entladeregler* with it). evcc is the input, as for a Marstek:
   `TestPeakShutdownDoesNotBlock`). A change that cannot release is refused with
   `errHandBack`. A crash or a kill is covered by the integration (sign of life)
   and by the stored mark of the switch at the next start.
-- **Migration:** a stored `peakShavingEntity` is released at the start: if
-  `peakShavingOwned` was set (the old meaning, the setpoint held), the free value
-  (the stored one, else 10000 W) is written to it once, a failure is logged and not
-  repeated; then the key, the mark and the stored free value are deleted. For a
-  Marstek the mark means the manual control and stays (`TestBydMigratePeakEntity`).
-  `freeValue` is still accepted by the api and in stored settings, without effect.
-  Peak shaving that was on is turned off (stored, published, warning in the log)
-  while one of the three entities of the integration is missing, as it cannot
-  run without them.
 - The reserve steps are 5 % for this type, the hysteresis a fixed 2 %, the band of the
-  integration (`bydHysteresis`; the former setting `hysteresis` is still
-  accepted and dropped at start, `TestLmAdvancedSettings`). Code in `core/site_peak_byd.go`; no new hook.
+  integration (`bydHysteresis`). Code in `core/site_peak_byd.go`; no new hook.
 
 As a Marstek does not go below 11 % soc, the soc selects of *Netzladen nach SoC*
 offer 15 % down to 11 % in 1 % steps for this type and nothing lower; the peak
@@ -1128,17 +1100,13 @@ values are not stored, so a changed default applies.
 
 | Name | Setting | Default | Range |
 | --- | --- | --- | --- |
-| `hysteresis` | no longer used (fixed 2 % like the integration): still accepted, without effect, and dropped at start | – | 0-20 |
-| `freeValue` | no longer used (the free value of the old BYD way): still accepted, without effect, and dropped at start | – | 1-100000 |
 | `holdOff` | wait after battery grid charging was stopped | 5 min | 1-60 |
 | `timeout` | expiry of unserved demand | 10 min | 1-60 |
 | `phases` | battery phases for current accounting, set under *Batterie → Stromkreis* (same key) | not set, accounting uses 3; required with a current limit, see [2](#2-battery-in-load-management) | 1-3 |
 | `peakFreeze` | minute from which the peak budget no longer grows | 12 | 1-14 |
-| `peakCap` | no longer used (the cap on the peak budget is fixed at 2 × limit, `peak.DefaultCap`): still accepted, without effect, and dropped at start | – | 1-10 |
 | `gridChargeWindow` | hours to reach the stop soc in the plan; it only moves the stop soc forward without peak shaving and only if the fork's charge time is longer than the window, otherwise it has no effect (no harm done) | 3 | 1-24 |
-| `homeForecast` | home forecast: evcc, per weekday, manual. The old name `homeWeekday` (0/1) is still accepted; a stored `homeWeekday` moves into `homeForecast` at start | 0 | 0-2 |
+| `homeForecast` | home forecast: evcc, per weekday, manual. | 0 | 0-2 |
 | `exportForecastEntity` | text, not a number: entity for the export forecast, see [16](#export-forecast) | empty = off | `sensor.<name>` |
-| `circuitFromPeak` | no longer used (the peak limit as circuit limit, see [7](#7-circuit-limits)): still accepted, without effect, and dropped at start | – | 0-1 |
 
 Also there: evcc's `profilePercentile` ([13](#13-home-consumption-forecast)).
 
@@ -1364,7 +1332,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site/api.go` | embeds `CustomAPI` |
 | `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`, evcc's rule that a charging loadpoint keeps its minimum on a full circuit asks `keepsMin` (with the priorities on top, what a higher priority waits for is still shed); three `lp.lmm().Peek*` probes; `pvEnablePhases` (the phases a disabled charger starts on) decides on `enablePhaseCurrents`, `pvMaxCurrent` then takes the limits of those phases; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` (in front of the disable branch, behind the always-charge/battery return) keeps a heater in stages on its running stages until the disable delay has passed, the phase timers take `phaseScaleDelay` (scaling down: `phaseScaleDelay1p`, the disable delay when 1p is not sustainable and evcc disables instead), `batterySupported` projects a pending 1p switch with `projectPhaseSwitch1p`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split per phase count (as in evcc PR 32505), min/max power use it |
-| `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui; `withoutDroppedKeys` in `SplitConfig` (start, save and show ignore the keys of `droppedKeys`) |
+| `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
 | `charger/switchsocket.go` | `RatedPower` config field |
 | `util/log.go` | `newLogger` writes to `logstash.Output` instead of `logstash.DefaultHandler`, which passes every line on to it and to the log file |
@@ -1396,7 +1364,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 | Area | Files |
 | --- | --- |
-| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_orphan.go`, `core/site_lm_phases.go`, `core/site_lm_advanced.go`, `core/site_restore.go`, `core/site_lm_dropped.go`, `core/circuit/circuit_custom.go` |
+| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_orphan.go`, `core/site_lm_phases.go`, `core/site_lm_advanced.go`, `core/site_restore.go`, `core/circuit/circuit_custom.go` |
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
@@ -1438,9 +1406,9 @@ task `evcc-update-release`, which opens it as a PR); the workflow opens no PR.
 5. Never press GitHub's "Sync fork" on `load-peak-features`: on conflicts it
    offers "Discard commits".
 
-A fork key that goes away is entered in `droppedKeys` (`core/loadpoint/config_custom.go`)
-and stays there: it is ignored by `SplitConfig` and removed from the stored
-loadpoint config at start (`core/site_lm_dropped.go`; yaml loadpoints are left alone).
+A setting or stored key that goes away is removed without a trace: no name
+stays accepted, nothing is cleaned up in the database at start. All instances
+run the current version; a stored field nobody reads is ignored.
 
 ## Tests
 

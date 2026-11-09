@@ -288,7 +288,7 @@ func TestHomeForecastSetting(t *testing.T) {
 	require.NoError(t, site.SetLmAdvanced("homeForecast", 2))
 	assert.Equal(t, homeForecastManual, site.homeForecast())
 
-	require.NoError(t, site.SetLmAdvanced("homeWeekday", 1))
+	require.NoError(t, site.SetLmAdvanced("homeForecast", 1))
 	assert.Equal(t, homeForecastWeekday, site.homeForecast())
 
 	require.Error(t, site.SetLmAdvanced("homeForecast", 3))

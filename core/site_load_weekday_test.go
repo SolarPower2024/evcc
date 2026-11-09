@@ -110,10 +110,10 @@ func TestHomeWeekdaySetting(t *testing.T) {
 	site := &Site{log: util.NewLogger("test")}
 	assert.Equal(t, homeForecastEvcc, site.homeForecast(), "off by default")
 
-	require.NoError(t, site.SetLmAdvanced("homeWeekday", 1))
+	require.NoError(t, site.SetLmAdvanced("homeForecast", 1))
 	assert.Equal(t, homeForecastWeekday, site.homeForecast())
 
-	require.Error(t, site.SetLmAdvanced("homeWeekday", 2))
-	require.NoError(t, site.SetLmAdvanced("homeWeekday", 0))
+	require.Error(t, site.SetLmAdvanced("homeForecast", 3))
+	require.NoError(t, site.SetLmAdvanced("homeForecast", 0))
 	assert.Equal(t, homeForecastEvcc, site.homeForecast())
 }

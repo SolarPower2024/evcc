@@ -110,7 +110,6 @@ type siteCustom struct {
 // must not leave the fork without its settings (peak shaving off, the battery held
 // by evcc never handed back)
 func (site *Site) restoreCustom() {
-	site.dropStoredLoadpointKeys()
 	site.restoreLmSettings()
 	site.restoreLmEvents()
 	site.restorePeakSettings()
@@ -184,11 +183,9 @@ func (site *Site) restoreLmSettings() {
 
 	site.lmm().SetPriorityLookup(site.lmPriorityLookup)
 	site.restoreGridChargeOnce()
-	site.unifyLmPriorities()
 
 	site.restoreLmGuard()
 	site.restoreLmAdvanced()
-	site.dropLmCircuit()
 	site.restoreBatteryIdent()
 	site.restoreBatteryGridChargeMode()
 	site.restoreLmProfiles()
