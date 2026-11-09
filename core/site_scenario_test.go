@@ -104,7 +104,7 @@ func newScenario(t *testing.T) *scenario {
 	site.valueChan = sc.values
 
 	site.lmm().SetPriorityLookup(site.lmPriorityLookup)
-	site.lmm().SetFollowCycles(site.lmFollowCycles)
+	site.lmm().SetFollowCycles(func() int { return defaultFollowCycles })
 
 	return sc
 }

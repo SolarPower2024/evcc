@@ -14,10 +14,6 @@ import (
 // is no longer counted on. Fixed: it was a setting, and 0 switched the check off.
 const defaultFollowCycles = 3
 
-func (site *Site) lmFollowCycles() int {
-	return defaultFollowCycles
-}
-
 // checkLmFollowing runs once per cycle, after every load has been limited
 func (site *Site) checkLmFollowing() {
 	for _, c := range site.lmm().CheckFollowing() {

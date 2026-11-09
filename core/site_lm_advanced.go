@@ -78,7 +78,7 @@ func (site *Site) restoreLmAdvanced() {
 	}
 
 	site.lmm().SetTimeout(site.lmTimeout())
-	site.lmm().SetFollowCycles(site.lmFollowCycles)
+	site.lmm().SetFollowCycles(func() int { return defaultFollowCycles })
 
 	site.publishLmAdvanced()
 	site.publishLmHomeProfile()

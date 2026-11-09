@@ -34,10 +34,9 @@ export interface LmAdvanced {
   phases: number;
   /** Minute of the quarter hour from which the peak budget no longer grows. */
   peakFreeze: number;
-  /** Smallest change in W written to a peak shaving entity. */
   /** Home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load profile. */
   homeForecast?: number;
-  /** Cycles after which a load ignoring its limit is no longer counted on, 0 = off. */
+  /** Hours the optimizer may take to reach the stop soc of soc-based grid charging. */
   gridChargeWindow: number;
   /** Home Assistant entity the optimizer's planned grid export is written to, empty = off. */
   exportForecastEntity?: string;
@@ -268,7 +267,6 @@ export interface LmState {
   peakShavingEnergyEntity?: string;
   /** Monthly peak statistics, newest first. */
   peakMonths?: PeakMonth[];
-  /** Follow the peak: the limit rises to the month's peak minus the buffer (W), base = limit set by hand. */
   /** Capacity tariff with each month's cost with and without the battery, a zero price is off. */
   peakTariff?: PeakTariff;
   /** Battery capacity and efficiency learned from the stored slots. */

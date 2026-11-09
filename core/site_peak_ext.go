@@ -75,7 +75,7 @@ func (site *Site) peakConfigured() bool {
 // applyOmniProtection brings the external peak control to what peak shaving
 // wants: while it runs, the soc threshold is the reserve (Marstek: at least 20 %),
 // the limit the grid power allowed in the running 15 minute window (without meter
-// values the peak limit, following the peak included) and the switch on.
+// values the peak limit) and the switch on.
 // Otherwise the switch is turned off, but only if evcc turned it on (protOwned);
 // limit and threshold stay. The battery type BYD gets the limit in every cycle, also
 // without peak shaving: it is the sign of life of evcc, see bydLimitRule. Called

@@ -137,7 +137,11 @@ turns the grid charge tile red and the dialog shows the choice empty with a hint
 accounting of a charge already running keeps three phases.
 
 After a shed, grid charging waits for the hold-off, as stopping it frees exactly
-the power that would let it start again. See `core/site_lm.go`.
+the power that would let it start again. The battery keeps its reservation
+during the hold-off, also with a hold-off longer than the reservation timeout and
+while the optimizer in control stops asking for the charge (it is told that grid
+charging is blocked): loads below keep giving way, so the next try fits
+(`TestScenarioCircuitOnOff`, `TestLmGateOptimizerChargeRefused`). See `core/site_lm.go`.
 
 evcc PR 34401 (open) adds a grid charge gate of its own on the root circuit
 (`batteryChargeExceedsCircuit`, wallboxes first). Once it is in a release, the
@@ -517,8 +521,7 @@ budget), grid charging pauses and stays off for the hold-off, so it cannot add
 to the peak.
 
 Without meter values for over 2 minutes the reserve ends and grid charging
-pauses until they are back; the limit then is the peak limit (following the peak
-included), not the allowed power of the window (`TestPeakMetersLost`).
+pauses until they are back; the limit then is the peak limit, not the allowed power of the window (`TestPeakMetersLost`).
 
 Three outages come without an error from the meter and count the same
 (`core/site_peak_readings.go`). A grid meter that has no power (a Home Assistant
@@ -557,7 +560,7 @@ metered from their start count, kept for 24 months (`peakMonths`,
 `core/site_peak_stats.go`). "Without the battery" adds back only what the
 battery gave to the house, not what it fed into the grid (`TestMeterCompleted`;
 with a counter an approximation, as the import counter knows no export). Each month also keeps its baseline, the highest
-limit set by hand in it (the base while following the peak); months from before
+limit set by hand in it; months from before
 get the current one at the start. A month is looked up, never assumed to be the first entry; one entered late (a window of the month before) is put in its place with no baseline, and a list with a month twice is merged at start.
 
 **Capacity tariff** (no dialog at the moment, the entry comes back with evcc's own view; route `peaktariff` and the stored values stay): price per kW
@@ -593,7 +596,7 @@ At the end of each cycle (after the battery mode, `updateBatteryModePeakAware`)
 | peak shaving on, normal (also below the reserve) | on | allowed power of the 15 minute window | reserve, at least 20 % | off (Omnibattery regulates) |
 | grid charging with a setpoint > 0 | on | as above | as above | on, mode `Charge`, charge power = setpoint |
 | grid charging ends | on | as above | as above | charge power 0, then off |
-| no meter values for over 2 minutes | on | the peak limit (following the peak included), no window | reserve | off (grid charging pauses as before) |
+| no meter values for over 2 minutes | on | the peak limit, no window | reserve | off (grid charging pauses as before) |
 | peak shaving off, battery type or an entity changed | off, only if evcc turned it on | stays | stays | as above |
 
 - **Limit:** `allowed` of the window (`peak.State`, i.e. limit, budget, follow,
