@@ -384,7 +384,7 @@ func numberWrite(r peak.Range, current string, val float64, up bool) (float64, b
 	// a state that is no number has no current value and gets the write
 	v, err := strconv.ParseFloat(current, 64)
 
-	return val, err != nil || !r.Unchanged(v, val, 0)
+	return val, err != nil || !r.Unchanged(v, val)
 }
 
 // notAvailable reports whether the state is that of an entity without a value
