@@ -415,6 +415,9 @@ func (site *Site) batteryCircuitAllows() bool {
 	s.mu.Unlock()
 
 	if now := time.Now(); now.Before(shedUntil) {
+		// keeps the reservation alive: with a hold-off longer than the reservation
+		// timeout the loads below would take the power back and the retry fail again
+		site.batteryCircuitBudget(c, want)
 		site.log.DEBUG.Printf("battery grid charge: shed by load management, retrying in %s", shedUntil.Sub(now).Round(time.Second))
 		return false
 	}
