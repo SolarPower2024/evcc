@@ -1,8 +1,8 @@
 package core
 
 // Custom extension: loads that do not follow their load management limit, see
-// core/lm/follow.go. After the cycles set under Lastmanagement-Details →
-// Erweitert, load management no longer counts on such a load to give way.
+// core/lm/follow.go. After defaultFollowCycles cycles load management no longer
+// counts on such a load to give way.
 
 import (
 	"time"
@@ -11,15 +11,8 @@ import (
 )
 
 // defaultFollowCycles is after how many cycles a load not following its limit
-// is no longer counted on
+// is no longer counted on. Fixed: it was a setting, and 0 switched the check off.
 const defaultFollowCycles = 3
-
-func (site *Site) lmFollowCycles() int {
-	if v := site.advanced().FollowCycles; v != nil {
-		return int(*v)
-	}
-	return defaultFollowCycles
-}
 
 // checkLmFollowing runs once per cycle, after every load has been limited
 func (site *Site) checkLmFollowing() {

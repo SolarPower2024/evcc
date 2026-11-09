@@ -101,37 +101,17 @@ func TestPeakLimitRaisesBaseline(t *testing.T) {
 	assert.Equal(t, 4000.0, m.Baseline)
 }
 
-func TestMigratePeakLimit(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		stored   map[string]string
-		baseline float64
-		want     float64
-	}{
-		{"taken over", map[string]string{keys.PeakShaving: "true", keys.PeakShavingLimit: "9000"}, 0, 9000},
-		{"evcc's limit stays", map[string]string{keys.PeakShaving: "true", keys.PeakShavingLimit: "9000"}, 7000, 7000},
-		{"following: the limit set by hand", map[string]string{keys.PeakShaving: "true", keys.PeakShavingLimit: "11300", keys.PeakFollow: "true", keys.PeakFollowBase: "9000", keys.PeakFollowBuffer: "500"}, 0, 9000},
-		{"not following: the old base does not count", map[string]string{keys.PeakShaving: "true", keys.PeakShavingLimit: "8000", keys.PeakFollow: "false", keys.PeakFollowBase: "9000"}, 0, 8000},
-		{"peak shaving off: the loads stay unlimited", map[string]string{keys.PeakShaving: "false", keys.PeakShavingLimit: "9000"}, 0, 0},
-		{"nothing stored: the default that was in use", map[string]string{keys.PeakShaving: "true"}, 0, 5000},
-		{"invalid: the default", map[string]string{keys.PeakShaving: "true", keys.PeakShavingLimit: "0"}, 0, 5000},
-		{"evcc's restore failed: its stored limit stays", map[string]string{keys.PeakShaving: "true", keys.PeakShavingLimit: "9000", keys.GridPeakBaseline: "7000"}, 0, 7000},
-		{"nothing stored, peak shaving off", map[string]string{}, 0, 0},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			site, _ := restoreTestSite(t)
-			for k, v := range tc.stored {
-				settings.SetString(k, v)
-			}
-			site.gridPeakBaseline = tc.baseline
+// evcc's stored limit comes back when evcc's own restore left it out, a limit
+// in use stays
+func TestRestoreGridPeakBaseline(t *testing.T) {
+	site, _ := restoreTestSite(t)
+	settings.SetString(keys.GridPeakBaseline, "7000")
 
-			site.migratePeakLimit()
+	site.gridPeakBaseline = 0
+	site.restoreGridPeakBaseline()
+	assert.Equal(t, 7000.0, site.GetGridPeakBaseline())
 
-			assert.Equal(t, tc.want, site.GetGridPeakBaseline())
-			for _, k := range []string{keys.PeakShavingLimit, keys.PeakFollow, keys.PeakFollowBase, keys.PeakFollowBuffer} {
-				_, err := settings.String(k)
-				assert.Error(t, err, "%s removed", k)
-			}
-		})
-	}
+	site.gridPeakBaseline = 6000
+	site.restoreGridPeakBaseline()
+	assert.Equal(t, 6000.0, site.GetGridPeakBaseline())
 }

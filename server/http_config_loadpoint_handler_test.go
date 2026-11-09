@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/evcc-io/evcc/api"
@@ -71,16 +70,6 @@ func TestDeleteLoadpointDisabledNilInstance(t *testing.T) {
 		deleteLoadpointHandler(deleteCircuitTestSite{})(rec, req)
 	})
 	assert.Equal(t, http.StatusOK, rec.Code)
-}
-
-// TestLoadpointSplitConfigDroppedKey ensures a config key the fork dropped does not fail saving or showing
-func TestLoadpointSplitConfigDroppedKey(t *testing.T) {
-	for _, key := range loadpoint.DroppedKeys() {
-		body := `{"title":"lp","` + key + `":3}`
-		_, static, _, _, err := loadpointSplitConfig(strings.NewReader(body))
-		require.NoError(t, err, key)
-		assert.NotContains(t, static, key)
-	}
 }
 
 // deleting a loadpoint deletes its charger and the devices the charger owns through template params

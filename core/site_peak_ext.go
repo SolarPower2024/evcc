@@ -75,7 +75,7 @@ func (site *Site) peakConfigured() bool {
 // applyOmniProtection brings the external peak control to what peak shaving
 // wants: while it runs, the soc threshold is the reserve (Marstek: at least 20 %),
 // the limit the grid power allowed in the running 15 minute window (without meter
-// values the peak limit, following the peak included) and the switch on.
+// values the peak limit) and the switch on.
 // Otherwise the switch is turned off, but only if evcc turned it on (protOwned);
 // limit and threshold stay. The battery type BYD gets the limit in every cycle, also
 // without peak shaving: it is the sign of life of evcc, see bydLimitRule. Called
@@ -497,10 +497,9 @@ func (site *Site) setProtNumber(entity, key string, name *string, set *func(floa
 }
 
 // protSocSetter returns the setter of the soc threshold entity. It rounds up to
-// the step: the threshold has to cover the reserve. The write tolerance is in W
-// and does not apply, every change of the reserve is written.
+// the step: the threshold has to cover the reserve.
 func (site *Site) protSocSetter(entity string) (func(float64) error, error) {
-	return site.numberSetter(entity, true, nil)
+	return site.numberSetter(entity, true)
 }
 
 // rebuildProtSetter resolves the setter of the soc threshold entity

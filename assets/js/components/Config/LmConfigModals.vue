@@ -4,7 +4,6 @@
 	<LmPrioritiesModal />
 	<LmShedGuardModal />
 	<LmAdvancedModal />
-	<PeakTariffModal />
 	<LmProfilesModal />
 	<FeedInEegModal />
 </template>
@@ -16,7 +15,6 @@ import BatteryConfigModal from "./BatteryConfigModal.vue";
 import LmPrioritiesModal from "./LmPrioritiesModal.vue";
 import LmShedGuardModal from "./LmShedGuardModal.vue";
 import LmAdvancedModal from "./LmAdvancedModal.vue";
-import PeakTariffModal from "./PeakTariffModal.vue";
 import LmProfilesModal from "./LmProfilesModal.vue";
 import FeedInEegModal from "./FeedInEegModal.vue";
 
@@ -30,7 +28,6 @@ export default defineComponent({
 		LmPrioritiesModal,
 		LmShedGuardModal,
 		LmAdvancedModal,
-		PeakTariffModal,
 		LmProfilesModal,
 		FeedInEegModal,
 	},

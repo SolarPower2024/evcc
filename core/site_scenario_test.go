@@ -104,7 +104,7 @@ func newScenario(t *testing.T) *scenario {
 	site.valueChan = sc.values
 
 	site.lmm().SetPriorityLookup(site.lmPriorityLookup)
-	site.lmm().SetFollowCycles(site.lmFollowCycles)
+	site.lmm().SetFollowCycles(func() int { return defaultFollowCycles })
 
 	return sc
 }
@@ -373,6 +373,21 @@ func TestScenarioCircuitOnOff(t *testing.T) {
 		sc.site.battery.Power = 0
 		assert.False(t, sc.cycle(80, 3000, 0))
 		assert.Equal(t, 7000.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 5750, 7000))
+	})
+
+	t.Run("reservation outlives a hold-off longer than its timeout", func(t *testing.T) {
+		sc := newScenario(t)
+		wallbox := &scenarioLoad{title: "wallbox", prio: 1, power: 7000}
+		sc.withCircuit(12000, wallbox, 5)
+		sc.site.lmm().SetTimeout(20 * time.Millisecond)
+
+		assert.False(t, sc.cycle(20, 3000, 0))
+		require.True(t, time.Now().Before(sc.site.lms().batteryShedUntil), "holding off")
+
+		// the reservation times out, the cycles within the hold-off renew it
+		time.Sleep(40 * time.Millisecond)
+		assert.False(t, sc.cycle(20, 3000, 0), "still holding off")
+		assert.Equal(t, 5750.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 7000, 7000))
 	})
 
 	t.Run("already charging is not re-checked against itself", func(t *testing.T) {

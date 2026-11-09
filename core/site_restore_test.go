@@ -7,7 +7,6 @@ import (
 
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm/profile"
-	"github.com/evcc-io/evcc/core/peak"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,10 +19,6 @@ func restoreTestSite(t *testing.T) (*Site, *bytes.Buffer) {
 	// keys other tests left behind (e.g. a battery circuit) would log errors
 	freshSettings(t)
 	site := newScenario(t).site
-	// keys from before the one limit, which would set it
-	for _, key := range []string{keys.PeakFollow, keys.PeakFollowBase, keys.PeakFollowBuffer} {
-		_ = settings.Delete(key)
-	}
 	buf := new(bytes.Buffer)
 	site.log = testLogger(buf)
 	return site, buf
@@ -56,8 +51,7 @@ func TestRestoreUnreadableJson(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, raw, kept)
 
-			// the value stays as it was, only a new valid value replaces the key;
-			// the priorities are rewritten at start (unifyLmPriorities), the copy keeps the raw value
+			// the value stays as it was, only a new valid value replaces the key
 			if key != keys.LmPriorities {
 				stored, _ := settings.String(key)
 				assert.Equal(t, raw, stored)
@@ -101,15 +95,15 @@ func TestRestoreLaterSaveKeepsInvalidCopy(t *testing.T) {
 // TestRestoreLmAdvancedKeepsGoodFields: a field of the wrong type does not take the others along
 func TestRestoreLmAdvancedKeepsGoodFields(t *testing.T) {
 	site, buf := restoreTestSite(t)
-	settings.SetString(keys.LmAdvanced, `{"holdOff":15,"timeout":"x","followCycles":4}`)
+	settings.SetString(keys.LmAdvanced, `{"holdOff":15,"timeout":"x","peakFreeze":4}`)
 
 	site.restoreLmAdvanced()
 
 	adv := site.advanced()
 	require.NotNil(t, adv.HoldOff)
 	assert.Equal(t, 15.0, *adv.HoldOff)
-	require.NotNil(t, adv.FollowCycles)
-	assert.Equal(t, 4.0, *adv.FollowCycles)
+	require.NotNil(t, adv.PeakFreeze)
+	assert.Equal(t, 4.0, *adv.PeakFreeze)
 	assert.Nil(t, adv.Timeout)
 
 	assert.Equal(t, 1, strings.Count(buf.String(), "ERROR"), buf.String())
@@ -157,13 +151,10 @@ func TestRestoreOutOfRange(t *testing.T) {
 		restore        func(*Site)
 		get            func(*Site) float64
 	}{
-		{"limit 0", keys.PeakShavingLimit, "0", (*Site).restorePeakSettings, (*Site).GetPeakShavingLimit},
-		{"limit 25000", keys.PeakShavingLimit, "25000", (*Site).restorePeakSettings, (*Site).GetPeakShavingLimit},
 		{"reserve 0", keys.PeakShavingReserve, "0", (*Site).restorePeakSettings, (*Site).GetPeakShavingReserve},
 		{"reserve 100", keys.PeakShavingReserve, "100", (*Site).restorePeakSettings, (*Site).GetPeakShavingReserve},
 		{"charge power", keys.PeakShavingChargePower, "-5", (*Site).restorePeakSettings, (*Site).GetPeakShavingChargePower},
 		{"guard 600", keys.LmShedGuard, "600", (*Site).restoreLmGuard, func(s *Site) float64 { return float64(s.GetLmShedGuard()) }},
-		{"freeValue 0", keys.LmAdvanced, `{"freeValue":0}`, (*Site).restoreLmAdvanced, (*Site).peakFreeValue},
 		{"phases 2", keys.LmAdvanced, `{"phases":2}`, (*Site).restoreLmAdvanced, func(s *Site) float64 { return float64(s.lmBatteryPhases()) }},
 		{"soc start >= stop", keys.BatterySocGridChargeStart, "90", (*Site).restoreLmSettings, (*Site).GetBatterySocGridChargeStart},
 	} {
@@ -205,19 +196,6 @@ func TestRestoreOutOfRange(t *testing.T) {
 	})
 }
 
-// TestRestoreRaisedLimitKept: follow the peak stored its limit in steps of 100 W
-func TestRestoreRaisedLimitKept(t *testing.T) {
-	site, buf := restoreTestSite(t)
-	site.gridPeakBaseline = 0
-	settings.SetString(keys.PeakShaving, "true")
-	settings.SetString(keys.PeakShavingLimit, "11300")
-
-	site.restorePeakSettings()
-
-	assert.Equal(t, 11300.0, site.GetPeakShavingLimit())
-	assert.NotContains(t, buf.String(), "WARN")
-}
-
 // TestRestoreLiveValuesUnchanged: the values of the live system run through as they are
 func TestRestoreLiveValuesUnchanged(t *testing.T) {
 	site, buf := restoreTestSite(t)
@@ -227,7 +205,7 @@ func TestRestoreLiveValuesUnchanged(t *testing.T) {
 	settings.SetString(keys.PeakShavingChargePower, "1800")
 	settings.SetString(keys.BatterySocGridChargeStart, "15")
 	settings.SetString(keys.BatterySocGridChargeStop, "20")
-	settings.SetString(keys.LmAdvanced, `{"freeValue":1800,"phases":1,"writeTolerance":50}`)
+	settings.SetString(keys.LmAdvanced, `{"phases":1}`)
 	settings.SetString(keys.BatteryGridChargeOnce, `{"target":0}`)
 
 	site.restoreLmSettings()
@@ -239,58 +217,11 @@ func TestRestoreLiveValuesUnchanged(t *testing.T) {
 	assert.Equal(t, 1800.0, site.GetPeakShavingChargePower())
 	assert.Equal(t, 15.0, site.GetBatterySocGridChargeStart())
 	assert.Equal(t, 20.0, site.GetBatterySocGridChargeStop())
-	assert.Equal(t, peak.DefaultFreeValue, site.peakFreeValue(), "the free value is no setting any more, the start drops it")
 	assert.Equal(t, 1, site.lmBatteryPhases())
-	assert.Equal(t, 50.0, site.peakWriteTolerance())
 
 	assert.Empty(t, buf.String(), "nothing warned or logged")
 	for _, key := range []string{keys.PeakShavingReserve, keys.LmAdvanced, keys.BatteryGridChargeOnce} {
 		_, err := settings.String(key)
 		assert.NoError(t, err, key)
 	}
-}
-
-// TestRestoreHomeWeekdayMoved: homeWeekday from an old backup becomes homeForecast
-// once and is gone from the stored value
-func TestRestoreHomeWeekdayMoved(t *testing.T) {
-	site, _ := restoreTestSite(t)
-	settings.SetString(keys.LmAdvanced, `{"homeWeekday":1,"holdOff":15}`)
-
-	site.restoreLmAdvanced()
-
-	assert.Equal(t, homeForecastWeekday, site.homeForecast())
-
-	var adv lmAdvanced
-	require.NoError(t, settings.Json(keys.LmAdvanced, &adv))
-	assert.Nil(t, adv.HomeWeekday)
-	require.NotNil(t, adv.HomeForecast)
-	assert.Equal(t, 1.0, *adv.HomeForecast)
-	require.NotNil(t, adv.HoldOff)
-
-	raw, _ := settings.String(keys.LmAdvanced)
-	assert.NotContains(t, raw, "homeWeekday")
-
-	// an explicit homeForecast wins
-	settings.SetString(keys.LmAdvanced, `{"homeWeekday":1,"homeForecast":2}`)
-	site.lms().adv = lmAdvanced{}
-	site.restoreLmAdvanced()
-	assert.Equal(t, homeForecastManual, site.homeForecast())
-}
-
-// TestRestorePeakCapDropped: the cap on the peak budget is fixed now, a stored value is removed at start
-func TestRestorePeakCapDropped(t *testing.T) {
-	site, _ := restoreTestSite(t)
-	settings.SetString(keys.LmAdvanced, `{"peakCap":3,"holdOff":15}`)
-
-	site.restoreLmAdvanced()
-
-	adv := site.advanced()
-	assert.Nil(t, adv.PeakCap)
-	require.NotNil(t, adv.HoldOff)
-	assert.Equal(t, 15.0, *adv.HoldOff, "the other values stay")
-
-	raw, err := settings.String(keys.LmAdvanced)
-	require.NoError(t, err)
-	assert.NotContains(t, raw, "peakCap")
-	assert.Contains(t, raw, "holdOff")
 }

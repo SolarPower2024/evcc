@@ -528,26 +528,23 @@ func TestNumberWrite(t *testing.T) {
 	r := peak.Range{Min: 0, Max: 15360, Step: 10}
 
 	tc := []struct {
-		name      string
-		current   string
-		val       float64
-		up        bool
-		tolerance float64
-		want      float64
-		write     bool
+		name    string
+		current string
+		val     float64
+		up      bool
+		want    float64
+		write   bool
 	}{
-		{"unchanged free value", "10000.0", 10000, true, 0, 10000, false},
-		{"rounded onto the held value", "4540", 4531, true, 0, 4540, false},
-		{"one step changed", "4540", 4545, true, 0, 4550, true},
-		{"within tolerance", "4540", 4570, true, 50, 4570, false},
-		{"beyond tolerance", "4540", 4600, true, 50, 4600, true},
-		{"stop always lands", "40", 0, false, 50, 0, true},
-		{"unavailable", "unavailable", 4540, true, 0, 4540, true},
+		{"unchanged free value", "10000.0", 10000, true, 10000, false},
+		{"rounded onto the held value", "4540", 4531, true, 4540, false},
+		{"one step changed", "4540", 4545, true, 4550, true},
+		{"stop lands", "40", 0, false, 0, true},
+		{"unavailable", "unavailable", 4540, true, 4540, true},
 	}
 
 	for _, tc := range tc {
 		t.Run(tc.name, func(t *testing.T) {
-			val, write := numberWrite(r, tc.current, tc.val, tc.up, tc.tolerance)
+			val, write := numberWrite(r, tc.current, tc.val, tc.up)
 			assert.Equal(t, tc.want, val)
 			assert.Equal(t, tc.write, write)
 		})

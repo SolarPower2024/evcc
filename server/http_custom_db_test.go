@@ -71,10 +71,6 @@ func TestEegPriceRoutes(t *testing.T) {
 	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
 	require.NoError(t, metrics.SetupSchema())
 
-	utc := time.Local
-	time.Local = time.UTC
-	t.Cleanup(func() { time.Local = utc })
-
 	base := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	slot := func(n int) time.Time { return base.Add(time.Duration(n) * 15 * time.Minute) }
 

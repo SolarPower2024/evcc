@@ -110,7 +110,6 @@ type siteCustom struct {
 // must not leave the fork without its settings (peak shaving off, the battery held
 // by evcc never handed back)
 func (site *Site) restoreCustom() {
-	site.dropStoredLoadpointKeys()
 	site.restoreLmSettings()
 	site.restoreLmEvents()
 	site.restorePeakSettings()
@@ -184,11 +183,9 @@ func (site *Site) restoreLmSettings() {
 
 	site.lmm().SetPriorityLookup(site.lmPriorityLookup)
 	site.restoreGridChargeOnce()
-	site.unifyLmPriorities()
 
 	site.restoreLmGuard()
 	site.restoreLmAdvanced()
-	site.dropLmCircuit()
 	site.restoreBatteryIdent()
 	site.restoreBatteryGridChargeMode()
 	site.restoreLmProfiles()
@@ -415,6 +412,9 @@ func (site *Site) batteryCircuitAllows() bool {
 	s.mu.Unlock()
 
 	if now := time.Now(); now.Before(shedUntil) {
+		// keeps the reservation alive: with a hold-off longer than the reservation
+		// timeout the loads below would take the power back and the retry fail again
+		site.batteryCircuitBudget(c, want)
 		site.log.DEBUG.Printf("battery grid charge: shed by load management, retrying in %s", shedUntil.Sub(now).Round(time.Second))
 		return false
 	}
@@ -520,6 +520,32 @@ func (site *Site) gridChargeGate() bool {
 // would otherwise stay throttled until the reservation expires
 func (site *Site) releaseGridCharge() {
 	site.lmm().Forget(site.lmBattery())
+	site.writeChargeValue(0)
+	site.recordBatteryLimit(0, 0)
+}
+
+// releaseGridChargeUnlessShed is releaseGridCharge for the optimizer in control.
+// During the hold-off after load management refused its charge request the plan
+// is told that grid charging is blocked (lmGridChargeBlocked) and stops asking.
+// Releasing then would hand the power back to the loads below, and the request
+// after the hold-off would be refused again; so the reservation is renewed until
+// the hold-off ends and the next plan decides.
+func (site *Site) releaseGridChargeUnlessShed() {
+	s := site.lms()
+
+	s.mu.Lock()
+	shed := time.Now().Before(s.batteryShedUntil)
+	s.mu.Unlock()
+
+	c := site.lmBatteryCircuit()
+	want, _ := site.lmBatteryChargePower()
+
+	if !shed || c == nil || want <= 0 || site.batteryPhasesMissing() {
+		site.releaseGridCharge()
+		return
+	}
+
+	site.batteryCircuitBudget(c, want)
 	site.writeChargeValue(0)
 	site.recordBatteryLimit(0, 0)
 }

@@ -15,38 +15,18 @@ import (
 
 // lmAdvanced holds the values set in the ui, nil = not set
 type lmAdvanced struct {
-	// peak reserve soc band in %, fixed now (bydHysteresis): only read from the stored
-	// settings, restoreLmAdvanced drops it at start
-	Hysteresis *float64 `json:"hysteresis,omitempty"`
-	// "discharge freely" setpoint in W of the old way of the battery type BYD. Only read
-	// from the stored settings, migratePeakEntity uses and drops it at start.
-	FreeValue  *float64 `json:"freeValue,omitempty"`
 	HoldOff    *float64 `json:"holdOff,omitempty"`    // battery grid charge hold-off in minutes
 	Timeout    *float64 `json:"timeout,omitempty"`    // unserved demand expiry in minutes
 	Phases     *float64 `json:"phases,omitempty"`     // battery phases for current accounting
 	PeakFreeze *float64 `json:"peakFreeze,omitempty"` // minute of the window from which the peak budget no longer grows
-	// allowed grid power at most this multiple of the peak limit, fixed now (peak.DefaultCap):
-	// only read from the stored settings, restoreLmAdvanced drops it at start
-	PeakCap *float64 `json:"peakCap,omitempty"`
-	// smallest change in W that is written to a peak shaving entity, see numberSetter
-	WriteTolerance *float64 `json:"writeTolerance,omitempty"`
-	// cycles after which a load not following its limit is no longer counted on, 0 = never
-	FollowCycles *float64 `json:"followCycles,omitempty"`
 	// hours the optimizer may take to reach the stop soc of soc-based grid charging
 	GridChargeWindow *float64 `json:"gridChargeWindow,omitempty"`
-	// home consumption forecast per weekday, 1 = on, see site_load_weekday.go.
-	// Replaced by HomeForecast: only read from old backups, restoreLmAdvanced moves it
-	// to HomeForecast at start. The name homeWeekday is still accepted by SetLmAdvanced.
-	HomeWeekday *float64 `json:"homeWeekday,omitempty"`
 	// home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load
 	// profile, see site_load_manual.go
 	HomeForecast *float64 `json:"homeForecast,omitempty"`
 	// Home Assistant entity the optimizer's planned grid export is written to, empty = off,
 	// see site_lm_export_forecast.go
 	ExportForecastEntity string `json:"exportForecastEntity,omitempty"`
-	// the load management (peak) circuit took the peak limit, gone: only read from the
-	// stored settings, restoreLmAdvanced drops it at start
-	CircuitFromPeak bool `json:"circuitFromPeak,omitempty"`
 }
 
 // home consumption forecasts, see HomeForecast
@@ -62,8 +42,6 @@ type lmAdvancedState struct {
 	Timeout              float64 `json:"timeout"`
 	Phases               int     `json:"phases"`
 	PeakFreeze           float64 `json:"peakFreeze"`
-	WriteTolerance       float64 `json:"writeTolerance"`
-	FollowCycles         int     `json:"followCycles"`
 	GridChargeWindow     float64 `json:"gridChargeWindow"`
 	HomeForecast         int     `json:"homeForecast"`
 	ExportForecastEntity string  `json:"exportForecastEntity"`
@@ -78,19 +56,12 @@ type lmAdvancedLimit struct {
 }
 
 var lmAdvancedLimits = map[string]lmAdvancedLimit{
-	"hysteresis":       {0, 20, false},    // no longer used, still accepted: dropped at start
-	"freeValue":        {1, 100000, true}, // no longer used, still accepted: the stored value is read once, see migratePeakEntity
 	"holdOff":          {1, 60, true},
 	"timeout":          {1, 60, true},
 	"phases":           {1, 3, true},
 	"peakFreeze":       {1, 14, true},
-	"peakCap":          {1, 10, false}, // no longer used, still accepted: dropped at start
-	"writeTolerance":   {0, 1000, true},
-	"followCycles":     {0, 20, true},
 	"gridChargeWindow": {1, 24, true},
-	"homeWeekday":      {0, 1, true},
 	"homeForecast":     {0, 2, true},
-	"circuitFromPeak":  {0, 1, true}, // no longer used, still accepted: dropped at start
 }
 
 // restoreLmAdvanced restores the persisted advanced settings
@@ -98,21 +69,7 @@ func (site *Site) restoreLmAdvanced() {
 	s := site.lms()
 
 	if adv, ok := restoreLmAdvancedValue(site.log); ok {
-		dropped := dropInvalidLmAdvanced(site.log, &adv)
-		moved := moveHomeWeekday(&adv)
-		// no setting any more, see bydHysteresis
-		gone := adv.Hysteresis != nil
-		adv.Hysteresis = nil
-		// no setting any more, see peak.DefaultCap
-		gone = gone || adv.PeakCap != nil
-		adv.PeakCap = nil
-		if adv.CircuitFromPeak {
-			site.log.INFO.Println("setting \"limit = peak shaving limit\" removed: the circuits limit with their configured value")
-		}
-		// no setting any more, the circuits limit as configured
-		gone = gone || adv.CircuitFromPeak
-		adv.CircuitFromPeak = false
-		if dropped || moved || gone {
+		if dropInvalidLmAdvanced(site.log, &adv) {
 			_ = settings.SetJson(keys.LmAdvanced, adv)
 		}
 		s.advMu.Lock()
@@ -121,26 +78,10 @@ func (site *Site) restoreLmAdvanced() {
 	}
 
 	site.lmm().SetTimeout(site.lmTimeout())
-	site.lmm().SetFollowCycles(site.lmFollowCycles)
+	site.lmm().SetFollowCycles(func() int { return defaultFollowCycles })
 
 	site.publishLmAdvanced()
 	site.publishLmHomeProfile()
-}
-
-// dropFreeValue forgets the stored free value, see migratePeakEntity
-func (site *Site) dropFreeValue() {
-	s := site.lms()
-
-	s.advMu.Lock()
-	if s.adv.FreeValue == nil {
-		s.advMu.Unlock()
-		return
-	}
-	s.adv.FreeValue = nil
-	adv := s.adv
-	s.advMu.Unlock()
-
-	_ = settings.SetJson(keys.LmAdvanced, adv)
 }
 
 // advanced returns a copy of the values set in the ui
@@ -159,8 +100,6 @@ func (site *Site) publishLmAdvanced() {
 		Timeout:              site.lmTimeout().Minutes(),
 		Phases:               site.lmBatteryPhases(),
 		PeakFreeze:           site.peakFreeze().Minutes(),
-		WriteTolerance:       site.peakWriteTolerance(),
-		FollowCycles:         site.lmFollowCycles(),
 		GridChargeWindow:     site.gridChargeWindow().Hours(),
 		HomeForecast:         site.homeForecast(),
 		ExportForecastEntity: site.exportForecastEntity(),
@@ -206,12 +145,6 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 		return err
 	}
 
-	// accepted for old clients, nothing to store
-	switch name {
-	case "peakCap", "circuitFromPeak":
-		return nil
-	}
-
 	s := site.lms()
 
 	s.advMu.Lock()
@@ -225,15 +158,10 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 		s.adv.Phases = &v
 	case "peakFreeze":
 		s.adv.PeakFreeze = &v
-	case "writeTolerance":
-		s.adv.WriteTolerance = &v
-	case "followCycles":
-		s.adv.FollowCycles = &v
 	case "gridChargeWindow":
 		s.adv.GridChargeWindow = &v
-	case "homeWeekday", "homeForecast":
+	case "homeForecast":
 		s.adv.HomeForecast = &v
-		s.adv.HomeWeekday = nil
 	}
 	adv := s.adv
 	s.advMu.Unlock()
@@ -247,7 +175,7 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 	if name == "timeout" {
 		site.lmm().SetTimeout(site.lmTimeout())
 	}
-	if name == "homeWeekday" || name == "homeForecast" {
+	if name == "homeForecast" {
 		site.Optimize() // the home demand forecast changed
 	}
 

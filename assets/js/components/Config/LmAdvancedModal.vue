@@ -40,9 +40,7 @@
 								class="form-control"
 								:data-testid="`lmadvanced-${field.name}`"
 							/>
-							<span class="input-group-text">{{
-								field.unitKey ? $t(field.unitKey) : field.unit
-							}}</span>
+							<span class="input-group-text">{{ field.unit }}</span>
 						</div>
 					</FormRow>
 
@@ -206,15 +204,6 @@ import api from "@/api";
 // group: the section of the dialog, see GROUPS.
 const FIELDS = [
 	{ name: "timeout", group: "lm", unit: "min", min: 1, max: 60, integer: true, default: 10 },
-	{
-		name: "followCycles",
-		group: "lm",
-		unitKey: "config.lmadvanced.cycles",
-		min: 0,
-		max: 20,
-		integer: true,
-		default: 3,
-	},
 	{ name: "peakFreeze", group: "peak", unit: "min", min: 1, max: 14, integer: true, default: 12 },
 	{
 		name: "holdOff",

@@ -702,14 +702,11 @@
       "v2Support": "Zurück zu InfluxDB 2.x"
     },
     "lmadvanced": {
-      "cycles": "Zyklen",
       "description": "Die Standardwerte passen für die meisten Anlagen.",
       "entryLabel": "Erweitert",
       "exportForecastHelp": "Nur im Add-on. Schreibt die geplante Einspeisung des Optimizers in diese Entität (wird angelegt), z. B. als PV-Prognose einer zweiten evcc-Instanz. Leer = aus.",
       "exportForecastInvalid": "Entität: sensor. gefolgt von a–z, 0–9 oder _",
       "exportForecastLabel": "Einspeise-Prognose an Home Assistant",
-      "followCyclesHelp": "Zieht ein reduzierter Verbraucher bei Überlast so viele Zyklen mehr als erlaubt, wird stattdessen der Nächste in der Prioritätenreihe gedrosselt. 0 = aus.",
-      "followCyclesLabel": "Vorgabe ignoriert nach",
       "holdOffHelp": "So lange bleibt das Batterie-Netzladen aus, nachdem eine Spitze oder der Stromkreis es gestoppt hat.",
       "holdOffLabel": "Wartezeit nach Abbruch Batterie-Netzladen",
       "invalid": "{label}: bitte einen Wert von {min} bis {max} eingeben.",
@@ -1301,30 +1298,7 @@
         "power": "Netzleistung"
       },
       "sourceLabel": "15-Minuten-Mittel gemessen mit",
-      "title": "Peak Shaving",
-      "writeToleranceHelp": "Kleinere Änderungen der Netzladeleistung schreibt evcc nicht in die Entität, das schont das Gerät. 0 = jede Änderung, Stopp und Maximum immer.",
-      "writeToleranceInvalid": "Die Toleranz muss zwischen 0 und 1000 W liegen, in ganzen Watt.",
-      "writeToleranceLabel": "Schreib-Toleranz"
-    },
-    "peaktariff": {
-      "agreedHelp": "Laut Netzvertrag, 0 = ohne.",
-      "agreedLabel": "Vereinbarte Leistung",
-      "description": "Bewertet die höchste Viertelstunde je Monat in Geld und zeigt unter Mehr → Peak Shaving, was die Batterie spart.",
-      "enable": "Leistungstarif verwenden",
-      "entryLabel": "Leistungstarif",
-      "invalid": "{label} muss zwischen {min} und {max} liegen.",
-      "minShareHelp": "Anteil der vereinbarten Leistung.",
-      "minShareLabel": "Mindestens verrechnet",
-      "minimumHelp": "Wird immer mindestens verrechnet.",
-      "minimumLabel": "Mindestleistung",
-      "perKwYear": "{currency}/kW·Jahr",
-      "priceAboveHelp": "Pro kW und Jahr. Österreich: doppelt.",
-      "priceAboveLabel": "Leistungspreis über der Schwelle",
-      "priceHelp": "Pro kW und Jahr bis zur Schwelle.",
-      "priceLabel": "Leistungspreis",
-      "thresholdHelp": "Bis hier gilt der Leistungspreis, darüber der höhere.",
-      "thresholdLabel": "Schwelle",
-      "title": "Leistungstarif"
+      "title": "Peak Shaving"
     },
     "pv": {
       "titleAdd": "PV-Anlage hinzufügen",

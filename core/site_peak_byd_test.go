@@ -1,7 +1,6 @@
 package core
 
 import (
-	"bytes"
 	"net/http"
 	"testing"
 
@@ -325,168 +324,11 @@ func TestBydHeldMarkStored(t *testing.T) {
 	assert.Equal(t, "false", stored(t, keys.PeakShavingProtOwned))
 }
 
-// TestBydMigratePeakEntity verifies the end of the old way: the discharge setpoint
-// entity is set free once if evcc held it back, and its key and the mark are gone
-func TestBydMigratePeakEntity(t *testing.T) {
-	const entity = haDischargeNum
-
-	t.Run("held", func(t *testing.T) {
-		sc, ha := newByd(t)
-		keepSettings(t)
-		settings.SetString(keys.PeakShavingEntity, entity)
-		settings.SetBool(keys.PeakShavingOwned, true)
-		ha.set(entity, "3000")
-
-		s := sc.site.peak()
-		s.owned = true
-
-		sc.site.migratePeakEntity()
-		assert.Equal(t, []string{"set_value " + entity + " 10000"}, ha.take())
-		assert.False(t, sc.site.peakOwned())
-
-		_, err := settings.String(keys.PeakShavingEntity)
-		assert.ErrorIs(t, err, settings.ErrNotFound)
-		_, err = settings.Bool(keys.PeakShavingOwned)
-		assert.ErrorIs(t, err, settings.ErrNotFound)
-
-		// once
-		sc.site.migratePeakEntity()
-		assert.Empty(t, ha.take())
-	})
-
-	t.Run("stored free value", func(t *testing.T) {
-		sc, ha := newByd(t)
-		keepSettings(t)
-		settings.SetString(keys.PeakShavingEntity, entity)
-		ha.set(entity, "3000")
-
-		v := 8000.0
-		lms := sc.site.lms()
-		lms.advMu.Lock()
-		lms.adv.FreeValue = &v
-		lms.advMu.Unlock()
-		sc.site.peak().owned = true
-
-		sc.site.migratePeakEntity()
-		assert.Equal(t, []string{"set_value " + entity + " 8000"}, ha.take())
-		assert.Nil(t, sc.site.advanced().FreeValue, "dropped")
-	})
-
-	t.Run("not held", func(t *testing.T) {
-		sc, ha := newByd(t)
-		keepSettings(t)
-		settings.SetString(keys.PeakShavingEntity, entity)
-		ha.set(entity, "3000")
-
-		sc.site.migratePeakEntity()
-		assert.Empty(t, ha.take(), "an entity evcc never held back is left alone")
-
-		_, err := settings.String(keys.PeakShavingEntity)
-		assert.ErrorIs(t, err, settings.ErrNotFound)
-	})
-
-	t.Run("failing write is logged, not repeated", func(t *testing.T) {
-		sc, ha := newByd(t)
-		keepSettings(t)
-		settings.SetString(keys.PeakShavingEntity, entity)
-		settings.SetBool(keys.PeakShavingOwned, true)
-		sc.site.peak().owned = true
-		ha.fail["number/set_value"] = http.StatusInternalServerError
-
-		var buf bytes.Buffer
-		sc.site.log = testLogger(&buf)
-
-		sc.site.migratePeakEntity()
-		assert.Contains(t, buf.String(), "was not set free")
-		assert.False(t, sc.site.peakOwned())
-
-		_, err := settings.String(keys.PeakShavingEntity)
-		assert.ErrorIs(t, err, settings.ErrNotFound)
-
-		delete(ha.fail, "number/set_value")
-		ha.take()
-		sc.site.migratePeakEntity()
-		assert.Empty(t, ha.take())
-	})
-
-	t.Run("marstek keeps its mark", func(t *testing.T) {
-		sc, ha := newOmni(t)
-		keepSettings(t)
-		settings.SetString(keys.PeakShavingEntity, entity)
-		settings.SetBool(keys.PeakShavingOwned, true)
-		sc.site.peak().owned = true
-
-		sc.site.migratePeakEntity()
-		assert.Empty(t, ha.take(), "the mark is the manual control")
-		assert.True(t, sc.site.peakOwned())
-
-		owned, err := settings.Bool(keys.PeakShavingOwned)
-		require.NoError(t, err)
-		assert.True(t, owned)
-
-		_, err = settings.String(keys.PeakShavingEntity)
-		assert.ErrorIs(t, err, settings.ErrNotFound)
-	})
-
-	t.Run("peak shaving off without the entities", func(t *testing.T) {
-		sc, _ := newByd(t)
-		keepSettings(t)
-		settings.SetString(keys.PeakShavingEntity, entity)
-		settings.SetBool(keys.PeakShaving, true)
-		s := sc.site.peak()
-		s.enabled = true
-		s.protSwitch, s.protLimit, s.protSoc, s.protSocSet = "", "", "", nil
-
-		var buf bytes.Buffer
-		sc.site.log = testLogger(&buf)
-
-		sc.site.migratePeakEntity()
-		assert.False(t, sc.site.GetPeakShaving())
-		on, err := settings.Bool(keys.PeakShaving)
-		require.NoError(t, err)
-		assert.False(t, on, "stored")
-		assert.Contains(t, buf.String(), "off until the entities of evcc Peak Fronius are set")
-	})
-
-	t.Run("peak shaving stays on with the entities", func(t *testing.T) {
-		sc, _ := newByd(t)
-		keepSettings(t)
-		settings.SetString(keys.PeakShavingEntity, entity)
-		sc.site.peak().enabled = true
-
-		sc.site.migratePeakEntity()
-		assert.True(t, sc.site.GetPeakShaving())
-	})
-
-	t.Run("peak shaving without entities, no old key: untouched", func(t *testing.T) {
-		sc, _ := newByd(t)
-		keepSettings(t)
-		s := sc.site.peak()
-		s.enabled = true
-		s.protSwitch = ""
-
-		sc.site.migratePeakEntity()
-		assert.True(t, sc.site.GetPeakShaving())
-	})
-
-	t.Run("no key, nothing to do", func(t *testing.T) {
-		sc, ha := newByd(t)
-		keepSettings(t)
-		sc.site.peak().owned = true
-
-		sc.site.migratePeakEntity()
-		assert.Empty(t, ha.take())
-		assert.True(t, sc.site.peakOwned(), "the request mark of this version")
-	})
-}
-
 // TestBydHysteresisFixed verifies the reserve band of the battery type BYD: 2 %
-// as in the integration, whatever an old stored setting says
+// as in the integration
 func TestBydHysteresisFixed(t *testing.T) {
 	sc, ha := newByd(t)
 	sc.site.lms().socChargeEnabled = false
-	old := 10.0
-	sc.site.lms().adv.Hysteresis = &old
 
 	for _, c := range []struct {
 		soc    float64

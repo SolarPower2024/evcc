@@ -21,16 +21,8 @@ package core
 //
 // What evcc held is handed back: the switch off, the grid charge power to 0, see
 // releasePeak.
-//
-// Until this version evcc wrote the discharge power itself into a number entity
-// (peakShavingEntity). That way is gone; a stored entity is released and removed
-// at the start, see migratePeakEntity.
 
-import (
-	"github.com/evcc-io/evcc/core/keys"
-	"github.com/evcc-io/evcc/core/peak"
-	"github.com/evcc-io/evcc/db/settings"
-)
+import "github.com/evcc-io/evcc/core/peak"
 
 // bydHysteresis is the soc band in % above the threshold in which the integration
 // goes on holding the battery back. It is fixed there, so evcc's state of the
@@ -47,70 +39,6 @@ func (site *Site) bydLimitRule() (floor float64, zero bool) {
 	}
 
 	return minBydLimit, true
-}
-
-// migratePeakEntity ends the old way of the battery type BYD, where evcc wrote the
-// discharge power into a number entity (peakShavingEntity). If evcc still held the
-// battery back through it (peakShavingOwned), the free value goes there once, a
-// failure is logged and not repeated. Then the entity and the mark are deleted. For
-// the battery type Marstek the mark means the manual control and stays. The stored
-// free value goes with it, see dropFreeValue. Peak shaving that was on is turned
-// off while one of the three entities of the integration is missing. Called at the
-// start, after the settings are back.
-func (site *Site) migratePeakEntity() {
-	defer site.dropFreeValue()
-
-	entity, err := settings.String(keys.PeakShavingEntity)
-	if err != nil {
-		return
-	}
-
-	s := site.peak()
-
-	s.mu.Lock()
-	byd, owned := s.batteryType != batteryTypeMarstek, s.owned
-	off := byd && s.enabled && (s.protSwitch == "" || s.protLimit == "" || s.protSoc == "")
-	if off {
-		s.enabled = false
-		s.shaving = false
-	}
-	s.mu.Unlock()
-
-	// peak shaving ran with the old setpoint and has nothing to run with now
-	if off {
-		site.log.WARN.Println("peak shaving: off until the entities of evcc Peak Fronius are set (Lastmanagement-Details → Peak Shaving)")
-		settings.SetBool(keys.PeakShaving, false)
-		site.publish(keys.PeakShaving, false)
-	}
-
-	if byd && owned {
-		if entity != "" {
-			free := site.peakFreeValue()
-
-			set, err := site.numberSetter(entity, true, nil)
-			if err == nil {
-				err = set(free)
-			}
-
-			if err != nil {
-				site.log.WARN.Printf("peak shaving: the old discharge entity %s was not set free: %v", entity, writeErrorText(err))
-			} else {
-				site.log.INFO.Printf("peak shaving: the old discharge entity %s set free (%.0fW)", entity, free)
-			}
-		}
-
-		s.mu.Lock()
-		s.owned = false
-		s.mu.Unlock()
-
-		if err := settings.Delete(keys.PeakShavingOwned); err != nil {
-			site.log.ERROR.Printf("peak shaving: delete %s: %v", keys.PeakShavingOwned, err)
-		}
-	}
-
-	if err := settings.Delete(keys.PeakShavingEntity); err != nil {
-		site.log.ERROR.Printf("peak shaving: delete %s: %v", keys.PeakShavingEntity, err)
-	}
 }
 
 // peakRuns reports whether peak shaving runs: on, set up and with a battery

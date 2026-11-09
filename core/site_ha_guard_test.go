@@ -175,7 +175,7 @@ func TestNumberSetterReadFailure(t *testing.T) {
 	delete(ha.states, haDischargeNum)
 	ha.mu.Unlock()
 
-	set, err := sc.site.numberSetter(haDischargeNum, true, nil)
+	set, err := sc.site.numberSetter(haDischargeNum, true)
 	require.NoError(t, err)
 
 	assert.Error(t, set(1000))
