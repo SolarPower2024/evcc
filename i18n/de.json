@@ -1306,26 +1306,6 @@
       "writeToleranceInvalid": "Die Toleranz muss zwischen 0 und 1000 W liegen, in ganzen Watt.",
       "writeToleranceLabel": "Schreib-Toleranz"
     },
-    "peaktariff": {
-      "agreedHelp": "Laut Netzvertrag, 0 = ohne.",
-      "agreedLabel": "Vereinbarte Leistung",
-      "description": "Bewertet die höchste Viertelstunde je Monat in Geld und zeigt unter Mehr → Peak Shaving, was die Batterie spart.",
-      "enable": "Leistungstarif verwenden",
-      "entryLabel": "Leistungstarif",
-      "invalid": "{label} muss zwischen {min} und {max} liegen.",
-      "minShareHelp": "Anteil der vereinbarten Leistung.",
-      "minShareLabel": "Mindestens verrechnet",
-      "minimumHelp": "Wird immer mindestens verrechnet.",
-      "minimumLabel": "Mindestleistung",
-      "perKwYear": "{currency}/kW·Jahr",
-      "priceAboveHelp": "Pro kW und Jahr. Österreich: doppelt.",
-      "priceAboveLabel": "Leistungspreis über der Schwelle",
-      "priceHelp": "Pro kW und Jahr bis zur Schwelle.",
-      "priceLabel": "Leistungspreis",
-      "thresholdHelp": "Bis hier gilt der Leistungspreis, darüber der höhere.",
-      "thresholdLabel": "Schwelle",
-      "title": "Leistungstarif"
-    },
     "pv": {
       "titleAdd": "PV-Anlage hinzufügen",
       "titleEdit": "PV-Zähler bearbeiten"

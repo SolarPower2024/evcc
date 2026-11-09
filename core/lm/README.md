@@ -579,7 +579,7 @@ with a counter an approximation, as the import counter knows no export). Each mo
 limit set by hand in it (the base while following the peak); months from before
 get the current one at the start. A month is looked up, never assumed to be the first entry; one entered late (a window of the month before) is put in its place with no baseline, and a list with a month twice is merged at start.
 
-**Capacity tariff** (*Lastmanagement-Details → Leistungstarif*): price per kW
+**Capacity tariff** (no dialog at the moment, the entry comes back with evcc's own view; route `peaktariff` and the stored values stay): price per kW
 and year up to a threshold, a higher one above, at least a minimum and a share
 of the agreed power; zero price = off. Each month's cost with and without the
 battery and the saving are kept with the statistics (not shown at the moment); the saving only counts
