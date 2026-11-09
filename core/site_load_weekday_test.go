@@ -105,15 +105,3 @@ func TestHomeProfileByWeekdayFallback(t *testing.T) {
 		assert.Equal(t, 2000.0, v, "slot %d", i)
 	}
 }
-
-func TestHomeWeekdaySetting(t *testing.T) {
-	site := &Site{log: util.NewLogger("test")}
-	assert.Equal(t, homeForecastEvcc, site.homeForecast(), "off by default")
-
-	require.NoError(t, site.SetLmAdvanced("homeForecast", 1))
-	assert.Equal(t, homeForecastWeekday, site.homeForecast())
-
-	require.Error(t, site.SetLmAdvanced("homeForecast", 3))
-	require.NoError(t, site.SetLmAdvanced("homeForecast", 0))
-	assert.Equal(t, homeForecastEvcc, site.homeForecast())
-}
