@@ -132,6 +132,34 @@ func TestLmGateOptimizerChargeRefused(t *testing.T) {
 		assert.Less(t, val(sc.charge), 500.0, "less than the minimum worth charging with")
 	})
 
+	t.Run("circuit full, reservation kept while the plan holds", func(t *testing.T) {
+		sc := gateScenario(t, api.BatteryCharge.String())
+		wallbox := &scenarioLoad{title: "wallbox", prio: 1, power: 7000}
+		sc.withCircuit(12000, wallbox, 5) // the battery outranks the wallbox
+
+		sc.cycle(50, 3000, 0)
+		require.Equal(t, api.BatteryHold, sc.mode())
+		assert.Equal(t, 5750.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 7000, 7000))
+
+		// the next plan is told grid charging is blocked and holds: the wallbox still gives way
+		require.True(t, sc.site.lmGridChargeBlocked())
+		sc.suggest(api.BatteryHold.String())
+		sc.cycle(50, 3000, 0)
+		assert.Equal(t, 5750.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 7000, 7000))
+		wallbox.power = 5750
+
+		// after the hold-off the plan charges and the battery fits
+		sc.clearHoldOffs()
+		sc.suggest(api.BatteryCharge.String())
+		sc.cycle(50, 3000, 0)
+		assert.Equal(t, api.BatteryCharge, sc.mode())
+
+		// a hold without a hold-off running releases as before
+		sc.suggest(api.BatteryHold.String())
+		sc.cycle(50, 3000, 0)
+		assert.Equal(t, 7000.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 5750, 7000))
+	})
+
 	t.Run("allowed again", func(t *testing.T) {
 		sc := gateScenario(t, api.BatteryCharge.String())
 

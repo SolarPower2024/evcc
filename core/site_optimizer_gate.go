@@ -122,14 +122,14 @@ func (site *Site) lmGateBatteryMode(mode api.BatteryMode, gridCharge bool) api.B
 		}
 
 	case api.BatteryHold, api.BatteryHoldCharge:
-		site.releaseGridCharge()
+		site.releaseGridChargeUnlessShed()
 		if site.peakNeedsBattery() {
 			site.log.DEBUG.Println("battery mode: optimizer hold, covering a peak")
 			return change(api.BatteryNormal)
 		}
 
 	default:
-		site.releaseGridCharge()
+		site.releaseGridChargeUnlessShed()
 	}
 
 	return mode

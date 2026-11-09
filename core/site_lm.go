@@ -524,6 +524,32 @@ func (site *Site) releaseGridCharge() {
 	site.recordBatteryLimit(0, 0)
 }
 
+// releaseGridChargeUnlessShed is releaseGridCharge for the optimizer in control.
+// During the hold-off after load management refused its charge request the plan
+// is told that grid charging is blocked (lmGridChargeBlocked) and stops asking.
+// Releasing then would hand the power back to the loads below, and the request
+// after the hold-off would be refused again; so the reservation is renewed until
+// the hold-off ends and the next plan decides.
+func (site *Site) releaseGridChargeUnlessShed() {
+	s := site.lms()
+
+	s.mu.Lock()
+	shed := time.Now().Before(s.batteryShedUntil)
+	s.mu.Unlock()
+
+	c := site.lmBatteryCircuit()
+	want, _ := site.lmBatteryChargePower()
+
+	if !shed || c == nil || want <= 0 || site.batteryPhasesMissing() {
+		site.releaseGridCharge()
+		return
+	}
+
+	site.batteryCircuitBudget(c, want)
+	site.writeChargeValue(0)
+	site.recordBatteryLimit(0, 0)
+}
+
 // recordBatteryLimit keeps what the battery may grid-charge with, which load
 // management compares with what it draws, see core/lm/follow.go
 func (site *Site) recordBatteryLimit(requested, allowed float64) {
