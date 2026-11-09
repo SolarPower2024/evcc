@@ -39,7 +39,6 @@ export interface LmAdvanced {
   /** Home consumption forecast: 0 evcc, 1 per weekday, 2 from the uploaded load profile. */
   homeForecast?: number;
   /** Cycles after which a load ignoring its limit is no longer counted on, 0 = off. */
-  followCycles: number;
   gridChargeWindow: number;
   /** Home Assistant entity the optimizer's planned grid export is written to, empty = off. */
   exportForecastEntity?: string;

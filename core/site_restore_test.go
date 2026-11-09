@@ -101,15 +101,15 @@ func TestRestoreLaterSaveKeepsInvalidCopy(t *testing.T) {
 // TestRestoreLmAdvancedKeepsGoodFields: a field of the wrong type does not take the others along
 func TestRestoreLmAdvancedKeepsGoodFields(t *testing.T) {
 	site, buf := restoreTestSite(t)
-	settings.SetString(keys.LmAdvanced, `{"holdOff":15,"timeout":"x","followCycles":4}`)
+	settings.SetString(keys.LmAdvanced, `{"holdOff":15,"timeout":"x","peakFreeze":4}`)
 
 	site.restoreLmAdvanced()
 
 	adv := site.advanced()
 	require.NotNil(t, adv.HoldOff)
 	assert.Equal(t, 15.0, *adv.HoldOff)
-	require.NotNil(t, adv.FollowCycles)
-	assert.Equal(t, 4.0, *adv.FollowCycles)
+	require.NotNil(t, adv.PeakFreeze)
+	assert.Equal(t, 4.0, *adv.PeakFreeze)
 	assert.Nil(t, adv.Timeout)
 
 	assert.Equal(t, 1, strings.Count(buf.String(), "ERROR"), buf.String())

@@ -702,14 +702,11 @@
       "v2Support": "Zurück zu InfluxDB 2.x"
     },
     "lmadvanced": {
-      "cycles": "Zyklen",
       "description": "Die Standardwerte passen für die meisten Anlagen.",
       "entryLabel": "Erweitert",
       "exportForecastHelp": "Nur im Add-on. Schreibt die geplante Einspeisung des Optimizers in diese Entität (wird angelegt), z. B. als PV-Prognose einer zweiten evcc-Instanz. Leer = aus.",
       "exportForecastInvalid": "Entität: sensor. gefolgt von a–z, 0–9 oder _",
       "exportForecastLabel": "Einspeise-Prognose an Home Assistant",
-      "followCyclesHelp": "Zieht ein reduzierter Verbraucher bei Überlast so viele Zyklen mehr als erlaubt, wird stattdessen der Nächste in der Prioritätenreihe gedrosselt. 0 = aus.",
-      "followCyclesLabel": "Vorgabe ignoriert nach",
       "holdOffHelp": "So lange bleibt das Batterie-Netzladen aus, nachdem eine Spitze oder der Stromkreis es gestoppt hat.",
       "holdOffLabel": "Wartezeit nach Abbruch Batterie-Netzladen",
       "invalid": "{label}: bitte einen Wert von {min} bis {max} eingeben.",

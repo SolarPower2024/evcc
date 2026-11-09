@@ -153,7 +153,7 @@ func dropInvalidLmAdvanced(log *util.Logger, adv *lmAdvanced) bool {
 		"hysteresis": &adv.Hysteresis, "freeValue": &adv.FreeValue, "holdOff": &adv.HoldOff,
 		"timeout": &adv.Timeout, "phases": &adv.Phases, "peakFreeze": &adv.PeakFreeze,
 		"writeTolerance": &adv.WriteTolerance,
-		"followCycles":   &adv.FollowCycles, "gridChargeWindow": &adv.GridChargeWindow,
+		"gridChargeWindow": &adv.GridChargeWindow,
 		"homeWeekday": &adv.HomeWeekday, "homeForecast": &adv.HomeForecast,
 	}
 

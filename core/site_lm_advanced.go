@@ -30,8 +30,6 @@ type lmAdvanced struct {
 	PeakCap *float64 `json:"peakCap,omitempty"`
 	// smallest change in W that is written to a peak shaving entity, see numberSetter
 	WriteTolerance *float64 `json:"writeTolerance,omitempty"`
-	// cycles after which a load not following its limit is no longer counted on, 0 = never
-	FollowCycles *float64 `json:"followCycles,omitempty"`
 	// hours the optimizer may take to reach the stop soc of soc-based grid charging
 	GridChargeWindow *float64 `json:"gridChargeWindow,omitempty"`
 	// home consumption forecast per weekday, 1 = on, see site_load_weekday.go.
@@ -63,7 +61,6 @@ type lmAdvancedState struct {
 	Phases               int     `json:"phases"`
 	PeakFreeze           float64 `json:"peakFreeze"`
 	WriteTolerance       float64 `json:"writeTolerance"`
-	FollowCycles         int     `json:"followCycles"`
 	GridChargeWindow     float64 `json:"gridChargeWindow"`
 	HomeForecast         int     `json:"homeForecast"`
 	ExportForecastEntity string  `json:"exportForecastEntity"`
@@ -86,7 +83,6 @@ var lmAdvancedLimits = map[string]lmAdvancedLimit{
 	"peakFreeze":       {1, 14, true},
 	"peakCap":          {1, 10, false}, // no longer used, still accepted: dropped at start
 	"writeTolerance":   {0, 1000, true},
-	"followCycles":     {0, 20, true},
 	"gridChargeWindow": {1, 24, true},
 	"homeWeekday":      {0, 1, true},
 	"homeForecast":     {0, 2, true},
@@ -160,7 +156,6 @@ func (site *Site) publishLmAdvanced() {
 		Phases:               site.lmBatteryPhases(),
 		PeakFreeze:           site.peakFreeze().Minutes(),
 		WriteTolerance:       site.peakWriteTolerance(),
-		FollowCycles:         site.lmFollowCycles(),
 		GridChargeWindow:     site.gridChargeWindow().Hours(),
 		HomeForecast:         site.homeForecast(),
 		ExportForecastEntity: site.exportForecastEntity(),
@@ -227,8 +222,6 @@ func (site *Site) SetLmAdvanced(name string, value float64) error {
 		s.adv.PeakFreeze = &v
 	case "writeTolerance":
 		s.adv.WriteTolerance = &v
-	case "followCycles":
-		s.adv.FollowCycles = &v
 	case "gridChargeWindow":
 		s.adv.GridChargeWindow = &v
 	case "homeWeekday", "homeForecast":
