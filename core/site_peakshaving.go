@@ -73,7 +73,6 @@ type peakState struct {
 	// control still hands back.
 	owned    bool
 	writeErr map[string]string // the last error logged per output, see writeOutput
-	readErr  string            // the last error logged reading the energy sensor, see logEnergyRead
 
 	// evcc is stopping: the cycle writes nothing any more while the shutdown
 	// function hands back, see site_peak_shutdown.go
@@ -121,9 +120,7 @@ type peakState struct {
 	window peak.State // its state after the last sample
 
 	// energy counters for the window, in the order they are used
-	gridEnergy   *float64                // grid meter import in kWh, from this cycle
-	energyEntity string                  // Home Assistant energy sensor
-	energyGet    func() (float64, error) // resolved from energyEntity, kWh
+	gridEnergy *float64 // grid meter import in kWh, from this cycle
 
 	months      []peakMonth // statistics, newest first, see site_peak_stats.go
 	monthsDirty bool
@@ -174,11 +171,6 @@ func (site *Site) restorePeakSettings() {
 	if v, err := settings.String(keys.PeakShavingChargeEntity); err == nil {
 		s.mu.Lock()
 		s.chargeEntity = v
-		s.mu.Unlock()
-	}
-	if v, err := settings.String(keys.PeakShavingEnergyEntity); err == nil {
-		s.mu.Lock()
-		s.energyEntity = v
 		s.mu.Unlock()
 	}
 
@@ -240,9 +232,6 @@ func (site *Site) restorePeakSettings() {
 	if err := site.rebuildProtSetter(); err != nil {
 		site.log.ERROR.Printf("peak shaving soc threshold: %v", err)
 	}
-	if err := site.rebuildEnergyGetter(); err != nil {
-		site.log.ERROR.Printf("peak shaving energy: %v", err)
-	}
 
 	site.restorePeakMonths()
 	site.updatePeakLimit()
@@ -284,31 +273,6 @@ func (site *Site) rebuildChargeSetter() error {
 
 	s.mu.Lock()
 	s.chargeSet = set
-	s.mu.Unlock()
-
-	return nil
-}
-
-// rebuildEnergyGetter resolves the energy sensor
-func (site *Site) rebuildEnergyGetter() error {
-	s := site.peak()
-
-	s.mu.Lock()
-	entity := s.energyEntity
-	s.mu.Unlock()
-
-	var get func() (float64, error)
-
-	if entity != "" {
-		conn, err := site.haConnection()
-		if err != nil {
-			return err
-		}
-		get = func() (float64, error) { return conn.GetFloatState(entity) }
-	}
-
-	s.mu.Lock()
-	s.energyGet = get
 	s.mu.Unlock()
 
 	return nil
@@ -419,7 +383,7 @@ func (site *Site) publishPeakSettings() {
 
 	s.mu.Lock()
 	enabled, limit, reserve, charge, circuit := s.enabled, s.limit, s.effectiveReserve(), s.chargePower, s.circuit
-	chargeEntity, energyEntity := s.chargeEntity, s.energyEntity
+	chargeEntity := s.chargeEntity
 	s.mu.Unlock()
 
 	site.publish(keys.PeakShaving, enabled)
@@ -428,7 +392,6 @@ func (site *Site) publishPeakSettings() {
 	site.publish(keys.PeakShavingChargePower, charge)
 	site.publish(keys.PeakShavingCircuit, circuit)
 	site.publish(keys.PeakShavingChargeEntity, chargeEntity)
-	site.publish(keys.PeakShavingEnergyEntity, energyEntity)
 
 	site.publishOmniSettings()
 	site.publishChargePower()
@@ -761,14 +724,13 @@ func writeErrorText(err error) string {
 }
 
 // peakEnergy returns the grid import counter in kWh and where it came from: the
-// meter of the main circuit, else the grid meter, else the Home Assistant sensor.
-// Without any, the source is the grid power. A 0 of the sensor is no reading, like evcc takes it for the grid
-// meter.
+// meter of the main circuit, else the grid meter. Without either, the source is
+// the grid power.
 func (site *Site) peakEnergy() (float64, string) {
 	s := site.peak()
 
 	s.mu.Lock()
-	meter, get, entity := s.gridEnergy, s.energyGet, s.energyEntity
+	meter := s.gridEnergy
 	s.gridEnergy = nil // only valid for the cycle it was read in
 	s.mu.Unlock()
 
@@ -780,46 +742,7 @@ func (site *Site) peakEnergy() (float64, string) {
 		return *meter, peak.SourceMeter
 	}
 
-	if get != nil {
-		v, err := nonZeroEnergy(get())
-		// a hung Home Assistant is logged once where it is detected
-		if !errors.Is(err, errHAHung) {
-			site.logEnergyRead(entity, err)
-		}
-
-		if err == nil {
-			return v, peak.SourceEntity
-		}
-	}
-
 	return 0, peak.SourcePower
-}
-
-// logEnergyRead reports the result of reading the energy sensor, every cycle. A
-// failure is logged once as a warning and then at debug level until the read
-// works again (once at info), like a failed write.
-func (site *Site) logEnergyRead(entity string, err error) {
-	s := site.peak()
-
-	var text string
-	if err != nil {
-		text = err.Error()
-	}
-
-	s.mu.Lock()
-	last := s.readErr
-	s.readErr = text
-	s.mu.Unlock()
-
-	switch {
-	case err == nil && last != "":
-		site.log.INFO.Printf("peak shaving: energy %s: ok again", entity)
-	case err == nil:
-	case text == last:
-		site.log.DEBUG.Printf("peak shaving: energy %s: %s", entity, text)
-	default:
-		site.log.WARN.Printf("peak shaving: energy %s: %s, using the grid power", entity, text)
-	}
 }
 
 // setPeakGridEnergy takes the grid meter's import counter of this cycle, nil if
@@ -1151,65 +1074,6 @@ func (site *Site) SetPeakShavingChargeEntity(entity string) error {
 	site.log.DEBUG.Println("set grid charge power entity:", entity)
 	settings.SetString(keys.PeakShavingChargeEntity, entity)
 	site.publish(keys.PeakShavingChargeEntity, entity)
-
-	return nil
-}
-
-// GetPeakShavingEnergyEntity returns the Home Assistant energy sensor the window
-// is metered with when the grid meter has no import counter
-func (site *Site) GetPeakShavingEnergyEntity() string {
-	s := site.peak()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.energyEntity
-}
-
-// SetPeakShavingEnergyEntity sets the Home Assistant energy sensor, a counter of
-// the grid import in kWh or Wh. Empty returns to the grid power.
-func (site *Site) SetPeakShavingEnergyEntity(entity string) error {
-	if entity != "" {
-		if !strings.HasPrefix(entity, "sensor.") && !strings.HasPrefix(entity, "input_number.") {
-			return fmt.Errorf("must be a sensor or input_number entity: %s", entity)
-		}
-
-		conn, err := site.haConnection()
-		if err != nil {
-			return err
-		}
-		state, err := conn.GetState(entity)
-		if err != nil {
-			return fmt.Errorf("%s: %w", entity, err)
-		}
-		if unit := state.Attributes.UnitOfMeasurement; unit != "kWh" && unit != "Wh" {
-			return fmt.Errorf("%s must be an energy counter in kWh or Wh, not %q", entity, unit)
-		}
-	}
-
-	s := site.peak()
-
-	s.mu.Lock()
-	changed := s.energyEntity != entity
-	previous := s.energyEntity
-	s.energyEntity = entity
-	s.mu.Unlock()
-
-	if !changed {
-		return nil
-	}
-
-	if err := site.rebuildEnergyGetter(); err != nil {
-		s.mu.Lock()
-		s.energyEntity = previous
-		s.mu.Unlock()
-
-		return err
-	}
-
-	site.log.DEBUG.Println("set peak shaving energy entity:", entity)
-	settings.SetString(keys.PeakShavingEnergyEntity, entity)
-	site.publish(keys.PeakShavingEnergyEntity, entity)
 
 	return nil
 }

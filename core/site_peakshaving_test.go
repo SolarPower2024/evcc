@@ -320,107 +320,28 @@ func energyStep(site *Site, clk *clock.Mock, grid float64, meter *float64) {
 func kWh(v float64) *float64 { return &v }
 
 // TestPeakWindowSources verifies the order of the energy sources: grid meter,
-// Home Assistant sensor, grid power
+// then grid power
 func TestPeakWindowSources(t *testing.T) {
 	site, clk := peakWindowSite(t, 0)
 	s := site.peak()
-
-	var entityReads int
-	entity := 50.0
-	s.energyGet = func() (float64, error) { entityReads++; return entity, nil }
 
 	// the grid meter's counter wins: 0.05kWh in 30s is 6kW, whatever the power says
 	energyStep(site, clk, 0, kWh(100))
 	energyStep(site, clk, 0, kWh(100.05))
 	assert.InDelta(t, 180000, s.window.DrawnWs, 0.001)
 	assert.Equal(t, peak.SourceMeter, s.window.Source)
-	assert.Zero(t, entityReads, "the sensor is not read while the meter has a counter")
 
-	// without a meter counter the sensor is used, the first reading is a baseline
-	// and the interval in between comes from the grid power
+	// without a meter counter the grid power is used
 	energyStep(site, clk, 1000, nil)
 	assert.InDelta(t, 180000+30000, s.window.DrawnWs, 0.001)
-	entity = 50.025
-	energyStep(site, clk, 0, nil)
-	assert.InDelta(t, 210000+90000, s.window.DrawnWs, 0.001)
-	assert.Equal(t, peak.SourceEntity, s.window.Source)
-
-	// a failed read falls back to the grid power for that interval, the next
-	// reading is a new baseline so nothing is counted twice
-	s.energyGet = func() (float64, error) { return 0, errors.New("unavailable") }
-	energyStep(site, clk, 2000, nil)
-	assert.InDelta(t, 300000+60000, s.window.DrawnWs, 0.001)
 	assert.Equal(t, peak.SourcePower, s.window.Source)
 
-	s.energyGet = func() (float64, error) { return 50.2, nil }
-	energyStep(site, clk, 2000, nil)
-	assert.InDelta(t, 360000+60000, s.window.DrawnWs, 0.001)
-
-	// a counter going backwards is reset or replaced, the grid power fills in
-	s.energyGet = func() (float64, error) { return 1, nil }
-	energyStep(site, clk, 4000, nil)
-	assert.InDelta(t, 420000+120000, s.window.DrawnWs, 0.001)
-
-	// back at the old level it was a glitch: the counter covers the interval the
-	// grid power counted, 0.05kWh since 50.2 less 120000Ws
-	s.energyGet = func() (float64, error) { return 50.25, nil }
-	energyStep(site, clk, 4000, nil)
-	assert.InDelta(t, 540000+60000, s.window.DrawnWs, 0.001)
-	assert.Equal(t, peak.SourceEntity, s.window.Source)
-
-	// a 0 is no reading, as for the grid meter: the grid power fills in, and the
-	// next reading is a new baseline
-	s.energyGet = func() (float64, error) { return 0, nil }
-	energyStep(site, clk, 2000, nil)
-	assert.InDelta(t, 600000+60000, s.window.DrawnWs, 0.001)
-	assert.Equal(t, peak.SourcePower, s.window.Source)
-
-	s.energyGet = func() (float64, error) { return 50.3, nil }
-	energyStep(site, clk, 2000, nil)
-	assert.InDelta(t, 660000+60000, s.window.DrawnWs, 0.001)
-	assert.Equal(t, peak.SourceEntity, s.window.Source)
-}
-
-// TestPeakEnergyReadLoggedOnce verifies that a sensor failing for many cycles, or
-// reporting 0, is logged once as a warning and then at debug level, and its
-// return once at info
-func TestPeakEnergyReadLoggedOnce(t *testing.T) {
-	var buf bytes.Buffer
-
-	site := &Site{log: testLogger(&buf)}
-	s := site.peak()
-
-	var (
-		val float64
-		err error
-	)
-	s.energyEntity = "sensor.energy"
-	s.energyGet = func() (float64, error) { return val, err }
-
-	count := func(level string) int { return strings.Count(buf.String(), level) }
-
-	for range 5 {
-		_, source := site.peakEnergy()
-		assert.Equal(t, peak.SourcePower, source, "0 is no reading")
-	}
-	assert.Equal(t, 1, count("WARN"))
-	assert.Equal(t, 4, count("DEBUG"))
-
-	// the same cause stays quiet, another one is a new line
-	err = errors.New("unreachable")
-	site.peakEnergy()
-	site.peakEnergy()
-	assert.Equal(t, 2, count("WARN"))
-
-	// the reading is back, once
-	err, val = nil, 12.5
-	for range 3 {
-		v, source := site.peakEnergy()
-		assert.Equal(t, 12.5, v)
-		assert.Equal(t, peak.SourceEntity, source)
-	}
-	assert.Equal(t, 1, count("INFO"))
-	assert.Contains(t, buf.String(), "energy sensor.energy: ok again")
+	// the counter's return is a new baseline, so nothing is counted twice
+	energyStep(site, clk, 2000, kWh(100.2))
+	assert.InDelta(t, 210000+60000, s.window.DrawnWs, 0.001)
+	energyStep(site, clk, 0, kWh(100.225))
+	assert.InDelta(t, 270000+90000, s.window.DrawnWs, 0.001)
+	assert.Equal(t, peak.SourceMeter, s.window.Source)
 }
 
 // TestPeakReserveKeepsExternalMode: below the reserve peak shaving keeps the

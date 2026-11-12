@@ -478,21 +478,20 @@ and such a window stays out of the statistics (`TestMeterUnmetered`).
 
 The energy drawn comes from the energy counter of the main circuit's own
 meter (the circuit's meter, if it has an energy counter; source `circuit`,
-*Zähler des Stromkreises*), else the grid meter's import counter, else a Home
-Assistant energy sensor (kWh or Wh), else the grid power. The circuit meter
+*Zähler des Stromkreises*), else the grid meter's import counter, else the grid
+power. The circuit meter
 sees the real power at the connection, where the grid meter's import counter
 may leave out a part of it (an energy community); the circuit's configuration
 is read as it is, `meter` resolved through the meters, nothing in the circuit
 code is touched (`core/site_peak_circuit.go`, `TestPeakCircuit*`). While the window is metered with it, its power of the same cycle replaces the grid meter's power for the gaps, the allowed power and the setpoint (`TestPeakCircuitPowerForSetpoint`); if that power cannot be read, the cycle uses the grid meter's counter and power. A circuit meter that is the grid meter itself is not used. A failed reading, a 0
-of the sensor (as evcc takes it for the grid meter) and a reading below the last
+of the counter (as evcc takes it for the grid meter) and a reading below the last
 are replaced by the grid power for that interval. The lower reading only becomes
 the new base once the next one confirms it (a real reset); back at the old level
 it was a glitch, and the counter's step leaves out what the grid power already
 counted (`TestMeterCounterGlitch`). A step beyond what a grid connection draws
 (100 kW) is no measurement either. A counter standing still while the grid power
 says more than 20 Wh in 2 minutes is replaced for the rest of the window
-(`peakShavingSource`). A failing sensor is logged once, then at debug level
-until it works again (`TestPeakEnergyReadLoggedOnce`).
+(`peakShavingSource`).
 
 The circuit meter's counter is also recorded per 15 minute slot by the collector
 `grid-peak` of its own group `gridpeak`, which is in no balance, flow or

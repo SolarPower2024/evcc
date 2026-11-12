@@ -112,22 +112,6 @@
 				</FormRow>
 			</template>
 
-			<FormRow
-				id="peakShavingEnergyEntity"
-				:label="$t('config.peakshaving.energyEntityLabel')"
-				:help="$t('config.peakshaving.energyEntityHelp')"
-				optional
-			>
-				<input
-					id="peakShavingEnergyEntity"
-					v-model="energyEntity"
-					type="text"
-					class="form-control"
-					placeholder="sensor.grid_import_energy"
-					data-testid="peakshaving-energy-entity"
-				/>
-			</FormRow>
-
 			<p class="small mb-0" data-testid="peakshaving-source">
 				{{ $t("config.peakshaving.sourceLabel") }}:
 				<strong>{{ sourceText }}</strong>
@@ -191,8 +175,6 @@ export default {
 			initialProtLimit: "",
 			protSoc: "",
 			initialProtSoc: "",
-			energyEntity: "",
-			initialEnergyEntity: "",
 		};
 	},
 	computed: {
@@ -228,16 +210,8 @@ export default {
 				protSoc: "number.evcc_peak_fronius_soc_threshold",
 			};
 		},
-		energyEntityChanged() {
-			return this.energyEntity.trim() !== this.initialEnergyEntity;
-		},
 		changed() {
-			return (
-				this.batteryTypeChanged ||
-				this.marstekChanged ||
-				this.protChanged ||
-				this.energyEntityChanged
-			);
+			return this.batteryTypeChanged || this.marstekChanged || this.protChanged;
 		},
 		sourceText() {
 			const source = store?.state?.peakShavingSource || "power";
@@ -246,7 +220,6 @@ export default {
 	},
 	methods: {
 		reset() {
-			const energyEntity = store?.state?.peakShavingEnergyEntity || "";
 			const manualEntity = store?.state?.peakShavingManualEntity || "";
 			const modeEntity = store?.state?.peakShavingModeEntity || "";
 			const protSwitch = store?.state?.peakShavingProtSwitch || "";
@@ -267,8 +240,6 @@ export default {
 			this.initialProtLimit = protLimit;
 			this.protSoc = protSoc;
 			this.initialProtSoc = protSoc;
-			this.energyEntity = energyEntity;
-			this.initialEnergyEntity = energyEntity;
 		},
 		open() {
 			this.reset();
@@ -332,17 +303,6 @@ export default {
 				if (this.batteryTypeChanged) {
 					await api.post(`peakshavingbatterytype/${this.batteryType}`);
 					this.initialBatteryType = this.batteryType;
-				}
-
-				const energyEntity = this.energyEntity.trim();
-				if (this.energyEntityChanged) {
-					if (energyEntity) {
-						await api.post(
-							`peakshavingenergyentity/${encodeURIComponent(energyEntity)}`
-						);
-					} else {
-						await api.delete("peakshavingenergyentity");
-					}
 				}
 
 				this.$emit("changed");

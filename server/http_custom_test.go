@@ -143,8 +143,6 @@ var customRouteSamples = map[string]string{
 	"peakshavingprotsocdelete":      "/peakshavingprotsoc",
 	"peakshavingchargeentity":       "/peakshavingchargeentity/input_number.charge",
 	"peakshavingchargeentitydelete": "/peakshavingchargeentity",
-	"peakshavingenergyentity":       "/peakshavingenergyentity/sensor.grid_import",
-	"peakshavingenergyentitydelete": "/peakshavingenergyentity",
 	"peakshavingchargepower":        "/peakshavingchargepower/4000",
 	"peakshavingcircuit":            "/peakshavingcircuit/db:1",
 	"peakshavingcircuitdelete":      "/peakshavingcircuit",

@@ -262,9 +262,8 @@ export interface LmState {
   /** End of the running 15 minute window. */
   peakShavingWindowEnd?: string;
   /** Where the window's energy comes from. */
-  peakShavingSource?: "circuit" | "meter" | "entity" | "power";
+  peakShavingSource?: "circuit" | "meter" | "power";
   /** Home Assistant grid import counter, used when the grid meter has none. */
-  peakShavingEnergyEntity?: string;
   /** Monthly peak statistics, newest first. */
   peakMonths?: PeakMonth[];
   /** Capacity tariff with each month's cost with and without the battery, a zero price is off. */
