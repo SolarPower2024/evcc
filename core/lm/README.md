@@ -36,6 +36,7 @@ Part 1 describes the features, part 2 how the fork is kept maintainable.
 - [Rules](#rules)
 - [Upstream touch points](#upstream-touch-points)
 - [Own files](#own-files)
+- [Dependencies](#dependencies)
 - [Taking in a new evcc version](#taking-in-a-new-evcc-version)
 - [Tests](#tests)
 
@@ -1385,6 +1386,46 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/utils/optimizerAutomatic.ts`, `assets/js/components/LoadManagement/`, the battery cards in `assets/js/components/Battery/` (`PeakStatusModal`, `PeakStatusHero`, `PeakStatusLoads`, `peakStatus.ts`, `peakDialog.ts`, `BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`) |
 | build | `.github/workflows/custom-image.yml` |
 | start page | `.github/README.md` (GitHub shows it instead of the evcc `README.md`; its feature list follows part 1) |
+
+## Dependencies
+
+Which features build on each other, and which evcc behaviour the fork uses
+without a hook. Changing a feature: check the features using it. Taking in an
+evcc version: check the second table, a change there brings no merge conflict.
+
+### Between fork features
+
+| Feature | Builds on | What it takes |
+|---|---|---|
+| 2 battery in load management | 1, 7, 17 | priority and circuit like a load; phases for current accounting (`lmBatteryPhases`), hold-off |
+| 3, 4 switch devices, stages | 1 | loads of the priority order; the assumed heater power stays in the home consumption (`meteredPower`), so also in 13 |
+| 5, 6 shed guard, not following | 1 | act on the loads of the priority order |
+| 9 phase switching | 7 | the per phase limits are what the circuit checks and 16 (`circuitPower`) count with |
+| 10 grid charging | 2, 11, 14 | every request passes `gridChargeGate`: circuit headroom (2), paused during a peak (11); one-time uses the identified charge power (14) |
+| 11 peak shaving | 7, 8, 16 | peak from the root circuit's meter (`site_peak_circuit.go`); events in the dialog; Marstek and BYD hold for the optimizer (`site_peak_omni_hold.go`) |
+| 12 profiles | 10 | set the soc thresholds of 10 and evcc's priority and buffer soc |
+| 16 optimizer inputs | 1, 2, 7, 10, 11, 13, 14, 17, 19 | priorities, battery circuit (`lmGridChargeBlocked`), circuit power of the loadpoints, goals of 10, import limit and reserve of 11, the forecast of 13 (through evcc's `homeProfile`), battery identification, grid charge window, solar series 0 with snow |
+| 16 automatic mode | 2, 10, 11 | `lmGateBatteryMode`: the optimizer's charge passes `gridChargeGate`, a peak (`peakNeedsBattery`) turns hold into normal, without a result the fork's grid charging of 10 applies |
+| 17 advanced settings | – | read by 2 (phases, hold-off), 11 (`PeakFreeze`), 13, 16 (window, export forecast entity) |
+
+Not used by other features: 15 EEG, 18 log file, 20 split grid tariff (a
+tariff template; 16 plans with it only when it is the planner tariff).
+
+### evcc behaviour used without a hook
+
+| evcc part | Fork feature | Relies on | Test |
+|---|---|---|---|
+| order in `Site.update` (meters, `updatePower`, battery) | 2, 10, 11 | the fork's cycle after the power values, battery calls in order | `TestForkUpdateOrder` |
+| `requiredBatteryMode`, `batterySuggestionMode` | 11, 16 | evcc's own decision on hold and the optimizer's mode for the first battery | `TestLmGate*`, peak reserve tests; `batterySuggestionMode` none |
+| `GetGridPeakBaseline` (Externe Begrenzung → Netzbezugsspitze) | 11 | is the peak limit, 0 is off | `site_peak_limit_test.go` |
+| `optimizerRequest`: `Ft` per slot, `PMaxImp` of the circuit, batteries moved in after the hook | 16, 19 | the series the fork changes are built before it | `TestForkOptimizerRequestOrder`, `TestSnowCoverOptimizerInput` |
+| optimizer: a goal binds from step 1 | 10, 16 | goals are set from step 1 | `TestLmOptimizerScenarios` (only with optimizer) |
+| `tariffs.Planner`, `currentRates` | 16 | planner tariff types, rates as evcc reads them | `site_optimizer_lm_test.go` |
+| circuits (`config.Circuits`, `GetParent`, `GetMaxPower`, `GetMaxCurrent`) | 1, 2, 7, 11, 16 | the tree and its limits as evcc configures them | `site_lm*_test.go`, `site_peak_circuit_test.go` |
+| `MaxActivePhases`, `GetCircuit` of the loadpoint | 9, 16 | phases and circuit of a loadpoint | `loadpoint_phases_test.go` |
+| `homeassistant` connection of the add-on | 11, 16 (export forecast) | reads and writes states through it | local server tests |
+
+A row without a test is checked by hand when evcc changed that part.
 
 ## Taking in a new evcc version
 
