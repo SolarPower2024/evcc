@@ -1416,7 +1416,7 @@ tariff template; 16 plans with it only when it is the planner tariff).
 | evcc part | Fork feature | Relies on | Test |
 |---|---|---|---|
 | order in `Site.update` (meters, `updatePower`, battery) | 2, 10, 11 | the fork's cycle after the power values, battery calls in order | `TestForkUpdateOrder` |
-| `requiredBatteryMode`, `batterySuggestionMode` | 11, 16 | evcc's own decision on hold and the optimizer's mode for the first battery | `TestLmGate*`, peak reserve tests; `batterySuggestionMode` none |
+| `requiredBatteryMode`, `batterySuggestionMode` | 11, 16 | evcc's own decision on hold and the optimizer's mode for the first battery | `TestLmGate*`, peak reserve tests, `TestBatterySuggestionModeContract` |
 | `GetGridPeakBaseline` (Externe Begrenzung → Netzbezugsspitze) | 11 | is the peak limit, 0 is off | `site_peak_limit_test.go` |
 | `optimizerRequest`: `Ft` per slot, `PMaxImp` of the circuit, batteries moved in after the hook | 16, 19 | the series the fork changes are built before it | `TestForkOptimizerRequestOrder`, `TestSnowCoverOptimizerInput` |
 | optimizer: a goal binds from step 1 | 10, 16 | goals are set from step 1 | `TestLmOptimizerScenarios` (only with optimizer) |
@@ -1501,6 +1501,10 @@ unused:
   `updateBatteryMode` changes nothing without automatic mode and leaves evcc's
   checks after it in place; `TestLmGateOptimizerChargeRefused` shows a refused
   charge arriving as hold at the battery.
+- `TestBatterySuggestionModeContract`: evcc's `batterySuggestionMode`, read by
+  the gate without a hook, is not ok without a result and after it expired,
+  returns each action of a result as its mode (an unknown one as normal) and
+  finds the result under the battery's name.
 - `TestRestoreCustomAfterRestart`: every fork setting survives a restart.
 - `TestGridChargeOnceSurvivesRestartOnDisk`: the one-time order stored by its setter comes back from a database file after reopening it.
 - `TestLmOptimizerResultExport`: the hook in `optimizerUpdate` passes a usable
