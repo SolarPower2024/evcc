@@ -1,9 +1,13 @@
 package core
 
 import (
+	"bytes"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
+	evbus "github.com/asaskevich/EventBus"
 	"github.com/benbjohnson/clock"
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/charger"
@@ -12,8 +16,10 @@ import (
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/util"
 	"github.com/evcc-io/evcc/util/grid"
+	jww "github.com/spf13/jwalterweatherman"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 // newStagesLoadpoint returns a 3-phase loadpoint driving a 3 x 3 kW heater on a
@@ -575,4 +581,59 @@ func TestStagesPhaseCurrentKeepsPhases(t *testing.T) {
 	assert.Equal(t, 3, lp.ActivePhases())
 	assert.InDelta(t, 3000.0/690, lp.effectiveMinCurrent(), 1e-9)
 	assert.InDelta(t, 9000.0/690, lp.effectiveMaxCurrent(), 1e-9)
+}
+
+// stagesGetter is a heater in stages as far as the loadpoint sees it: it reports a
+// current of its own
+type stagesGetter struct {
+	api.Charger
+	api.CurrentGetter
+}
+
+func (stagesGetter) Stages() int { return 3 }
+
+// TestSyncChargerStagesNoMismatchWarning: the current of a heater in stages is
+// adopted without the warning evcc gives for a charger out of step, any other
+// charger still gets it
+func TestSyncChargerStagesNoMismatchWarning(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stages bool
+		warned bool
+	}{
+		{"stages", true, false},
+		{"other charger", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			ch := api.NewMockCharger(ctrl)
+			cg := api.NewMockCurrentGetter(ctrl)
+			ch.EXPECT().Enabled().Return(true, nil)
+			cg.EXPECT().GetMaxCurrent().Return(9.0, nil)
+
+			var charger api.Charger = struct {
+				api.Charger
+				api.CurrentGetter
+			}{ch, cg}
+			if tc.stages {
+				charger = stagesGetter{ch, cg}
+			}
+
+			var buf bytes.Buffer
+			lp := &Loadpoint{
+				log:            &util.Logger{Notepad: jww.NewNotepad(jww.LevelTrace, jww.LevelTrace, io.Discard, &buf, "", 0)},
+				bus:            evbus.New(),
+				clock:          clock.New(),
+				charger:        charger,
+				status:         api.StatusC,
+				enabled:        true,
+				phases:         3,
+				offeredCurrent: 6,
+			}
+
+			require.NoError(t, lp.syncCharger())
+			assert.Equal(t, 9.0, lp.offeredCurrent, "adopted")
+			assert.Equal(t, tc.warned, strings.Contains(buf.String(), "current mismatch"), buf.String())
+		})
+	}
 }

@@ -35,6 +35,7 @@ var forkHooks = []struct {
 	{"core/site_optimizer_request.go", "Site.optimizerRequest", []string{"optimizerGridTariff", "applyLmOptimizerInputs"}},
 	{"core/site_optimizer.go", "Site.optimizerUpdate", []string{"lmOptimizerResult"}},
 	{"core/site_optimizer_result.go", "Site.addBatteryForecastTotals", []string{"lmForecastLowest"}},
+	{"core/loadpoint.go", "Loadpoint.syncCharger", []string{"isStagesCharger"}},
 	{"core/loadpoint.go", "Loadpoint.restoreSettings", []string{"restorePhaseSwitch"}},
 	{"core/loadpoint.go", "Loadpoint.pvEnablePhases", []string{"enablePhaseCurrents", "PeekCurrent"}},
 	{"core/loadpoint.go", "Loadpoint.Prepare", []string{"publishPhaseSwitch", "publishStages"}},

@@ -30,8 +30,7 @@ type powerEstimator interface {
 
 // publishStages publishes if the charger switches in stages and if its power is assumed
 func (lp *Loadpoint) publishStages() {
-	_, ok := lp.charger.(stagedCharger)
-	lp.publish(keys.ChargerStages, ok)
+	lp.publish(keys.ChargerStages, lp.isStagesCharger())
 	lp.publish(keys.ChargePowerEstimated, lp.powerEstimated())
 }
 
@@ -127,4 +126,12 @@ func (lp *Loadpoint) stagePhaseCurrent() float64 {
 		}
 	}
 	return 0
+}
+
+// isStagesCharger reports if the charger switches a heater in stages: it reports
+// a current of its own on purpose (it adopts running stages after a restart and
+// keeps what a failed switch left), so a mismatch to the offer is no logic error
+func (lp *Loadpoint) isStagesCharger() bool {
+	_, ok := lp.charger.(stagedCharger)
+	return ok
 }

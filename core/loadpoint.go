@@ -963,7 +963,7 @@ func (lp *Loadpoint) syncCharger() error {
 			if current, err = cg.GetMaxCurrent(); err == nil {
 				// smallest adjustment most PWM-Controllers can do is: 100%÷256×0,6A = 0.234A
 				if delta := math.Abs(lp.offeredCurrent - current); delta > 0.23 {
-					if shouldBeConsistent && delta >= 1 {
+					if shouldBeConsistent && delta >= 1 && !lp.isStagesCharger() { // custom: a heater in stages reports its own current on purpose, see core/loadpoint_stages.go
 						lp.log.WARN.Printf("charger logic error: current mismatch (got %.3gA, expected %.3gA) - make sure your interval is at least 30s", current, lp.offeredCurrent)
 					}
 					lp.offeredCurrent = current
