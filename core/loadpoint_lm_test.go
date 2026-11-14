@@ -791,3 +791,44 @@ func TestLmCircuitLogsStartReserve(t *testing.T) {
 	assert.Zero(t, second.lmLimit(16)) // 7 kW measured + 6 kW do not fit
 	assert.NotContains(t, out.String(), "starting load")
 }
+
+// TestLmStartNotedWhenOn: a wallbox that ends up below its minimum after the
+// current and the power check is off and reserves nothing; one that gets its
+// minimum reserves what it was granted
+func TestLmStartNotedWhenOn(t *testing.T) {
+	newWallbox := func(gridPower float64) (*Loadpoint, *Loadpoint, api.Circuit) {
+		m := &lmMeter{power: gridPower}
+		c, err := circuit.New(util.NewLogger("test"), "main", 0, 10000, m, 0)
+		require.NoError(t, err)
+		require.NoError(t, c.Update(nil))
+
+		mk := func() *Loadpoint {
+			return &Loadpoint{
+				log:        util.NewLogger("lp"),
+				clock:      clock.NewMock(),
+				circuit:    c,
+				charger:    &fakeCharger{},
+				minCurrent: 6,
+				maxCurrent: 16,
+				phases:     3,
+			}
+		}
+		wallbox, other := mk(), mk()
+		other.lmOwn = wallbox.lmm()
+		return wallbox, other, c
+	}
+
+	// 2 kW free, the minimum needs 4.1 kW: off
+	wallbox, other, c := newWallbox(8000)
+	assert.Less(t, wallbox.lmLimit(16), 6.0)
+	pow, cur := wallbox.lmm().StartReserve(other, c)
+	assert.Zero(t, pow)
+	assert.Zero(t, cur)
+
+	// 6 kW free: on with 8 A, which it does not draw yet
+	wallbox, other, c = newWallbox(4000)
+	assert.InDelta(t, 8.0, wallbox.lmLimit(16), 0.1)
+	pow, cur = wallbox.lmm().StartReserve(other, c)
+	assert.InDelta(t, 5520, pow, 100)
+	assert.InDelta(t, 8.0, cur, 0.1)
+}

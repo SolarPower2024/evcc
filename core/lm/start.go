@@ -1,11 +1,16 @@
 package lm
 
-// Starting loads: what load management granted a load and it does not draw yet
-// still counts in the circuit. A car takes about 20 s to draw after it was given
-// its current, a heater's contactors follow the switch. Until then the circuit
-// measures the old value, and the next load would be granted the same gap.
+// Starting loads: what a load was granted and does not draw yet still counts in
+// the circuit. A car takes up to a minute to draw its full current after it was
+// given it. Until then the circuit measures the old value, and the next load
+// would be granted the same gap.
+//
+// A grant is noted by the load once its request is decided (NoteStart), not by
+// the requests themselves: a loadpoint's current and power checks are only
+// combined afterwards, and a load that ends up off reserves nothing.
 
 import (
+	"math"
 	"sync"
 	"time"
 
@@ -17,19 +22,19 @@ const (
 	// Cars were measured to draw their full current after 30-60 s.
 	DefaultStartTime = time.Minute
 
-	// a remainder below this counts as drawn, a grant has to exceed the last one
-	// by this to start the time anew
+	// a remainder below this counts as drawn, a grant has to exceed the highest
+	// one since the load went on by this to start the time anew
 	startSlackCurrent = 1.0   // A
 	startSlackPower   = 300.0 // W
 )
 
-// start is what a load was last granted and since when
+// start is what a load was last granted, the highest grant since it went on and
+// since when the time runs
 type start struct {
-	circuit      api.Circuit
-	current      float64
-	power        float64
-	currentSince time.Time
-	powerSince   time.Time
+	circuit                  api.Circuit
+	current, power           float64
+	peakCurrent, peakPower   float64
+	currentSince, powerSince time.Time
 }
 
 // starts is the Manager's state of the loads that were granted an increase
@@ -57,75 +62,37 @@ func (m *Manager) startNow() time.Time {
 	return m.clock()
 }
 
-// granted reports whether a grant counts as given: a load that takes all or
-// nothing, like a heater or the battery, got its request in full; a regulated
-// load got what gets it going.
-func (d Demand) granted(old, new, granted float64) bool {
-	if d.Regulated {
-		return granted >= old+max(d.Min, 0)
-	}
-	return granted >= new
-}
-
-// noteCurrent records the current a load was granted. Nothing granted ends the
-// reserve; a grant above the last one by more than the slack starts the time
-// anew, the same grant again every cycle does not extend it.
-func (m *Manager) noteCurrent(l Load, c api.Circuit, granted float64) {
+// NoteStart records what load l on circuit c was finally granted: its current
+// and its power, 0 for off. Off ends the reserve. A grant above the highest one
+// since the load went on by more than the slack starts the time anew; the same
+// grant again, or one that goes down and back up, does not.
+func (m *Manager) NoteStart(l Load, c api.Circuit, current, power float64) {
 	m.startMu.Lock()
 	defer m.startMu.Unlock()
 
-	if granted <= 0 {
-		if s, ok := m.started[l]; ok {
-			s.current = 0
-			m.dropEmpty(l, s)
-		}
+	if c == nil || (current <= 0 && power <= 0) {
+		delete(m.started, l)
 		return
 	}
 
-	s := m.startOf(l)
-	if granted > s.current+startSlackCurrent {
-		s.currentSince = m.startNow()
-	}
-	s.current = granted
-	s.circuit = c
-}
-
-// notePower is noteCurrent for power
-func (m *Manager) notePower(l Load, c api.Circuit, granted float64) {
-	m.startMu.Lock()
-	defer m.startMu.Unlock()
-
-	if granted <= 0 {
-		if s, ok := m.started[l]; ok {
-			s.power = 0
-			m.dropEmpty(l, s)
-		}
-		return
-	}
-
-	s := m.startOf(l)
-	if granted > s.power+startSlackPower {
-		s.powerSince = m.startNow()
-	}
-	s.power = granted
-	s.circuit = c
-}
-
-// startOf is called with startMu held
-func (m *Manager) startOf(l Load) *start {
 	s, ok := m.started[l]
 	if !ok {
 		s = new(start)
 		m.started[l] = s
 	}
-	return s
-}
+	now := m.startNow()
 
-// dropEmpty is called with startMu held
-func (m *Manager) dropEmpty(l Load, s *start) {
-	if s.current <= 0 && s.power <= 0 {
-		delete(m.started, l)
+	s.circuit = c
+	s.current, s.power = max(current, 0), max(power, 0)
+
+	if s.current > s.peakCurrent+startSlackCurrent {
+		s.currentSince = now
 	}
+	if s.power > s.peakPower+startSlackPower {
+		s.powerSince = now
+	}
+	s.peakCurrent = max(s.peakCurrent, s.current)
+	s.peakPower = max(s.peakPower, s.power)
 }
 
 // forgetStart drops what a load was granted
@@ -135,57 +102,103 @@ func (m *Manager) forgetStart(l Load) {
 	delete(m.started, l)
 }
 
-// StartReserve returns the power and current that other loads granted an
-// increase and do not draw yet, on the circuits load l on circuit c shares a
-// limit with. It only reads.
-func (m *Manager) StartReserve(l Load, c api.Circuit) (power, current float64) {
-	return m.startReserve(c, l)
+// pendingStart is a load whose grant is still running, copied out under the lock
+type pendingStart struct {
+	load               Load
+	circuit            api.Circuit
+	current, power     float64
+	currentOn, powerOn bool
 }
 
-// startReserve sums up, over all other loads that draw through a limit shared
-// with c and were granted an increase less than DefaultStartTime ago, what they
-// were granted less what they draw. A remainder below the slack counts as drawn.
-// A grant that ran out stays recorded, so asking for the same again does not
-// start the time anew; it ends with a grant of nothing or Forget.
-func (m *Manager) startReserve(c api.Circuit, self Load) (power, current float64) {
+// pendingStarts returns the other loads on a limit shared with c whose grant is
+// still running. A grant that ran out stays recorded, so the same grant again
+// does not start the time anew; it ends with off or Forget.
+func (m *Manager) pendingStarts(c api.Circuit, self Load) []pendingStart {
 	m.startMu.Lock()
+	defer m.startMu.Unlock()
+
 	now := m.startNow()
+	var res []pendingStart
 
-	type pending struct {
-		load         Load
-		power, curr  float64
-		powerOn, cOn bool
-	}
-
-	var list []pending
 	for l, s := range m.started {
 		if l == self || !competes(c, s.circuit) {
 			continue
 		}
 
-		p := pending{load: l}
-		if s.power > 0 && now.Sub(s.powerSince) < DefaultStartTime {
-			p.power, p.powerOn = s.power, true
-		}
-		if s.current > 0 && now.Sub(s.currentSince) < DefaultStartTime {
-			p.curr, p.cOn = s.current, true
-		}
-		if p.powerOn || p.cOn {
-			list = append(list, p)
+		p := pendingStart{load: l, circuit: s.circuit, current: s.current, power: s.power}
+		p.currentOn = s.current > 0 && now.Sub(s.currentSince) < DefaultStartTime
+		p.powerOn = s.power > 0 && now.Sub(s.powerSince) < DefaultStartTime
+
+		if p.currentOn || p.powerOn {
+			res = append(res, p)
 		}
 	}
-	m.startMu.Unlock()
 
-	// what the loads draw is asked without holding the lock
-	for _, p := range list {
-		if p.powerOn {
-			if rest := p.power - p.load.GetChargePower(); rest >= startSlackPower {
-				power += rest
-			}
+	return res
+}
+
+// drawn returns what a starting load draws as a level of the circuit sees it. A
+// level with a meter measures what flows: a load drawing hardly any power draws
+// no current, whatever it reports (a charger without phase currents reports its
+// offer). A level without a meter adds up what the loads report, so the offer
+// counts there already.
+func (p pendingStart) drawn(level api.Circuit) (power, current float64) {
+	power = p.load.GetChargePower()
+	if level.HasMeter() && power < startSlackPower {
+		return power, 0
+	}
+	return power, p.load.GetMaxPhaseCurrent()
+}
+
+// rest returns what of the grant is not drawn yet on the level, 0 below the slack
+func (p pendingStart) rest(level api.Circuit) (power, current float64) {
+	drawnPower, drawnCurrent := p.drawn(level)
+
+	if p.powerOn {
+		if r := p.power - drawnPower; r >= startSlackPower {
+			power = r
 		}
-		if p.cOn {
-			if rest := p.curr - p.load.GetMaxPhaseCurrent(); rest >= startSlackCurrent {
-				current += rest
+	}
+	if p.currentOn {
+		if r := p.current - drawnCurrent; r >= startSlackCurrent {
+			current = r
+		}
+	}
+
+	return power, current
+}
+
+// levelReserve sums up the rest of the starting loads drawing through the level
+func levelReserve(list []pendingStart, level api.Circuit) (power, current float64) {
+	for _, p := range list {
+		if !under(p.circuit, level) {
+			continue
+		}
+		pw, cur := p.rest(level)
+		power += pw
+		current += cur
+	}
+	return power, current
+}
+
+// StartReserve returns the power and current that other loads were granted and
+// do not draw yet, on the levels load l on circuit c shares with them; the
+// tightest level of the chain counts most, here the sum over the chain's
+// competitors is given, for the log. It only reads.
+func (m *Manager) StartReserve(l Load, c api.Circuit) (power, current float64) {
+	if c == nil {
+		return 0, 0
+	}
+
+	list := m.pendingStarts(c, l)
+	for _, p := range list {
+		// the loads on c's chain, as the closest shared level sees them
+		for level := c; level != nil; level = level.GetParent() {
+			if under(p.circuit, level) {
+				pw, cur := p.rest(level)
+				power += pw
+				current += cur
+				break
 			}
 		}
 	}
@@ -193,12 +206,39 @@ func (m *Manager) startReserve(c api.Circuit, self Load) (power, current float64
 	return power, current
 }
 
-// grantedAmount returns what counts as granted of a request: the grant if it
-// is one, else nothing, as a load that did not get going draws nothing and
-// reserves nothing
-func (d Demand) grantedAmount(old, new, granted float64) float64 {
-	if !d.granted(old, new, granted) {
-		return 0
+// startCap returns the highest value a request may get with the starting loads'
+// rest counted on every level of c's chain they draw through; +Inf without a
+// limiting level. Read straight from the levels, so nothing is logged.
+func (m *Manager) startCap(c api.Circuit, self Load, old float64, isPower bool) float64 {
+	list := m.pendingStarts(c, self)
+	if len(list) == 0 {
+		return math.Inf(1)
 	}
-	return granted
+
+	res := math.Inf(1)
+	for level := c; level != nil; level = level.GetParent() {
+		reservePower, reserveCurrent := levelReserve(list, level)
+
+		if isPower {
+			if limit := level.EffectiveMaxPower(); limit > 0 && reservePower > 0 {
+				res = min(res, old+limit-level.GetChargePower()-reservePower)
+			}
+		} else {
+			if limit := level.GetMaxCurrent(); limit > 0 && reserveCurrent > 0 {
+				res = min(res, old+limit-level.GetMaxPhaseCurrent()-reserveCurrent)
+			}
+		}
+	}
+
+	return res
+}
+
+// applyStartCap cuts a result to the start cap, never below what the load draws
+// now
+func (m *Manager) applyStartCap(c api.Circuit, self Load, old, new, res float64, isPower bool) float64 {
+	limit := m.startCap(c, self, old, isPower)
+	if math.IsInf(limit, 1) {
+		return res
+	}
+	return min(res, max(min(old, new), limit))
 }

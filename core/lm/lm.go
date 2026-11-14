@@ -408,10 +408,7 @@ func (m *Manager) RequestPower(l Load, c api.Circuit, old, new float64, d Demand
 	need := d.amount(unmet(old, new, capped))
 	m.remember(c, l, m.Priority(l), &need, nil)
 
-	res := m.peekPower(l, c, old, new, &capped)
-	m.notePower(l, c, d.grantedAmount(old, new, res))
-
-	return res
+	return m.peekPower(l, c, old, new, &capped)
 }
 
 // ValidateCurrent caps a current request against the circuit while withholding
@@ -431,10 +428,7 @@ func (m *Manager) RequestCurrent(l Load, c api.Circuit, old, new float64, d Dema
 	need := d.amount(unmet(old, new, capped))
 	m.remember(c, l, m.Priority(l), nil, &need)
 
-	res := m.peekCurrent(l, c, old, new, &capped)
-	m.noteCurrent(l, c, d.grantedAmount(old, new, res))
-
-	return res
+	return m.peekCurrent(l, c, old, new, &capped)
 }
 
 // PeekPower caps a power request like ValidatePower but records no demand.
@@ -473,13 +467,9 @@ func (m *Manager) peekPower(l Load, c api.Circuit, old, new float64, capped *flo
 		res = max(res, min(keep, c.ValidatePower(old-reserve+lower, keep)))
 	}
 
-	// what loads granted an increase do not draw yet is not free either, but what
-	// the load draws itself stays
-	if sr, _ := m.startReserve(c, l); sr >= startSlackPower {
-		res = min(res, max(min(old, new), c.ValidatePower(old-reserve-sr, new)))
-	}
-
-	return res
+	// what loads granted an increase do not draw yet is not free either, on each
+	// level they draw through; what the load draws itself stays, see start.go
+	return m.applyStartCap(c, l, old, new, res, true)
 }
 
 // PeekCurrent caps a current request like ValidateCurrent but records no demand
@@ -510,9 +500,5 @@ func (m *Manager) peekCurrent(l Load, c api.Circuit, old, new float64, capped *f
 	}
 
 	// see peekPower
-	if _, sr := m.startReserve(c, l); sr >= startSlackCurrent {
-		res = min(res, max(min(old, new), c.ValidateCurrent(old-reserve-sr, new)))
-	}
-
-	return res
+	return m.applyStartCap(c, l, old, new, res, false)
 }

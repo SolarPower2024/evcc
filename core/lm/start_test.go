@@ -13,8 +13,8 @@ import (
 )
 
 // startRig is a circuit of 35 A (or 20 kW) with a base load and a manager on a
-// clock of its own. The loads a and b are on it, the circuit measures what the
-// loads draw.
+// clock of its own. The loads a and b are on it, the circuit adds up what the
+// loads report.
 type startRig struct {
 	t     *testing.T
 	m     *lm.Manager
@@ -43,7 +43,7 @@ func newStartRig(t *testing.T, maxCurrent, maxPower float64) *startRig {
 	return r
 }
 
-// measure lets the circuit measure what the loads draw
+// measure lets the circuit add up what the loads report
 func (r *startRig) measure() {
 	r.t.Helper()
 	require.NoError(r.t, r.c.Update(r.loads))
@@ -51,24 +51,38 @@ func (r *startRig) measure() {
 
 func (r *startRig) advance(d time.Duration) { r.now = r.now.Add(d) }
 
+// grant asks for a current and notes what was granted, as a loadpoint does
+func (r *startRig) grant(l *testLoad, old, new float64) float64 {
+	got := r.m.ValidateCurrent(l, r.c, old, new)
+	r.m.NoteStart(l, r.c, got, 0)
+	return got
+}
+
+// grantPower is grant for power
+func (r *startRig) grantPower(l *testLoad, old, new float64) float64 {
+	got := r.m.ValidatePower(l, r.c, old, new)
+	r.m.NoteStart(l, r.c, 0, got)
+	return got
+}
+
+func reserveCurrent(m *lm.Manager, l lm.Load, c api.Circuit) float64 {
+	_, cur := m.StartReserve(l, c)
+	return cur
+}
+
 // TestStartReserveBlocksSecondLoad: the circuit measures 12.9 A, the wallbox is
-// granted 18 A and draws nothing yet. The heater, which needs 8.7 A, does not
-// get them, the circuit counts 30.9 A.
+// granted 18 A and draws nothing yet. Of the 8.7 A the heater needs only 4.1 A
+// are left, the circuit counts 30.9 A.
 func TestStartReserveBlocksSecondLoad(t *testing.T) {
 	r := newStartRig(t, 35, 0)
 	r.base.current = 12.9
 	r.measure()
 
-	assert.Equal(t, 18.0, r.m.ValidateCurrent(r.a, r.c, 0, 18))
+	assert.Equal(t, 18.0, r.grant(r.a, 0, 18))
 
-	// 35 - 12.9 - 18 = 4.1 A are left, less than the heater needs: a load that
-	// takes all or nothing stays off
 	got := r.m.ValidateCurrent(r.b, r.c, 0, 8.7)
 	assert.InDelta(t, 4.1, got, 1e-9)
-	assert.Less(t, got, 8.7)
-
-	_, cur := r.m.StartReserve(r.b, r.c)
-	assert.Equal(t, 18.0, cur)
+	assert.Equal(t, 18.0, reserveCurrent(r.m, r.b, r.c))
 
 	// without the reserve it would have fitted
 	r2 := newStartRig(t, 35, 0)
@@ -82,8 +96,21 @@ func TestStartReserveBlocksSecondLoad(t *testing.T) {
 func TestStartReserveSameCycle(t *testing.T) {
 	r := newStartRig(t, 35, 0)
 
-	assert.Equal(t, 20.0, r.m.ValidateCurrent(r.a, r.c, 0, 20))
-	assert.Equal(t, 15.0, r.m.ValidateCurrent(r.b, r.c, 0, 20))
+	assert.Equal(t, 20.0, r.grant(r.a, 0, 20))
+	assert.Equal(t, 15.0, r.grant(r.b, 0, 20))
+}
+
+// TestStartReserveRequestDoesNotNote: a request alone reserves nothing, only the
+// grant the load notes (a battery probe, a what-if, a loadpoint that ends up off)
+func TestStartReserveRequestDoesNotNote(t *testing.T) {
+	r := newStartRig(t, 35, 0)
+	assert.Equal(t, 18.0, r.m.ValidateCurrent(r.a, r.c, 0, 18))
+	assert.Equal(t, 18.0, r.m.PeekCurrent(r.a, r.c, 0, 18))
+	assert.Equal(t, 9000.0, r.m.ValidatePower(r.a, r.c, 0, 9000))
+
+	pow, cur := r.m.StartReserve(r.b, r.c)
+	assert.Zero(t, pow)
+	assert.Zero(t, cur)
 }
 
 // TestStartReserveEndsWhenDrawing: once the wallbox draws, the circuit measures
@@ -93,31 +120,27 @@ func TestStartReserveEndsWhenDrawing(t *testing.T) {
 	r.base.current = 12.9
 	r.measure()
 
-	r.m.ValidateCurrent(r.a, r.c, 0, 18)
+	r.grant(r.a, 0, 18)
 
 	// 17.5 A drawn: less than 1 A of the grant remains
 	r.advance(15 * time.Second)
 	r.a.current = 17.5
 	r.measure()
 
-	_, cur := r.m.StartReserve(r.b, r.c)
-	assert.Zero(t, cur)
-	assert.Equal(t, 4.6, round1(r.m.ValidateCurrent(r.b, r.c, 0, 8.7)), "only the measurement counts: 35 - 30.4")
+	assert.Zero(t, reserveCurrent(r.m, r.b, r.c))
+	assert.InDelta(t, 4.6, r.m.ValidateCurrent(r.b, r.c, 0, 8.7), 1e-9, "only the measurement counts: 35 - 30.4")
 }
-
-func round1(f float64) float64 { return float64(int(f*10+0.5)) / 10 }
 
 // TestStartReserveShrinksWhileRamping: the reserve is the rest not yet drawn
 func TestStartReserveShrinksWhileRamping(t *testing.T) {
 	r := newStartRig(t, 35, 0)
-	r.m.ValidateCurrent(r.a, r.c, 0, 18)
+	r.grant(r.a, 0, 18)
 
 	r.advance(15 * time.Second)
 	r.a.current = 6
 	r.measure()
 
-	_, cur := r.m.StartReserve(r.b, r.c)
-	assert.Equal(t, 12.0, cur)
+	assert.Equal(t, 12.0, reserveCurrent(r.m, r.b, r.c))
 }
 
 // TestStartReserveExpires: a car that never draws blocks for a minute only
@@ -126,7 +149,7 @@ func TestStartReserveExpires(t *testing.T) {
 	r.base.current = 12.9
 	r.measure()
 
-	r.m.ValidateCurrent(r.a, r.c, 0, 18)
+	r.grant(r.a, 0, 18)
 	assert.Less(t, r.m.ValidateCurrent(r.b, r.c, 0, 8.7), 8.7)
 
 	r.advance(59 * time.Second)
@@ -144,19 +167,39 @@ func TestStartReserveNotExtendedByRepeat(t *testing.T) {
 	r.measure()
 
 	for range 5 {
-		r.m.ValidateCurrent(r.a, r.c, 18, 18)
+		r.grant(r.a, 0, 18)
 		assert.Less(t, r.m.ValidateCurrent(r.b, r.c, 0, 8.7), 8.7)
 		r.advance(12 * time.Second)
 	}
 
-	// 61 s after the first grant
-	r.m.ValidateCurrent(r.a, r.c, 18, 18)
+	// 60 s after the first grant
+	r.grant(r.a, 0, 18)
 	assert.Equal(t, 8.7, r.m.ValidateCurrent(r.b, r.c, 0, 8.7))
 
-	// a higher grant starts it anew
-	assert.Equal(t, 8.7, r.m.ValidateCurrent(r.b, r.c, 0, 8.7))
-	r.a.current = 0
-	r.m.ValidateCurrent(r.a, r.c, 18, 22)
+	// a grant above the highest one starts it anew
+	r.grant(r.a, 0, 22)
+	assert.Less(t, r.m.ValidateCurrent(r.b, r.c, 0, 8.7), 8.7)
+}
+
+// TestStartReserveNotRestartedBySwing: an offer going down and back up, as with
+// pv surplus, does not start the minute anew
+func TestStartReserveNotRestartedBySwing(t *testing.T) {
+	r := newStartRig(t, 35, 0)
+	r.base.current = 12.9
+	r.measure()
+
+	r.grant(r.a, 0, 16)
+	r.advance(61 * time.Second)
+
+	for _, cur := range []float64{13, 16, 12, 16} {
+		r.grant(r.a, 0, cur)
+		assert.Equal(t, 8.7, r.m.ValidateCurrent(r.b, r.c, 0, 8.7), "offer %gA", cur)
+		r.advance(15 * time.Second)
+	}
+
+	// off and on again is a new start
+	r.m.NoteStart(r.a, r.c, 0, 0)
+	r.grant(r.a, 0, 16)
 	assert.Less(t, r.m.ValidateCurrent(r.b, r.c, 0, 8.7), 8.7)
 }
 
@@ -167,12 +210,11 @@ func TestStartReserveRaise(t *testing.T) {
 	r.a.current = 10
 	r.measure()
 
-	r.m.ValidateCurrent(r.a, r.c, 10, 10)
+	r.grant(r.a, 10, 10)
 	r.advance(5 * time.Minute)
-	assert.Equal(t, 16.0, r.m.ValidateCurrent(r.a, r.c, 10, 16))
+	assert.Equal(t, 16.0, r.grant(r.a, 10, 16))
 
-	_, cur := r.m.StartReserve(r.b, r.c)
-	assert.Equal(t, 6.0, cur)
+	assert.Equal(t, 6.0, reserveCurrent(r.m, r.b, r.c))
 }
 
 // TestStartReserveKeepsOwnDraw: a load keeps what it draws, the reserve limits
@@ -183,7 +225,7 @@ func TestStartReserveKeepsOwnDraw(t *testing.T) {
 	r.b.current = 8.7
 	r.measure()
 
-	assert.Equal(t, 13.0, r.m.ValidateCurrent(r.a, r.c, 0, 13))
+	assert.Equal(t, 13.0, r.grant(r.a, 0, 13))
 
 	// 35 - 21.6 - 13 = 0.4 A are left, the heater keeps its 8.7 A
 	assert.Equal(t, 8.7, r.m.ValidateCurrent(r.b, r.c, 8.7, 8.7))
@@ -200,7 +242,7 @@ func TestStartReserveIgnoresPriority(t *testing.T) {
 	r.measure()
 	r.a.prio, r.b.prio = 0, 5
 
-	r.m.ValidateCurrent(r.a, r.c, 0, 18)
+	r.grant(r.a, 0, 18)
 	assert.Less(t, r.m.ValidateCurrent(r.b, r.c, 0, 8.7), 8.7)
 }
 
@@ -217,7 +259,7 @@ func TestStartReserveOtherCircuit(t *testing.T) {
 	a := &testLoad{title: "wallbox", circuit: c1}
 	b := &testLoad{title: "heater", circuit: c2}
 
-	assert.Equal(t, 30.0, m.ValidateCurrent(a, c1, 0, 30))
+	m.NoteStart(a, c1, m.ValidateCurrent(a, c1, 0, 30), 0)
 	assert.Equal(t, 30.0, m.ValidateCurrent(b, c2, 0, 30))
 }
 
@@ -231,77 +273,88 @@ func TestStartReserveSharedParent(t *testing.T) {
 	b := n.load("heater", 0, n.heating, 0, 0)
 	n.update(t, a, b)
 
-	assert.Equal(t, 30.0, m.ValidateCurrent(a, n.garage, 0, 30))
+	m.NoteStart(a, n.garage, m.ValidateCurrent(a, n.garage, 0, 30), 0)
 	assert.Equal(t, 5.0, m.ValidateCurrent(b, n.heating, 0, 20))
+}
+
+// TestStartReserveOwnSubCircuitFree: the reserve counts on the levels the
+// starting load draws through only. Main 35 A, garage 32 A with the wallbox,
+// heating 16 A with the heater: the wallbox is granted 30 A, so the main fuse
+// has 5 A left for the heater, not the 0 A that taking the 30 A off the
+// heating's own 16 A would leave.
+func TestStartReserveOwnSubCircuitFree(t *testing.T) {
+	log := util.NewLogger("test")
+	main, err := circuit.New(log, "main", 35, 0, nil, 0)
+	require.NoError(t, err)
+
+	mk := func(title string, limit float64) *level {
+		c, err := circuit.New(log, title, limit, 0, nil, 0)
+		require.NoError(t, err)
+		l := &level{Circuit: c, parent: main}
+		main.RegisterChild(l)
+		return l
+	}
+	garage, heating := mk("garage", 32), mk("heating", 16)
+
+	a := &testLoad{title: "wallbox", circuit: garage.Circuit}
+	b := &testLoad{title: "heater", circuit: heating.Circuit}
+	require.NoError(t, main.Update([]api.CircuitLoad{a, b}))
+
+	m := lm.New()
+	m.NoteStart(a, garage, m.ValidateCurrent(a, garage, 0, 30), 0)
+	assert.Equal(t, 5.0, m.ValidateCurrent(b, heating, 0, 10))
+}
+
+// startMeter is a circuit meter with phase currents
+type startMeter struct{ current float64 }
+
+func (m *startMeter) CurrentPower() (float64, error) { return 3 * 230 * m.current, nil }
+func (m *startMeter) Currents() (float64, float64, float64, error) {
+	return m.current, m.current, m.current, nil
+}
+
+// TestStartReserveMeteredWithoutPhaseCurrents: a charger without phase currents
+// reports its offer as current while it draws nothing yet. A circuit with a
+// meter measures what flows, so the reserve counts the whole grant there.
+func TestStartReserveMeteredWithoutPhaseCurrents(t *testing.T) {
+	meter := &startMeter{current: 12.9}
+	c, err := circuit.New(util.NewLogger("test"), "main", 35, 0, meter, 0)
+	require.NoError(t, err)
+	require.NoError(t, c.Update(nil))
+
+	m := lm.New()
+	a := &testLoad{title: "wallbox", circuit: c}
+	b := &testLoad{title: "heater", circuit: c}
+
+	m.NoteStart(a, c, m.ValidateCurrent(a, c, 0, 18), 0)
+	a.current = 18 // the offer, no power yet
+
+	assert.Equal(t, 18.0, reserveCurrent(m, b, c))
+	assert.Less(t, m.ValidateCurrent(b, c, 0, 8.7), 8.7)
+
+	// drawing: the meter sees it
+	a.power, meter.current = 12000, 30.9
+	require.NoError(t, c.Update(nil))
+	assert.Zero(t, reserveCurrent(m, b, c))
 }
 
 // TestStartReserveClearedOnOff: switching off ends the reserve
 func TestStartReserveClearedOnOff(t *testing.T) {
 	r := newStartRig(t, 35, 0)
-	r.m.ValidateCurrent(r.a, r.c, 0, 18)
+	r.grant(r.a, 0, 18)
+	assert.Equal(t, 18.0, reserveCurrent(r.m, r.b, r.c))
 
-	_, cur := r.m.StartReserve(r.b, r.c)
-	assert.Equal(t, 18.0, cur)
-
-	r.m.ValidateCurrent(r.a, r.c, 0, 0)
-
-	_, cur = r.m.StartReserve(r.b, r.c)
-	assert.Zero(t, cur)
+	r.m.NoteStart(r.a, r.c, 0, 0)
+	assert.Zero(t, reserveCurrent(r.m, r.b, r.c))
 }
 
 // TestStartReserveClearedOnForget: a load that is forgotten reserves nothing
 func TestStartReserveClearedOnForget(t *testing.T) {
 	r := newStartRig(t, 35, 0)
-	r.m.ValidateCurrent(r.a, r.c, 0, 18)
+	r.grant(r.a, 0, 18)
 	r.m.Forget(r.a)
 
-	_, cur := r.m.StartReserve(r.b, r.c)
-	assert.Zero(t, cur)
-}
-
-// TestStartReservePeekDoesNotNote: a what-if request reserves nothing
-func TestStartReservePeekDoesNotNote(t *testing.T) {
-	r := newStartRig(t, 35, 0)
-	assert.Equal(t, 18.0, r.m.PeekCurrent(r.a, r.c, 0, 18))
-
-	_, cur := r.m.StartReserve(r.b, r.c)
-	assert.Zero(t, cur)
-}
-
-// TestStartReserveDeniedIsNoGrant: a request the circuit cannot serve in full
-// for a load that takes all or nothing is no grant
-func TestStartReserveDeniedIsNoGrant(t *testing.T) {
-	r := newStartRig(t, 35, 0)
-	r.base.current = 30
-	r.measure()
-
-	assert.Less(t, r.m.ValidateCurrent(r.a, r.c, 0, 18), 18.0)
-
-	_, cur := r.m.StartReserve(r.b, r.c)
-	assert.Zero(t, cur)
-}
-
-// TestStartReserveRegulatedPartialGrant: a regulated load that gets going on
-// part of its request reserves that part
-func TestStartReserveRegulatedPartialGrant(t *testing.T) {
-	r := newStartRig(t, 35, 0)
-	r.base.current = 25
-	r.measure()
-
-	got := r.m.RequestCurrent(r.a, r.c, 0, 18, lm.Demand{Regulated: true, Min: 6})
-	assert.Equal(t, 10.0, got)
-
-	_, cur := r.m.StartReserve(r.b, r.c)
-	assert.Equal(t, 10.0, cur)
-
-	// below its minimum it does not start and reserves nothing
-	r2 := newStartRig(t, 35, 0)
-	r2.base.current = 32
-	r2.measure()
-	assert.Equal(t, 3.0, r2.m.RequestCurrent(r2.a, r2.c, 0, 18, lm.Demand{Regulated: true, Min: 6}))
-
-	_, cur = r2.m.StartReserve(r2.b, r2.c)
-	assert.Zero(t, cur)
+	assert.Zero(t, reserveCurrent(r.m, r.b, r.c))
 }
 
 // TestStartReservePower is the same for a limit in W
@@ -310,7 +363,7 @@ func TestStartReservePower(t *testing.T) {
 	r.base.power = 4000
 	r.measure()
 
-	assert.Equal(t, 12000.0, r.m.ValidatePower(r.a, r.c, 0, 12000))
+	assert.Equal(t, 12000.0, r.grantPower(r.a, 0, 12000))
 
 	// 20000 - 4000 - 12000 = 4000 W are left
 	assert.Equal(t, 4000.0, r.m.ValidatePower(r.b, r.c, 0, 9000))
@@ -328,7 +381,7 @@ func TestStartReservePower(t *testing.T) {
 // TestStartReservePowerExpires
 func TestStartReservePowerExpires(t *testing.T) {
 	r := newStartRig(t, 0, 20000)
-	r.m.ValidatePower(r.a, r.c, 0, 12000)
+	r.grantPower(r.a, 0, 12000)
 
 	assert.Less(t, r.m.ValidatePower(r.b, r.c, 0, 9000), 9000.0)
 
@@ -336,7 +389,7 @@ func TestStartReservePowerExpires(t *testing.T) {
 	assert.Equal(t, 9000.0, r.m.ValidatePower(r.b, r.c, 0, 9000))
 
 	// the same grant again does not block anew
-	r.m.ValidatePower(r.a, r.c, 12000, 12000)
+	r.grantPower(r.a, 12000, 12000)
 	assert.Equal(t, 9000.0, r.m.ValidatePower(r.b, r.c, 0, 9000))
 }
 
@@ -347,22 +400,6 @@ func TestStartReserveKeepsOwnDrawPower(t *testing.T) {
 	r.b.power = 5000
 	r.measure()
 
-	assert.Equal(t, 11000.0, r.m.ValidatePower(r.a, r.c, 0, 11000))
+	assert.Equal(t, 11000.0, r.grantPower(r.a, 0, 11000))
 	assert.Equal(t, 5000.0, r.m.ValidatePower(r.b, r.c, 5000, 5000))
-}
-
-// TestStartReserveBatteryAsLoad: the battery's grid charge counts as a load with
-// a positive charge power
-func TestStartReserveBatteryAsLoad(t *testing.T) {
-	r := newStartRig(t, 0, 10000)
-	battery := &testLoad{title: "battery", circuit: r.c}
-	r.loads = append(r.loads, battery)
-	r.measure()
-
-	assert.Equal(t, 8000.0, r.m.ValidatePower(battery, r.c, 0, 8000))
-	assert.Equal(t, 2000.0, r.m.ValidatePower(r.a, r.c, 0, 5000))
-
-	// it is full and never draws: after a minute the circuit is free again
-	r.advance(61 * time.Second)
-	assert.Equal(t, 5000.0, r.m.ValidatePower(r.a, r.c, 0, 5000))
 }

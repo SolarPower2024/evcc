@@ -239,6 +239,33 @@ func (c *lmCircuit) logStartPower(asked, allowed float64) {
 	}
 }
 
+// noteStart tells load management what the loadpoint was finally granted, the
+// combined result of the current and the power check, see lm.Manager.NoteStart.
+// A loadpoint that ends up below its minimum is off and reserves nothing. A
+// switch draws its own power when on.
+func (c *lmCircuit) noteStart(limited float64) {
+	lp := c.lp
+	phases := lp.ActivePhases()
+
+	var current, power float64
+	switch {
+	case c.guarded:
+	case c.switchDevice:
+		if limited > 0 {
+			power = lp.lmSwitchPower()
+			current = grid.PowerToCurrent(power, phases)
+		}
+	case c.stageCurrent > 0:
+		if limited > 0 {
+			current, power = c.stageCurrent, grid.CurrentToPower(limited, phases)
+		}
+	case limited >= lp.effectiveMinCurrent():
+		current, power = limited, grid.CurrentToPower(limited, phases)
+	}
+
+	lp.lmm().NoteStart(lp, c.Circuit, current, power)
+}
+
 // keepsMin is evcc's check whether a charging loadpoint measuring below its offer
 // keeps its minimum on a full circuit, with the priorities on top: what is
 // reserved for a higher priority is not there to keep, so such a load is still
@@ -257,6 +284,8 @@ func (c *lmCircuit) keepsMin(minCurrent, minPower float64) bool {
 // done records the result of setLimit's circuit check for the overview and
 // starts the shed guard when a running load was switched off
 func (c *lmCircuit) done(current, limited float64) {
+	c.noteStart(limited)
+
 	if c.guarded {
 		return
 	}

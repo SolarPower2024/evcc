@@ -1,8 +1,6 @@
 package lm_test
 
 import (
-	"time"
-
 	"testing"
 
 	"github.com/evcc-io/evcc/api"
@@ -291,9 +289,6 @@ func TestValidateAsksCircuitOnce(t *testing.T) {
 func TestStandingDemand(t *testing.T) {
 	m := lm.New()
 
-	now := time.Now()
-	m.SetClock(func() time.Time { return now })
-
 	low := &testLoad{title: "low", prio: 1, power: 10500}
 	c := newCircuit(t, 11000, low)
 	high := &testLoad{title: "high", prio: 5, circuit: c}
@@ -308,9 +303,6 @@ func TestStandingDemand(t *testing.T) {
 	require.NoError(t, c.Update([]api.CircuitLoad{low, high}))
 	assert.Equal(t, 1000.0, m.RequestPower(high, c, 0, 1000, lm.Demand{Standing: 1000}))
 	assert.Equal(t, 10000.0, m.ValidatePower(low, c, 10000, 10500), "the low one is not allowed back to 10500")
-
-	// the high one does not draw yet, but the minute for that has passed
-	now = now.Add(2 * time.Minute)
 
 	// the plain request that fits demands nothing, the low one takes the power
 	assert.Equal(t, 1000.0, m.ValidatePower(high, c, 0, 1000))
