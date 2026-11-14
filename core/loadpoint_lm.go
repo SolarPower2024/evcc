@@ -129,6 +129,7 @@ func (c *lmCircuit) ValidateCurrent(old, new float64) float64 {
 
 	case !c.switchDevice:
 		c.allowedCurrent = c.lp.lmm().RequestCurrent(c.lp, c.Circuit, old, new, c.demand(new, old, c.lp.effectiveMinCurrent(), c.unusedOffer(old)))
+		c.logStartCurrent(new, c.allowedCurrent)
 		return c.allowedCurrent
 
 	case new <= 0:
@@ -143,6 +144,7 @@ func (c *lmCircuit) ValidateCurrent(old, new float64) float64 {
 	need := grid.PowerToCurrent(c.lp.lmSwitchPower(), phases)
 
 	if allowed := c.lp.lmm().ValidateCurrent(c.lp, c.Circuit, old, need); allowed < need {
+		c.logStartCurrent(need, allowed)
 		if c.lp.enabled {
 			c.lp.log.DEBUG.Printf("circuit allows %.3gA, switch needs %.3gA: off", allowed, need)
 		}
@@ -166,6 +168,7 @@ func (c *lmCircuit) validateStageCurrent(old, new float64) float64 {
 	}
 
 	if allowed := c.lp.lmm().ValidateCurrent(c.lp, c.Circuit, old, c.stageCurrent); allowed < c.stageCurrent {
+		c.logStartCurrent(c.stageCurrent, allowed)
 		if c.lp.enabled {
 			c.lp.log.DEBUG.Printf("circuit allows %.3gA on a phase, a stage needs %.3gA: off", allowed, c.stageCurrent)
 		}
@@ -189,6 +192,7 @@ func (c *lmCircuit) ValidatePower(old, new float64) float64 {
 		c.requested = new
 		phases := c.lp.ActivePhases()
 		c.allowedPower = c.lp.lmm().RequestPower(c.lp, c.Circuit, old, new, c.demand(new, old, grid.CurrentToPower(c.lp.effectiveMinCurrent(), phases), c.unusedOffer(grid.PowerToCurrent(old, phases))))
+		c.logStartPower(new, c.allowedPower)
 		return c.allowedPower
 
 	case new <= 0:
@@ -201,6 +205,7 @@ func (c *lmCircuit) ValidatePower(old, new float64) float64 {
 	c.allowedPower = c.lp.lmm().ValidatePower(c.lp, c.Circuit, old, c.requested)
 
 	if c.allowedPower < c.requested {
+		c.logStartPower(c.requested, c.allowedPower)
 		// only worth a line when it actually switches off, not on every cycle it stays off
 		if c.lp.enabled {
 			c.lp.log.DEBUG.Printf("circuit allows %.0fW, switch needs %.0fW: off", c.allowedPower, c.requested)
@@ -209,6 +214,29 @@ func (c *lmCircuit) ValidatePower(old, new float64) float64 {
 	}
 
 	return new
+}
+
+// logStartCurrent notes in the log that a request was cut while loads that were
+// granted an increase do not draw it yet, see lm.Manager.StartReserve. The
+// reserve is read, not the cut itself, so it is shown for a request that is cut
+// for whatever reason while a start is pending.
+func (c *lmCircuit) logStartCurrent(asked, allowed float64) {
+	if allowed >= asked {
+		return
+	}
+	if _, reserve := c.lp.lmm().StartReserve(c.lp, c.Circuit); reserve > 0 {
+		c.lp.log.DEBUG.Printf("circuit keeps %.3gA for a starting load", reserve)
+	}
+}
+
+// logStartPower is logStartCurrent for power
+func (c *lmCircuit) logStartPower(asked, allowed float64) {
+	if allowed >= asked {
+		return
+	}
+	if reserve, _ := c.lp.lmm().StartReserve(c.lp, c.Circuit); reserve > 0 {
+		c.lp.log.DEBUG.Printf("circuit keeps %.0fW for a starting load", reserve)
+	}
 }
 
 // keepsMin is evcc's check whether a charging loadpoint measuring below its offer

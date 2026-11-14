@@ -19,7 +19,7 @@
     {
       "name": "Lastmanagement-Prioritäten (Abwurf nach Priorität)",
       "files": ["core/lm/lm.go", "core/loadpoint_lm.go", "core/site_lm.go"],
-      "keywords": ["shed", "Shed"],
+      "keywords": ["shed", "Shed", "pending", "ramp", "reserved"],
       "paths": ["core/circuit/", "core/loadpoint.go", "core/site_circuits.go"]
     },
     {

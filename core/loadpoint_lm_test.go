@@ -758,3 +758,36 @@ func TestPrioritiesSeeTheGridPeakTarget(t *testing.T) {
 	s.low.lmLimit(16)
 	assert.GreaterOrEqual(t, s.high.lmCircuit().ValidatePower(carPower, carPower), float64(carPower))
 }
+
+// TestLmCircuitLogsStartReserve: a request that is cut while another load was
+// granted its power and does not draw it yet says so in the debug log
+func TestLmCircuitLogsStartReserve(t *testing.T) {
+	first, meter, c := newSwitchLoadpoint(t, 5000, 2000)
+	second, _, _ := newSwitchLoadpoint(t, 6000, 2000)
+
+	// one load management, one circuit
+	first.circuit, second.circuit = c, c
+	second.lmOwn = first.lmm()
+
+	log, out := captureLog()
+	second.log = log
+
+	// 8 kW are free, the first load is granted 5 kW and does not draw them yet
+	assert.Positive(t, first.lmLimit(16))
+	pow, _ := first.lmm().StartReserve(second, c)
+	assert.Equal(t, 5000.0, pow)
+
+	// the second needs 6 kW, 3 kW are left
+	assert.Zero(t, second.lmLimit(16))
+	assert.Contains(t, out.String(), "circuit keeps 5000W for a starting load")
+
+	// once the first draws, the circuit measures it and the log stays quiet
+	out.Reset()
+	first.chargePower = 5000
+	meter.power = 7000
+	require.NoError(t, c.Update(nil))
+	pow, _ = first.lmm().StartReserve(second, c)
+	assert.Zero(t, pow)
+	assert.Zero(t, second.lmLimit(16)) // 7 kW measured + 6 kW do not fit
+	assert.NotContains(t, out.String(), "starting load")
+}
