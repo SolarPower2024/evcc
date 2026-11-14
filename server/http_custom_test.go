@@ -147,6 +147,7 @@ var customRouteSamples = map[string]string{
 	"peakshavingcircuit":            "/peakshavingcircuit/db:1",
 	"peakshavingcircuitdelete":      "/peakshavingcircuit",
 	"peakshavingevents":             "/peakshaving/events",
+	"peakreset":                     "/peakreset",
 }
 
 // TestCustomRoutesMatch sends a request to every custom route through a real

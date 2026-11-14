@@ -63,6 +63,8 @@ type peakState struct {
 	chargePower float64 // assumed grid charge power in W, 0 = derive it
 	circuit     string  // circuit the battery draws from, empty = not managed
 
+	resetAt time.Time // the month's peak was reset then, see site_peak_reset.go
+
 	shaving  bool // hysteresis state: below the reserve
 	covering bool // covering a peak right now, for the event log
 

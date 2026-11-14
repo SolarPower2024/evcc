@@ -59,7 +59,7 @@ func (c *Collector) EnergyStats() (EnergyStats, error) {
 
 // dailyPeakEnergy returns the max persisted slot energy in kWh per day of the month of
 // slotStart, nil for days without a slot. Queried by group so a replaced meter keeps the month.
-func dailyPeakEnergy(group string, slotStart time.Time) ([]*float64, error) {
+func dailyPeakEnergy(group string, slotStart, since time.Time) ([]*float64, error) { // custom: since = a reset of the month's peak, zero = the whole month, see peak_reset_custom.go
 	type row struct {
 		Day    int
 		Energy float64
@@ -70,7 +70,7 @@ func dailyPeakEnergy(group string, slotStart time.Time) ([]*float64, error) {
 		Select(`CAST(strftime('%d', m.ts, 'unixepoch', 'localtime') AS INTEGER) AS day, MAX(m.energy) AS energy`).
 		Joins("JOIN entities e ON m.meter = e.id").
 		Where(`e."group" = ? AND m.ts >= ? AND m.ts < ? AND COALESCE(m.recovered, 0) = 0`,
-			group, now.With(slotStart).BeginningOfMonth().Unix(), slotStart.Unix()).
+			group, max(now.With(slotStart).BeginningOfMonth().Unix(), since.Unix()), slotStart.Unix()). // custom: not before the reset
 		Group("day").
 		Scan(&rows).Error
 	if err != nil {
@@ -93,7 +93,7 @@ func (c *Collector) DailyPeakEnergy() ([]*float64, error) {
 	slotStart := c.accu.clock.Now().Truncate(tariff.SlotDuration)
 
 	if !slotStart.Equal(c.peakSlot) {
-		days, err := dailyPeakEnergy(c.entity.Group, slotStart)
+		days, err := dailyPeakEnergy(c.entity.Group, slotStart, time.Time{}) // custom: the whole month
 		if err != nil {
 			return nil, err
 		}

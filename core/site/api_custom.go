@@ -57,6 +57,9 @@ type CustomAPI interface {
 	// the events of the peak status in the battery page, see core/site_lm_events.go
 	PeakEvents() []lm.Event
 
+	// debug: the month's peak starts again, see core/site_peak_reset.go
+	ResetMonthPeak() error
+
 	// export under a second feed-in tariff, see core/site_feedin_eeg.go
 	GetFeedInEegEntity() string
 	SetFeedInEegEntity(string) error

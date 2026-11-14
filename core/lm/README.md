@@ -1357,7 +1357,8 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site_battery.go` | `lmGateBatteryMode` in `updateBatteryMode` right after evcc decided the mode, before its §14a check (optimizer automatic mode; returns the mode unchanged without it) |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
-| `core/site_gridpeak.go` | `updateGridPeak` reads the collector through `gridPeakCollector` |
+| `core/site_gridpeak.go` | `updateGridPeak` reads the collector through `gridPeakCollector` and takes the days after a reset of the month's peak from `peakAfterReset` (`core/site_peak_reset.go`) |
+| `core/metrics/stats.go` | `dailyPeakEnergy` takes a start (`since`) next to the slot: the quarter hours before a reset of the month's peak do not count; zero = the whole month as evcc (`DailyPeakEnergySince` in `peak_reset_custom.go`, contract test `TestDailyPeakEnergySince`; follows evcc's `dailyPeakEnergy`, see `watch.json`) |
 | `assets/js/components/Config/HemsModal.vue` | `experimental` and `peakLimitAvailable` also on the static tab: the battery card links there |
 | `core/site_optimizer.go`, `site_optimizer_request.go`, `site_optimizer_result.go` | `optimizerGridTariff` for the grid price and `applyLmOptimizerInputs` where the request is assembled (`site_optimizer_request.go`), `lmOptimizerResult` after the solve (`site_optimizer.go`), `lmForecastLowest` for the forecast (`site_optimizer_result.go`) |
 | `core/site/api.go` | embeds `CustomAPI` |
@@ -1399,7 +1400,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `core/loadpoint_pollwarn.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
-| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go`, `core/site_lm_events.go`, `core/site_peak_status.go` |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go`, `core/site_peak_reset.go`, `core/metrics/peak_reset_custom.go`, `core/site_lm_events.go`, `core/site_peak_status.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
