@@ -38,7 +38,7 @@ var forkHooks = []struct {
 	{"core/loadpoint.go", "Loadpoint.syncCharger", []string{"isStagesCharger"}},
 	{"core/loadpoint.go", "Loadpoint.restoreSettings", []string{"restorePhaseSwitch"}},
 	{"core/loadpoint.go", "Loadpoint.pvEnablePhases", []string{"enablePhaseCurrents", "PeekCurrent"}},
-	{"core/loadpoint.go", "Loadpoint.Prepare", []string{"publishPhaseSwitch", "publishStages"}},
+	{"core/loadpoint.go", "Loadpoint.Prepare", []string{"publishPhaseSwitch", "publishStages", "warnPollMode"}},
 	{"core/loadpoint.go", "Loadpoint.UpdateChargePowerAndCurrents", []string{"publishChargePower"}},
 	{"core/loadpoint.go", "Loadpoint.publishChargeProgress", []string{"meteredPower"}},
 	{"core/loadpoint.go", "Loadpoint.Update", []string{"meteredPower"}},
@@ -79,11 +79,13 @@ var forkDeferHooks = []struct {
 	{"core/site.go", "Site.restoreSettings", "restoreCustom"},
 }
 
-// forkUiHooks lists the fork's mounts in evcc's ui files
+// forkUiHooks lists the fork's mounts in evcc's ui files, and text marks in other
+// files where a hook leaves a line out and there is no call to look for
 var forkUiHooks = []struct {
 	file string
 	text []string
 }{
+	{"core/loadpoint.go", []string{"// custom: warned in Prepare"}},
 	{"assets/js/views/App.vue", []string{"<LmGlobalModals"}},
 	{"assets/js/components/Config/HemsModal.vue", []string{"=== \"static\"; // custom: the battery card", "=== \"static\" // custom: the battery card"}},
 	{"assets/js/views/Config.vue", []string{"<PeakShavingConfig", "<LmConfigModals", "feedInEegTariff"}},

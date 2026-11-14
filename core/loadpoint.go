@@ -219,7 +219,7 @@ func NewLoadpointFromConfig(log *util.Logger, settings settings.Settings, collec
 	switch lp.Soc.Poll.Mode {
 	case loadpoint.PollCharging:
 	case loadpoint.PollConnected, loadpoint.PollAlways:
-		lp.log.WARN.Printf("poll mode '%s' may deplete your battery or lead to API misuse. USE AT YOUR OWN RISK.", lp.Soc.Poll)
+		// custom: warned in Prepare, see core/loadpoint_pollwarn.go
 	default:
 		lp.Soc.Poll.Mode = loadpoint.PollCharging
 	}
@@ -897,9 +897,7 @@ func (lp *Loadpoint) Prepare(site site.API, uiChan chan<- util.Param, pushChan c
 	}
 
 	// set vehicle polling mode
-	if lp.Soc.Poll.Mode != loadpoint.PollCharging {
-		lp.log.WARN.Printf("poll mode '%s' may deplete your battery or lead to API misuse. USE AT YOUR OWN RISK.", lp.Soc.Poll)
-	}
+	lp.warnPollMode() // custom: not for vehicles from Home Assistant, see core/loadpoint_pollwarn.go
 
 	// allow charger to access loadpoint
 	if ctrl, ok := lp.charger.(loadpoint.Controller); ok {
