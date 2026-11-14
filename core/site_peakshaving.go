@@ -475,6 +475,9 @@ func (site *Site) updatePeakShaving(state siteState) {
 	// the window takes the counter
 	gridPower := site.peakGridPower(state.gridPower)
 
+	// a changed limit counts for this cycle's window already; the second call below takes
+	// the month's peak of a window that just completed
+	site.updatePeakLimit()
 	site.updatePeakWindow(gridPower, state.battery.Power)
 	site.updatePeakLimit()
 

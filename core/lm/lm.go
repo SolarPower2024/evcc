@@ -94,6 +94,7 @@ type Manager struct {
 	guard
 	status
 	follow
+	starts
 }
 
 // New returns an empty load management
@@ -104,6 +105,7 @@ func New() *Manager {
 		guard:   guard{shedAt: make(map[Load]time.Time)},
 		status:  status{decisions: make(map[Load]Decision)},
 		follow:  follow{following: make(map[Load]*followState)},
+		starts:  starts{started: make(map[Load]*start)},
 	}
 }
 
@@ -149,6 +151,7 @@ func (m *Manager) Forget(l Load) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.reg, l)
+	m.forgetStart(l)
 }
 
 // competes reports whether loads on the two circuits draw through a shared
@@ -464,7 +467,9 @@ func (m *Manager) peekPower(l Load, c api.Circuit, old, new float64, capped *flo
 		res = max(res, min(keep, c.ValidatePower(old-reserve+lower, keep)))
 	}
 
-	return res
+	// what loads granted an increase do not draw yet is not free either, on each
+	// level they draw through; what the load draws itself stays, see start.go
+	return m.applyStartCap(c, l, old, new, res, true)
 }
 
 // PeekCurrent caps a current request like ValidateCurrent but records no demand
@@ -494,5 +499,6 @@ func (m *Manager) peekCurrent(l Load, c api.Circuit, old, new float64, capped *f
 		res = max(res, min(keep, c.ValidateCurrent(old-reserve+lower, keep)))
 	}
 
-	return res
+	// see peekPower
+	return m.applyStartCap(c, l, old, new, res, false)
 }

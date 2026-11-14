@@ -89,6 +89,9 @@ increase would not make it draw more, so the loads below are only shed for it
 when its whole demand can be freed
 (`TestLoadpointBelowItsOfferDoesNotShedLowerLoad`).
 
+What a load was granted and does not draw yet is left free for it for a minute,
+whatever the priority, see [7](#7-circuit-limits).
+
 All state lives in one `lm.Manager` per site (`site.lmm()`); loadpoints reach it
 through their site (`lp.lmm()`). The check runs inside evcc's `setLimit` through
 `lmCircuit` (`core/loadpoint_lm.go`), which keeps evcc's calculation and adds
@@ -271,6 +274,30 @@ To limit loads to the peak, set evcc's *Netzbezugsspitze*
 The circuit chosen for the battery stays (§2). One that is deleted afterwards is
 not followed: the name is removed with a warning at the start and with the next
 cycle (`core/site_lm_orphan.go`, `TestBatteryCircuitDeleted`).
+
+**Starting loads.** What load management grants a load, it often draws only
+seconds later (a car up to a minute after the start). Until then the circuit
+measures the old value, and the next load would be granted the same gap. So a
+granted increase counts for the other loads for `DefaultStartTime` (1 minute,
+fixed): the part not drawn yet, grant less draw, in A and W separately, on each
+level of the chain the starting load draws through, not on a sibling level of
+its own (`core/lm/start.go`, `TestStartReserveOwnSubCircuitFree`). A level with
+a meter takes a load drawing under 300 W as drawing no current, whatever its
+charger reports (`TestStartReserveMeteredWithoutPhaseCurrents`). The load notes
+its final grant (`Manager.NoteStart`, from `lmCircuit.done` after the current
+and the power check, 0 below the minimum, `TestLmStartNotedWhenOn`); requests
+alone note nothing, so the battery's probes reserve nothing
+(`TestStartReserveRequestDoesNotNote`). It ends when the load draws (a remainder
+below 1 A or 300 W counts as drawn), when it is switched off, or when the minute
+is over. Only a grant more than 1 A or 300 W above the highest since the load
+went on starts the minute anew: the same grant again or an offer swinging with
+the pv surplus does not, so a full car blocks once for a minute at most
+(`TestStartReserveNotExtendedByRepeat`, `TestStartReserveNotRestartedBySwing`,
+`TestStartReserveExpires`). Raising counts the difference only
+(`TestStartReserveRaise`), whatever the priority
+(`TestStartReserveIgnoresPriority`), and it limits increases only: a load keeps
+what it draws (`TestStartReserveKeepsOwnDraw`), shedding in an overload is
+unchanged. Tests: `core/lm/start_test.go`.
 
 ## 8. Loads and events in the dialog
 
@@ -552,7 +579,7 @@ battery mode.
 *Externe Begrenzung → Statische Limits → Netzbezugsspitze*; the value on the battery
 card opens this dialog, its static tab also without experimental and country), which also limits the loads. Once the month has a higher peak, shaving below it saves nothing, so the
 battery's limit (`peakShavingLimit`, no longer stored) is the higher of the two; a
-new month starts at the limit again. Without a limit there is no reserve. See `core/site_peak_limit.go`.
+new month starts at the limit again. Without a limit there is no reserve. A changed limit counts for the window in the same cycle, also its cap of 2 x limit (`TestPeakLimitChangeSameCycle`); the month's peak of a window that just completed follows in the cycle after. See `core/site_peak_limit.go`.
 
 **Statistics** (collected, no dialog at the moment; *Mehr → Peak Shaving* shows the peak status): per month the highest quarter hour with
 and without the battery and how often it covered a peak; only quarter hours
@@ -1367,7 +1394,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 
 | Area | Files |
 | --- | --- |
-| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_orphan.go`, `core/site_lm_phases.go`, `core/site_lm_advanced.go`, `core/site_restore.go`, `core/circuit/circuit_custom.go` |
+| load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`, `start.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_orphan.go`, `core/site_lm_phases.go`, `core/site_lm_advanced.go`, `core/site_restore.go`, `core/circuit/circuit_custom.go` |
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
