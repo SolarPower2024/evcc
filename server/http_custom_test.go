@@ -148,6 +148,9 @@ var customRouteSamples = map[string]string{
 	"peakshavingcircuitdelete":      "/peakshavingcircuit",
 	"peakshavingevents":             "/peakshaving/events",
 	"peakreset":                     "/peakreset",
+	"lmeventsclear":                 "/lmevents",
+	"lmguardcount":                  "/lmguardcount",
+	"lmguardrelease":                "/lmguardrelease",
 }
 
 // TestCustomRoutesMatch sends a request to every custom route through a real

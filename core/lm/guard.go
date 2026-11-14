@@ -97,3 +97,35 @@ func (m *Manager) Resumed(l Load, now time.Time) (time.Duration, bool) {
 
 	return now.Sub(at), true
 }
+
+// GuardedCount returns how many loads are held off at now
+func (m *Manager) GuardedCount(now time.Time) int {
+	m.guardMu.Lock()
+	shed := make(map[Load]time.Time, len(m.shedAt))
+	for l, at := range m.shedAt {
+		shed[l] = at
+	}
+	m.guardMu.Unlock()
+
+	var n int
+	for l, at := range shed {
+		if at.Add(m.guardDuration(l)).After(now) {
+			n++
+		}
+	}
+
+	return n
+}
+
+// ReleaseGuards lets every load held off start again with the next cycle and
+// returns how many were held off at now. The record of the shed for the event
+// "switched on again" stays.
+func (m *Manager) ReleaseGuards(now time.Time) int {
+	n := m.GuardedCount(now)
+
+	m.guardMu.Lock()
+	clear(m.shedAt)
+	m.guardMu.Unlock()
+
+	return n
+}

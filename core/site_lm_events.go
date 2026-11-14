@@ -66,3 +66,12 @@ func (site *Site) saveLmEvents(force bool) {
 func (site *Site) PeakEvents() []lm.Event {
 	return site.lmm().AllEvents(site.peak().clock.Now(), nil)
 }
+
+// ClearLmEvents empties the event log of the peak status dialog, also what is
+// stored (Konfiguration → System → Debug)
+func (site *Site) ClearLmEvents() error {
+	site.lmm().ClearEvents()
+	site.saveLmEvents(true)
+
+	return nil
+}

@@ -199,3 +199,13 @@ func (m *Manager) Restore(events []Event, now time.Time) {
 	all := append(append([]Event(nil), events...), m.events...)
 	m.events = trimEvents(all, now)
 }
+
+// ClearEvents empties the log, also what is stored: the empty log is saved with
+// the next Snapshot
+func (m *Manager) ClearEvents() {
+	m.statusMu.Lock()
+	defer m.statusMu.Unlock()
+
+	m.events = nil
+	m.dirty = true
+}

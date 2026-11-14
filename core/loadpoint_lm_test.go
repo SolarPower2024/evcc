@@ -875,3 +875,22 @@ func TestResumedEvent(t *testing.T) {
 		}
 	}
 }
+
+// TestReleaseGuardsStartsLoad: a load held off by the shed guard starts again in
+// the next cycle once the locks are lifted
+func TestReleaseGuardsStartsLoad(t *testing.T) {
+	lp, m, c := newSwitchLoadpoint(t, 3000, 0)
+	clk := lp.clock.(*clock.Mock)
+	guardFor(5*time.Minute, lp)
+
+	lp.enabled = true
+	require.True(t, switchCycle(t, lp, m, c, 5000))
+	require.False(t, switchCycle(t, lp, m, c, 12000), "shed")
+
+	clk.Add(10 * time.Second)
+	require.False(t, switchCycle(t, lp, m, c, 5000), "held off")
+	assert.Equal(t, 1, lp.lmm().GuardedCount(clk.Now()))
+
+	assert.Equal(t, 1, lp.lmm().ReleaseGuards(clk.Now()))
+	assert.True(t, switchCycle(t, lp, m, c, 5000), "runs in the next cycle")
+}

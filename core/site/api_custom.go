@@ -60,6 +60,11 @@ type CustomAPI interface {
 	// debug: the month's peak starts again, see core/site_peak_reset.go
 	ResetMonthPeak() error
 
+	// debug: empty the event log, lift the shed locks, see core/site_lm_events.go and site_lm_guard.go
+	ClearLmEvents() error
+	LmGuardedCount() int
+	ReleaseLmGuards() int
+
 	// export under a second feed-in tariff, see core/site_feedin_eeg.go
 	GetFeedInEegEntity() string
 	SetFeedInEegEntity(string) error

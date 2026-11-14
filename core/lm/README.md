@@ -251,6 +251,11 @@ a heater does not flap around the limit. Only switching off a running load
 counts: a switch losing its budget or a wallbox pushed below its minimum. While
 held off it asks for nothing. Changes apply to a running guard right away. See
 `core/lm/guard.go`, `core/site_lm_guard.go`.
+*System → Debug → Abwurfsperren aufheben* lets the loads held off start again with the next
+cycle (`Manager.ReleaseGuards`, `GET /api/lmguardcount` for how many, `POST /api/lmguardrelease`;
+`TestReleaseGuards`, `TestReleaseGuardsStartsLoad`). *Ereignisliste leeren* (`DELETE /api/lmevents`)
+empties the event log of the dialog and what is stored (`Manager.ClearEvents`, `TestClearLmEvents`).
+The three routes need a login like the configuration routes.
 
 ## 6. Loads not following their limit
 

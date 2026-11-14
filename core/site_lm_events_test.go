@@ -140,3 +140,25 @@ func keysOf(m map[string]bool) []string {
 
 	return res
 }
+
+// TestClearLmEvents: the list is empty after clearing, also after a restart
+func TestClearLmEvents(t *testing.T) {
+	keepSettings(t)
+
+	site, clk := peakWindowSite(t, 0)
+	site.lmm().AddEvent(lm.Event{At: clk.Now(), Type: lm.EventShed, Load: "wallbox"})
+	site.lmm().AddEvent(lm.Event{At: clk.Now(), Type: lm.EventPeakEnd, A: 1600, B: 180})
+	site.saveLmEvents(true)
+
+	require.NoError(t, site.ClearLmEvents())
+	assert.Empty(t, site.PeakEvents())
+
+	var saved []lm.Event
+	require.NoError(t, settings.Json(keys.LmEvents, &saved))
+	assert.Empty(t, saved, "stored at once")
+
+	again, _ := peakWindowSite(t, 0)
+	again.custom.peak.clock = clk
+	again.restoreLmEvents()
+	assert.Empty(t, again.PeakEvents())
+}

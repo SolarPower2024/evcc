@@ -152,3 +152,19 @@ func (site *Site) SetLmShedProtected(name string, protected bool) error {
 
 	return nil
 }
+
+// LmGuardedCount returns how many loads the shed guard holds off right now
+func (site *Site) LmGuardedCount() int {
+	return site.lmm().GuardedCount(site.peak().clock.Now())
+}
+
+// ReleaseLmGuards lets the loads the shed guard holds off start again with the
+// next cycle (Konfiguration → System → Debug) and returns how many there were
+func (site *Site) ReleaseLmGuards() int {
+	n := site.lmm().ReleaseGuards(site.peak().clock.Now())
+	if n > 0 {
+		site.log.INFO.Printf("shed guard lifted for %d loads", n)
+	}
+
+	return n
+}
