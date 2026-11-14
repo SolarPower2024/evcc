@@ -30,6 +30,7 @@ Part 1 describes the features, part 2 how the fork is kept maintainable.
 18. [Log file](#18-log-file)
 19. [Snow on PV](#19-snow-on-pv)
 20. [Split grid tariff](#20-split-grid-tariff)
+21. [Debug](#21-debug)
 
 **Part 2: maintenance**
 
@@ -241,6 +242,7 @@ shows it as an error (`TestSwitchStagesUnreadableStage`,
 A heater found running at start (restart of evcc) is taken over with the current
 of its stages, so evcc's first request, the minimum, does not drop it to one
 stage, and a smaller request later is written (`TestSwitchStagesRunningAtStart`).
+evcc's warning "charger logic error: current mismatch" is left out for it, as the heater reports a current different from the offer on purpose (`TestSyncChargerStagesNoMismatchWarning`).
 
 ## 5. Shed guard
 
@@ -250,6 +252,11 @@ a heater does not flap around the limit. Only switching off a running load
 counts: a switch losing its budget or a wallbox pushed below its minimum. While
 held off it asks for nothing. Changes apply to a running guard right away. See
 `core/lm/guard.go`, `core/site_lm_guard.go`.
+*System → Debug → Abwurfsperren aufheben* lets the loads held off start again with the next
+cycle (`Manager.ReleaseGuards`, `GET /api/lmguardcount` for how many, `POST /api/lmguardrelease`;
+`TestReleaseGuards`, `TestReleaseGuardsStartsLoad`). *Ereignisliste leeren* (`DELETE /api/lmevents`)
+empties the event log of the dialog and what is stored (`Manager.ClearEvents`, `TestClearLmEvents`).
+The three routes need a login like the configuration routes.
 
 ## 6. Loads not following their limit
 
@@ -308,9 +315,9 @@ including battery grid charging with its power and state (running, throttled, sh
 until, waiting with what it needs and what is free, paused), the shed guard lock and the
 *Optimizer* badge (`PeakStatusLoads.vue`, `peakDialog.ts`, `peakDialog.test.ts`). *Zuletzt* lists
 the peak events (`peakEvents()` in `peakStatus.ts`, the list of `lm.PeakEvent`,
-`TestPeakEventListsMatch`), *Letzte Eingriffe* the others (shed, throttled, not following,
+`TestPeakEventListsMatch`), *Letzte Eingriffe* the others (shed, switched on again after a shed, throttled, not following,
 grid charging denied; `actionEvents()`, `PeakStatusEventList.vue`), the newest 5 and *Mehr*;
-it shows below the loads, or as a section of its own without them. There is
+it shows below the loads, or as a section of its own without them. A shed load that runs again logs `resumed` once (`lm.EventResumed`, "switched on again · after N min"; `Manager.Resumed` in `core/lm/guard.go`, whatever the shed guard; only after a shed, not at every start; the mark lives in memory, so a restart forgets an open shed; `TestResumed`, `TestResumedEvent`). There is
 no view of its own and no circuit tile any more; circuits are set in their configuration.
 The status is published as `lmStatus` at the end of every cycle
 (`core/site_lm_status.go`, records in `core/lm/status.go`); it never feeds back
@@ -1302,6 +1309,46 @@ See `templates/definition/tariff/fixed-netz.yaml`, `GridFeeZonesField.vue`,
 
 ---
 
+## 21. Debug
+
+*Konfiguration → System → Debug* (`DebugModal.vue`, button next to *Sichern & Wiederherstellen*)
+holds corrections for faulty readings and tests. Each function asks before it runs
+("Wirklich ausführen?"). The site routes need a login like the configuration routes, the
+feed-in routes the admin password like evcc's own deletion routes (`api/db`).
+
+- **Reset the month's peak** (`POST /api/peakreset`, `ResetMonthPeak` in `core/site_peak_reset.go`):
+  the quarter hours of the running month up to now no longer count. evcc's grid peak limit
+  (the days of the month's peak, `peakAfterReset` through the hook in `site_gridpeak.go`)
+  and the fork's peak statistics (the month's peak and demand, quarter hours that started
+  before the reset are not taken in) fall back, so the limit is the one set in *Externe
+  Begrenzung → Netzbezugsspitze* again. The measurements stay as stored (energy history,
+  forecasts, battery identification see nothing); only the time is stored (setting
+  `peakResetAt`, restored at the start, without effect in the next month). The query is
+  evcc's `dailyPeakEnergy` with a start (`since`, hook in `core/metrics/stats.go`),
+  `DailyPeakEnergySince` in `core/metrics/peak_reset_custom.go`. The grid operator still
+  bills the real peak. Tests `TestResetMonthPeak*`, `TestDailyPeakEnergySince`.
+- **Delete feed-in** (`GET`/`DELETE /api/db/metrics/feedin?from&to`, `core/metrics/feedin_clear_custom.go`):
+  the dialog takes a first and a last day (local time, last day at most today; the client sends
+  `[first 00:00, last + 1 day 00:00)`), asks for the admin password and shows what is removed
+  ("Einspeisung 23,4 kWh, Erlös 1,87 €", the numbers of the energy view, nothing changes), then
+  sets `return_energy` of the grid meter's slots to 0. The revenue, the EEG split and the energy
+  flow are worked out from it, so they follow; draw, home consumption and the prices stay. The
+  EEG counter, a share of the feed-in, is set to 0 with it. Cannot be undone, download a backup
+  first. Tests `TestClearFeedIn`, `TestFeedInRoutes`.
+- **Clear event list** (`DELETE /api/lmevents`): empties the event log of the peak shaving dialog
+  and what is stored (`TestClearLmEvents`).
+- **Lift shed locks** (`POST /api/lmguardrelease`, count: `GET /api/lmguardcount`, off without a
+  lock): see [5](#5-shed-guard).
+
+Two of evcc's warnings are left out where they do not apply (hooks in `core/loadpoint.go`, see
+the table below): "charger logic error: current mismatch" for a heater in stages, which reports a
+current of its own on purpose, and "poll mode may deplete your battery" unless a vehicle that is not
+from Home Assistant is configured (`core/loadpoint_pollwarn.go`, once at the start of the loadpoint).
+
+UI steps: `testtools/steps_debug.mjs` (scenario `debug`).
+
+---
+
 ## Rules
 
 Every fork feature follows these, so taking in a new evcc version stays cheap:
@@ -1356,11 +1403,12 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site_battery.go` | `lmGateBatteryMode` in `updateBatteryMode` right after evcc decided the mode, before its §14a check (optimizer automatic mode; returns the mode unchanged without it) |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
-| `core/site_gridpeak.go` | `updateGridPeak` reads the collector through `gridPeakCollector` |
+| `core/site_gridpeak.go` | `updateGridPeak` reads the collector through `gridPeakCollector` and takes the days after a reset of the month's peak from `peakAfterReset` (`core/site_peak_reset.go`) |
+| `core/metrics/stats.go` | `dailyPeakEnergy` takes a start (`since`) next to the slot: the quarter hours before a reset of the month's peak do not count; zero = the whole month as evcc (`DailyPeakEnergySince` in `peak_reset_custom.go`, contract test `TestDailyPeakEnergySince`; follows evcc's `dailyPeakEnergy`, see `watch.json`) |
 | `assets/js/components/Config/HemsModal.vue` | `experimental` and `peakLimitAvailable` also on the static tab: the battery card links there |
 | `core/site_optimizer.go`, `site_optimizer_request.go`, `site_optimizer_result.go` | `optimizerGridTariff` for the grid price and `applyLmOptimizerInputs` where the request is assembled (`site_optimizer_request.go`), `lmOptimizerResult` after the solve (`site_optimizer.go`), `lmForecastLowest` for the forecast (`site_optimizer_result.go`) |
 | `core/site/api.go` | embeds `CustomAPI` |
-| `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`, evcc's rule that a charging loadpoint keeps its minimum on a full circuit asks `keepsMin` (with the priorities on top, what a higher priority waits for is still shed); three `lp.lmm().Peek*` probes; `pvEnablePhases` (the phases a disabled charger starts on) decides on `enablePhaseCurrents`, `pvMaxCurrent` then takes the limits of those phases; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` (in front of the disable branch, behind the always-charge/battery return) keeps a heater in stages on its running stages until the disable delay has passed, the phase timers take `phaseScaleDelay` (scaling down: `phaseScaleDelay1p`, the disable delay when 1p is not sustainable and evcc disables instead), `batterySupported` projects a pending 1p switch with `projectPhaseSwitch1p`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor) |
+| `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`, evcc's rule that a charging loadpoint keeps its minimum on a full circuit asks `keepsMin` (with the priorities on top, what a higher priority waits for is still shed); three `lp.lmm().Peek*` probes; `pvEnablePhases` (the phases a disabled charger starts on) decides on `enablePhaseCurrents`, `pvMaxCurrent` then takes the limits of those phases; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` (in front of the disable branch, behind the always-charge/battery return) keeps a heater in stages on its running stages until the disable delay has passed, the phase timers take `phaseScaleDelay` (scaling down: `phaseScaleDelay1p`, the disable delay when 1p is not sustainable and evcc disables instead), `batterySupported` projects a pending 1p switch with `projectPhaseSwitch1p`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor); `NewLoadpointFromConfig` leaves out evcc's warning "poll mode may deplete your battery" (marked `// custom: warned in Prepare`, checked as a text mark in `forkUiHooks`, `TestLoadConfigDoesNotWarnPollMode`), `Prepare` calls `warnPollMode` in place of that warning (a vehicle from Home Assistant is polled from Home Assistant only: the warning stays only if a vehicle of the site is not one; none: silent; `TestWarnPollMode`, `TestWarnPollModeHomeAssistantTypes`, `TestWarnPollModeBehindWrapper`); `syncCharger` leaves out evcc's warning "current mismatch" in the branch that reads the current back from the charger when `isStagesCharger()` (a heater in stages reports its own current on purpose; the current is still adopted and published; contract test `TestSyncChargerStagesNoMismatchWarning`, other chargers keep the warning) |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split per phase count (as in evcc PR 32505), min/max power use it |
 | `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
@@ -1370,12 +1418,12 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `server/http_config_helper.go` | `customTestResults` in `testInstance`: the config page shows the switch of each stage of a heater in stages (`server/http_config_custom.go`) |
-| `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes (`server/http_custom_db.go`), a colliding route is left out and logged |
+| `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes and the feed-in routes of the debug area (`server/http_custom_db.go`; `GET`/`DELETE /api/db/metrics/feedin?from&to`, preview and set to 0, admin password like evcc's deletion routes; `TestFeedInRoutes`), a colliding route is left out and logged |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection; `gridChargeVisible` passes evcc's own condition through `priceCardVisible` (`utils/gridChargeMode.ts`): the price card is hidden for grid charging by soc only; the soc card has a `v-if` (`socCardShown`) and, like one-time charging, needs a battery that offers the charge mode (`chargeSupported`) and one-time charging a card of its own (`BatteryGridChargeOnceCard`) for price only; contract test: `utils/gridChargeMode.test.ts` and `TestForkHooksInPlace` |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
 | `assets/js/views/Forecast.vue` | `<SnowCoverSwitch />` under the solar chart (snow on pv as one choice); evcc's *adjust* switch stays in the card header |
-| `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button |
+| `assets/js/views/Config.vue` | *Lastmanagement-Details* section, `LmConfigModals.vue`, EEG tariff card and add button, the *Debug* button in the System list (`openModal('debug')`, the dialog `DebugModal.vue` is mounted by `LmConfigModals.vue`; contract test `TestForkHooksInPlace`) |
 | `assets/js/components/BottomTabs/MoreMenu.vue` | mounts `LoadManagement/MoreMenuItems.vue` |
 | `assets/js/components/Config/LoadpointModal.vue` | mounts `PhaseSwitchFields.vue`, 3-phase labels and minimum while it is shown; default mode labels Aus/Smart/Ein for a heater in stages (`chargerIsStages`) |
 | `assets/js/components/Loadpoints/Loadpoint.vue`, `Mode.vue` | `chargerStages` prop, mode labels Aus/Smart/Ein for a heater in stages; `chargePowerEstimate` shown as "≈ 6 kW" (whole kW, fits a phone), formatted by `fmtPowerEstimate` (`utils/lmEnergyflow.ts`) |
@@ -1395,10 +1443,10 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | Area | Files |
 | --- | --- |
 | load management | `core/lm/` (`lm.go`, `guard.go`, `status.go`, `follow.go`, `start.go`), `core/loadpoint_lm.go`, `core/site_lm.go`, `core/site_lm_priority.go`, `core/site_lm_guard.go`, `core/site_lm_follow.go`, `core/site_lm_status.go`, `core/site_lm_orphan.go`, `core/site_lm_phases.go`, `core/site_lm_advanced.go`, `core/site_restore.go`, `core/circuit/circuit_custom.go` |
-| switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
+| switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `core/loadpoint_pollwarn.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
-| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go`, `core/site_lm_events.go`, `core/site_peak_status.go` |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go`, `core/site_peak_reset.go`, `core/metrics/peak_reset_custom.go`, `core/metrics/feedin_clear_custom.go`, `core/site_lm_events.go`, `core/site_peak_status.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |
@@ -1410,7 +1458,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | split grid tariff | `templates/definition/tariff/fixed-netz.yaml`, `tariff/fixed_netz_test.go`, `assets/js/utils/lmGridTariff.ts`, `assets/js/components/Config/GridFeeZonesField.vue`, `GridFeeZoneForm.vue`, `GridFeeZoneSummary.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
-| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/utils/optimizerAutomatic.ts`, `assets/js/components/LoadManagement/`, the battery cards in `assets/js/components/Battery/` (`PeakStatusModal`, `PeakStatusHero`, `PeakStatusLoads`, `peakStatus.ts`, `peakDialog.ts`, `BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`) |
+| ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/utils/optimizerAutomatic.ts`, `assets/js/components/LoadManagement/`, the battery cards in `assets/js/components/Battery/` (`PeakStatusModal`, `PeakStatusHero`, `PeakStatusLoads`, `peakStatus.ts`, `peakDialog.ts`, `BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `DebugModal`) |
 | build | `.github/workflows/custom-image.yml` |
 | start page | `.github/README.md` (GitHub shows it instead of the evcc `README.md`; its feature list follows part 1) |
 

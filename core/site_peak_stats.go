@@ -124,6 +124,11 @@ func (s *peakState) peakMonthOf(t time.Time) (*peakMonth, bool) {
 // recordPeakWindow takes a completed quarter hour into its month. Must be called
 // with the lock held.
 func (s *peakState) recordPeakWindow(start time.Time, drawnWs, demandWs float64) {
+	// a quarter hour that started before a reset does not count
+	if start.Before(s.resetAt) {
+		return
+	}
+
 	window := peak.Window.Seconds()
 	m, _ := s.peakMonthOf(start)
 

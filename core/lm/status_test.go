@@ -135,3 +135,19 @@ func TestEventFilterAndStore(t *testing.T) {
 	_, changed = m.Snapshot()
 	assert.True(t, changed)
 }
+
+func TestClearEvents(t *testing.T) {
+	m := lm.New()
+	m.AddEvent(lm.Event{Type: lm.EventShed, Load: "a"})
+	m.AddEvent(lm.Event{Type: lm.EventPeak})
+	_, _ = m.Snapshot() // stored
+
+	m.ClearEvents()
+	assert.Empty(t, m.Events())
+	assert.Empty(t, m.AllEvents(time.Time{}, nil))
+
+	// the empty log is stored with the next snapshot
+	events, changed := m.Snapshot()
+	assert.True(t, changed)
+	assert.Empty(t, events)
+}

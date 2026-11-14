@@ -31,13 +31,15 @@ var forkHooks = []struct {
 	{"core/site_battery.go", "Site.updateBatteryMode", []string{"lmGateBatteryMode"}},
 	{"core/site_circuits.go", "Site.updateCircuits", []string{"circuitLoads"}},
 	{"core/site_load_predictor.go", "Site.homeProfile", []string{"homeProfileCustom"}},
-	{"core/site_gridpeak.go", "Site.updateGridPeak", []string{"gridPeakCollector"}},
+	{"core/site_gridpeak.go", "Site.updateGridPeak", []string{"gridPeakCollector", "peakAfterReset"}},
+	{"core/metrics/stats.go", "dailyPeakEnergy", []string{"since"}},
 	{"core/site_optimizer_request.go", "Site.optimizerRequest", []string{"optimizerGridTariff", "applyLmOptimizerInputs"}},
 	{"core/site_optimizer.go", "Site.optimizerUpdate", []string{"lmOptimizerResult"}},
 	{"core/site_optimizer_result.go", "Site.addBatteryForecastTotals", []string{"lmForecastLowest"}},
+	{"core/loadpoint.go", "Loadpoint.syncCharger", []string{"isStagesCharger"}},
 	{"core/loadpoint.go", "Loadpoint.restoreSettings", []string{"restorePhaseSwitch"}},
 	{"core/loadpoint.go", "Loadpoint.pvEnablePhases", []string{"enablePhaseCurrents", "PeekCurrent"}},
-	{"core/loadpoint.go", "Loadpoint.Prepare", []string{"publishPhaseSwitch", "publishStages"}},
+	{"core/loadpoint.go", "Loadpoint.Prepare", []string{"publishPhaseSwitch", "publishStages", "warnPollMode"}},
 	{"core/loadpoint.go", "Loadpoint.UpdateChargePowerAndCurrents", []string{"publishChargePower"}},
 	{"core/loadpoint.go", "Loadpoint.publishChargeProgress", []string{"meteredPower"}},
 	{"core/loadpoint.go", "Loadpoint.Update", []string{"meteredPower"}},
@@ -78,14 +80,16 @@ var forkDeferHooks = []struct {
 	{"core/site.go", "Site.restoreSettings", "restoreCustom"},
 }
 
-// forkUiHooks lists the fork's mounts in evcc's ui files
+// forkUiHooks lists the fork's mounts in evcc's ui files, and text marks in other
+// files where a hook leaves a line out and there is no call to look for
 var forkUiHooks = []struct {
 	file string
 	text []string
 }{
+	{"core/loadpoint.go", []string{"// custom: warned in Prepare"}},
 	{"assets/js/views/App.vue", []string{"<LmGlobalModals"}},
 	{"assets/js/components/Config/HemsModal.vue", []string{"=== \"static\"; // custom: the battery card", "=== \"static\" // custom: the battery card"}},
-	{"assets/js/views/Config.vue", []string{"<PeakShavingConfig", "<LmConfigModals", "feedInEegTariff"}},
+	{"assets/js/views/Config.vue", []string{"<PeakShavingConfig", "<LmConfigModals", "feedInEegTariff", "openModal('debug')"}},
 	{"assets/js/views/Battery.vue", []string{"<!-- custom: soc grid charging and peak shaving", "<BatterySocGridChargeCard", "socCardShown", "chargeSupported", "<BatteryGridChargeOnceCard", "<BatteryPeakShavingCard", "<BatteryProfileCard", "priceCardVisible("}},
 	{"assets/js/components/BottomTabs/MoreMenu.vue", []string{"<LmMoreMenuItems"}},
 	{"assets/js/components/Config/LoadpointModal.vue", []string{"<PhaseSwitchFields", "emptyUnsetPhaseSwitch(this.values)", "config.loadpoint.minCurrent${showCurrent1p ? '3p' : ''}Label", "chargerIsStages"}},

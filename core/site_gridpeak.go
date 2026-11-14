@@ -17,6 +17,7 @@ func (site *Site) updateGridPeak() {
 		if energy, err = c.DailyPeakEnergy(); err != nil {
 			site.log.ERROR.Printf("grid peak: %v", err)
 		}
+		energy = site.peakAfterReset(c, energy) // custom: after a reset of the month's peak, see core/site_peak_reset.go
 	}
 
 	var peak float64

@@ -15,6 +15,7 @@ type guard struct {
 	guardMu     sync.Mutex
 	guardLookup func(Load) time.Duration
 	shedAt      map[Load]time.Time
+	shedSince   map[Load]time.Time // when a load was shed, until it runs again, whatever the guard
 }
 
 // SetGuardLookup installs the lookup returning how long a load stays off after
@@ -42,12 +43,16 @@ func (m *Manager) guardDuration(l Load) time.Duration {
 // it stays off, 0 if it is not protected
 func (m *Manager) Shed(l Load, now time.Time) time.Duration {
 	d := m.guardDuration(l)
+
+	m.guardMu.Lock()
+	defer m.guardMu.Unlock()
+
+	m.shedSince[l] = now
+
 	if d <= 0 {
 		return 0
 	}
 
-	m.guardMu.Lock()
-	defer m.guardMu.Unlock()
 	m.shedAt[l] = now
 
 	return d
@@ -74,4 +79,53 @@ func (m *Manager) Guarded(l Load, now time.Time) time.Duration {
 	m.guardMu.Unlock()
 
 	return 0
+}
+
+// Resumed returns how long l was off when it runs again after a shed. It answers
+// once per shed: a load that was not shed, or that was reported already, gives
+// false.
+func (m *Manager) Resumed(l Load, now time.Time) (time.Duration, bool) {
+	m.guardMu.Lock()
+	defer m.guardMu.Unlock()
+
+	at, ok := m.shedSince[l]
+	if !ok {
+		return 0, false
+	}
+
+	delete(m.shedSince, l)
+
+	return now.Sub(at), true
+}
+
+// GuardedCount returns how many loads are held off at now
+func (m *Manager) GuardedCount(now time.Time) int {
+	m.guardMu.Lock()
+	shed := make(map[Load]time.Time, len(m.shedAt))
+	for l, at := range m.shedAt {
+		shed[l] = at
+	}
+	m.guardMu.Unlock()
+
+	var n int
+	for l, at := range shed {
+		if at.Add(m.guardDuration(l)).After(now) {
+			n++
+		}
+	}
+
+	return n
+}
+
+// ReleaseGuards lets every load held off start again with the next cycle and
+// returns how many were held off at now. The record of the shed for the event
+// "switched on again" stays.
+func (m *Manager) ReleaseGuards(now time.Time) int {
+	n := m.GuardedCount(now)
+
+	m.guardMu.Lock()
+	clear(m.shedAt)
+	m.guardMu.Unlock()
+
+	return n
 }

@@ -44,3 +44,61 @@ func TestShedGuard(t *testing.T) {
 	guard = 0
 	assert.Zero(t, m.Guarded(protected, now.Add(time.Minute)))
 }
+
+// TestResumed: a shed load reports once when it runs again, with or without a
+// guard; a load that was not shed never does
+func TestResumed(t *testing.T) {
+	m := lm.New()
+	l, other := &testLoad{title: "heater"}, &testLoad{title: "other"}
+	m.SetGuardLookup(func(lm.Load) time.Duration { return 0 })
+
+	now := time.Now()
+
+	_, ok := m.Resumed(l, now)
+	assert.False(t, ok, "never shed")
+
+	m.Shed(l, now)
+	_, ok = m.Resumed(other, now)
+	assert.False(t, ok, "another load")
+
+	d, ok := m.Resumed(l, now.Add(12*time.Minute))
+	assert.True(t, ok)
+	assert.Equal(t, 12*time.Minute, d)
+
+	_, ok = m.Resumed(l, now.Add(13*time.Minute))
+	assert.False(t, ok, "once per shed")
+}
+
+// TestReleaseGuards: the loads held off are counted and may run again at once
+func TestReleaseGuards(t *testing.T) {
+	m := lm.New()
+	a, b, free := &testLoad{title: "a"}, &testLoad{title: "b"}, &testLoad{title: "free"}
+	m.SetGuardLookup(func(l lm.Load) time.Duration {
+		if l == free {
+			return 0
+		}
+		return 5 * time.Minute
+	})
+
+	now := time.Now()
+	m.Shed(a, now)
+	m.Shed(b, now.Add(-4*time.Minute))
+	m.Shed(free, now)
+
+	assert.Equal(t, 2, m.GuardedCount(now))
+	assert.Equal(t, 1, m.GuardedCount(now.Add(2*time.Minute)), "b is over")
+
+	assert.Equal(t, 2, m.ReleaseGuards(now))
+	assert.Zero(t, m.Guarded(a, now))
+	assert.Zero(t, m.Guarded(b, now))
+	assert.Zero(t, m.GuardedCount(now))
+	assert.Zero(t, m.ReleaseGuards(now), "nothing left to lift")
+
+	// a shed that follows is held again
+	m.Shed(a, now)
+	assert.Equal(t, 5*time.Minute, m.Guarded(a, now))
+
+	// "switched on again" still comes after a release
+	_, ok := m.Resumed(free, now.Add(time.Minute))
+	assert.True(t, ok)
+}

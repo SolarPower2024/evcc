@@ -36,6 +36,7 @@ const (
 	PeakShavingWindowEnd            = "peakShavingWindowEnd"      // end of the running window
 	PeakShavingSource               = "peakShavingSource"         // where the window's energy comes from: meter, entity or power
 	PeakMonths                      = "peakMonths"                // monthly peak statistics
+	PeakResetAt                     = "peakResetAt"               // Unix seconds of the last reset of the month's peak, see core/site_peak_reset.go
 	PeakStatus                      = "peakStatus"                // what peak shaving does with the battery and why, see core/site_peak_status.go
 	PeakShavingChargeEntity         = "peakShavingChargeEntity"   // grid charge power target
 	PeakShavingChargeSetpoint       = "peakShavingChargeSetpoint" // grid charge power written, 0 = not charging

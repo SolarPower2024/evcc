@@ -219,7 +219,7 @@ func NewLoadpointFromConfig(log *util.Logger, settings settings.Settings, collec
 	switch lp.Soc.Poll.Mode {
 	case loadpoint.PollCharging:
 	case loadpoint.PollConnected, loadpoint.PollAlways:
-		lp.log.WARN.Printf("poll mode '%s' may deplete your battery or lead to API misuse. USE AT YOUR OWN RISK.", lp.Soc.Poll)
+		// custom: warned in Prepare, see core/loadpoint_pollwarn.go
 	default:
 		lp.Soc.Poll.Mode = loadpoint.PollCharging
 	}
@@ -897,9 +897,7 @@ func (lp *Loadpoint) Prepare(site site.API, uiChan chan<- util.Param, pushChan c
 	}
 
 	// set vehicle polling mode
-	if lp.Soc.Poll.Mode != loadpoint.PollCharging {
-		lp.log.WARN.Printf("poll mode '%s' may deplete your battery or lead to API misuse. USE AT YOUR OWN RISK.", lp.Soc.Poll)
-	}
+	lp.warnPollMode() // custom: not for vehicles from Home Assistant, see core/loadpoint_pollwarn.go
 
 	// allow charger to access loadpoint
 	if ctrl, ok := lp.charger.(loadpoint.Controller); ok {
@@ -963,7 +961,7 @@ func (lp *Loadpoint) syncCharger() error {
 			if current, err = cg.GetMaxCurrent(); err == nil {
 				// smallest adjustment most PWM-Controllers can do is: 100%÷256×0,6A = 0.234A
 				if delta := math.Abs(lp.offeredCurrent - current); delta > 0.23 {
-					if shouldBeConsistent && delta >= 1 {
+					if shouldBeConsistent && delta >= 1 && !lp.isStagesCharger() { // custom: a heater in stages reports its own current on purpose, see core/loadpoint_stages.go
 						lp.log.WARN.Printf("charger logic error: current mismatch (got %.3gA, expected %.3gA) - make sure your interval is at least 30s", current, lp.offeredCurrent)
 					}
 					lp.offeredCurrent = current

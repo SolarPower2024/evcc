@@ -308,6 +308,12 @@ func (c *lmCircuit) done(current, limited float64) {
 		c.lp.lmm().AddEvent(lm.Event{At: c.now, Type: lm.EventThrottled, Load: lp.GetTitle(), A: c.requested, B: allowed})
 	}
 
+	if running {
+		if d, ok := lp.lmm().Resumed(lp, c.now); ok {
+			lp.lmm().AddEvent(lm.Event{At: c.now, Type: lm.EventResumed, Load: lp.GetTitle(), A: d.Minutes()})
+		}
+	}
+
 	// only switching off a running load counts, not one that could not start
 	if shed && lp.enabled {
 		d := c.lp.lmm().Shed(lp, c.now)

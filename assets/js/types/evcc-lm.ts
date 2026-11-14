@@ -131,6 +131,7 @@ export interface LmEvent {
   at: string;
   type:
     | "shed"
+    | "resumed"
     | "throttled"
     | "gridChargePaused"
     | "gridChargeDenied"
@@ -340,4 +341,12 @@ export interface LogFileState {
   size: number;
   /** Why the file is off, empty = none. */
   error?: string;
+}
+
+/** The feed-in a deletion of a time range removes, see Konfiguration → System → Debug. */
+export interface FeedInSummary {
+  /** kWh */
+  energy: number;
+  /** In the configured currency. */
+  revenue: number;
 }

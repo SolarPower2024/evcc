@@ -832,3 +832,65 @@ func TestLmStartNotedWhenOn(t *testing.T) {
 	assert.InDelta(t, 5520, pow, 100)
 	assert.InDelta(t, 8.0, cur, 0.1)
 }
+
+// TestResumedEvent: after a shed and the run that follows exactly one event
+// tells how long the load was off; starting without a shed logs none
+func TestResumedEvent(t *testing.T) {
+	for _, protected := range []bool{true, false} {
+		lp, m, c := newSwitchLoadpoint(t, 3000, 0)
+		lp.title = "Heizstab"
+		clk := lp.clock.(*clock.Mock)
+		if protected {
+			guardFor(5*time.Minute, lp)
+		}
+
+		resumed := func() (res []lm.Event) {
+			for _, e := range lp.lmm().Events() {
+				if e.Type == lm.EventResumed {
+					res = append(res, e)
+				}
+			}
+			return
+		}
+
+		// normal start: no event
+		require.True(t, switchCycle(t, lp, m, c, 5000))
+		require.True(t, switchCycle(t, lp, m, c, 5000))
+		assert.Empty(t, resumed(), "started without a shed")
+
+		// shed
+		require.False(t, switchCycle(t, lp, m, c, 12000))
+		assert.Empty(t, resumed(), "off")
+
+		// back after the guard, the event comes with the first cycle running
+		clk.Add(5*time.Minute + 10*time.Second)
+		require.True(t, switchCycle(t, lp, m, c, 5000))
+		require.True(t, switchCycle(t, lp, m, c, 5000))
+		require.True(t, switchCycle(t, lp, m, c, 5000))
+
+		ev := resumed()
+		if assert.Len(t, ev, 1, "protected %v", protected) {
+			assert.Equal(t, "Heizstab", ev[0].Load)
+			assert.InDelta(t, 5.0, ev[0].A, 0.5, "minutes off")
+		}
+	}
+}
+
+// TestReleaseGuardsStartsLoad: a load held off by the shed guard starts again in
+// the next cycle once the locks are lifted
+func TestReleaseGuardsStartsLoad(t *testing.T) {
+	lp, m, c := newSwitchLoadpoint(t, 3000, 0)
+	clk := lp.clock.(*clock.Mock)
+	guardFor(5*time.Minute, lp)
+
+	lp.enabled = true
+	require.True(t, switchCycle(t, lp, m, c, 5000))
+	require.False(t, switchCycle(t, lp, m, c, 12000), "shed")
+
+	clk.Add(10 * time.Second)
+	require.False(t, switchCycle(t, lp, m, c, 5000), "held off")
+	assert.Equal(t, 1, lp.lmm().GuardedCount(clk.Now()))
+
+	assert.Equal(t, 1, lp.lmm().ReleaseGuards(clk.Now()))
+	assert.True(t, switchCycle(t, lp, m, c, 5000), "runs in the next cycle")
+}
