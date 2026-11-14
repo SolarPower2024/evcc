@@ -187,6 +187,23 @@
       ]
     },
     {
+      "name": "Debug: Peak des Monats zurücksetzen, Einspeisung löschen",
+      "files": [
+        "core/site_peak_reset.go",
+        "core/metrics/peak_reset_custom.go",
+        "core/metrics/feedin_clear_custom.go",
+        "assets/js/components/Config/DebugModal.vue"
+      ],
+      "keywords": ["dailyPeakEnergy", "DailyPeakEnergy", "ResetPeak", "resetPeak", "metrics/feedin"],
+      "paths": ["core/metrics/stats.go", "server/http_db_metrics_handler.go"]
+    },
+    {
+      "name": "Warnungen: current mismatch beim Heizstab in Stufen, poll mode bei Home-Assistant-Fahrzeugen",
+      "files": ["core/loadpoint_pollwarn.go", "core/loadpoint_stages.go"],
+      "keywords": ["current mismatch", "may deplete your battery", "warnPollMode", "isStagesCharger"],
+      "paths": ["core/loadpoint.go"]
+    },
+    {
       "name": "Grundlagen, auf denen der Fork aufbaut",
       "files": ["core/loadpoint_lm.go"],
       "prs": [30367, 33463]

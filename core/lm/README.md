@@ -30,6 +30,7 @@ Part 1 describes the features, part 2 how the fork is kept maintainable.
 18. [Log file](#18-log-file)
 19. [Snow on PV](#19-snow-on-pv)
 20. [Split grid tariff](#20-split-grid-tariff)
+21. [Debug](#21-debug)
 
 **Part 2: maintenance**
 
@@ -1305,6 +1306,46 @@ feed-in, planner or the other tariff types.
 See `templates/definition/tariff/fixed-netz.yaml`, `GridFeeZonesField.vue`,
 `utils/lmGridTariff.ts`; tests `tariff/fixed_netz_test.go`, `TestGridFeeZonesHook`,
 `TestGridFeeTemplateChoice`.
+
+---
+
+## 21. Debug
+
+*Konfiguration → System → Debug* (`DebugModal.vue`, button next to *Sichern & Wiederherstellen*)
+holds corrections for faulty readings and tests. Each function asks before it runs
+("Wirklich ausführen?"). The site routes need a login like the configuration routes, the
+feed-in routes the admin password like evcc's own deletion routes (`api/db`).
+
+- **Reset the month's peak** (`POST /api/peakreset`, `ResetMonthPeak` in `core/site_peak_reset.go`):
+  the quarter hours of the running month up to now no longer count. evcc's grid peak limit
+  (the days of the month's peak, `peakAfterReset` through the hook in `site_gridpeak.go`)
+  and the fork's peak statistics (the month's peak and demand, quarter hours that started
+  before the reset are not taken in) fall back, so the limit is the one set in *Externe
+  Begrenzung → Netzbezugsspitze* again. The measurements stay as stored (energy history,
+  forecasts, battery identification see nothing); only the time is stored (setting
+  `peakResetAt`, restored at the start, without effect in the next month). The query is
+  evcc's `dailyPeakEnergy` with a start (`since`, hook in `core/metrics/stats.go`),
+  `DailyPeakEnergySince` in `core/metrics/peak_reset_custom.go`. The grid operator still
+  bills the real peak. Tests `TestResetMonthPeak*`, `TestDailyPeakEnergySince`.
+- **Delete feed-in** (`GET`/`DELETE /api/db/metrics/feedin?from&to`, `core/metrics/feedin_clear_custom.go`):
+  the dialog takes a first and a last day (local time, last day at most today; the client sends
+  `[first 00:00, last + 1 day 00:00)`), asks for the admin password and shows what is removed
+  ("Einspeisung 23,4 kWh, Erlös 1,87 €", the numbers of the energy view, nothing changes), then
+  sets `return_energy` of the grid meter's slots to 0. The revenue, the EEG split and the energy
+  flow are worked out from it, so they follow; draw, home consumption and the prices stay. The
+  EEG counter, a share of the feed-in, is set to 0 with it. Cannot be undone, download a backup
+  first. Tests `TestClearFeedIn`, `TestFeedInRoutes`.
+- **Clear event list** (`DELETE /api/lmevents`): empties the event log of the peak shaving dialog
+  and what is stored (`TestClearLmEvents`).
+- **Lift shed locks** (`POST /api/lmguardrelease`, count: `GET /api/lmguardcount`, off without a
+  lock): see [5](#5-shed-guard).
+
+Two of evcc's warnings are left out where they do not apply (hooks in `core/loadpoint.go`, see
+the table below): "charger logic error: current mismatch" for a heater in stages, which reports a
+current of its own on purpose, and "poll mode may deplete your battery" unless a vehicle that is not
+from Home Assistant is configured (`core/loadpoint_pollwarn.go`, once at the start of the loadpoint).
+
+UI steps: `testtools/steps_debug.mjs` (scenario `debug`).
 
 ---
 
