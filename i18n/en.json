@@ -746,6 +746,36 @@
         "optimizer": "Optimizer"
       }
     },
+    "lmdebug": {
+      "confirm": "Really do this?",
+      "description": "Corrections for faulty readings and tests.",
+      "done": "Done.",
+      "events": {
+        "action": "Clear",
+        "description": "Deletes the entries in the peak shaving dialog.",
+        "title": "Clear event list"
+      },
+      "feedIn": {
+        "action": "Set to 0",
+        "check": "Check",
+        "description": "Sets the feed-in of these days to 0 kWh, the revenue follows. Cannot be undone. Download a backup first.",
+        "from": "From",
+        "preview": "Feed-in {energy}, revenue {price}",
+        "title": "Delete feed-in",
+        "to": "To"
+      },
+      "guard": {
+        "action": "Lift",
+        "description": "{count} locked loads may start again right away.",
+        "title": "Lift shed locks"
+      },
+      "peakReset": {
+        "action": "Reset",
+        "description": "Past quarter hours no longer count, the limit is back at {limit}. The grid operator still bills the real peak.",
+        "title": "Reset the month's peak"
+      },
+      "title": "Debug"
+    },
     "lmgridfee": {
       "mode": "Type",
       "modeAbs": "Grid fee",

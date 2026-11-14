@@ -342,3 +342,11 @@ export interface LogFileState {
   /** Why the file is off, empty = none. */
   error?: string;
 }
+
+/** The feed-in a deletion of a time range removes, see Konfiguration → System → Debug. */
+export interface FeedInSummary {
+  /** kWh */
+  energy: number;
+  /** In the configured currency. */
+  revenue: number;
+}

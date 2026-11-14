@@ -89,7 +89,7 @@ var forkUiHooks = []struct {
 	{"core/loadpoint.go", []string{"// custom: warned in Prepare"}},
 	{"assets/js/views/App.vue", []string{"<LmGlobalModals"}},
 	{"assets/js/components/Config/HemsModal.vue", []string{"=== \"static\"; // custom: the battery card", "=== \"static\" // custom: the battery card"}},
-	{"assets/js/views/Config.vue", []string{"<PeakShavingConfig", "<LmConfigModals", "feedInEegTariff"}},
+	{"assets/js/views/Config.vue", []string{"<PeakShavingConfig", "<LmConfigModals", "feedInEegTariff", "openModal('debug')"}},
 	{"assets/js/views/Battery.vue", []string{"<!-- custom: soc grid charging and peak shaving", "<BatterySocGridChargeCard", "socCardShown", "chargeSupported", "<BatteryGridChargeOnceCard", "<BatteryPeakShavingCard", "<BatteryProfileCard", "priceCardVisible("}},
 	{"assets/js/components/BottomTabs/MoreMenu.vue", []string{"<LmMoreMenuItems"}},
 	{"assets/js/components/Config/LoadpointModal.vue", []string{"<PhaseSwitchFields", "emptyUnsetPhaseSwitch(this.values)", "config.loadpoint.minCurrent${showCurrent1p ? '3p' : ''}Label", "chargerIsStages"}},
