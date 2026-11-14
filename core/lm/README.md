@@ -577,7 +577,7 @@ battery mode.
 *Externe Begrenzung → Statische Limits → Netzbezugsspitze*; the value on the battery
 card opens this dialog, its static tab also without experimental and country), which also limits the loads. Once the month has a higher peak, shaving below it saves nothing, so the
 battery's limit (`peakShavingLimit`, no longer stored) is the higher of the two; a
-new month starts at the limit again. Without a limit there is no reserve. See `core/site_peak_limit.go`.
+new month starts at the limit again. Without a limit there is no reserve. A changed limit counts for the window in the same cycle, also its cap of 2 x limit (`TestPeakLimitChangeSameCycle`); the month's peak of a window that just completed follows in the cycle after. See `core/site_peak_limit.go`.
 
 **Statistics** (collected, no dialog at the moment; *Mehr → Peak Shaving* shows the peak status): per month the highest quarter hour with
 and without the battery and how often it covered a peak; only quarter hours

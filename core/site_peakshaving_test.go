@@ -639,3 +639,28 @@ func TestPeakReserveClearsExternalTimer(t *testing.T) {
 		return site.GetBatteryModeExternal() == api.BatteryUnknown
 	}, 3*time.Second, 50*time.Millisecond, "the watchdog hands the mode back")
 }
+
+// TestPeakLimitChangeSameCycle: a changed limit counts for the window in the
+// cycle it is changed in, not one cycle later. With the old limit of 20 kW the
+// window would allow 40 kW after 10 quiet minutes, more than the 2 x 13.5 kW
+// the new limit allows at most.
+func TestPeakLimitChangeSameCycle(t *testing.T) {
+	sc := newScenario(t)
+	clk := clock.NewMock()
+	s := sc.site.peak()
+	s.clock = clk
+	setPeakLimit(sc.site, 20000)
+
+	for range 20 {
+		clk.Add(30 * time.Second)
+		sc.cycle(20, 0, 0)
+	}
+	require.InDelta(t, 40000, s.window.Allowed, 1, "twice the limit of 20 kW")
+
+	require.NoError(t, sc.site.SetGridPeakBaseline(13500))
+	clk.Add(30 * time.Second)
+	sc.cycle(20, 0, 0)
+
+	assert.Equal(t, 13500.0, sc.site.GetPeakShavingLimit())
+	assert.LessOrEqual(t, s.window.Allowed, 27000.0, "the new limit counts at once")
+}
