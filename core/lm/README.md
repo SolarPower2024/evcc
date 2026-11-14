@@ -89,6 +89,9 @@ increase would not make it draw more, so the loads below are only shed for it
 when its whole demand can be freed
 (`TestLoadpointBelowItsOfferDoesNotShedLowerLoad`).
 
+What a load was granted and does not draw yet is left free for it for a minute,
+whatever the priority, see [7](#7-circuit-limits).
+
 All state lives in one `lm.Manager` per site (`site.lmm()`); loadpoints reach it
 through their site (`lp.lmm()`). The check runs inside evcc's `setLimit` through
 `lmCircuit` (`core/loadpoint_lm.go`), which keeps evcc's calculation and adds
@@ -271,6 +274,28 @@ To limit loads to the peak, set evcc's *Netzbezugsspitze*
 The circuit chosen for the battery stays (§2). One that is deleted afterwards is
 not followed: the name is removed with a warning at the start and with the next
 cycle (`core/site_lm_orphan.go`, `TestBatteryCircuitDeleted`).
+
+**Starting loads.** What load management grants a load, it often draws only
+seconds later (a car about 20 s after the start, a heater when its contactors
+close). Until then the circuit measures the old value, and the next load would
+be granted the same gap. So a granted increase counts in the circuit of the
+other loads, on every level they share a limit, for `DefaultStartTime` (1 minute,
+fixed): the part not drawn yet, grant less measured draw, in A and W separately
+(`core/lm/start.go`). It ends when the load draws (a remainder below 1 A or
+300 W counts as drawn), when it is switched off or turned down, or when the
+minute is over. The same grant again every cycle does not extend the minute,
+only a grant more than 1 A or 300 W above the last starts it anew, so a full car
+blocks once for a minute at most (`TestStartReserveNotExtendedByRepeat`,
+`TestStartReserveExpires`). It applies to raising as well, only the difference
+counts (`TestStartReserveRaise`), whatever the priority
+(`TestStartReserveIgnoresPriority`), and it limits increases only: a load keeps
+what it draws (`TestStartReserveKeepsOwnDraw`), shedding in an overload is
+unchanged. A grant that is no start counts nothing: a load taking all or nothing
+that did not get it all, a wallbox below its minimum
+(`TestStartReserveDeniedIsNoGrant`). Loads on circuits without a shared limit do
+not affect each other (`TestStartReserveOtherCircuit`); `PeekCurrent` and
+`PeekPower` apply the reserve but note nothing (`TestStartReservePeekDoesNotNote`).
+Tests: `core/lm/start_test.go`.
 
 ## 8. Loads and events in the dialog
 

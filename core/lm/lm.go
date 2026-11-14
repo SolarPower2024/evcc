@@ -94,6 +94,7 @@ type Manager struct {
 	guard
 	status
 	follow
+	starts
 }
 
 // New returns an empty load management
@@ -104,6 +105,7 @@ func New() *Manager {
 		guard:   guard{shedAt: make(map[Load]time.Time)},
 		status:  status{decisions: make(map[Load]Decision)},
 		follow:  follow{following: make(map[Load]*followState)},
+		starts:  starts{started: make(map[Load]*start)},
 	}
 }
 
@@ -149,6 +151,7 @@ func (m *Manager) Forget(l Load) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.reg, l)
+	m.forgetStart(l)
 }
 
 // competes reports whether loads on the two circuits draw through a shared
@@ -405,7 +408,10 @@ func (m *Manager) RequestPower(l Load, c api.Circuit, old, new float64, d Demand
 	need := d.amount(unmet(old, new, capped))
 	m.remember(c, l, m.Priority(l), &need, nil)
 
-	return m.peekPower(l, c, old, new, &capped)
+	res := m.peekPower(l, c, old, new, &capped)
+	m.notePower(l, c, d.grantedAmount(old, new, res))
+
+	return res
 }
 
 // ValidateCurrent caps a current request against the circuit while withholding
@@ -425,7 +431,10 @@ func (m *Manager) RequestCurrent(l Load, c api.Circuit, old, new float64, d Dema
 	need := d.amount(unmet(old, new, capped))
 	m.remember(c, l, m.Priority(l), nil, &need)
 
-	return m.peekCurrent(l, c, old, new, &capped)
+	res := m.peekCurrent(l, c, old, new, &capped)
+	m.noteCurrent(l, c, d.grantedAmount(old, new, res))
+
+	return res
 }
 
 // PeekPower caps a power request like ValidatePower but records no demand.
@@ -464,6 +473,12 @@ func (m *Manager) peekPower(l Load, c api.Circuit, old, new float64, capped *flo
 		res = max(res, min(keep, c.ValidatePower(old-reserve+lower, keep)))
 	}
 
+	// what loads granted an increase do not draw yet is not free either, but what
+	// the load draws itself stays
+	if sr, _ := m.startReserve(c, l); sr >= startSlackPower {
+		res = min(res, max(min(old, new), c.ValidatePower(old-reserve-sr, new)))
+	}
+
 	return res
 }
 
@@ -492,6 +507,11 @@ func (m *Manager) peekCurrent(l Load, c api.Circuit, old, new float64, capped *f
 	if keep := min(old, new); res < keep {
 		_, lower := m.relief(m.snapshot(), c, prio, l, 0, old)
 		res = max(res, min(keep, c.ValidateCurrent(old-reserve+lower, keep)))
+	}
+
+	// see peekPower
+	if _, sr := m.startReserve(c, l); sr >= startSlackCurrent {
+		res = min(res, max(min(old, new), c.ValidateCurrent(old-reserve-sr, new)))
 	}
 
 	return res
