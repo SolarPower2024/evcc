@@ -131,6 +131,7 @@ export interface LmEvent {
   at: string;
   type:
     | "shed"
+    | "resumed"
     | "throttled"
     | "gridChargePaused"
     | "gridChargeDenied"

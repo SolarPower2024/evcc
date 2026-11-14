@@ -44,3 +44,27 @@ func TestShedGuard(t *testing.T) {
 	guard = 0
 	assert.Zero(t, m.Guarded(protected, now.Add(time.Minute)))
 }
+
+// TestResumed: a shed load reports once when it runs again, with or without a
+// guard; a load that was not shed never does
+func TestResumed(t *testing.T) {
+	m := lm.New()
+	l, other := &testLoad{title: "heater"}, &testLoad{title: "other"}
+	m.SetGuardLookup(func(lm.Load) time.Duration { return 0 })
+
+	now := time.Now()
+
+	_, ok := m.Resumed(l, now)
+	assert.False(t, ok, "never shed")
+
+	m.Shed(l, now)
+	_, ok = m.Resumed(other, now)
+	assert.False(t, ok, "another load")
+
+	d, ok := m.Resumed(l, now.Add(12*time.Minute))
+	assert.True(t, ok)
+	assert.Equal(t, 12*time.Minute, d)
+
+	_, ok = m.Resumed(l, now.Add(13*time.Minute))
+	assert.False(t, ok, "once per shed")
+}

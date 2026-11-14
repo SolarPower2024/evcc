@@ -308,9 +308,9 @@ including battery grid charging with its power and state (running, throttled, sh
 until, waiting with what it needs and what is free, paused), the shed guard lock and the
 *Optimizer* badge (`PeakStatusLoads.vue`, `peakDialog.ts`, `peakDialog.test.ts`). *Zuletzt* lists
 the peak events (`peakEvents()` in `peakStatus.ts`, the list of `lm.PeakEvent`,
-`TestPeakEventListsMatch`), *Letzte Eingriffe* the others (shed, throttled, not following,
+`TestPeakEventListsMatch`), *Letzte Eingriffe* the others (shed, switched on again after a shed, throttled, not following,
 grid charging denied; `actionEvents()`, `PeakStatusEventList.vue`), the newest 5 and *Mehr*;
-it shows below the loads, or as a section of its own without them. There is
+it shows below the loads, or as a section of its own without them. A shed load that runs again logs `resumed` once (`lm.EventResumed`, "switched on again · after N min"; `Manager.Resumed` in `core/lm/guard.go`, whatever the shed guard; only after a shed, not at every start; the mark lives in memory, so a restart forgets an open shed; `TestResumed`, `TestResumedEvent`). There is
 no view of its own and no circuit tile any more; circuits are set in their configuration.
 The status is published as `lmStatus` at the end of every cycle
 (`core/site_lm_status.go`, records in `core/lm/status.go`); it never feeds back

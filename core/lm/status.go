@@ -22,6 +22,7 @@ type Decision struct {
 // Event types
 const (
 	EventShed             = "shed"             // a running load was switched off, A = guard minutes, B = circuit power
+	EventResumed          = "resumed"          // a shed load runs again, A = minutes it was off
 	EventThrottled        = "throttled"        // a load was limited, A = requested, B = allowed
 	EventGridChargePaused = "gridChargePaused" // a peak paused battery grid charging, A = demand, B = grid power allowed
 	EventGridChargeDenied = "gridChargeDenied" // the circuit denied battery grid charging, A = allowed, B = wanted
