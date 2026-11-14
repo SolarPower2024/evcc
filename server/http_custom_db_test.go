@@ -12,6 +12,7 @@ import (
 
 	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/db"
+	"github.com/evcc-io/evcc/util/auth"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -64,7 +65,7 @@ func TestCustomDbRoutesNoCollision(t *testing.T) {
 	for name := range customDbRoutes() {
 		assert.Contains(t, routes, name)
 	}
-	assert.Len(t, routes, 3)
+	assert.Len(t, routes, 1+len(customDbRoutes()))
 }
 
 func TestEegPriceRoutes(t *testing.T) {
@@ -133,4 +134,72 @@ func TestEegPriceRoutes(t *testing.T) {
 	assert.Equal(t, http.StatusOK, code)
 	assert.JSONEq(t, `{"deleted":2}`, body)
 	assert.Equal(t, map[int64]float64{slot(2).Unix(): 0.082, slot(3).Unix(): 0}, prices())
+}
+
+// TestFeedInRoutes: the summary shows what the deletion removes without changing
+// it, the deletion sets the feed-in of the range to 0, and both need the admin
+// password
+func TestFeedInRoutes(t *testing.T) {
+	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	require.NoError(t, metrics.SetupSchema())
+
+	_, err := metrics.NewCollector(metrics.Grid, "grid", "grid")
+	require.NoError(t, err)
+
+	base := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	slot := func(n int) time.Time { return base.Add(time.Duration(n) * 15 * time.Minute) }
+	require.NoError(t, db.Instance.Exec(`INSERT INTO meters (meter, ts, energy, return_energy)
+		SELECT id, ?, 2, 3 FROM entities WHERE "group" = 'grid'`, slot(0).Unix()).Error)
+	require.NoError(t, db.Instance.Exec(`INSERT INTO meters (meter, ts, energy, return_energy)
+		SELECT id, ?, 2, 3 FROM entities WHERE "group" = 'grid'`, slot(1).Unix()).Error)
+
+	const pw = "secret"
+	authed := fakeAuth{mode: auth.Enabled, password: pw}
+
+	r := mux.NewRouter()
+	sub := r.PathPrefix("/db").Subrouter()
+	sub.Use(ensureDbAuth(authed))
+	for _, rt := range customDbRoutes() {
+		sub.Methods(rt.Method).Path(rt.Pattern).Handler(rt.HandlerFunc)
+	}
+
+	call := func(method, password string, from, to int) (int, string) {
+		q := url.Values{"from": {slot(from).Format(time.RFC3339)}, "to": {slot(to).Format(time.RFC3339)}}
+		req := httptest.NewRequest(method, "/db/metrics/feedin?"+q.Encode(), nil)
+		if password != "" {
+			req.Header.Set("X-Admin-Password", password)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w.Code, w.Body.String()
+	}
+
+	// without the password nothing happens
+	for _, method := range []string{http.MethodGet, http.MethodDelete} {
+		code, _ := call(method, "", 0, 2)
+		assert.Equal(t, http.StatusUnauthorized, code, method)
+		code, _ = call(method, "wrong", 0, 2)
+		assert.Equal(t, http.StatusUnauthorized, code, method)
+	}
+
+	code, body := call(http.MethodGet, pw, 0, 2)
+	assert.Equal(t, http.StatusOK, code)
+	assert.JSONEq(t, `{"energy":6,"revenue":0}`, body)
+
+	// the second slot only
+	code, body = call(http.MethodDelete, pw, 1, 2)
+	assert.Equal(t, http.StatusOK, code)
+	assert.JSONEq(t, `{"deleted":1}`, body)
+
+	_, body = call(http.MethodGet, pw, 0, 2)
+	assert.JSONEq(t, `{"energy":3,"revenue":0}`, body)
+
+	// the draw is as it was
+	var energy float64
+	require.NoError(t, db.Instance.Raw(`SELECT SUM(energy) FROM meters`).Scan(&energy).Error)
+	assert.Equal(t, 4.0, energy)
+
+	// a range without sense
+	code, _ = call(http.MethodDelete, pw, 2, 0)
+	assert.Equal(t, http.StatusBadRequest, code)
 }

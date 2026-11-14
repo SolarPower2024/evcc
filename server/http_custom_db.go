@@ -14,11 +14,14 @@ import (
 )
 
 // customDbRoutes are the fork's routes below api/db: the stored EEG prices of a
-// time range can be deleted or set anew
+// time range can be deleted or set anew, the feed-in of a time range can be read
+// and set to 0 (Debug, see core/metrics/feedin_clear_custom.go)
 func customDbRoutes() map[string]route {
 	return map[string]route{
 		"deleteeegprices": {"DELETE", "/metrics/tariffs/eeg", deleteEegPricesHandler},
 		"seteegprices":    {"PUT", "/metrics/tariffs/eeg", setEegPricesHandler},
+		"feedinsummary":   {"GET", "/metrics/feedin", feedInSummaryHandler},
+		"deletefeedin":    {"DELETE", "/metrics/feedin", deleteFeedInHandler},
 	}
 }
 
@@ -81,6 +84,61 @@ func setEegPricesHandler(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, status, err)
 		return
 	}
+
+	jsonWrite(w, deleteResult{rows})
+}
+
+// feedInSummaryResult is what a deletion of the feed-in would remove
+type feedInSummaryResult struct {
+	Energy  float64 `json:"energy"`  // kWh
+	Revenue float64 `json:"revenue"` // currency
+}
+
+// feedInSummaryHandler answers the feed-in of from/to without changing it: the
+// preview of deleteFeedInHandler
+func feedInSummaryHandler(w http.ResponseWriter, r *http.Request) {
+	if db.Instance == nil {
+		jsonError(w, http.StatusBadRequest, errors.New("database offline"))
+		return
+	}
+
+	from, to, err := timeRange(r)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	energy, revenue, err := metrics.FeedInSummary(from, to)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	jsonWrite(w, feedInSummaryResult{energy, revenue})
+}
+
+// deleteFeedInHandler sets the feed-in of from/to to 0 kWh, draw and home
+// consumption stay
+func deleteFeedInHandler(w http.ResponseWriter, r *http.Request) {
+	if db.Instance == nil {
+		jsonError(w, http.StatusBadRequest, errors.New("database offline"))
+		return
+	}
+
+	from, to, err := timeRange(r)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	rows, err := metrics.ClearFeedIn(from, to)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	// invalidate cached values derived from the history, as evcc's own deletion does
+	util.ResetCached()
 
 	jsonWrite(w, deleteResult{rows})
 }
