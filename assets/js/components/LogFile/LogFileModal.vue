@@ -70,7 +70,7 @@
 				</div>
 			</dl>
 
-			<div class="mt-3" data-testid="logfile-list">
+			<div v-if="state" class="mt-3" data-testid="logfile-list">
 				<div class="small evcc-gray">{{ $t("logFile.list") }}</div>
 				<div v-if="!files.length" class="small" data-testid="logfile-nofiles">
 					{{ $t("logFile.noFiles") }}
