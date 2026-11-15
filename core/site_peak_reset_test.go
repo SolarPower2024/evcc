@@ -73,6 +73,11 @@ func TestResetMonthPeak(t *testing.T) {
 
 	require.NoError(t, site.ResetMonthPeak())
 
+	// the handler only sets the time, the site loop works the limits out
+	assert.Equal(t, 12000.0, site.GetGridPeakTarget(), "not before the next cycle")
+	site.updateGridPeak()
+	site.updatePeakLimit()
+
 	assert.Equal(t, 8000.0, site.GetGridPeakTarget(), "evcc's limit again")
 	assert.Equal(t, 8000.0, site.GetPeakShavingLimit(), "the battery's limit with it")
 

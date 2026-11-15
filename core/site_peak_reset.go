@@ -42,7 +42,8 @@ func (site *Site) restorePeakReset() {
 }
 
 // ResetMonthPeak lets the month start again: the quarter hours up to now no
-// longer count for the peak
+// longer count for the peak. Called from a handler: it only sets the time, the
+// next cycle does the rest.
 func (site *Site) ResetMonthPeak() error {
 	s := site.peak()
 
@@ -59,10 +60,10 @@ func (site *Site) ResetMonthPeak() error {
 
 	settings.SetInt(keys.PeakResetAt, now.Unix())
 	site.log.INFO.Printf("peak of the month reset")
+	// no call at the collector from here: the next cycle of the site loop works the
+	// limits out anew
 
 	site.savePeakMonths()
-	site.updateGridPeak()
-	site.updatePeakLimit()
 
 	return nil
 }
