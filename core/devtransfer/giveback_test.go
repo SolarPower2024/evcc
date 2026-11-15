@@ -9,6 +9,7 @@ import (
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestDisabledGiveBack(t *testing.T) {
@@ -200,4 +201,36 @@ func TestSummary(t *testing.T) {
 	assert.Equal(t, 1, res.Sessions)
 	assert.Equal(t, 2, res.Slots, "distinct quarter hours")
 	assert.Equal(t, 1, res.Months)
+}
+
+func meterReading(t *testing.T, g *gorm.DB, name string) float64 {
+	t.Helper()
+	var v float64
+	require.NoError(t, g.Raw("SELECT energy_meter FROM entities WHERE name = ?", name).Scan(&v).Error)
+	return v
+}
+
+// TestGiveBackReadings: the last absolute readings of an entity follow only if the
+// test version recorded later than the real database
+func TestGiveBackReadings(t *testing.T) {
+	f := newFixture(t)
+	taken(t, f)
+
+	for _, g := range []*gorm.DB{f.live, f.dev} {
+		addSlot(t, g, "grid", "grid", t0, 1)
+		addSlot(t, g, "pv", "pv", t0, 1)
+	}
+	exec(t, f.live, "UPDATE entities SET energy_meter = 100")
+	exec(t, f.dev, "UPDATE entities SET energy_meter = 50")
+
+	// the test version recorded later for pv, the real one for grid
+	addSlot(t, f.dev, "pv", "pv", t0.Add(slot), 1)
+	addSlot(t, f.live, "grid", "grid", t0.Add(2*slot), 1)
+	addSlot(t, f.dev, "grid", "grid", t0.Add(slot), 1)
+
+	_, err := GiveBack(context.Background(), Items{Energy: true})
+	require.NoError(t, err)
+
+	assert.InDelta(t, 50, meterReading(t, f.live, "pv"), 1e-9, "the test version recorded later")
+	assert.InDelta(t, 100, meterReading(t, f.live, "grid"), 1e-9, "the real one recorded later")
 }

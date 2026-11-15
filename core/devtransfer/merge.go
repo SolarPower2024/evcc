@@ -201,6 +201,17 @@ func mergeSessions(ctx context.Context, conn *sql.Conn, since time.Time) (int, e
 // that dst does not have, mapped over group and name. The last absolute readings
 // of the entities follow, so evcc custom carries on from them.
 func mergeSlots(ctx context.Context, conn *sql.Conn, since time.Time) (int, error) {
+	// the entities already in dst take over the latest readings of src, if src
+	// recorded later than dst; decided before the slots are added
+	if _, err := conn.ExecContext(ctx, `UPDATE main.entities SET
+			energy_meter = COALESCE((SELECT s.energy_meter FROM src.entities s WHERE s."group" = main.entities."group" AND s.name = main.entities.name), energy_meter),
+			return_energy_meter = COALESCE((SELECT s.return_energy_meter FROM src.entities s WHERE s."group" = main.entities."group" AND s.name = main.entities.name), return_energy_meter)
+		WHERE (SELECT MAX(m.ts) FROM src.entities s JOIN src.meters m ON m.meter = s.id
+				WHERE s."group" = main.entities."group" AND s.name = main.entities.name AND m.ts >= ?)
+			> COALESCE((SELECT MAX(x.ts) FROM main.meters x WHERE x.meter = main.entities.id), 0)`, since.Unix()); err != nil {
+		return 0, err
+	}
+
 	ecols, err := commonColumns(ctx, conn, "entities", "id")
 	if err != nil {
 		return 0, err
@@ -227,15 +238,6 @@ func mergeSlots(ctx context.Context, conn *sql.Conn, since time.Time) (int, erro
 		return 0, err
 	}
 	rows, _ := res.RowsAffected()
-
-	// the entities already in dst: take over the latest readings of src, where src recorded
-	if _, err := conn.ExecContext(ctx, `UPDATE main.entities SET
-			energy_meter = COALESCE((SELECT s.energy_meter FROM src.entities s WHERE s."group" = main.entities."group" AND s.name = main.entities.name), energy_meter),
-			return_energy_meter = COALESCE((SELECT s.return_energy_meter FROM src.entities s WHERE s."group" = main.entities."group" AND s.name = main.entities.name), return_energy_meter)
-		WHERE EXISTS (SELECT 1 FROM src.entities s JOIN src.meters m ON m.meter = s.id
-			WHERE s."group" = main.entities."group" AND s.name = main.entities.name AND m.ts >= ?)`, since.Unix()); err != nil {
-		return int(rows), err
-	}
 
 	return int(rows), nil
 }
