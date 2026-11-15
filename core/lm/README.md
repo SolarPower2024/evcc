@@ -1185,17 +1185,31 @@ info while the file gets debug.
   run: logged once as an error (console and log page) and shown in the dialog. The
   setting stays on, the next start tries again. A failing file never stops
   the control loop
+- the dialog lists the files of the folder (also with the log file switched off,
+  as long as there is a folder): date (today marked), size and a download link,
+  newest first, 7 rows and "Alle anzeigen" for more. The list is part of the GET
+  answer (`list`) and loads with the dialog and after saving. No delete: the
+  retention and the 1 GB limit clean up
+- the download streams the file as it lies: today's as `text/plain` after a
+  flush of the buffer, limited to the size at opening so a growing file ends
+  cleanly; the days before as `application/gzip` (`.log.gz`), not unpacked. Only
+  names of the file pattern, no path part, and only a regular file in the folder
+  (no symlink), everything else is a 404. Like the other log file routes it needs
+  a login (`customConfigRoutes`). evcc's api compression applies to it as to every
+  route: a client that accepts gzip gets a transport layer on top, which it
+  removes again, the saved file is the `.log.gz` of the folder
 
 ```
-GET  /api/logfile   {enabled, level, days, dir, files, size, error}
+GET  /api/logfile   {enabled, level, days, dir, files, size, list: [{name, day, size, gz}], error}
 POST /api/logfile   json body {enabled, level, days}, answers like GET
+GET  /api/logfile/files/{name}   download of evcc-YYYY-MM-DD.log or .log.gz
 ```
 
 The output sits between the loggers and the buffer (`logstash.Output`, hook in
 `util/log.go`), the buffer and the log page stay as they are. evcc PR 32018 (open)
 changes the logger underneath `util/log.go`; then the hook has to be set again and
 checked whether evcc brings a file output itself. See `util/logstash/file_custom.go`,
-`core/site_logfile.go`.
+`util/logstash/file_list_custom.go` (list and download), `core/site_logfile.go`.
 
 ## 19. Snow on PV
 
@@ -1395,7 +1409,7 @@ in a running evcc) they answer 401. The ui opens the login on a 401 by itself.
 | List | Routes |
 |---|---|
 | `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakshavingreserve`, `peakshavingevents`, `feedinsplit` |
-| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `importeegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
+| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `importeegentity(delete)`, `logfile`, `logfileset`, `logfiledownload`, `peakshavinglimit`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
 
 ## Upstream touch points
 
@@ -1457,7 +1471,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
 | EEG | `core/site_feedin_eeg.go`, `core/site_import_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
 | peak from the circuit meter | `core/site_peak_circuit.go`, `core/metrics/grid_peak_custom.go` |
-| log file | `util/logstash/file_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
+| log file | `util/logstash/file_custom.go`, `util/logstash/file_list_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | split grid tariff | `templates/definition/tariff/fixed-netz.yaml`, `tariff/fixed_netz_test.go`, `assets/js/utils/lmGridTariff.ts`, `assets/js/components/Config/GridFeeZonesField.vue`, `GridFeeZoneForm.vue`, `GridFeeZoneSummary.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
