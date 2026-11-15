@@ -1,0 +1,214 @@
+package devtransfer
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/evcc-io/evcc/db"
+	"github.com/evcc-io/evcc/db/settings"
+	"github.com/evcc-io/evcc/util"
+)
+
+// supervisorURL is the restart route of the Home Assistant supervisor
+var supervisorURL = "http://supervisor/addons/self/restart"
+
+// Exit ends the process like the restore of a database does, replaced in tests
+var Exit = func() {
+	if p, err := os.FindProcess(os.Getpid()); err == nil {
+		_ = p.Signal(os.Interrupt)
+	}
+}
+
+// restore and closeDB are replaced in tests
+var (
+	restore = db.Restore
+	closeDB = db.Close
+)
+
+// Restart ways
+const (
+	RestartSupervisor = "supervisor"
+	RestartExit       = "exit"
+)
+
+// RestartWay tells how the test version restarts after the take over: through
+// the supervisor if it hands out a token, else it ends and the watchdog or the
+// user starts it
+func RestartWay() string {
+	if os.Getenv("SUPERVISOR_TOKEN") != "" {
+		return RestartSupervisor
+	}
+	return RestartExit
+}
+
+// Restart restarts the test version, through the supervisor if possible, else
+// it ends the process
+func Restart(ctx context.Context) {
+	if RestartWay() == RestartSupervisor {
+		err := supervisorRestart(ctx)
+		if err == nil {
+			return
+		}
+		util.NewLogger("devtransfer").WARN.Printf("supervisor restart: %v", err)
+	}
+
+	Exit()
+}
+
+func supervisorRestart(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, supervisorURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+os.Getenv("SUPERVISOR_TOKEN"))
+
+	client := http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("status %s", resp.Status)
+	}
+	return nil
+}
+
+// TakeoverInfo is what the preview of the take over shows
+type TakeoverInfo struct {
+	Path    string    `json:"path"`
+	Changed time.Time `json:"changed"`
+}
+
+// GetTakeoverInfo returns path and last change of the real database
+func GetTakeoverInfo() (TakeoverInfo, error) {
+	path, err := LivePath()
+	if err != nil {
+		return TakeoverInfo{}, err
+	}
+
+	return TakeoverInfo{path, Changed(path)}, nil
+}
+
+// Takeover replaces the database of this instance by a copy of the real one,
+// with what this instance recorded since the real one stopped recording. The
+// copy goes through sqlite's backup, so it holds what a crash left in the log.
+// backup makes the local backup of the own database first. The database is closed
+// at the end, the caller flushes its answer and calls Restart. An error that
+// wraps ErrRestored comes after the data was replaced: restart then as well.
+func Takeover(ctx context.Context, backup func(context.Context) error) error {
+	path, err := LivePath()
+	if err != nil {
+		return err
+	}
+
+	if err := settings.Persist(); err != nil {
+		return err
+	}
+
+	if backup != nil {
+		if err := backup(ctx); err != nil {
+			return fmt.Errorf("backup: %w", err)
+		}
+	}
+
+	tmp, err := os.CreateTemp("", "evcc-takeover-*.db")
+	if err != nil {
+		return err
+	}
+	tmp.Close()
+	defer os.Remove(tmp.Name())
+
+	if err := backupFile(ctx, path, tmp.Name()); err != nil {
+		return fmt.Errorf("copy: %w", err)
+	}
+
+	since, err := recorded(ctx, tmp.Name())
+	if err != nil {
+		return fmt.Errorf("since: %w", err)
+	}
+
+	// what this instance recorded since stays
+	if _, err := merge(ctx, tmp.Name(), db.FilePath(), since, DefaultItems, nil); err != nil {
+		return fmt.Errorf("merge: %w", err)
+	}
+
+	// the since file first: a restore that ran must never be without it. A failing
+	// restore leaves the state as it was.
+	old, hadSince := Since()
+	if err := writeSince(since); err != nil {
+		return err
+	}
+
+	if err := restore(ctx, tmp.Name()); err != nil {
+		if hadSince {
+			_ = writeSince(old)
+		} else {
+			_ = os.Remove(sinceFile())
+		}
+		return fmt.Errorf("restore: %w", err)
+	}
+
+	// checkpoint the log into the file before the shutdown hooks run; the data is
+	// replaced already, so the caller restarts anyway
+	if err := closeDB(); err != nil {
+		return fmt.Errorf("%w: %v", ErrRestored, err)
+	}
+
+	return nil
+}
+
+// recorded returns the end of the recording of the database file
+func recorded(ctx context.Context, path string) (time.Time, error) {
+	d, err := openFile(path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer d.Close()
+
+	return latest(ctx, d, "")
+}
+
+// Outdated tells whether evcc custom recorded after the take over (or after the
+// last give back it holds), so the test version runs on an old copy and should
+// take over again
+func Outdated(ctx context.Context) (bool, error) {
+	since, ok := Since()
+	if !ok {
+		return false, nil
+	}
+
+	path, err := LivePath()
+	if err != nil {
+		return false, err
+	}
+
+	d, err := openReadOnly(path)
+	if err != nil {
+		return false, err
+	}
+	defer d.Close()
+
+	ref := since
+	if v, ok, err := settingValue(ctx, d, "", DevTransferApplied); err != nil {
+		return false, err
+	} else if ok {
+		var a Applied
+		if json.Unmarshal([]byte(v), &a) == nil && a.At.After(ref) {
+			ref = a.At
+		}
+	}
+
+	end, err := latest(ctx, d, "")
+	if err != nil {
+		return false, err
+	}
+
+	// the slot running at the reference time ends after it
+	return end.After(ref.Truncate(slot).Add(slot)), nil
+}

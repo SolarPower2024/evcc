@@ -52,6 +52,7 @@ var customConfigRoutes = []string{
 	"peakshavingcircuit", "peakshavingcircuitdelete",
 	"batterygridchargemode",
 	"peakreset", "lmeventsclear", "lmguardcount", "lmguardrelease",
+	"devtransfer",
 }
 
 // customOperateRoutes are switches, actions and soc thresholds of the main and
@@ -214,6 +215,10 @@ func customSiteRoutes(site site.API) map[string]route {
 		"lmeventsclear":  {"DELETE", "/lmevents", actionHandler(site.ClearLmEvents)},
 		"lmguardcount":   {"GET", "/lmguardcount", func(w http.ResponseWriter, r *http.Request) { jsonWrite(w, site.LmGuardedCount()) }},
 		"lmguardrelease": {"POST", "/lmguardrelease", func(w http.ResponseWriter, r *http.Request) { jsonWrite(w, site.ReleaseLmGuards()) }},
+
+		// the test version's exchange with evcc custom: its state and the last give back, the
+		// actions are below api/db, see http_custom_devtransfer.go
+		"devtransfer": {"GET", "/devtransfer", devTransferStatusHandler},
 
 		// log in daily files, see core/site_logfile.go
 		"logfile":         {"GET", "/logfile", logFileHandler(site)},

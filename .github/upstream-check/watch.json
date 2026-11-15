@@ -199,6 +199,19 @@
       "paths": ["core/metrics/stats.go", "server/http_db_metrics_handler.go", "core/metrics/db_flow.go"]
     },
     {
+      "name": "Testversion: Daten von evcc custom übernehmen und zurückgeben",
+      "files": [
+        "core/devtransfer/role.go",
+        "core/devtransfer/takeover.go",
+        "core/devtransfer/giveback.go",
+        "core/devtransfer/merge.go",
+        "server/http_custom_devtransfer.go",
+        "assets/js/components/Config/DebugDevTransfer.vue"
+      ],
+      "keywords": ["restoreDatabase", "createLocalDatabaseBackup", "db.Restore", "devtransfer"],
+      "paths": ["server/http_site_handler.go", "db/db.go", "core/metrics/db.go", "core/metrics/tariffs.go", "core/session/session.go", "util/config/config.go", "db/settings/setting.go"]
+    },
+    {
       "name": "Warnungen: current mismatch beim Heizstab in Stufen, poll mode bei Home-Assistant-Fahrzeugen",
       "files": ["core/loadpoint_pollwarn.go", "core/loadpoint_stages.go"],
       "keywords": ["current mismatch", "may deplete your battery", "warnPollMode", "isStagesCharger"],

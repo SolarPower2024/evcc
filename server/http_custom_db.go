@@ -5,6 +5,7 @@ package server
 
 import (
 	"errors"
+	"maps"
 	"net/http"
 	"strconv"
 
@@ -18,7 +19,7 @@ import (
 // and set to 0 or recalculated from the energy balance (Debug, see
 // core/metrics/feedin_clear_custom.go and feedin_recalc_custom.go)
 func customDbRoutes() map[string]route {
-	return map[string]route{
+	routes := map[string]route{
 		"deleteeegprices": {"DELETE", "/metrics/tariffs/eeg", deleteEegPricesHandler},
 		"seteegprices":    {"PUT", "/metrics/tariffs/eeg", setEegPricesHandler},
 		"feedinsummary":   {"GET", "/metrics/feedin", feedInSummaryHandler},
@@ -27,6 +28,11 @@ func customDbRoutes() map[string]route {
 		"feedinrecalcsummary": {"GET", "/metrics/feedinrecalc", feedInRecalcSummaryHandler},
 		"feedinrecalc":        {"POST", "/metrics/feedinrecalc", feedInRecalcHandler},
 	}
+
+	// the test version's exchange with evcc custom, see http_custom_devtransfer.go
+	maps.Copy(routes, devTransferRoutes())
+
+	return routes
 }
 
 // addCustomDbRoutes adds the fork's db routes to upstream's route table, a

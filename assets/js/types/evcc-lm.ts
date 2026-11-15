@@ -379,3 +379,49 @@ export interface FeedInRecalcSummary {
   /** Quarter hours without home consumption, left as stored. */
   skipped: number;
 }
+
+/** What can be handed back to evcc custom, see Konfiguration → System → Debug (test version). */
+export type DevTransferItem = "sessions" | "energy" | "peak" | "devices" | "settings";
+
+/** The last give back of a test version, stored in the real database. */
+export interface DevTransferApplied {
+  /** RFC 3339 */
+  at: string;
+  items: DevTransferItem[];
+}
+
+/** State of the data exchange between evcc custom and the test version. */
+export interface DevTransferStatus {
+  /** Only the test version has it. */
+  enabled: boolean;
+  livePath?: string;
+  /** RFC 3339, last change of the real database. */
+  liveChanged?: string;
+  /** The real database was not found. */
+  notFound?: boolean;
+  /** RFC 3339, start of the test time, set once data was taken over. */
+  since?: string;
+  outdated?: boolean;
+  /** How the test version restarts after the take over. */
+  restart?: "supervisor" | "exit";
+  applied?: DevTransferApplied;
+}
+
+/** The test time a give back would hand over. */
+export interface DevTransferSummary {
+  /** RFC 3339 */
+  since: string;
+  /** RFC 3339 */
+  to: string;
+  sessions: number;
+  slots: number;
+  months: number;
+}
+
+/** What a give back handed over. */
+export interface DevTransferResult {
+  sessions: number;
+  slots: number;
+  prices: number;
+  months: number;
+}
