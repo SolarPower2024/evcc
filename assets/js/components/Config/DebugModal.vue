@@ -77,7 +77,7 @@
 						{{
 							$t("config.lmdebug.feedIn.preview", {
 								energy: fmtKWh(preview.energy),
-								price: fmtMoneyWithSymbol(preview.revenue),
+								price: fmtMoneyWithSymbol(preview.revenue, currency),
 							})
 						}}
 					</p>
@@ -210,9 +210,6 @@ export default defineComponent({
 		},
 	},
 	methods: {
-		fmtMoneyWithSymbol(amount: number): string {
-			return `${this.fmtMoney(amount, this.currency)} ${this.fmtCurrencySymbol(this.currency)}`;
-		},
 		open() {
 			this.latest = dayString(yesterday());
 			this.from = this.to = this.latest;
