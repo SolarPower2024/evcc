@@ -4,10 +4,11 @@ package core
 // a reading that was wrong (a meter spike) the limit would stay raised the whole
 // month: the battery's limit is the higher of evcc's limit and the month's peak.
 //
-// Only the time of the reset is stored. The quarter hours before it no longer
-// count, for evcc's grid peak limit (its days come from the metrics, queried from
-// the reset on) and for the statistics of the fork; the measurements themselves
-// stay as they are. In the next month the time has no effect any more.
+// The time of the reset is stored. The quarter hours before it no longer count for
+// the limits: evcc's grid peak limit (its days come from the metrics, queried from
+// the reset on) and the battery's (the highest quarter hour since, `resetPeak`,
+// stored with it). The statistics and the peak tariff card keep the real peak, the
+// measurements stay as they are. In the next month the reset has no effect any more.
 
 import (
 	"time"
@@ -38,6 +39,9 @@ func (site *Site) restorePeakReset() {
 
 	s.mu.Lock()
 	s.resetAt = time.Unix(v, 0)
+	if p, err := settings.Float(keys.PeakResetPeak); err == nil {
+		s.resetPeak, s.resetPeakSaved = p, p
+	}
 	s.mu.Unlock()
 }
 
@@ -51,19 +55,14 @@ func (site *Site) ResetMonthPeak() error {
 	now := s.clock.Now()
 	s.resetAt = now
 
-	if len(s.months) > 0 && s.months[0].Month == now.Local().Format("2006-01") {
-		m := &s.months[0]
-		m.Peak, m.PeakAt, m.Demand, m.DemandAt = 0, time.Time{}, 0, time.Time{}
-		s.monthsDirty = true
-	}
+	s.resetPeak, s.resetPeakSaved = 0, 0
 	s.mu.Unlock()
 
 	settings.SetInt(keys.PeakResetAt, now.Unix())
+	settings.SetFloat(keys.PeakResetPeak, 0)
 	site.log.INFO.Printf("peak of the month reset")
 	// no call at the collector from here: the next cycle of the site loop works the
 	// limits out anew
-
-	site.savePeakMonths()
 
 	return nil
 }

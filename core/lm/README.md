@@ -1319,11 +1319,14 @@ feed-in routes the admin password like evcc's own deletion routes (`api/db`).
 - **Reset the month's peak** (`POST /api/peakreset`, `ResetMonthPeak` in `core/site_peak_reset.go`):
   the quarter hours of the running month up to now no longer count. evcc's grid peak limit
   (the days of the month's peak, `peakAfterReset` through the hook in `site_gridpeak.go`)
-  and the fork's peak statistics (the month's peak and demand, quarter hours that started
-  before the reset are not taken in) fall back, so the limit is the one set in *Externe
-  Begrenzung → Netzbezugsspitze* again. The measurements stay as stored (energy history,
-  forecasts, battery identification see nothing); only the time is stored (setting
-  `peakResetAt`, restored at the start, without effect in the next month). The query is
+  and the battery's limit fall back, so the limits are the one set in *Externe Begrenzung →
+  Netzbezugsspitze* again. The battery's limit takes the highest quarter hour since the reset
+  (`resetPeak`, raised when a window completes, stored as `peakResetPeak`). The peak statistics
+  and the peak tariff card keep the real peak of the month. The handler only sets the time; the
+  next cycle of the site loop works the limits out (no call at the collector from the handler).
+  The measurements stay as stored (energy history, forecasts, battery identification see
+  nothing); the settings `peakResetAt` and `peakResetPeak` are restored at the start, without
+  effect in the next month. The query is
   evcc's `dailyPeakEnergy` with a start (`since`, hook in `core/metrics/stats.go`),
   `DailyPeakEnergySince` in `core/metrics/peak_reset_custom.go`. The grid operator still
   bills the real peak. Tests `TestResetMonthPeak*`, `TestDailyPeakEnergySince`.

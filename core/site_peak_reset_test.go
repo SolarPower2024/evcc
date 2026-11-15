@@ -81,15 +81,11 @@ func TestResetMonthPeak(t *testing.T) {
 	assert.Equal(t, 8000.0, site.GetGridPeakTarget(), "evcc's limit again")
 	assert.Equal(t, 8000.0, site.GetPeakShavingLimit(), "the battery's limit with it")
 
+	// the statistics and the tariff card keep the real peak
 	m := site.custom.peak.months[0]
-	assert.Zero(t, m.Peak)
-	assert.Zero(t, m.Demand)
-	assert.True(t, m.PeakAt.IsZero() && m.DemandAt.IsZero())
-	assert.Equal(t, 2, m.Interventions, "counts of the month stay")
-
-	var saved []peakMonth
-	require.NoError(t, settings.Json(keys.PeakMonths, &saved))
-	assert.Zero(t, saved[0].Peak, "stored")
+	assert.Equal(t, 12000.0, m.Peak)
+	assert.Equal(t, 12000.0, m.Demand)
+	assert.Equal(t, 2, m.Interventions)
 
 	// the metrics are as they were
 	after, err := col.DailyPeakEnergy()
@@ -112,12 +108,17 @@ func TestResetMonthPeak(t *testing.T) {
 	site.updateGridPeak()
 	assert.InDelta(t, 9000, site.GetGridPeakTarget(), 1e-6)
 
-	// the statistics' window that started before the reset is not taken in
-	at := site.peakResetAt()
-	site.custom.peak.recordPeakWindow(at.Add(-5*time.Minute), 12000*900, 12000*900)
-	assert.Zero(t, site.custom.peak.months[0].Peak)
-	site.custom.peak.recordPeakWindow(at.Add(10*time.Minute), 7000*900, 7000*900)
-	assert.InDelta(t, 7000, site.custom.peak.months[0].Peak, 1e-6)
+	// the battery's limit counts the windows since the reset, the statistics every one
+	at, s := site.peakResetAt(), site.peak()
+	s.recordPeakWindow(at.Add(-5*time.Minute), 12500*900, 12500*900)
+	assert.Equal(t, 12500.0, s.months[0].Peak, "the real peak")
+	assert.Zero(t, s.resetPeak, "before the reset")
+
+	s.recordPeakWindow(at.Add(10*time.Minute), 9300*900, 9300*900)
+	assert.InDelta(t, 9300, s.resetPeak, 1e-6)
+	assert.Equal(t, 12500.0, s.months[0].Peak)
+	site.updatePeakLimit()
+	assert.Equal(t, 9300.0, site.GetPeakShavingLimit(), "the peak since the reset")
 }
 
 // TestResetMonthPeakRestart: the reset survives a restart
@@ -126,8 +127,12 @@ func TestResetMonthPeakRestart(t *testing.T) {
 	require.NoError(t, site.ResetMonthPeak())
 
 	restarted := &Site{log: util.NewLogger("foo")}
+	site.custom.peak.recordPeakWindow(clk.Now().Add(time.Minute), 9300*900, 9300*900)
+	site.updatePeakLimit() // stores it
+
 	restarted.restorePeakReset()
 	assert.True(t, restarted.peakResetAt().Equal(clk.Now()), "%v", restarted.peakResetAt())
+	assert.InDelta(t, 9300, restarted.peak().resetPeak, 1e-6, "the peak since the reset survives too")
 }
 
 // TestResetMonthPeakLastMonth: a reset of an earlier month has no effect
