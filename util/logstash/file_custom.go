@@ -241,11 +241,19 @@ func (t *tee) status() FileState {
 		res.Error = err.Error()
 	}
 
+	var current string
+	if sink != nil {
+		current = sink.currentFile()
+	}
+
 	if cfg.Dir != "" {
 		for _, f := range listFiles(cfg.Dir) {
 			res.Files++
 			res.Size += f.size
-			res.List = append(res.List, f.entry())
+
+			e := f.entry()
+			e.Current = f.name == current
+			res.List = append(res.List, e)
 		}
 		slices.Reverse(res.List) // listFiles is oldest first
 	}

@@ -18,6 +18,8 @@ type FileEntry struct {
 	Day  string `json:"day"` // YYYY-MM-DD
 	Size int64  `json:"size"`
 	Gz   bool   `json:"gz"`
+	// Current is the file being written now, none while the log file is off
+	Current bool `json:"current"`
 }
 
 func (f logFile) entry() FileEntry {
@@ -84,4 +86,16 @@ func (s *fileSink) flushFile(name string) {
 	if cur {
 		s.flush()
 	}
+}
+
+// currentFile returns the name of the file being written, empty if none
+func (s *fileSink) currentFile() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.f == nil || s.w == nil {
+		return ""
+	}
+
+	return filepath.Base(s.f.Name())
 }

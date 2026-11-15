@@ -82,7 +82,7 @@
 					data-testid="logfile-row"
 				>
 					<span class="d-flex gap-3 text-nowrap">
-						<span data-testid="logfile-day">{{ dayLabel(f.day) }}</span>
+						<span data-testid="logfile-day">{{ dayLabel(f) }}</span>
 						<span class="evcc-gray" data-testid="logfile-filesize">{{
 							formatSize(f.size)
 						}}</span>
@@ -155,12 +155,6 @@ const MAX_DAYS = 90;
 const MAX_ROWS = 7;
 const LEVELS = ["error", "warn", "info", "debug", "trace"];
 
-function localDay() {
-	const n = new Date();
-	const p = (v: number) => String(v).padStart(2, "0");
-	return `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())}`;
-}
-
 function formatSize(bytes: number) {
 	if (bytes < 1024) return `${bytes} B`;
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -209,15 +203,15 @@ export default defineComponent({
 		downloadUrl(name: string) {
 			return `./api/logfile/files/${name}`;
 		},
-		// local date, the newest file (today) with a note
-		dayLabel(day: string) {
-			const [y, m, d] = day.split("-").map(Number);
+		// local date, the file being written (from the server) with a note
+		dayLabel(f: LogFileEntry) {
+			const [y, m, d] = f.day.split("-").map(Number);
 			const date = new Intl.DateTimeFormat(this.$i18n?.locale, {
 				day: "2-digit",
 				month: "2-digit",
 				year: "numeric",
 			}).format(new Date(y, m - 1, d));
-			return day === localDay() ? `${date} (${this.$t("logFile.today")})` : date;
+			return f.current ? `${date} (${this.$t("logFile.today")})` : date;
 		},
 		async open() {
 			this.showAllFiles = false;

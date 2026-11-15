@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,9 +32,9 @@ func TestFileList(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, st.List, 3)
-	assert.Equal(t, FileEntry{"evcc-2026-10-05.log", "2026-10-05", int64(len(header + "info\n")), false}, st.List[0])
-	assert.Equal(t, FileEntry{"evcc-2026-10-04.log.gz", "2026-10-04", 6, true}, st.List[1])
-	assert.Equal(t, FileEntry{"evcc-2026-10-03.log.gz", "2026-10-03", 3, true}, st.List[2])
+	assert.Equal(t, FileEntry{"evcc-2026-10-05.log", "2026-10-05", int64(len(header + "info\n")), false, true}, st.List[0])
+	assert.Equal(t, FileEntry{"evcc-2026-10-04.log.gz", "2026-10-04", 6, true, false}, st.List[1])
+	assert.Equal(t, FileEntry{"evcc-2026-10-03.log.gz", "2026-10-03", 3, true, false}, st.List[2])
 	assert.Equal(t, 3, st.Files)
 }
 
@@ -49,6 +50,12 @@ func TestFileListDisabled(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, st.List, 1)
 	assert.Equal(t, "evcc-2026-10-04.log.gz", st.List[0].Name)
+
+	// the file is off: none is written, also not one of today
+	f.put(t, "evcc-2026-10-05.log", "x")
+	for _, e := range f.status().List {
+		assert.False(t, e.Current, e.Name)
+	}
 
 	cfg.Dir = ""
 	st, err = f.setFile(cfg)
@@ -146,4 +153,37 @@ func TestFileOpenRejects(t *testing.T) {
 	require.NoError(t, err)
 	_, _, err = f.openFile("evcc-2026-10-04.log.gz")
 	assert.ErrorIs(t, err, fs.ErrNotExist)
+}
+
+// TestFileListCurrent: only the file being written is current, after switching off none
+func TestFileListCurrent(t *testing.T) {
+	f := newFileTest(t)
+	f.put(t, "evcc-2026-10-04.log.gz", "abc")
+	f.put(t, "evcc-2026-10-05.log", "from before\n") // today's file of an earlier run
+
+	st, err := f.setFile(f.config("info", 30))
+	require.NoError(t, err)
+	require.Len(t, st.List, 2)
+	assert.True(t, st.List[0].Current)
+	assert.Equal(t, "evcc-2026-10-05.log", st.List[0].Name)
+	assert.False(t, st.List[1].Current)
+
+	// a new day: the first line switches, the file of the day before is no longer current
+	f.setTime(time.Date(2026, 10, 6, 0, 0, 1, 0, time.Local))
+	f.write(lInfo)
+	f.waitMaintain()
+	st = f.status()
+	require.NotEmpty(t, st.List)
+	assert.Equal(t, "evcc-2026-10-06.log", st.List[0].Name)
+	for i, e := range st.List {
+		assert.Equal(t, i == 0, e.Current, e.Name)
+	}
+
+	cfg := f.config("info", 30)
+	cfg.Enabled = false
+	st, err = f.setFile(cfg)
+	require.NoError(t, err)
+	for _, e := range st.List {
+		assert.False(t, e.Current, e.Name)
+	}
 }

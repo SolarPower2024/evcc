@@ -1186,7 +1186,7 @@ info while the file gets debug.
   setting stays on, the next start tries again. A failing file never stops
   the control loop
 - the dialog lists the files of the folder (also with the log file switched off,
-  as long as there is a folder): date (today marked), size and a download link,
+  as long as there is a folder): date (the file being written marked "heute", from the server), size and a download link,
   newest first, 7 rows and "Alle anzeigen" for more. The list is part of the GET
   answer (`list`) and loads with the dialog and after saving. No delete: the
   retention and the 1 GB limit clean up
@@ -1202,7 +1202,7 @@ info while the file gets debug.
   before evcc's compression, Content-Length is the file's size
 
 ```
-GET  /api/logfile   {enabled, level, days, dir, files, size, list: [{name, day, size, gz}], error}
+GET  /api/logfile   {enabled, level, days, dir, files, size, list: [{name, day, size, gz, current}], error}
 POST /api/logfile   json body {enabled, level, days}, answers like GET
 GET  /api/logfile/files/{name}   download of evcc-YYYY-MM-DD.log or .log.gz
 ```

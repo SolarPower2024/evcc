@@ -336,6 +336,8 @@ export interface LogFileEntry {
   size: number;
   /** Packed, a day before. */
   gz: boolean;
+  /** The file being written now, none while the log file is off. */
+  current: boolean;
 }
 
 /** Log file setting and state, see core/site_logfile.go. */
