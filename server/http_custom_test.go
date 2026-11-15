@@ -159,6 +159,7 @@ var customRouteSamples = map[string]string{
 	"lmeventsclear":                 "/lmevents",
 	"lmguardcount":                  "/lmguardcount",
 	"lmguardrelease":                "/lmguardrelease",
+	"devtransfer":                   "/devtransfer",
 }
 
 // TestCustomRoutesMatch sends a request to every custom route through a real
