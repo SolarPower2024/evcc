@@ -73,13 +73,14 @@ func TestRecalcFeedIn(t *testing.T) {
 
 	from, to := day(10, 0), day(12, 0)
 
-	oldE, newE, oldR, newR, err := FeedInRecalcSummary(from, to)
+	sum, err := FeedInRecalcSummary(from, to)
 	require.NoError(t, err)
-	assert.InDelta(t, 4, oldE, 1e-9)
-	assert.InDelta(t, 6, newE, 1e-9)
+	assert.InDelta(t, 4, sum.OldEnergy, 1e-9)
+	assert.InDelta(t, 6, sum.NewEnergy, 1e-9)
 	// the EEG counter is 1 per slot, the rest at the standard price
-	assert.InDelta(t, 2*(0.12)+2*0.08, oldR, 1e-9)
-	assert.InDelta(t, 2*0.12+5*0.08, newR, 1e-9, "the EEG counter stays, as in the history")
+	assert.InDelta(t, 2*(0.12)+2*0.08, sum.OldRevenue, 1e-9)
+	assert.InDelta(t, 2*0.12+5*0.08, sum.NewRevenue, 1e-9, "the EEG counter stays, as in the history")
+	assert.Zero(t, sum.Skipped)
 
 	// asking changes nothing
 	assert.Equal(t, before, snapshot())
@@ -88,12 +89,10 @@ func TestRecalcFeedIn(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, rows)
 
-	_, newE2, _, _, err := FeedInRecalcSummary(from, to)
+	sum, err = FeedInRecalcSummary(from, to)
 	require.NoError(t, err)
-	assert.InDelta(t, 6, newE2, 1e-9)
-	oldE2, _, _, _, err := FeedInRecalcSummary(from, to)
-	require.NoError(t, err)
-	assert.InDelta(t, 6, oldE2, 1e-9, "stored value is the balance now")
+	assert.InDelta(t, 6, sum.NewEnergy, 1e-9)
+	assert.InDelta(t, 6, sum.OldEnergy, 1e-9, "stored value is the balance now")
 
 	// in a second run nothing changes
 	rows, err = RecalcFeedIn(from, to)
@@ -123,7 +122,7 @@ func TestRecalcFeedInNotToday(t *testing.T) {
 
 	_, err := RecalcFeedIn(midnight.AddDate(0, 0, -1), midnight.Add(time.Hour))
 	assert.ErrorIs(t, err, ErrFeedInRange)
-	_, _, _, _, err = FeedInRecalcSummary(midnight.AddDate(0, 0, -1), midnight.AddDate(0, 0, 1))
+	_, err = FeedInRecalcSummary(midnight.AddDate(0, 0, -1), midnight.AddDate(0, 0, 1))
 	assert.ErrorIs(t, err, ErrFeedInRange)
 	_, err = RecalcFeedIn(midnight, midnight.AddDate(0, 0, -1))
 	assert.ErrorIs(t, err, ErrFeedInRange)
@@ -149,4 +148,44 @@ func TestBalanceFeedIn(t *testing.T) {
 	} {
 		assert.InDelta(t, tc.want, balanceFeedIn(tc.s), 1e-9, tc.name)
 	}
+}
+
+// TestRecalcFeedInWithoutHome: a slot without a home consumption row has no balance,
+// its feed-in stays and the preview counts it
+func TestRecalcFeedInWithoutHome(t *testing.T) {
+	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	require.NoError(t, SetupSchema())
+	require.NoError(t, db.Instance.AutoMigrate(new(tariffValue), new(eegPrice)))
+
+	grid, err := createEntity(Grid, Grid, Grid)
+	require.NoError(t, err)
+	pv, err := createEntity(PV, "pv", "pv")
+	require.NoError(t, err)
+	home, err := createEntity(Home, "home", "home")
+	require.NoError(t, err)
+
+	ts := func(h int) time.Time { return time.Date(2026, 9, 10, h, 0, 0, 0, time.UTC) }
+
+	// with home: pv 5, draw 1, home 3 -> 3; without home: would be 5 + 1 = 6
+	require.NoError(t, persist(grid, ts(10), 1, 1, nil, false))
+	require.NoError(t, persist(pv, ts(10), 5, 0, nil, false))
+	require.NoError(t, persist(home, ts(10), 3, 0, nil, false))
+	require.NoError(t, persist(grid, ts(11), 1, 1, nil, false))
+	require.NoError(t, persist(pv, ts(11), 5, 0, nil, false))
+
+	from, to := ts(0), ts(0).AddDate(0, 0, 1)
+
+	sum, err := FeedInRecalcSummary(from, to)
+	require.NoError(t, err)
+	assert.Equal(t, 1, sum.Skipped)
+	assert.InDelta(t, 2, sum.OldEnergy, 1e-9)
+	assert.InDelta(t, 3+1, sum.NewEnergy, 1e-9, "the slot without home keeps its 1")
+
+	rows, err := RecalcFeedIn(from, to)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, rows)
+
+	var kept float64
+	require.NoError(t, db.Instance.Raw(`SELECT return_energy FROM meters WHERE meter = ? AND ts = ?`, grid.Id, ts(11).Unix()).Scan(&kept).Error)
+	assert.InDelta(t, 1, kept, 1e-9)
 }

@@ -376,4 +376,6 @@ export interface FeedInRecalcSummary {
   oldRevenue: number;
   /** In the configured currency. */
   newRevenue: number;
+  /** Quarter hours without home consumption, left as stored. */
+  skipped: number;
 }

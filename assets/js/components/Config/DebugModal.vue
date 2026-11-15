@@ -99,6 +99,16 @@
 							})
 						}}
 					</p>
+					<p
+						v-if="s.name === 'feedInRecalc' && recalcPreview?.skipped"
+						data-testid="debug-feedinrecalc-skipped"
+					>
+						{{
+							$t("config.lmdebug.feedInRecalc.skipped", {
+								count: recalcPreview.skipped,
+							})
+						}}
+					</p>
 				</template>
 				<p v-if="!isFeedInSection(s.name) || hasPreview" class="mb-3">
 					{{ $t("config.lmdebug.confirm") }}

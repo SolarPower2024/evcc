@@ -244,13 +244,17 @@ func TestFeedInRecalcRoutes(t *testing.T) {
 	require.NoError(t, err)
 	_, err = metrics.NewCollector(metrics.Home, "home", "home")
 	require.NoError(t, err)
+	_, err = metrics.NewCollector(metrics.PV, "pv", "pv")
+	require.NoError(t, err)
 
-	// draw 2, feed-in 2 (a copy of the draw), home 1: balance 2 - 1 = 1
+	// pv 1, draw 2, feed-in 2 (a copy of the draw), home 2: balance 1 + 2 - 2 = 1
 	base := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	require.NoError(t, db.Instance.Exec(`INSERT INTO meters (meter, ts, energy, return_energy)
 		SELECT id, ?, 2, 2 FROM entities WHERE "group" = 'grid'`, base.Unix()).Error)
 	require.NoError(t, db.Instance.Exec(`INSERT INTO meters (meter, ts, energy, return_energy)
-		SELECT id, ?, 1, 0 FROM entities WHERE "group" = 'home'`, base.Unix()).Error)
+		SELECT id, ?, 2, 0 FROM entities WHERE "group" = 'home'`, base.Unix()).Error)
+	require.NoError(t, db.Instance.Exec(`INSERT INTO meters (meter, ts, energy, return_energy)
+		SELECT id, ?, 1, 0 FROM entities WHERE "group" = 'pv'`, base.Unix()).Error)
 
 	const pw = "secret"
 	r := mux.NewRouter()
@@ -279,7 +283,7 @@ func TestFeedInRecalcRoutes(t *testing.T) {
 
 	code, body := call(http.MethodGet, pw, day, next)
 	assert.Equal(t, http.StatusOK, code)
-	assert.JSONEq(t, `{"oldEnergy":2,"newEnergy":1,"oldRevenue":0,"newRevenue":0}`, body)
+	assert.JSONEq(t, `{"oldEnergy":2,"newEnergy":1,"oldRevenue":0,"newRevenue":0,"skipped":0}`, body)
 
 	var stored float64
 	require.NoError(t, db.Instance.Raw(`SELECT SUM(return_energy) FROM meters`).Scan(&stored).Error)

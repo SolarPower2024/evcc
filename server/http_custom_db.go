@@ -161,6 +161,7 @@ type feedInRecalcSummaryResult struct {
 	NewEnergy  float64 `json:"newEnergy"`  // kWh
 	OldRevenue float64 `json:"oldRevenue"` // currency
 	NewRevenue float64 `json:"newRevenue"` // currency
+	Skipped    int     `json:"skipped"`    // slots without home consumption, left as stored
 }
 
 // feedInRecalcSummaryHandler answers the feed-in of from/to before and after a
@@ -177,13 +178,13 @@ func feedInRecalcSummaryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oldEnergy, newEnergy, oldRevenue, newRevenue, err := metrics.FeedInRecalcSummary(from, to)
+	res, err := metrics.FeedInRecalcSummary(from, to)
 	if err != nil {
 		jsonError(w, feedInStatus(err), err)
 		return
 	}
 
-	jsonWrite(w, feedInRecalcSummaryResult{oldEnergy, newEnergy, oldRevenue, newRevenue})
+	jsonWrite(w, feedInRecalcSummaryResult{res.OldEnergy, res.NewEnergy, res.OldRevenue, res.NewRevenue, res.Skipped})
 }
 
 // feedInRecalcResult is the number of changed slots

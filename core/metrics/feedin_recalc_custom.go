@@ -12,7 +12,6 @@ package metrics
 // feed-in when asked for. See feedin_clear_custom.go for the range check.
 
 import (
-	"sort"
 	"time"
 
 	"github.com/evcc-io/evcc/db"
@@ -41,12 +40,34 @@ type feedInChange struct {
 	Value float64
 }
 
+// FeedInRecalc is the feed-in and its revenue before and after a recalculation.
+// Skipped counts the slots without a home consumption row: their balance would
+// count all production as feed-in, so they stay as stored.
+type FeedInRecalc struct {
+	OldEnergy, NewEnergy   float64 // kWh
+	OldRevenue, NewRevenue float64 // currency
+	Skipped                int
+}
+
 // feedInRecalcPlan reads the slots in [from,to) and returns the changes of the grid
-// rows, the feed-in and revenue before and after. Nothing is written.
-func feedInRecalcPlan(from, to time.Time) (changes []feedInChange, oldEnergy, newEnergy, oldRevenue, newRevenue float64, err error) {
+// rows and the feed-in and revenue before and after. Nothing is written.
+func feedInRecalcPlan(from, to time.Time) (changes []feedInChange, res FeedInRecalc, err error) {
 	slots, err := sinkSlots(from, to)
 	if err != nil {
 		return
+	}
+
+	// slots with a stored home consumption
+	var homeTs []int64
+	if err = db.Instance.Raw(`
+		SELECT DISTINCT m.ts FROM meters m JOIN entities e ON e.id = m.meter AND e."group" = ?
+		WHERE m.ts >= ? AND m.ts < ?`,
+		Home, from.Unix(), to.Unix()).Scan(&homeTs).Error; err != nil {
+		return
+	}
+	hasHome := make(map[int64]bool, len(homeTs))
+	for _, ts := range homeTs {
+		hasHome[ts] = true
 	}
 
 	// loadpoints add up to one sink
@@ -120,34 +141,45 @@ func feedInRecalcPlan(from, to time.Time) (changes []feedInChange, oldEnergy, ne
 	seen := make(map[int64]bool)
 	for _, row := range rows {
 		s := slotBy[row.Ts]
+		res.OldEnergy += row.Value
+		res.OldRevenue += revenue(s, row.Value)
+
+		if !hasHome[row.Ts] {
+			// no balance without the home consumption: the slot stays
+			if !seen[row.Ts] {
+				seen[row.Ts] = true
+				res.Skipped++
+			}
+			res.NewEnergy += row.Value
+			res.NewRevenue += revenue(s, row.Value)
+			continue
+		}
+
 		target := 0.0
 		if !seen[row.Ts] {
 			// the first grid meter of a slot takes the feed-in, others 0
 			seen[row.Ts] = true
 			target = balanceFeedIn(s)
-			newEnergy += target
-			newRevenue += revenue(s, target)
+			res.NewEnergy += target
+			res.NewRevenue += revenue(s, target)
 		}
-		oldEnergy += row.Value
-		oldRevenue += revenue(s, row.Value)
 
 		if row.Value != target && (row.Value > feedInEpsilon || target > 0) {
 			changes = append(changes, feedInChange{row.Ts, row.Meter, target})
 		}
 	}
 
-	sort.Slice(changes, func(i, j int) bool { return changes[i].Ts < changes[j].Ts })
-	return changes, oldEnergy, newEnergy, oldRevenue, newRevenue, nil
+	return changes, res, nil
 }
 
 // FeedInRecalcSummary returns the feed-in of the slots in [from,to) in kWh and its
 // revenue before and after a recalculation. Nothing changes.
-func FeedInRecalcSummary(from, to time.Time) (oldEnergy, newEnergy, oldRevenue, newRevenue float64, err error) {
-	if err = feedInRange(from, to); err != nil {
-		return
+func FeedInRecalcSummary(from, to time.Time) (FeedInRecalc, error) {
+	if err := feedInRange(from, to); err != nil {
+		return FeedInRecalc{}, err
 	}
-	_, oldEnergy, newEnergy, oldRevenue, newRevenue, err = feedInRecalcPlan(from, to)
-	return
+	_, res, err := feedInRecalcPlan(from, to)
+	return res, err
 }
 
 // RecalcFeedIn sets the feed-in of the grid meter in the slots in [from,to) to the
@@ -157,7 +189,7 @@ func RecalcFeedIn(from, to time.Time) (int64, error) {
 		return 0, err
 	}
 
-	changes, _, _, _, _, err := feedInRecalcPlan(from, to)
+	changes, _, err := feedInRecalcPlan(from, to)
 	if err != nil {
 		return 0, err
 	}
