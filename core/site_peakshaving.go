@@ -35,6 +35,7 @@ import (
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
 	"github.com/evcc-io/evcc/core/lm"
+	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/peak"
 	"github.com/evcc-io/evcc/db/settings"
 	"github.com/evcc-io/evcc/util"
@@ -62,6 +63,11 @@ type peakState struct {
 	reserve     float64 // soc below which the battery is reserved for peaks
 	chargePower float64 // assumed grid charge power in W, 0 = derive it
 	circuit     string  // circuit the battery draws from, empty = not managed
+
+	resetAt        time.Time        // the month's peak was reset then, see site_peak_reset.go
+	resetPeak      float64          // the highest quarter hour since then in W, what the battery's limit takes
+	resetPeakSaved float64          // resetPeak as stored
+	resetDays      metrics.PeakDays // the days since the reset, read and written by the site loop only
 
 	shaving  bool // hysteresis state: below the reserve
 	covering bool // covering a peak right now, for the event log

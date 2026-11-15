@@ -130,6 +130,10 @@ func (s *peakState) recordPeakWindow(start time.Time, drawnWs, demandWs float64)
 	if avg := drawnWs / window; avg > m.Peak {
 		m.Peak, m.PeakAt = avg, start
 	}
+	// the statistics keep the real peak; the limits start again at a reset
+	if avg := drawnWs / window; !s.resetAt.IsZero() && !start.Before(s.resetAt) && avg > s.resetPeak {
+		s.resetPeak = avg
+	}
 	if avg := demandWs / window; avg > m.Demand {
 		m.Demand, m.DemandAt = avg, start
 	}

@@ -244,6 +244,8 @@ export function eventText(e: LmEvent, t: Translate, f: Fmt): string {
       return e.a > 0
         ? k("shedGuard", { load: e.load, power: f.w(e.b), minutes: Math.round(e.a) })
         : k("shed", { load: e.load, power: f.w(e.b) });
+    case "resumed":
+      return k("resumed", { load: e.load, minutes: Math.max(1, Math.round(e.a)) });
     case "throttled":
       return k("throttled", { load: e.load, requested: f.bare(e.a), allowed: f.w(e.b) });
     case "gridChargePaused":

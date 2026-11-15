@@ -36,14 +36,23 @@ func (site *Site) updatePeakLimit() {
 
 	s.mu.Lock()
 	var monthPeak float64
-	if len(s.months) > 0 && s.months[0].Month == s.clock.Now().Local().Format("2006-01") {
+	if month := s.clock.Now().Local().Format("2006-01"); !s.resetAt.IsZero() && s.resetAt.Local().Format("2006-01") == month {
+		// reset this month: what counts is the peak since, the statistics keep the real one
+		monthPeak = s.resetPeak
+	} else if len(s.months) > 0 && s.months[0].Month == month {
 		monthPeak = s.months[0].Peak
 	}
+	resetPeak, saved := s.resetPeak, s.resetPeakSaved
+	s.resetPeakSaved = resetPeak
 
 	limit := peakLimitFor(baseline, monthPeak)
 	previous, baselineChanged := s.limit, s.baseline != baseline
 	s.limit, s.baseline = limit, baseline
 	s.mu.Unlock()
+
+	if resetPeak != saved {
+		settings.SetFloat(keys.PeakResetPeak, resetPeak)
+	}
 
 	if baselineChanged && baseline > 0 {
 		site.raisePeakBaseline(baseline) // the month's savings are counted above it, see site_peak_stats.go

@@ -102,7 +102,7 @@ func New() *Manager {
 	return &Manager{
 		reg:     make(map[Load]*record),
 		timeout: DefaultTimeout,
-		guard:   guard{shedAt: make(map[Load]time.Time)},
+		guard:   guard{shedAt: make(map[Load]time.Time), shedSince: make(map[Load]time.Time)},
 		status:  status{decisions: make(map[Load]Decision)},
 		follow:  follow{following: make(map[Load]*followState)},
 		starts:  starts{started: make(map[Load]*start)},

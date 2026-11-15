@@ -746,6 +746,36 @@
         "optimizer": "Optimizer"
       }
     },
+    "lmdebug": {
+      "confirm": "Wirklich ausführen?",
+      "description": "Korrekturen für Fehlmessungen und Tests.",
+      "done": "Erledigt.",
+      "events": {
+        "action": "Leeren",
+        "description": "Löscht die Einträge im Peak-Shaving-Dialog.",
+        "title": "Ereignisliste leeren"
+      },
+      "feedIn": {
+        "action": "Auf 0 setzen",
+        "check": "Prüfen",
+        "description": "Setzt die Einspeisung der Tage auf 0 kWh, der Erlös folgt. Nicht umkehrbar. Vorher eine Sicherung herunterladen.",
+        "from": "Von",
+        "preview": "Einspeisung {energy}, Erlös {price}",
+        "title": "Einspeisung löschen",
+        "to": "Bis"
+      },
+      "guard": {
+        "action": "Aufheben",
+        "description": "{count} gesperrte Lasten dürfen sofort wieder starten.",
+        "title": "Abwurfsperren aufheben"
+      },
+      "peakReset": {
+        "action": "Zurücksetzen",
+        "description": "Bisherige Viertelstunden zählen nicht mehr, das Limit gilt wieder ab {limit}. Der Netzbetreiber verrechnet die echte Spitze.",
+        "title": "Peak des Monats zurücksetzen"
+      },
+      "title": "Debug"
+    },
     "lmgridfee": {
       "mode": "Art",
       "modeAbs": "Netzgebühr",
@@ -1980,6 +2010,7 @@
       "peakSwitchOn": "Peak Shaving an",
       "reserveAbove": "Über {reserve}: Batterie frei",
       "reserveBelow": "Unter {reserve}: spart jetzt für Spitzen",
+      "resumed": "{load} wieder eingeschaltet · nach {minutes} min",
       "shed": "{load} abgeworfen · Stromkreis bei {power}",
       "shedGuard": "{load} abgeworfen · Stromkreis bei {power}, {minutes} min gesperrt",
       "storageBack": "Speicher wieder verbunden",

@@ -339,6 +339,11 @@ describe("events", () => {
         "Garage abgeworfen · Stromkreis bei 9.0 kW, 10 min gesperrt",
       ],
       [
+        ev("resumed", 12, 0, "Garage"),
+        "Garage switched on again · after 12 min",
+        "Garage wieder eingeschaltet · nach 12 min",
+      ],
+      [
         ev("throttled", 11000, 6000, "Garage"),
         "Garage throttled 11.0 → 6.0 kW",
         "Garage gedrosselt 11.0 → 6.0 kW",
@@ -359,6 +364,7 @@ describe("events", () => {
   test("every type has a text, not the type name", () => {
     const types: LmEvent["type"][] = [
       "shed",
+      "resumed",
       "throttled",
       "gridChargePaused",
       "gridChargeDenied",

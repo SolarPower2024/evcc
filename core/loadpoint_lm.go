@@ -293,6 +293,11 @@ func (c *lmCircuit) done(current, limited float64) {
 	lp := c.lp
 	allowed := c.allowedPower
 
+	// nothing requested: a load that was shed does not want to run any more
+	if current == 0 {
+		lp.lmm().ForgetShed(lp)
+	}
+
 	var shed bool
 	if c.switchDevice {
 		shed = current > 0 && limited == 0
@@ -306,6 +311,12 @@ func (c *lmCircuit) done(current, limited float64) {
 	running := lp.enabled && !shed
 	if c.lp.lmm().Record(lp, c.requested, allowed, running, c.now) && !c.switchDevice {
 		c.lp.lmm().AddEvent(lm.Event{At: c.now, Type: lm.EventThrottled, Load: lp.GetTitle(), A: c.requested, B: allowed})
+	}
+
+	if running {
+		if d, ok := lp.lmm().Resumed(lp, c.now); ok {
+			lp.lmm().AddEvent(lm.Event{At: c.now, Type: lm.EventResumed, Load: lp.GetTitle(), A: d.Minutes()})
+		}
 	}
 
 	// only switching off a running load counts, not one that could not start
@@ -346,4 +357,10 @@ func (lp *Loadpoint) lmSwitchPower() float64 {
 	}
 
 	return grid.CurrentToPower(lp.effectiveMaxCurrent(), lp.ActivePhases())
+}
+
+// lmIdle reports if the loadpoint does not want to run: no vehicle connected or
+// the mode is off. A shed it had is over then, see lm.Manager.ForgetShed.
+func (lp *Loadpoint) lmIdle() bool {
+	return lp.GetMode() == api.ModeOff || lp.GetStatus() == api.StatusA
 }

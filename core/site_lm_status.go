@@ -74,6 +74,10 @@ func (site *Site) publishLmStatus(gridCharge bool) {
 		protected := s.guarded[name] && s.guardMinutes > 0
 		s.mu.Unlock()
 
+		if lp.lmIdle() {
+			site.lmm().ForgetShed(lp)
+		}
+
 		st := lmLoadStatus{
 			Name:      name,
 			Title:     lp.GetTitle(),

@@ -49,6 +49,7 @@ var customConfigRoutes = []string{
 	"peakshavingchargepower",
 	"peakshavingcircuit", "peakshavingcircuitdelete",
 	"batterygridchargemode",
+	"peakreset", "lmeventsclear", "lmguardcount", "lmguardrelease",
 }
 
 // customOperateRoutes are switches, actions and soc thresholds of the main and
@@ -205,6 +206,12 @@ func customSiteRoutes(site site.API) map[string]route {
 
 		// the events of the peak status in the battery page, see core/site_lm_events.go
 		"peakshavingevents": {"GET", "/peakshaving/events", peakEventsHandler(site)},
+
+		// debug, see core/site_peak_reset.go
+		"peakreset":      {"POST", "/peakreset", actionHandler(site.ResetMonthPeak)},
+		"lmeventsclear":  {"DELETE", "/lmevents", actionHandler(site.ClearLmEvents)},
+		"lmguardcount":   {"GET", "/lmguardcount", func(w http.ResponseWriter, r *http.Request) { jsonWrite(w, site.LmGuardedCount()) }},
+		"lmguardrelease": {"POST", "/lmguardrelease", func(w http.ResponseWriter, r *http.Request) { jsonWrite(w, site.ReleaseLmGuards()) }},
 
 		// log in daily files, see core/site_logfile.go
 		"logfile":    {"GET", "/logfile", logFileHandler(site)},
@@ -501,4 +508,16 @@ func feedInSplitHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonWrite(w, res)
+}
+
+// actionHandler runs an action without a value and answers true
+func actionHandler(action func() error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := action(); err != nil {
+			jsonError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		jsonWrite(w, true)
+	}
 }

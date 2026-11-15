@@ -14,7 +14,7 @@ func (site *Site) updateGridPeak() {
 	var energy []*float64
 	if c := site.gridPeakCollector(); c != nil { // custom: the main circuit's meter if it has one, see core/site_peak_circuit.go
 		var err error
-		if energy, err = c.DailyPeakEnergy(); err != nil {
+		if energy, err = site.gridPeakEnergy(c); err != nil { // custom: DailyPeakEnergy, or since a reset of the month's peak, see core/site_peak_reset.go
 			site.log.ERROR.Printf("grid peak: %v", err)
 		}
 	}

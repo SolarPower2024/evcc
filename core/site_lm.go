@@ -113,6 +113,7 @@ func (site *Site) restoreCustom() {
 	site.restoreLmSettings()
 	site.restoreLmEvents()
 	site.restorePeakSettings()
+	site.restorePeakReset()
 	site.dropOrphanCircuits()
 	// restoreLmSettings published the advanced settings before the battery circuit was
 	// back, so phasesMissing read false: publish them once more

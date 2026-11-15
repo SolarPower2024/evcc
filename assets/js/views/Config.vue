@@ -538,6 +538,14 @@
 						>
 							{{ $t("config.system.backupRestore.title") }}
 						</button>
+						<!-- custom: debug, see core/lm/README.md -->
+						<button
+							data-testid="debug"
+							class="btn btn-outline-secondary text-truncate"
+							@click="openModal('debug')"
+						>
+							{{ $t("config.lmdebug.title") }}
+						</button>
 						<button
 							v-if="experimental"
 							class="btn btn-outline-secondary text-truncate"
