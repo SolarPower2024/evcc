@@ -31,6 +31,7 @@ Part 1 describes the features, part 2 how the fork is kept maintainable.
 19. [Snow on PV](#19-snow-on-pv)
 20. [Split grid tariff](#20-split-grid-tariff)
 21. [Debug](#21-debug)
+22. [Test version: data of evcc custom](#22-test-version-data-of-evcc-custom)
 
 **Part 2: maintenance**
 
@@ -1380,6 +1381,47 @@ from Home Assistant is configured (`core/loadpoint_pollwarn.go`, once at the sta
 
 UI steps: `testtools/steps_debug.mjs` (scenario `debug`).
 
+## 22. Test version: data of evcc custom
+
+The add-on *evcc custom development* (own database, runs instead of evcc custom: both take port 7070 in
+the host network) takes over the data of evcc custom and hands back what it recorded since, so the real
+statistics have no gap. Everything is in `core/devtransfer/`, with no hook in an evcc file and no new code
+in evcc custom. It is off without the environment variable `EVCC_DEVTRANSFER` of the test version's add-on
+(a glob of the real database, e.g. `/addon_configs/*_evcc_custom/evcc.db`, it has to hit exactly one file
+that is not the own one, else the log says why; `role.go`). The test version reads and writes that file
+directly. It shows in *Konfiguration → System → Debug* (`DebugDevTransfer.vue`, `utils/debugDevTransfer.ts`,
+texts `config.lmdebug.devTransfer.*`): password, preview, confirm like the other sections. evcc custom shows only
+the line of the last give back.
+
+- **Take over** (`POST /api/db/devtransfer/takeover`, `takeover.go`): the local backup, then the real file is
+  copied through sqlite's backup function (so what only a crash left in the write-ahead log is in it), the
+  copy gets what the test version recorded from `since` on (the same `merge` as the give back, the other
+  way round), `db.Restore`, and `<db>.since` is written. `since` is the newest time of the real file: the end
+  of the last quarter hour in `meters` or `created` of the last session (not the time of the click). Later the
+  test version has taken over, the more of its own recording is kept. Nothing happens at the start. The
+  restart is `POST http://supervisor/addons/self/restart` with `SUPERVISOR_TOKEN` if set (add-on with
+  `hassio_api: true`), else, or if refused, the process ends like after restoring a backup (the watchdog or the user
+  starts it); `RestartWay` tells which, the preview says it. Tests `TestTakeover`, `TestTakeoverCopiesLog`,
+  `TestSinceIsNewest`, `TestRestartSupervisor`.
+- **Give back** (`GET`/`POST /api/db/devtransfer/giveback?items=`, `giveback.go`, `merge.go`): the selection is
+  sessions, energy statistics, peak values (on) and devices, settings (off). The preview counts the test time
+  (`Summary`); the real file gets first the backup `evcc.db.bak-dev` beside it, then one transaction with its
+  own connection (`ATTACH` of the own database, 5 s busy timeout, a locked file is 409 and nothing changes):
+  sessions from `since` that have no counterpart (same loadpoint and `created`, without `id`); entities and the
+  slots (`meters`, mapped over group and name), `tariffs` and `tariffs_eeg` from `since` where the slot is
+  missing, an existing one is never overwritten (the last readings of existing entities follow, evcc custom
+  carries on from them); peak: per month from the month of `since` the entry with the higher `peak`; devices:
+  `configs` replaced; settings: `settings` replaced except `stateKeys` (`keys.go`: statistics and state of
+  the fork keys, `TestForkKeysClassified` makes every key of `core/keys/site_custom.go` a setting or a state);
+  the key `devTransferApplied` (`{at, items}`) is written in the same transaction. An error rolls back. Only
+  devices or only settings: the preview warns, references between them may be missing. Tests `TestGiveBack*`,
+  `TestSummary`.
+- **Routes** (`server/http_custom_devtransfer.go`): the actions below `api/db` (admin password), 409 without
+  variable, file or take over; `GET /api/devtransfer` (state, last give back; login like the other configuration routes, in `customSiteRoutes`)
+  answers on evcc custom too, with the last give back only. Tests `TestDevTransferRoutesOff`, `TestDevTransferRoutes`.
+
+UI steps: `testtools/steps_devtransfer.mjs` (two evcc one after the other in WSL, "live" without and "dev" with the variable).
+
 ---
 
 ## Rules
@@ -1490,6 +1532,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | split grid tariff | `templates/definition/tariff/fixed-netz.yaml`, `tariff/fixed_netz_test.go`, `assets/js/utils/lmGridTariff.ts`, `assets/js/components/Config/GridFeeZonesField.vue`, `GridFeeZoneForm.vue`, `GridFeeZoneSummary.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
+| test version | `core/devtransfer/`, `server/http_custom_devtransfer.go`, `assets/js/utils/debugDevTransfer.ts`, `assets/js/components/Config/DebugDevTransfer.vue` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |
 | ui | `assets/js/types/evcc-lm.ts`, `assets/js/utils/lmPriorityOrder.ts`, `assets/js/utils/socSteps.ts`, `assets/js/utils/gridChargeMode.ts`, `assets/js/utils/optimizerAutomatic.ts`, `assets/js/components/LoadManagement/`, the battery cards in `assets/js/components/Battery/` (`PeakStatusModal`, `PeakStatusHero`, `PeakStatusLoads`, `peakStatus.ts`, `peakDialog.ts`, `BatterySocGridChargeCard`, `BatteryGridChargeOnce`, `BatteryGridChargeOnceCard`, `BatteryPeakShavingCard`, `BatteryProfileCard`, `ProfileIcon`), the config components in `assets/js/components/Config/` (`PeakShavingConfig`, `LmConfigModals` and its dialogs, `BatteryConfigModal` with `BatteryCircuitForm`, `BatteryGridChargeForm`, `BatteryIdentForm`, `FeedInEegSummary`, `PhaseSwitchFields`, `DebugModal`) |
 | build | `.github/workflows/custom-image.yml` |
