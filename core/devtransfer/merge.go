@@ -99,7 +99,7 @@ func merge(ctx context.Context, dstPath, srcPath string, since time.Time, items 
 	}
 	defer conn.Close()
 
-	if _, err := conn.ExecContext(ctx, "ATTACH DATABASE ? AS src", srcPath); err != nil {
+	if _, err := conn.ExecContext(ctx, "ATTACH DATABASE ? AS src", readOnlyURI(srcPath)); err != nil {
 		return res, wrapBusy(err)
 	}
 

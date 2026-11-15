@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -243,4 +244,10 @@ func contains(s []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// readOnlyURI is the URI that opens the database file path read only
+func readOnlyURI(path string) string {
+	u := url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro"}
+	return u.String()
 }

@@ -254,3 +254,27 @@ func TestGiveBackSinceInSlot(t *testing.T) {
 	assert.Equal(t, Counts{Slots: 1, Prices: 1}, res)
 	assert.Equal(t, 1, count(t, f.live, "SELECT COUNT(*) FROM meters WHERE ts = ? AND energy = 5", t0.Unix()))
 }
+
+// TestGiveBackSourceBusy: the source is only read, a write transaction running
+// on it neither blocks the give back nor shows as a lock
+func TestGiveBackSourceBusy(t *testing.T) {
+	f := newFixture(t)
+	taken(t, f)
+	addSession(t, f.dev, "lp1", t0.Add(time.Hour), 9)
+
+	d, err := openFile(f.devPath)
+	require.NoError(t, err)
+	defer d.Close()
+	conn, err := d.Conn(context.Background())
+	require.NoError(t, err)
+	defer conn.Close()
+	_, err = conn.ExecContext(context.Background(), "BEGIN IMMEDIATE")
+	require.NoError(t, err)
+	defer conn.ExecContext(context.Background(), "ROLLBACK")
+
+	start := time.Now()
+	res, err := GiveBack(context.Background(), Items{Sessions: true})
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Sessions)
+	assert.Less(t, time.Since(start), 4*time.Second, "no wait for a lock")
+}
