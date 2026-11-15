@@ -278,3 +278,24 @@ func TestGiveBackSourceBusy(t *testing.T) {
 	assert.Equal(t, 1, res.Sessions)
 	assert.Less(t, time.Since(start), 4*time.Second, "no wait for a lock")
 }
+
+// TestGiveBackSinceExact: the start of the test time keeps its precision, so the
+// last real charging session (it is where since is taken from) is not part of it
+func TestGiveBackSinceExact(t *testing.T) {
+	f := newFixture(t)
+
+	last := t0.Add(20*time.Minute + 123456789*time.Nanosecond)
+	require.NoError(t, writeSince(last))
+	since, ok := Since()
+	require.True(t, ok)
+	assert.Equal(t, last.UnixNano(), since.UnixNano())
+
+	addSession(t, f.dev, "lp1", last, 1)                  // the last real one
+	addSession(t, f.dev, "lp1", last.Add(time.Second), 2) // the test time's
+
+	res, err := GiveBack(context.Background(), Items{Sessions: true})
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Sessions)
+	assert.Equal(t, 1, count(t, f.live, "SELECT COUNT(*) FROM sessions WHERE charged_kwh = 2"))
+	assert.Equal(t, 0, count(t, f.live, "SELECT COUNT(*) FROM sessions WHERE charged_kwh = 1"))
+}

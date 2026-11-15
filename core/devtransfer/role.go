@@ -106,7 +106,7 @@ func logOnce(err error) {
 }
 
 // sinceFile is the file next to the own database that marks the take over: its
-// content is the start of the test time in Unix seconds
+// content is the start of the test time in Unix nanoseconds
 func sinceFile() string {
 	return db.FilePath() + ".since"
 }
@@ -118,16 +118,16 @@ func Since() (time.Time, bool) {
 		return time.Time{}, false
 	}
 
-	var sec int64
-	if _, err := fmt.Sscanf(string(b), "%d", &sec); err != nil {
+	var ns int64
+	if _, err := fmt.Sscanf(string(b), "%d", &ns); err != nil {
 		return time.Time{}, false
 	}
 
-	return time.Unix(sec, 0), true
+	return time.Unix(0, ns), true
 }
 
 func writeSince(t time.Time) error {
-	return os.WriteFile(sinceFile(), fmt.Appendf(nil, "%d", t.Unix()), 0o600)
+	return os.WriteFile(sinceFile(), fmt.Appendf(nil, "%d", t.UnixNano()), 0o600)
 }
 
 // Changed returns when the real database was changed last, including its log

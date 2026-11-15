@@ -158,7 +158,7 @@ func merge(ctx context.Context, dstPath, srcPath string, since time.Time, items 
 	return res, wrapBusy(err)
 }
 
-// mergeSessions adds the charging sessions created from since on that dst does
+// mergeSessions adds the charging sessions created after since that dst does
 // not have (same loadpoint and creation), without their id
 func mergeSessions(ctx context.Context, conn *sql.Conn, since time.Time) (int, error) {
 	have, err := sessionTimes(ctx, conn, "main")
@@ -182,7 +182,7 @@ func mergeSessions(ctx context.Context, conn *sql.Conn, since time.Time) (int, e
 
 	var n int
 	for id, k := range src {
-		if k.created < since.UnixNano() || known[k] {
+		if k.created <= since.UnixNano() || known[k] {
 			continue
 		}
 		res, err := conn.ExecContext(ctx, fmt.Sprintf("INSERT INTO main.sessions (%s) SELECT %s FROM src.sessions WHERE id = ?", cols, cols), id)
