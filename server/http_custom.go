@@ -551,5 +551,8 @@ func logFileDownloadHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	w.Header().Set("Cache-Control", "no-store")
 
-	_, _ = io.Copy(w, rc)
+	// the api compresses for clients that accept it (evcc router middleware, the client unpacks that layer
+	// and keeps the file as it lies). Its ReadFrom would leave the Content-Length of the plain file standing,
+	// so copy through a plain writer.
+	_, _ = io.Copy(struct{ io.Writer }{w}, rc)
 }

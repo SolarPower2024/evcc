@@ -2051,6 +2051,7 @@
     "daysLabel": "Aufbewahrung",
     "daysUnit": "Tage",
     "description": "Schreibt das Log in Tagesdateien, ältere werden gepackt. Im Add-on über die Samba-Freigabe unter addon_configs lesbar. Höchstens 1 GB.",
+    "download": "Herunterladen",
     "enabledLabel": "Log-Datei schreiben",
     "failed": "Fehler",
     "files": "Dateien",
@@ -2058,9 +2059,13 @@
     "invalid": "Ungültige Einstellung.",
     "invalidDays": "Aufbewahrung: ganze Tage von {min} bis {max}.",
     "levelLabel": "Level",
+    "list": "Dateien",
+    "noFiles": "Keine Dateien.",
     "off": "aus",
+    "showAll": "Alle anzeigen",
     "size": "Größe",
-    "title": "Log-Datei"
+    "title": "Log-Datei",
+    "today": "heute"
   },
   "loginModal": {
     "cancel": "Abbrechen",
