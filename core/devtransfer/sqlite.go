@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -223,7 +224,7 @@ func commonColumns(ctx context.Context, q queryer, table string, skip ...string)
 
 	var cols []string
 	for _, c := range dst {
-		if contains(src, c) && !contains(skip, c) {
+		if slices.Contains(src, c) && !slices.Contains(skip, c) {
 			cols = append(cols, `"`+c+`"`)
 		}
 	}
@@ -233,15 +234,6 @@ func commonColumns(ctx context.Context, q queryer, table string, skip ...string)
 	}
 
 	return strings.Join(cols, ","), nil
-}
-
-func contains(s []string, v string) bool {
-	for _, e := range s {
-		if e == v {
-			return true
-		}
-	}
-	return false
 }
 
 // readOnlyURI is the URI that opens the database file path read only

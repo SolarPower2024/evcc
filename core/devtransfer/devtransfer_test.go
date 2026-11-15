@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -287,7 +288,7 @@ func TestForkKeysClassified(t *testing.T) {
 			require.NoError(t, err)
 
 			consts++
-			inSettings, inState := contains(settingKeys, val), contains(stateKeys, val)
+			inSettings, inState := slices.Contains(settingKeys, val), slices.Contains(stateKeys, val)
 			assert.True(t, inSettings != inState, "%s (%s) must be in exactly one of settingKeys and stateKeys of core/devtransfer/keys.go", name.Name, val)
 		}
 		return true
