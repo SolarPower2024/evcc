@@ -894,3 +894,63 @@ func TestReleaseGuardsStartsLoad(t *testing.T) {
 	assert.Equal(t, 1, lp.lmm().ReleaseGuards(clk.Now()))
 	assert.True(t, switchCycle(t, lp, m, c, 5000), "runs in the next cycle")
 }
+
+// TestNoResumedAfterUnplugging: a shed load that does not want to run any more
+// (nothing requested, vehicle unplugged, mode off) reports nothing when it runs
+// again much later, and nothing is reported after the list was cleared
+func TestNoResumedAfterUnplugging(t *testing.T) {
+	resumed := func(lp *Loadpoint) (n int) {
+		for _, e := range lp.lmm().AllEvents(time.Time{}, nil) {
+			if e.Type == lm.EventResumed {
+				n++
+			}
+		}
+		return
+	}
+
+	shedAndLater := func(t *testing.T, between func(lp *Loadpoint)) *Loadpoint {
+		lp, m, c := newSwitchLoadpoint(t, 3000, 0)
+		clk := lp.clock.(*clock.Mock)
+
+		lp.enabled = true
+		require.True(t, switchCycle(t, lp, m, c, 5000))
+		require.False(t, switchCycle(t, lp, m, c, 12000), "shed")
+
+		between(lp)
+
+		clk.Add(48 * time.Hour)
+		for range 3 {
+			switchCycle(t, lp, m, c, 5000)
+		}
+		return lp
+	}
+
+	assert.Equal(t, 1, resumed(shedAndLater(t, func(*Loadpoint) {})), "control: it runs again")
+
+	t.Run("nothing requested", func(t *testing.T) {
+		lp := shedAndLater(t, func(lp *Loadpoint) { lp.lmLimit(0) })
+		assert.Zero(t, resumed(lp))
+	})
+
+	t.Run("unplugged", func(t *testing.T) {
+		lp := shedAndLater(t, func(lp *Loadpoint) {
+			lp.status = api.StatusA
+			require.True(t, lp.lmIdle())
+			lp.lmm().ForgetShed(lp) // what the status loop does for an idle loadpoint
+			lp.status = api.StatusC
+		})
+		assert.Zero(t, resumed(lp))
+	})
+
+	t.Run("mode off", func(t *testing.T) {
+		lp := &Loadpoint{mode: api.ModeOff}
+		assert.True(t, lp.lmIdle())
+		lp.mode, lp.status = api.ModeNow, api.StatusB
+		assert.False(t, lp.lmIdle())
+	})
+
+	t.Run("list cleared", func(t *testing.T) {
+		lp := shedAndLater(t, func(lp *Loadpoint) { lp.lmm().ClearEvents() })
+		assert.Zero(t, resumed(lp))
+	})
+}

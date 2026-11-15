@@ -293,6 +293,11 @@ func (c *lmCircuit) done(current, limited float64) {
 	lp := c.lp
 	allowed := c.allowedPower
 
+	// nothing requested: a load that was shed does not want to run any more
+	if current == 0 {
+		lp.lmm().ForgetShed(lp)
+	}
+
 	var shed bool
 	if c.switchDevice {
 		shed = current > 0 && limited == 0
@@ -352,4 +357,10 @@ func (lp *Loadpoint) lmSwitchPower() float64 {
 	}
 
 	return grid.CurrentToPower(lp.effectiveMaxCurrent(), lp.ActivePhases())
+}
+
+// lmIdle reports if the loadpoint does not want to run: no vehicle connected or
+// the mode is off. A shed it had is over then, see lm.Manager.ForgetShed.
+func (lp *Loadpoint) lmIdle() bool {
+	return lp.GetMode() == api.ModeOff || lp.GetStatus() == api.StatusA
 }

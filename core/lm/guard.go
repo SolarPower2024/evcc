@@ -129,3 +129,21 @@ func (m *Manager) ReleaseGuards(now time.Time) int {
 
 	return n
 }
+
+// ForgetShed drops the mark of a shed of l without an event: the load does not want
+// to run any more (vehicle unplugged, mode off), so what runs later is a new
+// start, not a load that comes back
+func (m *Manager) ForgetShed(l Load) {
+	m.guardMu.Lock()
+	defer m.guardMu.Unlock()
+
+	delete(m.shedSince, l)
+}
+
+// forgetAllShed drops all marks, see ClearEvents
+func (m *Manager) forgetAllShed() {
+	m.guardMu.Lock()
+	defer m.guardMu.Unlock()
+
+	clear(m.shedSince)
+}

@@ -208,4 +208,7 @@ func (m *Manager) ClearEvents() {
 
 	m.events = nil
 	m.dirty = true
+
+	// nothing is reported later for a shed that is no longer in the list
+	defer m.forgetAllShed()
 }

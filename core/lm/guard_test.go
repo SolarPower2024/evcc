@@ -102,3 +102,21 @@ func TestReleaseGuards(t *testing.T) {
 	_, ok := m.Resumed(free, now.Add(time.Minute))
 	assert.True(t, ok)
 }
+
+// TestForgetShed: a load that does not want to run any more, or whose list was
+// cleared, reports nothing when it runs again
+func TestForgetShed(t *testing.T) {
+	m := lm.New()
+	a, b := &testLoad{title: "a"}, &testLoad{title: "b"}
+	now := time.Now()
+
+	m.Shed(a, now)
+	m.Shed(b, now)
+	m.ForgetShed(a)
+	_, ok := m.Resumed(a, now.Add(time.Hour))
+	assert.False(t, ok)
+
+	m.ClearEvents()
+	_, ok = m.Resumed(b, now.Add(time.Hour))
+	assert.False(t, ok, "cleared with the list")
+}
