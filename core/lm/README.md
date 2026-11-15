@@ -1396,7 +1396,7 @@ the line of the last give back.
 - **Take over** (`POST /api/db/devtransfer/takeover`, `takeover.go`): the local backup, then the real file is
   copied through sqlite's backup function (so what only a crash left in the write-ahead log is in it), the
   copy gets what the test version recorded from `since` on (the same `merge` as the give back, the other
-  way round), `db.Restore`, and `<db>.since` is written. `since` is the newest time of the real file: the end
+  way round), `db.Restore`, and `<db>.since` (Unix nanoseconds) is written before the restore and put back if it fails; a failing step after the restore (`ErrRestored`) still restarts. `since` is the newest time of the real file: the end
   of the last quarter hour in `meters` or `created` of the last session (not the time of the click). Later the
   test version has taken over, the more of its own recording is kept. Nothing happens at the start. The
   restart is `POST http://supervisor/addons/self/restart` with `SUPERVISOR_TOKEN` if set (add-on with
@@ -1404,13 +1404,13 @@ the line of the last give back.
   starts it); `RestartWay` tells which, the preview says it. Tests `TestTakeover`, `TestTakeoverCopiesLog`,
   `TestSinceIsNewest`, `TestRestartSupervisor`.
 - **Give back** (`GET`/`POST /api/db/devtransfer/giveback?items=`, `giveback.go`, `merge.go`): the selection is
-  sessions, energy statistics, peak values (on) and devices, settings (off). The preview counts the test time
-  (`Summary`); the real file gets first the backup `evcc.db.bak-dev` beside it, then one transaction with its
-  own connection (`ATTACH` of the own database, 5 s busy timeout, a locked file is 409 and nothing changes):
-  sessions from `since` that have no counterpart (same loadpoint and `created`, without `id`); entities and the
-  slots (`meters`, mapped over group and name), `tariffs` and `tariffs_eeg` from `since` where the slot is
-  missing, an existing one is never overwritten (the last readings of existing entities follow, evcc custom
-  carries on from them); peak: per month from the month of `since` the entry with the higher `peak`; devices:
+  sessions, energy statistics, peak values (on) and devices, settings (off). The preview (`Summary`) is the same merge, rolled
+  back, so it shows what the give back then does; the real file gets first the backup `evcc.db.bak-dev` beside it, then one transaction with its
+  own connection (`ATTACH` of the own database read only, so it is not locked, 5 s busy timeout, a locked real file is 409 and nothing changes):
+  sessions after `since` that have no counterpart (same loadpoint and `created`, without `id`); entities and the
+  slots (`meters`, mapped over group and name; counted as quarter hours), `tariffs` and `tariffs_eeg` from the quarter hour `since` lies in where the slot is
+  missing, an existing one is never overwritten (the last readings of an existing entity follow only if the
+  test version recorded later than the real file, evcc custom carries on from them); peak: per month from the month of `since` the entry with the higher `peak`; devices:
   `configs` replaced; settings: `settings` replaced except `stateKeys` (`keys.go`: statistics and state of
   the fork keys, `TestForkKeysClassified` makes every key of `core/keys/site_custom.go` a setting or a state);
   the key `devTransferApplied` (`{at, items}`) is written in the same transaction. An error rolls back. Only
