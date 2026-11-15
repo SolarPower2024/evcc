@@ -146,7 +146,6 @@ import { defineComponent } from "vue";
 import GenericModal from "../Helper/GenericModal.vue";
 import FormRow from "../Config/FormRow.vue";
 import api from "@/api";
-import formatter from "@/mixins/formatter";
 import { handleDownloadClick } from "@/utils/native";
 import type { LogFileEntry, LogFileState } from "@/types/evcc-lm";
 
@@ -167,7 +166,6 @@ function formatSize(bytes: number) {
 // would block the submit without a message, the range is checked in save.
 export default defineComponent({
 	name: "LogFileModal",
-	mixins: [formatter],
 	components: { FormRow, GenericModal },
 	emits: ["changed"],
 	data() {
