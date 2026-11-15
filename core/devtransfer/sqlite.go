@@ -146,13 +146,6 @@ type sessionKey struct {
 // at that time is recorded in part by both sides, so it counts
 func slotSince(since time.Time) int64 { return since.Truncate(slot).Unix() }
 
-// slotCount returns the number of distinct slots from since on in schema
-func slotCount(ctx context.Context, q queryer, schema string, since time.Time) (int, error) {
-	var n int
-	err := q.QueryRowContext(ctx, "SELECT COUNT(DISTINCT ts) FROM "+tableOf(schema, "meters")+" WHERE ts >= ?", slotSince(since)).Scan(&n)
-	return n, err
-}
-
 // latest returns the end of the recording in schema: the end of the last
 // quarter hour in meters or the creation of the last charging session
 func latest(ctx context.Context, q queryer, schema string) (time.Time, error) {

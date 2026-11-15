@@ -86,7 +86,13 @@ type Counts struct {
 // where src's is higher, and with the items set the devices and settings replaced
 // by src's. dst and src are database files, each opened of its own connection;
 // an existing entry of dst is never overwritten. applied, if set, is stored in dst.
-func merge(ctx context.Context, dstPath, srcPath string, since time.Time, items Items, applied *Applied) (res Counts, err error) {
+func merge(ctx context.Context, dstPath, srcPath string, since time.Time, items Items, applied *Applied) (Counts, error) {
+	return mergeTx(ctx, dstPath, srcPath, since, items, applied, true)
+}
+
+// mergeTx is merge; without commit the transaction is rolled back at the end, so
+// the counts show what a merge would do and dst stays as it was
+func mergeTx(ctx context.Context, dstPath, srcPath string, since time.Time, items Items, applied *Applied, commit bool) (res Counts, err error) {
 	dbc, err := openFile(dstPath)
 	if err != nil {
 		return res, err
@@ -154,7 +160,12 @@ func merge(ctx context.Context, dstPath, srcPath string, since time.Time, items 
 		}
 	}
 
-	_, err = conn.ExecContext(ctx, "COMMIT")
+	end := "COMMIT"
+	if !commit {
+		end = "ROLLBACK"
+	}
+
+	_, err = conn.ExecContext(ctx, end)
 	return res, wrapBusy(err)
 }
 
@@ -229,17 +240,22 @@ func mergeSlots(ctx context.Context, conn *sql.Conn, since time.Time) (int, erro
 
 	prefixed := "s." + strings.ReplaceAll(mcols, ",", ",s.")
 
-	res, err := conn.ExecContext(ctx, fmt.Sprintf(`INSERT INTO main.meters (meter, %s)
-		SELECT d.id, %s FROM src.meters s
+	const missing = `FROM src.meters s
 		JOIN src.entities se ON se.id = s.meter
 		JOIN main.entities d ON d."group" = se."group" AND d.name = se.name
-		WHERE s.ts >= ? AND NOT EXISTS (SELECT 1 FROM main.meters x WHERE x.meter = d.id AND x.ts = s.ts)`, mcols, prefixed), slotSince(since))
-	if err != nil {
+		WHERE s.ts >= ? AND NOT EXISTS (SELECT 1 FROM main.meters x WHERE x.meter = d.id AND x.ts = s.ts)`
+
+	// the quarter hours are counted, not the rows of the entities
+	var slots int
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(DISTINCT s.ts) "+missing, slotSince(since)).Scan(&slots); err != nil {
 		return 0, err
 	}
-	rows, _ := res.RowsAffected()
 
-	return int(rows), nil
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf("INSERT INTO main.meters (meter, %s) SELECT d.id, %s "+missing, mcols, prefixed), slotSince(since)); err != nil {
+		return 0, err
+	}
+
+	return slots, nil
 }
 
 // mergePrices adds the prices of the slots from since on that dst does not have

@@ -762,6 +762,7 @@
         "restart_exit": "Then the test version ends. The watchdog of the add-on or you start it again.",
         "restart_supervisor": "Then the test version restarts by itself.",
         "return": "Return data to evcc custom",
+        "returned": "Returned: {sessions} charging sessions, {slots} quarter hours, peak values {months} months.",
         "returnPreview": "Test period {from} – {to}: {sessions} charging sessions, {slots} quarter hours, peak values {months} months. A backup is made first.",
         "sessions": "Charging sessions",
         "settings": "Settings (replace those of evcc custom)",

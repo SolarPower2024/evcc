@@ -762,6 +762,7 @@
         "restart_exit": "Danach beendet sich die Testversion. Der Watchdog des Add-ons oder du startest sie neu.",
         "restart_supervisor": "Danach startet die Testversion von selbst neu.",
         "return": "Daten an evcc custom zurückgeben",
+        "returned": "Zurückgegeben: {sessions} Ladevorgänge, {slots} Viertelstunden, Peak-Werte {months} Monate.",
         "returnPreview": "Testzeit {from} – {to}: {sessions} Ladevorgänge, {slots} Viertelstunden, Peak-Werte {months} Monate. Vorher wird eine Sicherung angelegt.",
         "sessions": "Ladevorgänge",
         "settings": "Einstellungen (ersetzt die Einstellungen von evcc custom)",

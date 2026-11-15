@@ -53,7 +53,7 @@ func TestGiveBack(t *testing.T) {
 
 	res, err := GiveBack(context.Background(), DefaultItems)
 	require.NoError(t, err)
-	assert.Equal(t, Counts{Sessions: 1, Slots: 2, Prices: 2, Months: 1}, res)
+	assert.Equal(t, Counts{Sessions: 1, Slots: 1, Prices: 2, Months: 1}, res)
 
 	// the backup holds the state before
 	assert.FileExists(t, f.livePath+BackupSuffix)
@@ -134,7 +134,7 @@ func TestGiveBackNotTaken(t *testing.T) {
 
 	_, err := GiveBack(context.Background(), DefaultItems)
 	assert.ErrorIs(t, err, ErrNotTaken)
-	_, err = GetSummary(context.Background())
+	_, err = GetSummary(context.Background(), DefaultItems)
 	assert.ErrorIs(t, err, ErrNotTaken)
 }
 
@@ -193,9 +193,9 @@ func TestSummary(t *testing.T) {
 	addSlot(t, f.dev, "battery", "battery", t0.Add(slot), 1)
 	addSession(t, f.dev, "lp1", t0.Add(time.Hour), 1)
 	addSession(t, f.dev, "lp1", t0.Add(-time.Hour), 1)
-	peak(t, f.dev, month("2026-11", 100), month("2026-10", 100))
+	peak(t, f.dev, month("2026-11", 5000), month("2026-10", 100)) // only the first is higher
 
-	res, err := GetSummary(context.Background())
+	res, err := GetSummary(context.Background(), DefaultItems)
 	require.NoError(t, err)
 	assert.Equal(t, t0.Unix(), res.Since.Unix())
 	assert.Equal(t, 1, res.Sessions)
@@ -245,7 +245,7 @@ func TestGiveBackSinceInSlot(t *testing.T) {
 	addSlot(t, f.dev, "grid", "grid", t0, 5)
 	exec(t, f.dev, "INSERT INTO tariffs (ts, grid) VALUES (?, 0.9)", t0.Unix())
 
-	sum, err := GetSummary(context.Background())
+	sum, err := GetSummary(context.Background(), DefaultItems)
 	require.NoError(t, err)
 	assert.Equal(t, 1, sum.Slots)
 
@@ -298,4 +298,38 @@ func TestGiveBackSinceExact(t *testing.T) {
 	assert.Equal(t, 1, res.Sessions)
 	assert.Equal(t, 1, count(t, f.live, "SELECT COUNT(*) FROM sessions WHERE charged_kwh = 2"))
 	assert.Equal(t, 0, count(t, f.live, "SELECT COUNT(*) FROM sessions WHERE charged_kwh = 1"))
+}
+
+// TestSummaryIsResult: the preview is what the give back then does, it changes
+// nothing, and after the give back it is empty
+func TestSummaryIsResult(t *testing.T) {
+	f := newFixture(t)
+	taken(t, f)
+
+	addSession(t, f.dev, "lp1", t0.Add(time.Hour), 1)
+	addSession(t, f.dev, "lp1", t0.Add(-4*time.Hour), 1) // before the test time
+	addSlot(t, f.dev, "grid", "grid", t0.Add(slot), 1)
+	addSlot(t, f.dev, "battery", "battery", t0.Add(slot), 1)
+	peak(t, f.dev, month("2026-11", 5000), month("2026-10", 100))
+	addSession(t, f.live, "lp1", t0.Add(2*time.Hour), 3)
+	addSession(t, f.dev, "lp1", t0.Add(2*time.Hour), 3) // the real one has it already
+
+	ctx := context.Background()
+	before := count(t, f.live, "SELECT COUNT(*) FROM sessions") + count(t, f.live, "SELECT COUNT(*) FROM meters")
+
+	sum, err := GetSummary(ctx, DefaultItems)
+	require.NoError(t, err)
+	assert.Equal(t, 1, sum.Sessions, "only the missing session")
+	assert.Equal(t, 1, sum.Slots)
+	assert.Equal(t, 1, sum.Months, "only the month with the higher peak")
+	assert.Equal(t, before, count(t, f.live, "SELECT COUNT(*) FROM sessions")+count(t, f.live, "SELECT COUNT(*) FROM meters"), "nothing changed")
+	assert.Equal(t, "", setting(t, f.live, DevTransferApplied))
+
+	res, err := GiveBack(ctx, DefaultItems)
+	require.NoError(t, err)
+	assert.Equal(t, Counts{Sessions: sum.Sessions, Slots: sum.Slots, Prices: 0, Months: sum.Months}, res)
+
+	sum, err = GetSummary(ctx, DefaultItems)
+	require.NoError(t, err)
+	assert.Equal(t, Summary{Since: sum.Since, To: sum.To}, sum, "the second give back would hand over nothing")
 }

@@ -19,6 +19,9 @@
 			<p v-if="done" class="text-success" data-testid="debug-devtransfer-done">
 				{{ $t("config.lmdebug.done") }}
 			</p>
+			<p v-if="returned" class="text-success" data-testid="debug-devtransfer-returned">
+				{{ $t("config.lmdebug.devTransfer.returned", { ...returned }) }}
+			</p>
 
 			<div class="d-flex flex-column gap-3">
 				<div>
@@ -186,7 +189,12 @@ import formatter from "@/mixins/formatter";
 import store from "@/store";
 import api from "@/api";
 import { isLoggedIn } from "../Auth/auth";
-import type { DevTransferItem, DevTransferStatus, DevTransferSummary } from "@/types/evcc-lm";
+import type {
+	DevTransferItem,
+	DevTransferResult,
+	DevTransferStatus,
+	DevTransferSummary,
+} from "@/types/evcc-lm";
 import { feedInAnswer, loginMissing } from "@/utils/debugFeedIn";
 import {
 	DEV_TRANSFER_DEFAULT,
@@ -217,6 +225,7 @@ export default defineComponent({
 			summary: null as DevTransferSummary | null,
 			busy: false,
 			done: false,
+			returned: null as DevTransferResult | null,
 			error: "",
 			passwordError: "",
 			iframeHint: false,
@@ -238,9 +247,13 @@ export default defineComponent({
 		},
 	},
 	methods: {
-		async load() {
-			this.reset();
-			this.done = false;
+		// keep: refresh the state without clearing the answer
+		async load(keep = false) {
+			if (!keep) {
+				this.reset();
+				this.done = false;
+				this.returned = null;
+			}
 			try {
 				this.status = (await api.get("devtransfer")).data;
 			} catch (e) {
@@ -273,6 +286,7 @@ export default defineComponent({
 		ask(what: "takeover" | "giveback") {
 			this.reset();
 			this.done = false;
+			this.returned = null;
 			this.confirming = what;
 
 			// the preview of the give back needs the call, without a password there is nothing to ask first
@@ -311,8 +325,12 @@ export default defineComponent({
 					this.summary = res.data;
 				} else {
 					this.reset();
-					this.done = true;
-					await this.load2();
+					if (giveBack) {
+						this.returned = res.data;
+					} else {
+						this.done = true;
+					}
+					await this.load(true);
 				}
 			} catch (e) {
 				const err = e as { response?: { data?: { error?: string } }; message?: string };
@@ -320,14 +338,6 @@ export default defineComponent({
 			}
 
 			this.busy = false;
-		},
-		// refresh the state without clearing the answer
-		async load2() {
-			try {
-				this.status = (await api.get("devtransfer")).data;
-			} catch (e) {
-				console.error(e);
-			}
 		},
 	},
 });

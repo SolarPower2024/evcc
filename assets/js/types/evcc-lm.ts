@@ -417,3 +417,11 @@ export interface DevTransferSummary {
   slots: number;
   months: number;
 }
+
+/** What a give back handed over. */
+export interface DevTransferResult {
+  sessions: number;
+  slots: number;
+  prices: number;
+  months: number;
+}

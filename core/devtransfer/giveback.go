@@ -22,9 +22,14 @@ type Summary struct {
 	Months   int       `json:"months"`
 }
 
-// GetSummary counts the test time of this instance: sessions, quarter hours and
-// months of peak values from since on
-func GetSummary(ctx context.Context) (Summary, error) {
+// GetSummary returns what a give back of the selection would hand over: the same
+// merge, rolled back at the end, so the preview is the result
+func GetSummary(ctx context.Context, items Items) (Summary, error) {
+	path, err := LivePath()
+	if err != nil {
+		return Summary{}, err
+	}
+
 	since, ok := Since()
 	if !ok {
 		return Summary{}, ErrNotTaken
@@ -32,39 +37,16 @@ func GetSummary(ctx context.Context) (Summary, error) {
 
 	res := Summary{Since: since, To: time.Now()}
 
-	d, err := db.Instance.DB()
-	if err != nil {
-		return res, err
-	}
-
-	times, err := sessionTimes(ctx, d, "")
-	if err != nil {
-		return res, err
-	}
-	for _, k := range times {
-		if k.created >= since.UnixNano() {
-			res.Sessions++
-		}
-	}
-
-	if res.Slots, err = slotCount(ctx, d, "", since); err != nil {
-		return res, err
-	}
-
 	if err := settings.Persist(); err != nil {
 		return res, err
 	}
 
-	months, err := readMonths(ctx, d, "")
+	c, err := mergeTx(ctx, path, db.FilePath(), since, items, nil, false)
 	if err != nil {
 		return res, err
 	}
-	for _, m := range months {
-		if m.month() >= sinceMonth(since) {
-			res.Months++
-		}
-	}
 
+	res.Sessions, res.Slots, res.Months = c.Sessions, c.Slots, c.Months
 	return res, nil
 }
 

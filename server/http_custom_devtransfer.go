@@ -108,7 +108,7 @@ func devTransferSummaryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := devtransfer.GetSummary(r.Context())
+	res, err := devtransfer.GetSummary(r.Context(), items)
 	if err != nil {
 		jsonError(w, devTransferStatus(err), err)
 		return
