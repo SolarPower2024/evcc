@@ -1346,7 +1346,8 @@ feed-in routes the admin password like evcc's own deletion routes (`api/db`).
 Two of evcc's warnings are left out where they do not apply (hooks in `core/loadpoint.go`, see
 the table below): "charger logic error: current mismatch" for a heater in stages, which reports a
 current of its own on purpose, and "poll mode may deplete your battery" unless a vehicle that is not
-from Home Assistant is configured (`core/loadpoint_pollwarn.go`, once at the start of the loadpoint).
+from Home Assistant is configured (`core/loadpoint_pollwarn.go`, once at the start of the loadpoint). The check runs once, at the start of the loadpoint, on purpose: a vehicle added later is not checked again (evcc warns once at the start as well).
+
 
 UI steps: `testtools/steps_debug.mjs` (scenario `debug`).
 
