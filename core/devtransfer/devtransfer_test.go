@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -328,4 +329,29 @@ func TestRestartSupervisor(t *testing.T) {
 	supervisorURL = srv.URL + "/refuse"
 	Restart(context.Background())
 	assert.Equal(t, 2, exits, "refused: ends")
+}
+
+func TestOutdated(t *testing.T) {
+	f := newFixture(t)
+
+	out, err := Outdated(context.Background())
+	require.NoError(t, err)
+	assert.False(t, out, "nothing taken over yet")
+
+	require.NoError(t, writeSince(t0))
+	out, err = Outdated(context.Background())
+	require.NoError(t, err)
+	assert.False(t, out, "the real one stopped recording at the take over")
+
+	// evcc custom ran again after the take over
+	addSlot(t, f.live, "grid", "grid", t0.Add(4*slot), 3)
+	out, err = Outdated(context.Background())
+	require.NoError(t, err)
+	assert.True(t, out, "evcc custom recorded after the take over")
+
+	// a give back that holds this recording: current again
+	exec(t, f.live, "INSERT INTO settings (key, value) VALUES (?, ?)", DevTransferApplied, fmt.Sprintf(`{"at":%q,"items":["energy"]}`, t0.Add(5*slot).Format(time.RFC3339)))
+	out, err = Outdated(context.Background())
+	require.NoError(t, err)
+	assert.False(t, out, "the give back is newer than the recording")
 }

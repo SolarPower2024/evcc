@@ -401,6 +401,7 @@ export interface DevTransferStatus {
   notFound?: boolean;
   /** RFC 3339, start of the test time, set once data was taken over. */
   since?: string;
+  outdated?: boolean;
   /** How the test version restarts after the take over. */
   restart?: "supervisor" | "exit";
   applied?: DevTransferApplied;

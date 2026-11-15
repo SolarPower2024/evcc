@@ -2,6 +2,7 @@ package devtransfer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -151,4 +152,43 @@ func recorded(ctx context.Context, path string) (time.Time, error) {
 	defer d.Close()
 
 	return latest(ctx, d, "")
+}
+
+// Outdated tells whether evcc custom recorded after the take over (or after the
+// last give back it holds), so the test version runs on an old copy and should
+// take over again
+func Outdated(ctx context.Context) (bool, error) {
+	since, ok := Since()
+	if !ok {
+		return false, nil
+	}
+
+	path, err := LivePath()
+	if err != nil {
+		return false, err
+	}
+
+	d, err := openFile(path)
+	if err != nil {
+		return false, err
+	}
+	defer d.Close()
+
+	ref := since
+	if v, ok, err := settingValue(ctx, d, "", DevTransferApplied); err != nil {
+		return false, err
+	} else if ok {
+		var a Applied
+		if json.Unmarshal([]byte(v), &a) == nil && a.At.After(ref) {
+			ref = a.At
+		}
+	}
+
+	end, err := latest(ctx, d, "")
+	if err != nil {
+		return false, err
+	}
+
+	// the slot running at the reference time ends after it
+	return end.After(ref.Truncate(slot).Add(slot)), nil
 }

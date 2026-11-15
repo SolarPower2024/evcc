@@ -7,7 +7,7 @@
 				{{ $t("config.lmdebug.devTransfer.notFound") }}
 			</p>
 			<p
-				v-else-if="!status.since"
+				v-else-if="!status.since || status.outdated"
 				class="text-warning"
 				data-testid="debug-devtransfer-nottaken"
 			>

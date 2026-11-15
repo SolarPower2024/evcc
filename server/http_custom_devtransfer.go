@@ -31,6 +31,7 @@ type devTransferStatusResult struct {
 	LiveChanged *time.Time           `json:"liveChanged,omitempty"`
 	NotFound    bool                 `json:"notFound,omitempty"` // the real database was not found
 	Since       *time.Time           `json:"since,omitempty"`    // start of the test time, set once data was taken over
+	Outdated    bool                 `json:"outdated,omitempty"` // evcc custom recorded after the take over
 	Restart     string               `json:"restart,omitempty"`  // supervisor or exit
 	Applied     *devtransfer.Applied `json:"applied,omitempty"`
 }
@@ -56,6 +57,7 @@ func devTransferStatusHandler(w http.ResponseWriter, r *http.Request) {
 
 		if since, ok := devtransfer.Since(); ok {
 			res.Since = &since
+			res.Outdated, _ = devtransfer.Outdated(r.Context())
 		}
 	}
 
