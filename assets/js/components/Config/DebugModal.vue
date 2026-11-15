@@ -14,33 +14,33 @@
 			<h6>{{ $t(`config.lmdebug.${s.name}.title`) }}</h6>
 			<p class="mb-2">{{ s.description }}</p>
 
-			<div v-if="s.name === 'feedIn'" class="d-flex gap-2 mb-2">
+			<div v-if="isFeedInSection(s.name)" class="d-flex gap-2 mb-2">
 				<div class="flex-fill min-w-0">
-					<label class="form-label mb-1" for="debugFeedInFrom">
+					<label class="form-label mb-1" :for="`debug-${s.name}-from`">
 						{{ $t("config.lmdebug.feedIn.from") }}
 					</label>
 					<input
-						id="debugFeedInFrom"
+						:id="`debug-${s.name}-from`"
 						v-model="from"
 						type="date"
 						class="form-control"
 						:max="latest"
-						data-testid="debug-feedin-from"
+						:data-testid="`debug-${s.name.toLowerCase()}-from`"
 						@change="rangeChanged"
 					/>
 				</div>
 				<div class="flex-fill min-w-0">
-					<label class="form-label mb-1" for="debugFeedInTo">
+					<label class="form-label mb-1" :for="`debug-${s.name}-to`">
 						{{ $t("config.lmdebug.feedIn.to") }}
 					</label>
 					<input
-						id="debugFeedInTo"
+						:id="`debug-${s.name}-to`"
 						v-model="to"
 						type="date"
 						class="form-control"
 						:min="from"
 						:max="latest"
-						data-testid="debug-feedin-to"
+						:data-testid="`debug-${s.name.toLowerCase()}-to`"
 						@change="rangeChanged"
 					/>
 				</div>
@@ -66,14 +66,18 @@
 			</button>
 
 			<form v-else class="border rounded p-3" @submit.prevent="submit(s.name)">
-				<template v-if="s.name === 'feedIn'">
+				<template v-if="isFeedInSection(s.name)">
 					<PasswordInput
 						v-if="!authDisabled"
 						v-model:password="password"
 						:error="passwordError"
 						:iframe-hint="iframeHint"
 					/>
-					<p v-if="preview" class="fw-bold" data-testid="debug-feedin-preview">
+					<p
+						v-if="s.name === 'feedIn' && preview"
+						class="fw-bold"
+						data-testid="debug-feedin-preview"
+					>
 						{{
 							$t("config.lmdebug.feedIn.preview", {
 								energy: fmtKWh(preview.energy),
@@ -81,8 +85,22 @@
 							})
 						}}
 					</p>
+					<p
+						v-else-if="s.name === 'feedInRecalc' && recalcPreview"
+						class="fw-bold"
+						data-testid="debug-feedinrecalc-preview"
+					>
+						{{
+							$t("config.lmdebug.feedInRecalc.preview", {
+								old: fmtKWh(recalcPreview.oldEnergy),
+								new: fmtKWh(recalcPreview.newEnergy),
+								oldPrice: fmtMoneyWithSymbol(recalcPreview.oldRevenue, currency),
+								newPrice: fmtMoneyWithSymbol(recalcPreview.newRevenue, currency),
+							})
+						}}
+					</p>
 				</template>
-				<p v-if="s.name !== 'feedIn' || preview" class="mb-3">
+				<p v-if="!isFeedInSection(s.name) || hasPreview" class="mb-3">
 					{{ $t("config.lmdebug.confirm") }}
 				</p>
 
@@ -108,7 +126,7 @@
 							aria-hidden="true"
 						></span>
 						{{
-							s.name === "feedIn" && !preview
+							isFeedInSection(s.name) && !hasPreview
 								? $t("config.lmdebug.feedIn.check")
 								: $t(`config.lmdebug.${s.name}.action`)
 						}}
@@ -127,10 +145,16 @@ import formatter from "@/mixins/formatter";
 import store from "@/store";
 import api from "@/api";
 import { isLoggedIn } from "../Auth/auth";
-import type { FeedInSummary } from "@/types/evcc-lm";
-import { feedInAnswer, loginMissing } from "@/utils/debugFeedIn";
+import type { FeedInRecalcSummary, FeedInSummary } from "@/types/evcc-lm";
+import {
+	feedInAnswer,
+	feedInRequest,
+	isFeedInSection,
+	loginMissing,
+	type FeedInSection,
+} from "@/utils/debugFeedIn";
 
-type Section = "peakReset" | "feedIn" | "events" | "guard";
+type Section = "peakReset" | FeedInSection | "events" | "guard";
 
 // 200 and the errors answered here, so the global handler neither opens the login
 // nor raises a message for a wrong password
@@ -174,6 +198,7 @@ export default defineComponent({
 			iframeHint: false,
 			password: "",
 			preview: null as FeedInSummary | null,
+			recalcPreview: null as FeedInRecalcSummary | null,
 			guardCount: 0,
 		};
 	},
@@ -186,6 +211,9 @@ export default defineComponent({
 		},
 		limit(): string {
 			return this.fmtW(store.state?.gridPeakBaseline ?? 0);
+		},
+		hasPreview(): boolean {
+			return !!this.preview || !!this.recalcPreview;
 		},
 		rangeValid(): boolean {
 			return !!this.from && !!this.to && this.from <= this.to && this.to <= this.latest;
@@ -200,6 +228,11 @@ export default defineComponent({
 					enabled: true,
 				},
 				{ name: "feedIn", description: t("feedIn"), enabled: this.rangeValid },
+				{
+					name: "feedInRecalc",
+					description: t("feedInRecalc"),
+					enabled: this.rangeValid,
+				},
 				{ name: "events", description: t("events"), enabled: true },
 				{
 					name: "guard",
@@ -210,6 +243,7 @@ export default defineComponent({
 		},
 	},
 	methods: {
+		isFeedInSection,
 		open() {
 			this.latest = dayString(yesterday());
 			this.from = this.to = this.latest;
@@ -225,6 +259,7 @@ export default defineComponent({
 			this.iframeHint = false;
 			this.password = "";
 			this.preview = null;
+			this.recalcPreview = null;
 		},
 		async loadGuardCount() {
 			try {
@@ -236,7 +271,7 @@ export default defineComponent({
 		},
 		rangeChanged() {
 			// another range, another preview
-			if (this.confirming === "feedIn") this.reset();
+			if (isFeedInSection(this.confirming)) this.reset();
 		},
 		ask(name: Section) {
 			this.reset();
@@ -244,7 +279,7 @@ export default defineComponent({
 			this.confirming = name;
 
 			// without a password there is nothing to ask first
-			if (name === "feedIn" && this.authDisabled) this.submit(name);
+			if (isFeedInSection(name) && this.authDisabled) this.submit(name);
 		},
 		cancel() {
 			this.reset();
@@ -254,8 +289,8 @@ export default defineComponent({
 			this.error = "";
 
 			try {
-				if (name === "feedIn") {
-					await this.feedIn();
+				if (isFeedInSection(name)) {
+					await this.feedIn(name);
 				} else {
 					await this.run(name);
 				}
@@ -266,7 +301,7 @@ export default defineComponent({
 
 			this.busy = false;
 		},
-		async run(name: Exclude<Section, "feedIn">) {
+		async run(name: Exclude<Section, FeedInSection>) {
 			if (name === "peakReset") {
 				await api.post("peakreset");
 			} else if (name === "events") {
@@ -278,8 +313,8 @@ export default defineComponent({
 
 			this.finish(name);
 		},
-		// the preview first, the second submit sets the feed-in to 0
-		async feedIn() {
+		// the preview first, the second submit sets the feed-in to 0 or recalculates it
+		async feedIn(name: FeedInSection) {
 			// checked before sending, a deletion that went through must not end in a hint
 			if (loginMissing(isLoggedIn(), this.authDisabled)) {
 				this.iframeHint = true;
@@ -290,10 +325,9 @@ export default defineComponent({
 			const headers = { "X-Admin-Password": this.password };
 			const config = { params, headers, validateStatus };
 
-			const res = this.preview
-				? await api.delete("/db/metrics/feedin", config)
-				: await api.get("/db/metrics/feedin", config);
-
+			const confirmed = this.hasPreview;
+			const { method, url } = feedInRequest(name, confirmed);
+			const res = await api[method](url, config);
 			const answer = feedInAnswer(res.status);
 			if (answer === "password") {
 				this.passwordError = this.$t("loginModal.invalid");
@@ -304,8 +338,10 @@ export default defineComponent({
 				return;
 			}
 
-			if (this.preview) {
-				this.finish("feedIn");
+			if (confirmed) {
+				this.finish(name);
+			} else if (name === "feedInRecalc") {
+				this.recalcPreview = res.data;
 			} else {
 				this.preview = res.data;
 			}

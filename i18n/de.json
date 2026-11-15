@@ -764,6 +764,12 @@
         "title": "Einspeisung löschen",
         "to": "Bis"
       },
+      "feedInRecalc": {
+        "action": "Neu berechnen",
+        "description": "Berechnet die Einspeisung je Viertelstunde aus Erzeugung, Batterie, Bezug und Verbrauch neu, z. B. nach einem falschen Einspeise-Sensor. Nicht umkehrbar. Vorher eine Sicherung herunterladen.",
+        "preview": "Einspeisung {old} → {new}, Erlös {oldPrice} → {newPrice}",
+        "title": "Einspeisung neu berechnen"
+      },
       "guard": {
         "action": "Aufheben",
         "description": "{count} gesperrte Lasten dürfen sofort wieder starten.",

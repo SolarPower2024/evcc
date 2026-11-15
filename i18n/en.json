@@ -764,6 +764,12 @@
         "title": "Delete feed-in",
         "to": "To"
       },
+      "feedInRecalc": {
+        "action": "Recalculate",
+        "description": "Recalculates the feed-in per quarter hour from production, battery, import and consumption, e.g. after a wrong export sensor. Cannot be undone. Download a backup first.",
+        "preview": "Feed-in {old} → {new}, revenue {oldPrice} → {newPrice}",
+        "title": "Recalculate feed-in"
+      },
       "guard": {
         "action": "Lift",
         "description": "{count} locked loads may start again right away.",
