@@ -365,3 +365,17 @@ export interface FeedInSummary {
   /** In the configured currency. */
   revenue: number;
 }
+
+/** The feed-in of a time range before and after a recalculation from the energy balance, see Konfiguration → System → Debug. */
+export interface FeedInRecalcSummary {
+  /** kWh */
+  oldEnergy: number;
+  /** kWh */
+  newEnergy: number;
+  /** In the configured currency. */
+  oldRevenue: number;
+  /** In the configured currency. */
+  newRevenue: number;
+  /** Quarter hours without home consumption, left as stored. */
+  skipped: number;
+}

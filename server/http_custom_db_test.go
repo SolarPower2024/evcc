@@ -232,3 +232,73 @@ func TestFeedInRoutesDatabaseError(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, call(method, base, base.AddDate(0, 0, 1)), method+" database error")
 	}
 }
+
+// TestFeedInRecalcRoutes: the preview shows old and new feed-in without changing
+// it, the POST sets the feed-in to the balance, both need the admin password, a
+// range reaching into today is a 400
+func TestFeedInRecalcRoutes(t *testing.T) {
+	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	require.NoError(t, metrics.SetupSchema())
+
+	_, err := metrics.NewCollector(metrics.Grid, "grid", "grid")
+	require.NoError(t, err)
+	_, err = metrics.NewCollector(metrics.Home, "home", "home")
+	require.NoError(t, err)
+	_, err = metrics.NewCollector(metrics.PV, "pv", "pv")
+	require.NoError(t, err)
+
+	// pv 1, draw 2, feed-in 2 (a copy of the draw), home 2: balance 1 + 2 - 2 = 1
+	base := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, db.Instance.Exec(`INSERT INTO meters (meter, ts, energy, return_energy)
+		SELECT id, ?, 2, 2 FROM entities WHERE "group" = 'grid'`, base.Unix()).Error)
+	require.NoError(t, db.Instance.Exec(`INSERT INTO meters (meter, ts, energy, return_energy)
+		SELECT id, ?, 2, 0 FROM entities WHERE "group" = 'home'`, base.Unix()).Error)
+	require.NoError(t, db.Instance.Exec(`INSERT INTO meters (meter, ts, energy, return_energy)
+		SELECT id, ?, 1, 0 FROM entities WHERE "group" = 'pv'`, base.Unix()).Error)
+
+	const pw = "secret"
+	r := mux.NewRouter()
+	sub := r.PathPrefix("/db").Subrouter()
+	sub.Use(ensureDbAuth(fakeAuth{mode: auth.Enabled, password: pw}))
+	for _, rt := range customDbRoutes() {
+		sub.Methods(rt.Method).Path(rt.Pattern).Handler(rt.HandlerFunc)
+	}
+
+	call := func(method, password string, from, to time.Time) (int, string) {
+		q := url.Values{"from": {from.Format(time.RFC3339)}, "to": {to.Format(time.RFC3339)}}
+		req := httptest.NewRequest(method, "/db/metrics/feedinrecalc?"+q.Encode(), nil)
+		if password != "" {
+			req.Header.Set("X-Admin-Password", password)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w.Code, w.Body.String()
+	}
+	day, next := base.Add(-12*time.Hour), base.Add(12*time.Hour)
+
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		code, _ := call(method, "", day, next)
+		assert.Equal(t, http.StatusUnauthorized, code, method)
+	}
+
+	code, body := call(http.MethodGet, pw, day, next)
+	assert.Equal(t, http.StatusOK, code)
+	assert.JSONEq(t, `{"oldEnergy":2,"newEnergy":1,"oldRevenue":0,"newRevenue":0,"skipped":0}`, body)
+
+	var stored float64
+	require.NoError(t, db.Instance.Raw(`SELECT SUM(return_energy) FROM meters`).Scan(&stored).Error)
+	assert.Equal(t, 2.0, stored, "the preview changes nothing")
+
+	code, body = call(http.MethodPost, pw, day, next)
+	assert.Equal(t, http.StatusOK, code)
+	assert.JSONEq(t, `{"changed":1}`, body)
+	require.NoError(t, db.Instance.Raw(`SELECT SUM(return_energy) FROM meters`).Scan(&stored).Error)
+	assert.Equal(t, 1.0, stored)
+
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		code, _ = call(method, pw, next, day)
+		assert.Equal(t, http.StatusBadRequest, code, method+" invalid range")
+		code, _ = call(method, pw, day, time.Now().AddDate(0, 0, 1))
+		assert.Equal(t, http.StatusBadRequest, code, method+" today")
+	}
+}

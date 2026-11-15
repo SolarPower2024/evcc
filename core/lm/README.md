@@ -1354,6 +1354,19 @@ feed-in routes the admin password like evcc's own deletion routes (`api/db`).
   flow are worked out from it, so they follow; draw, home consumption and the prices stay. The
   EEG counter, a share of the feed-in, is set to 0 with it. Cannot be undone, download a backup
   first. Tests `TestClearFeedIn`, `TestFeedInRoutes`.
+- **Recalculate feed-in** (`GET`/`POST /api/db/metrics/feedinrecalc?from&to`, `core/metrics/feedin_recalc_custom.go`):
+  for a feed-in stored wrong (e.g. the export sensor of the grid meter held the import sensor). Same
+  range, password and preview as "Delete feed-in" (the section shares the date fields), the preview
+  shows "Einspeisung alt → neu, Erlös alt → neu" and changes nothing (pure calculation, the write is
+  one transaction). Per stored grid slot the feed-in becomes
+  `max(0, min(PV + battery discharge, PV + battery discharge + import - home - battery charge - loadpoints))`,
+  capped by production and discharge so the metering difference at night is no feed-in (battery:
+  `energy` is the charge, `return_energy` the discharge; loadpoints: sum of the group, home
+  excludes them); remainders below 1e-9 are 0, with several grid meters in a slot the first takes
+  the value, the others 0. A slot without a home consumption row has no balance and stays as
+  stored, the preview counts these slots. Only `return_energy` of the grid changes, no slot is created; the EEG
+  counter stays (unlike the deletion), the revenue, EEG split and flow follow. Cannot be undone,
+  download a backup first. Tests `TestRecalcFeedIn`, `TestRecalcFeedInWithoutHome`, `TestBalanceFeedIn`, `TestRecalcFeedInNotToday`, `TestFeedInRecalcRoutes`.
 - **Clear event list** (`DELETE /api/lmevents`): empties the event log of the peak shaving dialog
   and what is stored (`TestClearLmEvents`).
 - **Lift shed locks** (`POST /api/lmguardrelease`, count: `GET /api/lmguardcount`, off without a
@@ -1438,7 +1451,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `server/http_config_helper.go` | `customTestResults` in `testInstance`: the config page shows the switch of each stage of a heater in stages (`server/http_config_custom.go`) |
-| `server/http.go` | `addCustomSiteRoutes`: `api.Use(noCompressLogFiles)` before `handlers.CompressHandler` keeps the log file downloads uncompressed (`TestLogFileDownloadNotCompressed`); a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes and the feed-in routes of the debug area (`server/http_custom_db.go`; `GET`/`DELETE /api/db/metrics/feedin?from&to`, preview and set to 0, admin password like evcc's deletion routes; `TestFeedInRoutes`), a colliding route is left out and logged |
+| `server/http.go` | `addCustomSiteRoutes`: `api.Use(noCompressLogFiles)` before `handlers.CompressHandler` keeps the log file downloads uncompressed (`TestLogFileDownloadNotCompressed`); a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes and the feed-in routes of the debug area (`server/http_custom_db.go`; `GET`/`DELETE /api/db/metrics/feedin?from&to`, preview and set to 0, admin password like evcc's deletion routes; `TestFeedInRoutes`; `GET`/`POST /api/db/metrics/feedinrecalc?from&to`, recalculation from the energy balance, `TestFeedInRecalcRoutes`), a colliding route is left out and logged |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection; `gridChargeVisible` passes evcc's own condition through `priceCardVisible` (`utils/gridChargeMode.ts`): the price card is hidden for grid charging by soc only; the soc card has a `v-if` (`socCardShown`) and, like one-time charging, needs a battery that offers the charge mode (`chargeSupported`) and one-time charging a card of its own (`BatteryGridChargeOnceCard`) for price only; contract test: `utils/gridChargeMode.test.ts` and `TestForkHooksInPlace` |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
@@ -1466,7 +1479,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | switch devices, stages | `charger/switchsocket_lm.go`, `charger/switchstages.go`, `core/loadpoint_stages.go`, `core/loadpoint_pollwarn.go`, `server/http_config_custom.go`, `templates/definition/charger/homeassistant-stages.yaml` |
 | phase switching | `core/loadpoint_phasecurrents.go`, `core/loadpoint/config_custom.go`, `core/keys/loadpoint_custom.go` |
 | grid charging | `core/site_lm_once.go`, `core/site_lm_grid_mode.go` (soc-based in `core/site_lm.go`) |
-| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go`, `core/site_peak_reset.go`, `core/metrics/peak_reset_custom.go`, `core/metrics/feedin_clear_custom.go`, `core/site_lm_events.go`, `core/site_peak_status.go` |
+| peak shaving | `core/peak/`, `core/site_peakshaving.go`, `core/site_peak_readings.go`, `core/site_peak_ext.go`, `core/site_peak_omni.go`, `core/site_peak_byd.go`, `core/site_peak_omni_hold.go`, `core/site_peak_shutdown.go`, `core/site_ha_guard.go`, `core/site_peak_limit.go`, `core/site_peak_stats.go`, `core/site_peak_tariff.go`, `core/site_peak_reset.go`, `core/metrics/peak_reset_custom.go`, `core/metrics/feedin_clear_custom.go`, `core/metrics/feedin_recalc_custom.go`, `core/site_lm_events.go`, `core/site_peak_status.go` |
 | profiles | `core/lm/profile/`, `core/site_lm_profiles.go` |
 | update hint | `cmd/root_custom.go` (`forkUpdateCheck`, off in the fork) |
 | forecast | `core/site_load_weekday.go`, `core/site_load_manual.go`, `core/metrics/profile_custom.go` |

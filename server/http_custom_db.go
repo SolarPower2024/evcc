@@ -15,13 +15,17 @@ import (
 
 // customDbRoutes are the fork's routes below api/db: the stored EEG prices of a
 // time range can be deleted or set anew, the feed-in of a time range can be read
-// and set to 0 (Debug, see core/metrics/feedin_clear_custom.go)
+// and set to 0 or recalculated from the energy balance (Debug, see
+// core/metrics/feedin_clear_custom.go and feedin_recalc_custom.go)
 func customDbRoutes() map[string]route {
 	return map[string]route{
 		"deleteeegprices": {"DELETE", "/metrics/tariffs/eeg", deleteEegPricesHandler},
 		"seteegprices":    {"PUT", "/metrics/tariffs/eeg", setEegPricesHandler},
 		"feedinsummary":   {"GET", "/metrics/feedin", feedInSummaryHandler},
 		"deletefeedin":    {"DELETE", "/metrics/feedin", deleteFeedInHandler},
+
+		"feedinrecalcsummary": {"GET", "/metrics/feedinrecalc", feedInRecalcSummaryHandler},
+		"feedinrecalc":        {"POST", "/metrics/feedinrecalc", feedInRecalcHandler},
 	}
 }
 
@@ -149,4 +153,66 @@ func feedInStatus(err error) int {
 		return http.StatusBadRequest
 	}
 	return http.StatusInternalServerError
+}
+
+// feedInRecalcSummaryResult is what a recalculation of the feed-in changes
+type feedInRecalcSummaryResult struct {
+	OldEnergy  float64 `json:"oldEnergy"`  // kWh
+	NewEnergy  float64 `json:"newEnergy"`  // kWh
+	OldRevenue float64 `json:"oldRevenue"` // currency
+	NewRevenue float64 `json:"newRevenue"` // currency
+	Skipped    int     `json:"skipped"`    // slots without home consumption, left as stored
+}
+
+// feedInRecalcSummaryHandler answers the feed-in of from/to before and after a
+// recalculation without changing it: the preview of feedInRecalcHandler
+func feedInRecalcSummaryHandler(w http.ResponseWriter, r *http.Request) {
+	if db.Instance == nil {
+		jsonError(w, http.StatusBadRequest, errors.New("database offline"))
+		return
+	}
+
+	from, to, err := timeRange(r)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	res, err := metrics.FeedInRecalcSummary(from, to)
+	if err != nil {
+		jsonError(w, feedInStatus(err), err)
+		return
+	}
+
+	jsonWrite(w, feedInRecalcSummaryResult{res.OldEnergy, res.NewEnergy, res.OldRevenue, res.NewRevenue, res.Skipped})
+}
+
+// feedInRecalcResult is the number of changed slots
+type feedInRecalcResult struct {
+	Changed int64 `json:"changed"`
+}
+
+// feedInRecalcHandler sets the feed-in of from/to to the balance of each slot
+func feedInRecalcHandler(w http.ResponseWriter, r *http.Request) {
+	if db.Instance == nil {
+		jsonError(w, http.StatusBadRequest, errors.New("database offline"))
+		return
+	}
+
+	from, to, err := timeRange(r)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	rows, err := metrics.RecalcFeedIn(from, to)
+	if err != nil {
+		jsonError(w, feedInStatus(err), err)
+		return
+	}
+
+	// invalidate cached values derived from the history, as evcc's own deletion does
+	util.ResetCached()
+
+	jsonWrite(w, feedInRecalcResult{rows})
 }
