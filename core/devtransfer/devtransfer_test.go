@@ -387,3 +387,35 @@ func TestTakeoverFailures(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, t0.Unix(), since.Unix(), "the since file belongs to the restored data")
 }
+
+// TestReadOnlyOfLive: the real database is only looked at, never written
+func TestReadOnlyOfLive(t *testing.T) {
+	f := newFixture(t)
+	require.NoError(t, writeSince(t0))
+
+	d, err := openReadOnly(f.livePath)
+	require.NoError(t, err)
+	defer d.Close()
+
+	got, err := latest(context.Background(), d, "")
+	require.NoError(t, err)
+	assert.Equal(t, t0.Unix(), got.Unix())
+
+	_, err = d.Exec("INSERT INTO settings (key, value) VALUES ('x', 'y')")
+	require.Error(t, err, "read only")
+	assert.Zero(t, count(t, f.live, "SELECT COUNT(*) FROM settings WHERE key = 'x'"))
+
+	// the preview of the dialog neither waits for nor changes the real file
+	conn, err := f.live.DB()
+	require.NoError(t, err)
+	tx, err := conn.Begin()
+	require.NoError(t, err)
+	defer tx.Rollback()
+	_, err = tx.Exec("INSERT INTO settings (key, value) VALUES ('z', '1')")
+	require.NoError(t, err)
+
+	start := time.Now()
+	_, err = Outdated(context.Background())
+	require.NoError(t, err)
+	assert.Less(t, time.Since(start), 4*time.Second)
+}

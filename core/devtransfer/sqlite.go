@@ -21,6 +21,13 @@ func openFile(path string) (*sql.DB, error) {
 	return sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)")
 }
 
+// openReadOnly opens a database file of someone else read only, so looking at it
+// changes nothing and takes no lock
+func openReadOnly(path string) (*sql.DB, error) {
+	u := url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro&_pragma=busy_timeout(5000)"}
+	return sql.Open("sqlite", u.String())
+}
+
 // queryer is a *sql.DB or *sql.Conn
 type queryer interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
@@ -45,10 +52,10 @@ func wrapBusy(err error) error {
 	return err
 }
 
-// backupFile copies the database in path, with the content of its log, to
-// target through sqlite's backup function
+// backupFile copies the database in path, read only and with the content of its
+// log, to target through sqlite's backup function
 func backupFile(ctx context.Context, path, target string) error {
-	sdb, err := openFile(path)
+	sdb, err := openReadOnly(path)
 	if err != nil {
 		return err
 	}
@@ -159,14 +166,12 @@ func latest(ctx context.Context, q queryer, schema string) (time.Time, error) {
 		res = time.Unix(ts.Int64, 0).Add(slot)
 	}
 
-	times, err := sessionTimes(ctx, q, schema)
-	if err != nil {
+	var created any
+	if err := q.QueryRowContext(ctx, "SELECT MAX(created) FROM "+tableOf(schema, "sessions")).Scan(&created); err != nil {
 		return res, err
 	}
-	for _, k := range times {
-		if t := time.Unix(0, k.created); t.After(res) {
-			res = t
-		}
+	if t, ok := toTime(created); ok && t.After(res) {
+		res = t
 	}
 
 	return res, nil

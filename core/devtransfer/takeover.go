@@ -188,7 +188,7 @@ func Outdated(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	d, err := openFile(path)
+	d, err := openReadOnly(path)
 	if err != nil {
 		return false, err
 	}
