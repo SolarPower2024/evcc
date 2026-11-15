@@ -4,9 +4,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/evcc-io/evcc/core"
 	"github.com/evcc-io/evcc/core/lm/profile"
@@ -15,6 +19,7 @@ import (
 	"github.com/evcc-io/evcc/util/logstash"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNamePatternMatchesUiDevices is the regression test for device names like
@@ -124,6 +129,7 @@ var customRouteSamples = map[string]string{
 	"importeegentitydelete":         "/importeegentity",
 	"logfile":                       "/logfile",
 	"logfileset":                    "/logfile",
+	"logfiledownload":               "/logfile/files/evcc-2026-10-05.log",
 	"snowcover":                     "/snowcover/true",
 	"snowauto":                      "/snowauto/true",
 	"peakshaving":                   "/peakshaving/false",
@@ -434,4 +440,58 @@ func TestLmEnabledRouteGone(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// TestLogFileDownload: today's file as text with the buffered lines, a day before as the .log.gz bytes
+// unchanged and without Content-Encoding, every other name is a 404
+func TestLogFileDownload(t *testing.T) {
+	r := mux.NewRouter()
+	for _, rt := range customSiteRoutes(core.NewSite()) {
+		r.Methods(rt.Methods()...).Path(rt.Pattern).Handler(rt.HandlerFunc)
+	}
+
+	dir := filepath.Join(t.TempDir(), "logs")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	gzName := "evcc-" + yesterday + ".log.gz"
+	gz := []byte("\x1f\x8b\x08 not unpacked \x00\xff")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, gzName), gz, 0o644))
+
+	t.Cleanup(func() { _, _ = logstash.SetFile(logstash.DefaultFileConfig) })
+
+	_, err := logstash.SetFile(logstash.FileConfig{Enabled: true, Level: "info", Days: 7, Dir: dir})
+	require.NoError(t, err)
+
+	// below the 2 s flush: only the download brings it to disk
+	line := "[site  ] INFO " + time.Now().Format("2006/01/02 15:04:05") + " buffered line for the download\n"
+	_, _ = logstash.Output.Write([]byte(line))
+
+	get := func(name string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/logfile/files/"+name, nil))
+		return w
+	}
+
+	today := "evcc-" + time.Now().Format("2006-01-02") + ".log"
+	w := get(today)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "text/plain; charset=utf-8", w.Header().Get("Content-Type"))
+	assert.Equal(t, `attachment; filename="`+today+`"`, w.Header().Get("Content-Disposition"))
+	assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
+	assert.Equal(t, strconv.Itoa(w.Body.Len()), w.Header().Get("Content-Length"))
+	assert.Contains(t, w.Body.String(), "buffered line for the download")
+
+	w = get(gzName)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/gzip", w.Header().Get("Content-Type"))
+	assert.Equal(t, `attachment; filename="`+gzName+`"`, w.Header().Get("Content-Disposition"))
+	assert.Empty(t, w.Header().Get("Content-Encoding"))
+	assert.Equal(t, strconv.Itoa(len(gz)), w.Header().Get("Content-Length"))
+	assert.Equal(t, gz, w.Body.Bytes())
+
+	for _, name := range []string{"evcc-2020-01-01.log", "other.log", "..%2Foutside.log", "%2e%2e", "a%2Fevcc-2020-01-01.log"} {
+		// the router either cleans the path and redirects or the name does not match: never served
+		assert.Contains(t, []int{http.StatusNotFound, http.StatusMovedPermanently}, get(name).Code, name)
+	}
 }

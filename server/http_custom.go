@@ -7,7 +7,9 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"slices"
 	"strconv"
@@ -37,7 +39,7 @@ var customConfigRoutes = []string{
 	"batteryidentuse", "lmadvanced", "lmexportforecast", "lmexportforecastdelete",
 	"lmhomeprofile", "lmhomeprofiledelete", "lmhomeprofilecsv",
 	"lmprofile", "lmprofiledelete",
-	"feedineegentity", "feedineegentitydelete", "importeegentity", "importeegentitydelete", "logfile", "logfileset",
+	"feedineegentity", "feedineegentitydelete", "importeegentity", "importeegentitydelete", "logfile", "logfileset", "logfiledownload",
 	"peakshavinglimit", "peaktariff",
 	"peakshavingbatterytype",
 	"peakshavingmanualentity", "peakshavingmanualentitydelete",
@@ -214,8 +216,9 @@ func customSiteRoutes(site site.API) map[string]route {
 		"lmguardrelease": {"POST", "/lmguardrelease", func(w http.ResponseWriter, r *http.Request) { jsonWrite(w, site.ReleaseLmGuards()) }},
 
 		// log in daily files, see core/site_logfile.go
-		"logfile":    {"GET", "/logfile", logFileHandler(site)},
-		"logfileset": {"POST", "/logfile", logFileSetHandler(site)},
+		"logfile":         {"GET", "/logfile", logFileHandler(site)},
+		"logfileset":      {"POST", "/logfile", logFileSetHandler(site)},
+		"logfiledownload": {"GET", "/logfile/files/{name}", logFileDownloadHandler},
 
 		// snow on pv, see core/site_snow.go and core/site_snow_auto.go
 		"snowcover": {"POST", "/snowcover/{value:[01truefalse]+}", boolHandler(site.SetSnowCover, site.GetSnowCover)},
@@ -520,4 +523,33 @@ func actionHandler(action func() error) http.HandlerFunc {
 
 		jsonWrite(w, true)
 	}
+}
+
+// logFileDownloadHandler delivers a log file of the folder as it lies: today's as text, the days before
+// as the .log.gz they are, without Content-Encoding so that the browser does not unpack them
+func logFileDownloadHandler(w http.ResponseWriter, r *http.Request) {
+	name := mux.Vars(r)["name"]
+
+	rc, size, err := logstash.OpenFile(name)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, fs.ErrNotExist) {
+			status = http.StatusNotFound
+		}
+		jsonError(w, status, err)
+		return
+	}
+	defer rc.Close()
+
+	typ := "text/plain; charset=utf-8"
+	if strings.HasSuffix(name, ".gz") {
+		typ = "application/gzip"
+	}
+
+	w.Header().Set("Content-Type", typ)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", name))
+	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	w.Header().Set("Cache-Control", "no-store")
+
+	_, _ = io.Copy(w, rc)
 }
