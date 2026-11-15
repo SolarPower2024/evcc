@@ -69,13 +69,14 @@ var DefaultFileConfig = FileConfig{Level: "debug", Days: 14}
 
 // FileState is what the ui shows
 type FileState struct {
-	Enabled bool   `json:"enabled"`
-	Level   string `json:"level"`
-	Days    int    `json:"days"`
-	Dir     string `json:"dir"`
-	Files   int    `json:"files"`
-	Size    int64  `json:"size"`
-	Error   string `json:"error,omitempty"`
+	Enabled bool        `json:"enabled"`
+	Level   string      `json:"level"`
+	Days    int         `json:"days"`
+	Dir     string      `json:"dir"`
+	Files   int         `json:"files"`
+	Size    int64       `json:"size"`
+	List    []FileEntry `json:"list"` // newest first
+	Error   string      `json:"error,omitempty"`
 }
 
 // Validate checks level and retention
@@ -235,15 +236,26 @@ func (t *tee) status() FileState {
 	}
 
 	res := FileState{Enabled: cfg.Enabled, Level: strings.ToLower(cfg.Level), Days: cfg.Days, Dir: cfg.Dir}
+	res.List = []FileEntry{} // [] for the ui, not null
 	if err != nil {
 		res.Error = err.Error()
+	}
+
+	var current string
+	if sink != nil {
+		current = sink.currentFile()
 	}
 
 	if cfg.Dir != "" {
 		for _, f := range listFiles(cfg.Dir) {
 			res.Files++
 			res.Size += f.size
+
+			e := f.entry()
+			e.Current = f.name == current
+			res.List = append(res.List, e)
 		}
+		slices.Reverse(res.List) // listFiles is oldest first
 	}
 
 	return res

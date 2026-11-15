@@ -70,6 +70,49 @@
 				</div>
 			</dl>
 
+			<div v-if="state" class="mt-3" data-testid="logfile-list">
+				<div class="small evcc-gray">{{ $t("logFile.list") }}</div>
+				<div v-if="!files.length" class="small" data-testid="logfile-nofiles">
+					{{ $t("logFile.noFiles") }}
+				</div>
+				<div
+					v-for="f in shownFiles"
+					:key="f.name"
+					class="d-flex align-items-center justify-content-between gap-2 py-1 border-bottom"
+					data-testid="logfile-row"
+				>
+					<span class="d-flex gap-3 text-nowrap">
+						<span data-testid="logfile-day">{{ dayLabel(f) }}</span>
+						<span class="evcc-gray" data-testid="logfile-filesize">{{
+							formatSize(f.size)
+						}}</span>
+					</span>
+					<a
+						class="btn btn-sm btn-outline-secondary flex-shrink-0"
+						:href="downloadUrl(f.name)"
+						:aria-label="$t('logFile.download')"
+						:title="$t('logFile.download')"
+						download
+						data-testid="logfile-download"
+						@click="handleDownloadClick($event, downloadUrl(f.name))"
+					>
+						<shopicon-regular-download
+							size="s"
+							class="icon"
+						></shopicon-regular-download>
+					</a>
+				</div>
+				<button
+					v-if="files.length > MAX_ROWS && !showAllFiles"
+					type="button"
+					class="btn btn-link btn-sm px-0"
+					data-testid="logfile-showall"
+					@click="showAllFiles = true"
+				>
+					{{ $t("logFile.showAll") }}
+				</button>
+			</div>
+
 			<div class="mt-4 d-flex justify-content-between gap-2 flex-column flex-sm-row">
 				<button
 					type="button"
@@ -103,10 +146,12 @@ import { defineComponent } from "vue";
 import GenericModal from "../Helper/GenericModal.vue";
 import FormRow from "../Config/FormRow.vue";
 import api from "@/api";
-import type { LogFileState } from "@/types/evcc-lm";
+import { handleDownloadClick } from "@/utils/native";
+import type { LogFileEntry, LogFileState } from "@/types/evcc-lm";
 
 const MIN_DAYS = 1;
 const MAX_DAYS = 90;
+const MAX_ROWS = 7;
 const LEVELS = ["error", "warn", "info", "debug", "trace"];
 
 function formatSize(bytes: number) {
@@ -132,9 +177,17 @@ export default defineComponent({
 			level: "debug",
 			days: 14,
 			levels: LEVELS,
+			MAX_ROWS,
+			showAllFiles: false,
 		};
 	},
 	computed: {
+		files(): LogFileEntry[] {
+			return this.state?.list ?? [];
+		},
+		shownFiles(): LogFileEntry[] {
+			return this.showAllFiles ? this.files : this.files.slice(0, MAX_ROWS);
+		},
 		changed() {
 			const s = this.state;
 			return (
@@ -144,7 +197,22 @@ export default defineComponent({
 	},
 	methods: {
 		formatSize,
+		handleDownloadClick,
+		downloadUrl(name: string) {
+			return `./api/logfile/files/${name}`;
+		},
+		// local date, the file being written (from the server) with a note
+		dayLabel(f: LogFileEntry) {
+			const [y, m, d] = f.day.split("-").map(Number);
+			const date = new Intl.DateTimeFormat(this.$i18n?.locale, {
+				day: "2-digit",
+				month: "2-digit",
+				year: "numeric",
+			}).format(new Date(y, m - 1, d));
+			return f.current ? `${date} (${this.$t("logFile.today")})` : date;
+		},
 		async open() {
+			this.showAllFiles = false;
 			this.saving = false;
 			this.error = "";
 			try {

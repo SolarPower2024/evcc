@@ -2051,6 +2051,7 @@
     "daysLabel": "Retention",
     "daysUnit": "days",
     "description": "Writes the log to daily files, older ones are compressed. In the add-on readable via the Samba share under addon_configs. At most 1 GB.",
+    "download": "Download",
     "enabledLabel": "Write log file",
     "failed": "Error",
     "files": "Files",
@@ -2058,9 +2059,13 @@
     "invalid": "Invalid setting.",
     "invalidDays": "Retention: whole days from {min} to {max}.",
     "levelLabel": "Level",
+    "list": "Files",
+    "noFiles": "No files.",
     "off": "off",
+    "showAll": "Show all",
     "size": "Size",
-    "title": "Log file"
+    "title": "Log file",
+    "today": "today"
   },
   "loginModal": {
     "cancel": "Cancel",

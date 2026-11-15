@@ -327,6 +327,19 @@ export interface LmConfigLoadpoint {
   phaseScale1pDelay?: number; // ns before scaling down, 0/empty = disable delay
 }
 
+/** A file of the log folder, see util/logstash/file_list_custom.go. */
+export interface LogFileEntry {
+  name: string;
+  /** YYYY-MM-DD */
+  day: string;
+  /** Bytes. */
+  size: number;
+  /** Packed, a day before. */
+  gz: boolean;
+  /** The file being written now, none while the log file is off. */
+  current: boolean;
+}
+
 /** Log file setting and state, see core/site_logfile.go. */
 export interface LogFileState {
   enabled: boolean;
@@ -339,6 +352,8 @@ export interface LogFileState {
   files: number;
   /** Bytes of all files. */
   size: number;
+  /** The files of the folder, newest first. */
+  list: LogFileEntry[];
   /** Why the file is off, empty = none. */
   error?: string;
 }

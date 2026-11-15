@@ -1185,17 +1185,33 @@ info while the file gets debug.
   run: logged once as an error (console and log page) and shown in the dialog. The
   setting stays on, the next start tries again. A failing file never stops
   the control loop
+- the dialog lists the files of the folder (also with the log file switched off,
+  as long as there is a folder): date (the file being written marked "heute", from the server), size and a download link,
+  newest first, 7 rows and "Alle anzeigen" for more. The list is part of the GET
+  answer (`list`) and loads with the dialog and after saving. No delete: the
+  retention and the 1 GB limit clean up
+- the download streams the file as it lies: today's as `text/plain` after a
+  flush of the buffer, limited to the size at opening so a growing file ends
+  cleanly; the days before as `application/gzip` (`.log.gz`), not unpacked. Only
+  names of the file pattern, no path part, and only a regular file in the folder
+  (no symlink), everything else is a 404. Like the other log file routes it needs
+  a login (`customConfigRoutes`). Without any Content-Encoding, also for a client that
+  accepts gzip (Firefox does not unpack a transport layer around a `.gz`, the file
+  would be packed twice): the hook `api.Use(noCompressLogFiles)` in
+  `RegisterSiteHandlers` removes the request's Accept-Encoding for these paths
+  before evcc's compression, Content-Length is the file's size
 
 ```
-GET  /api/logfile   {enabled, level, days, dir, files, size, error}
+GET  /api/logfile   {enabled, level, days, dir, files, size, list: [{name, day, size, gz, current}], error}
 POST /api/logfile   json body {enabled, level, days}, answers like GET
+GET  /api/logfile/files/{name}   download of evcc-YYYY-MM-DD.log or .log.gz
 ```
 
 The output sits between the loggers and the buffer (`logstash.Output`, hook in
 `util/log.go`), the buffer and the log page stay as they are. evcc PR 32018 (open)
 changes the logger underneath `util/log.go`; then the hook has to be set again and
 checked whether evcc brings a file output itself. See `util/logstash/file_custom.go`,
-`core/site_logfile.go`.
+`util/logstash/file_list_custom.go` (list and download), `core/site_logfile.go`.
 
 ## 19. Snow on PV
 
@@ -1395,7 +1411,7 @@ in a running evcc) they answer 401. The ui opens the login on a 401 by itself.
 | List | Routes |
 |---|---|
 | `customOperateRoutes` (open): switches, actions, soc thresholds of the main and battery page | `batterysocgridcharge`, `batterysocgridchargestart`, `batterysocgridchargestop`, `batterygridchargeonce`, `batterygridchargeonceuntil`, `batterygridchargeoncecancel`, `lmprofileapply`, `snowcover`, `snowauto`, `peakshaving`, `peakshavingreserve`, `peakshavingevents`, `feedinsplit` |
-| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `importeegentity(delete)`, `logfile`, `logfileset`, `peakshavinglimit`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
+| `customConfigRoutes` (login or api key): limits, entities, circuits, tariffs, profiles, files, priorities | `lmpriority`, `lmshedguard`, `lmshedprotect`, `batteryidentuse`, `batterygridchargemode`, `lmadvanced`, `lmexportforecast(delete)`, `lmhomeprofile` (POST, DELETE, csv), `lmprofile(delete)`, `feedineegentity(delete)`, `importeegentity(delete)`, `logfile`, `logfileset`, `logfiledownload`, `peakshavinglimit`, `peaktariff`, `peakshavingchargepower`, `peakshavingbatterytype`, `peakshavingcircuit(delete)` and the `peakshaving…entity` routes (entity, manual, mode, protswitch, protlimit, protsoc, charge, energy, each with delete) |
 
 ## Upstream touch points
 
@@ -1422,7 +1438,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `server/http_config_helper.go` | `customTestResults` in `testInstance`: the config page shows the switch of each stage of a heater in stages (`server/http_config_custom.go`) |
-| `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes and the feed-in routes of the debug area (`server/http_custom_db.go`; `GET`/`DELETE /api/db/metrics/feedin?from&to`, preview and set to 0, admin password like evcc's deletion routes; `TestFeedInRoutes`), a colliding route is left out and logged |
+| `server/http.go` | `addCustomSiteRoutes`: `api.Use(noCompressLogFiles)` before `handlers.CompressHandler` keeps the log file downloads uncompressed (`TestLogFileDownloadNotCompressed`); a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes and the feed-in routes of the debug area (`server/http_custom_db.go`; `GET`/`DELETE /api/db/metrics/feedin?from&to`, preview and set to 0, admin password like evcc's deletion routes; `TestFeedInRoutes`), a colliding route is left out and logged |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection; `gridChargeVisible` passes evcc's own condition through `priceCardVisible` (`utils/gridChargeMode.ts`): the price card is hidden for grid charging by soc only; the soc card has a `v-if` (`socCardShown`) and, like one-time charging, needs a battery that offers the charge mode (`chargeSupported`) and one-time charging a card of its own (`BatteryGridChargeOnceCard`) for price only; contract test: `utils/gridChargeMode.test.ts` and `TestForkHooksInPlace` |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
@@ -1457,7 +1473,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | battery identification | `core/site_battery_ident.go`, `core/metrics/slots_custom.go` |
 | EEG | `core/site_feedin_eeg.go`, `core/site_import_eeg.go`, `core/metrics/feedin_eeg_custom.go`, `assets/js/components/Energy/feedInEeg.ts` |
 | peak from the circuit meter | `core/site_peak_circuit.go`, `core/metrics/grid_peak_custom.go` |
-| log file | `util/logstash/file_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
+| log file | `util/logstash/file_custom.go`, `util/logstash/file_list_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | split grid tariff | `templates/definition/tariff/fixed-netz.yaml`, `tariff/fixed_netz_test.go`, `assets/js/utils/lmGridTariff.ts`, `assets/js/components/Config/GridFeeZonesField.vue`, `GridFeeZoneForm.vue`, `GridFeeZoneSummary.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
