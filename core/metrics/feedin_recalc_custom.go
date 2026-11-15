@@ -4,7 +4,7 @@ package metrics
 // time range from the energy balance of each slot, for a feed-in that was stored
 // wrong (e.g. the export sensor of the grid meter held the import sensor):
 //
-//	feed-in = max(0, PV + battery discharge + import - home - battery charge - loadpoints)
+//	feed-in = max(0, min(PV + discharge, PV + discharge + import - home - charge - loadpoints))
 //
 // All summands are measured independent of the export sensor. Only the feed-in of
 // the grid meter's existing slots changes, the EEG counter, a separate meter, stays.
@@ -22,9 +22,12 @@ import (
 // feedInEpsilon: smaller balances and remainders are 0
 const feedInEpsilon = 1e-9
 
-// balanceFeedIn is the feed-in of a slot from its balance
+// balanceFeedIn is the feed-in of a slot from its balance. Only production and
+// battery discharge can be fed in: without them (at night) the small difference
+// between the metered import and the home consumption, worked out from powers,
+// would add up to a feed-in that never happened.
 func balanceFeedIn(s flowSlot) float64 {
-	v := s.PV + s.BatOut + s.GridIn - s.Home - s.BatIn - s.Loadpoint
+	v := min(s.PV+s.BatOut, s.PV+s.BatOut+s.GridIn-s.Home-s.BatIn-s.Loadpoint)
 	if v < feedInEpsilon {
 		return 0
 	}

@@ -131,3 +131,22 @@ func TestRecalcFeedInNotToday(t *testing.T) {
 	_, err = RecalcFeedIn(midnight.AddDate(0, 0, -1), midnight)
 	assert.NoError(t, err)
 }
+
+// TestBalanceFeedIn: the balance of one slot, never more than production and
+// battery discharge, so the metering difference at night is no feed-in
+func TestBalanceFeedIn(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		s    flowSlot
+		want float64
+	}{
+		{"surplus", flowSlot{PV: 3, GridIn: 0.2, Home: 1, BatIn: 0.5}, 1.7},
+		{"loadpoint", flowSlot{PV: 3, Home: 1, Loadpoint: 1.5}, 0.5},
+		{"battery to grid", flowSlot{BatOut: 2, Home: 0.5}, 1.5},
+		{"deficit", flowSlot{PV: 1, GridIn: 0.5, Home: 2}, 0},
+		{"night metering difference", flowSlot{GridIn: 0.115, Home: 0.112}, 0},
+		{"capped by production", flowSlot{PV: 0.2, GridIn: 1, Home: 0.5}, 0.2},
+	} {
+		assert.InDelta(t, tc.want, balanceFeedIn(tc.s), 1e-9, tc.name)
+	}
+}

@@ -1359,12 +1359,13 @@ feed-in routes the admin password like evcc's own deletion routes (`api/db`).
   range, password and preview as "Delete feed-in" (the section shares the date fields), the preview
   shows "Einspeisung alt → neu, Erlös alt → neu" and changes nothing (pure calculation, the write is
   one transaction). Per stored grid slot the feed-in becomes
-  `max(0, PV + battery discharge + import - home - battery charge - loadpoints)` (battery:
+  `max(0, min(PV + battery discharge, PV + battery discharge + import - home - battery charge - loadpoints))`,
+  capped by production and discharge so the metering difference at night is no feed-in (battery:
   `energy` is the charge, `return_energy` the discharge; loadpoints: sum of the group, home
   excludes them); remainders below 1e-9 are 0, with several grid meters in a slot the first takes
   the value, the others 0. Only `return_energy` of the grid changes, no slot is created; the EEG
   counter stays (unlike the deletion), the revenue, EEG split and flow follow. Cannot be undone,
-  download a backup first. Tests `TestRecalcFeedIn`, `TestRecalcFeedInNotToday`, `TestFeedInRecalcRoutes`.
+  download a backup first. Tests `TestRecalcFeedIn`, `TestBalanceFeedIn`, `TestRecalcFeedInNotToday`, `TestFeedInRecalcRoutes`.
 - **Clear event list** (`DELETE /api/lmevents`): empties the event log of the peak shaving dialog
   and what is stored (`TestClearLmEvents`).
 - **Lift shed locks** (`POST /api/lmguardrelease`, count: `GET /api/lmguardcount`, off without a
