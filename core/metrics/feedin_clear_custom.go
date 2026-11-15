@@ -1,7 +1,7 @@
 package metrics
 
 // Custom extension: Konfiguration → System → Debug sets the feed-in of a time
-// range to 0 kWh, for readings that were wrong. Only the feed-in of the grid
+// range to 0 kWh, for readings that were wrong, up to yesterday. Only the feed-in of the grid
 // meter's slots changes, the draw and all other meters stay as stored, the home
 // consumption with them. Revenue, the EEG split and the energy flow are worked out
 // from the feed-in when they are asked for (return_cost in QueryEnergy, the EEG
@@ -10,6 +10,7 @@ package metrics
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/evcc-io/evcc/db"
@@ -17,12 +18,22 @@ import (
 )
 
 // feedInRange checks the range of the feed-in functions
+// ErrFeedInRange is returned for a range that cannot be taken
+var ErrFeedInRange = errors.New("invalid range")
+
 func feedInRange(from, to time.Time) error {
 	if from.IsZero() || to.IsZero() {
-		return errors.New("missing from/to")
+		return fmt.Errorf("%w: missing from/to", ErrFeedInRange)
 	}
 	if !to.After(from) {
-		return errors.New("'to' must be after 'from'")
+		return fmt.Errorf("%w: 'to' must be after 'from'", ErrFeedInRange)
+	}
+
+	// the slots of today are still being stored: what they bring after the deletion
+	// would bring the feed-in back, so the latest day is yesterday
+	now := time.Now()
+	if to.After(time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())) {
+		return fmt.Errorf("%w: today is not over yet", ErrFeedInRange)
 	}
 	return nil
 }

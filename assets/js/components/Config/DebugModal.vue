@@ -24,7 +24,7 @@
 						v-model="from"
 						type="date"
 						class="form-control"
-						:max="today"
+						:max="latest"
 						data-testid="debug-feedin-from"
 						@change="rangeChanged"
 					/>
@@ -39,7 +39,7 @@
 						type="date"
 						class="form-control"
 						:min="from"
-						:max="today"
+						:max="latest"
 						data-testid="debug-feedin-to"
 						@change="rangeChanged"
 					/>
@@ -135,6 +135,12 @@ type Section = "peakReset" | "feedIn" | "events" | "guard";
 // nor raises a message for a wrong password
 const validateStatus = (code: number) => [200, 204, 400, 401, 403].includes(code);
 
+// The latest day to delete: today is still being stored, see core/metrics/feedin_clear_custom.go
+const yesterday = () => {
+	const d = new Date();
+	return new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
+};
+
 const pad = (n: number) => String(n).padStart(2, "0");
 const dayString = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
@@ -156,9 +162,9 @@ export default defineComponent({
 	mixins: [formatter],
 	data() {
 		return {
-			today: dayString(new Date()),
-			from: dayString(new Date()),
-			to: dayString(new Date()),
+			latest: dayString(yesterday()),
+			from: dayString(yesterday()),
+			to: dayString(yesterday()),
 			confirming: "" as Section | "",
 			done: "" as Section | "",
 			busy: false,
@@ -181,7 +187,7 @@ export default defineComponent({
 			return this.fmtW(store.state?.gridPeakBaseline ?? 0);
 		},
 		rangeValid(): boolean {
-			return !!this.from && !!this.to && this.from <= this.to && this.to <= this.today;
+			return !!this.from && !!this.to && this.from <= this.to && this.to <= this.latest;
 		},
 		sections(): { name: Section; description: string; enabled: boolean }[] {
 			const t = (key: string, p: Record<string, unknown> = {}) =>
@@ -207,8 +213,8 @@ export default defineComponent({
 			return `${this.fmtMoney(amount, this.currency)} ${this.fmtCurrencySymbol(this.currency)}`;
 		},
 		open() {
-			this.today = dayString(new Date());
-			this.from = this.to = this.today;
+			this.latest = dayString(yesterday());
+			this.from = this.to = this.latest;
 			this.reset();
 			this.done = "";
 			this.loadGuardCount();

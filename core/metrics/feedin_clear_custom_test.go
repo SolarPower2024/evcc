@@ -100,3 +100,24 @@ func TestClearFeedIn(t *testing.T) {
 	_, _, err = FeedInSummary(time.Time{}, to)
 	assert.Error(t, err)
 }
+
+// TestFeedInNotToday: a range reaching into today is refused, yesterday is the
+// latest day: the slots stored afterwards would bring the feed-in back
+func TestFeedInNotToday(t *testing.T) {
+	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	require.NoError(t, SetupSchema())
+
+	now := time.Now()
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	_, err := ClearFeedIn(midnight.AddDate(0, 0, -1), midnight.Add(time.Hour))
+	assert.ErrorIs(t, err, ErrFeedInRange)
+	_, _, err = FeedInSummary(midnight.AddDate(0, 0, -1), midnight.AddDate(0, 0, 1))
+	assert.ErrorIs(t, err, ErrFeedInRange)
+
+	// up to the end of yesterday
+	_, err = ClearFeedIn(midnight.AddDate(0, 0, -1), midnight)
+	assert.NoError(t, err)
+	_, _, err = FeedInSummary(midnight.AddDate(0, 0, -1), midnight)
+	assert.NoError(t, err)
+}
