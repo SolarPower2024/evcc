@@ -110,7 +110,7 @@ func feedInSummaryHandler(w http.ResponseWriter, r *http.Request) {
 
 	energy, revenue, err := metrics.FeedInSummary(from, to)
 	if err != nil {
-		jsonError(w, http.StatusBadRequest, err)
+		jsonError(w, feedInStatus(err), err)
 		return
 	}
 
@@ -133,7 +133,7 @@ func deleteFeedInHandler(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := metrics.ClearFeedIn(from, to)
 	if err != nil {
-		jsonError(w, http.StatusBadRequest, err)
+		jsonError(w, feedInStatus(err), err)
 		return
 	}
 
@@ -141,4 +141,12 @@ func deleteFeedInHandler(w http.ResponseWriter, r *http.Request) {
 	util.ResetCached()
 
 	jsonWrite(w, deleteResult{rows})
+}
+
+// feedInStatus is 400 for a range that cannot be taken, 500 for a failing database
+func feedInStatus(err error) int {
+	if errors.Is(err, metrics.ErrFeedInRange) {
+		return http.StatusBadRequest
+	}
+	return http.StatusInternalServerError
 }

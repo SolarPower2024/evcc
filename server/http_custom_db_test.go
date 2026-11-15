@@ -203,3 +203,32 @@ func TestFeedInRoutes(t *testing.T) {
 	code, _ = call(http.MethodDelete, pw, 2, 0)
 	assert.Equal(t, http.StatusBadRequest, code)
 }
+
+// TestFeedInRoutesDatabaseError: a failing database is a 500, an invalid range a 400
+func TestFeedInRoutesDatabaseError(t *testing.T) {
+	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	require.NoError(t, metrics.SetupSchema())
+
+	r := mux.NewRouter()
+	for _, rt := range customDbRoutes() {
+		r.Methods(rt.Method).Path(rt.Pattern).Handler(rt.HandlerFunc)
+	}
+
+	base := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+	call := func(method string, from, to time.Time) int {
+		q := url.Values{"from": {from.Format(time.RFC3339)}, "to": {to.Format(time.RFC3339)}}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(method, "/metrics/feedin?"+q.Encode(), nil))
+		return w.Code
+	}
+
+	for _, method := range []string{http.MethodGet, http.MethodDelete} {
+		assert.Equal(t, http.StatusBadRequest, call(method, base.Add(time.Hour), base), method+" invalid range")
+		assert.Equal(t, http.StatusBadRequest, call(method, base, time.Now().AddDate(0, 0, 1)), method+" today")
+	}
+
+	require.NoError(t, db.Instance.Migrator().DropTable("meters"))
+	for _, method := range []string{http.MethodGet, http.MethodDelete} {
+		assert.Equal(t, http.StatusInternalServerError, call(method, base, base.AddDate(0, 0, 1)), method+" database error")
+	}
+}
