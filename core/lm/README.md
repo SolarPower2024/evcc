@@ -1329,7 +1329,7 @@ feed-in routes the admin password like evcc's own deletion routes (`api/db`).
   bills the real peak. Tests `TestResetMonthPeak*`, `TestDailyPeakEnergySince`.
 - **Delete feed-in** (`GET`/`DELETE /api/db/metrics/feedin?from&to`, `core/metrics/feedin_clear_custom.go`):
   the dialog takes a first and a last day (local time, last day at most yesterday; the client sends
-  `[first 00:00, last + 1 day 00:00)`), asks for the admin password and shows what is removed
+  `[first 00:00, last + 1 day 00:00)`), asks for the admin password and shows what is removed (a missing login is told before anything is sent, a 200 always ends in "Erledigt"; `utils/debugFeedIn.ts`)
   ("Einspeisung 23,4 kWh, Erlös 1,87 €", the numbers of the energy view, nothing changes), then
   sets `return_energy` of the grid meter's slots to 0. The revenue, the EEG split and the energy
   flow are worked out from it, so they follow; draw, home consumption and the prices stay. The

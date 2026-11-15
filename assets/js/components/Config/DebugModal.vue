@@ -128,6 +128,7 @@ import store from "@/store";
 import api from "@/api";
 import { isLoggedIn } from "../Auth/auth";
 import type { FeedInSummary } from "@/types/evcc-lm";
+import { feedInAnswer, loginMissing } from "@/utils/debugFeedIn";
 
 type Section = "peakReset" | "feedIn" | "events" | "guard";
 
@@ -282,6 +283,12 @@ export default defineComponent({
 		},
 		// the preview first, the second submit sets the feed-in to 0
 		async feedIn() {
+			// checked before sending, a deletion that went through must not end in a hint
+			if (loginMissing(isLoggedIn(), this.authDisabled)) {
+				this.iframeHint = true;
+				return;
+			}
+
 			const params = { from: dayStart(this.from), to: dayStart(this.to, 1) };
 			const headers = { "X-Admin-Password": this.password };
 			const config = { params, headers, validateStatus };
@@ -290,16 +297,13 @@ export default defineComponent({
 				? await api.delete("/db/metrics/feedin", config)
 				: await api.get("/db/metrics/feedin", config);
 
-			if (res.status === 401 || res.status === 403) {
+			const answer = feedInAnswer(res.status);
+			if (answer === "password") {
 				this.passwordError = this.$t("loginModal.invalid");
 				return;
 			}
-			if (res.status === 400) {
+			if (answer === "error") {
 				this.error = res.data?.error || "";
-				return;
-			}
-			if (!isLoggedIn() && !this.authDisabled) {
-				this.iframeHint = true;
 				return;
 			}
 
