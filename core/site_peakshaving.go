@@ -34,6 +34,7 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/evcc-io/evcc/api"
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/core/metrics"
 	"github.com/evcc-io/evcc/core/lm"
 	"github.com/evcc-io/evcc/core/peak"
 	"github.com/evcc-io/evcc/db/settings"
@@ -66,6 +67,7 @@ type peakState struct {
 	resetAt        time.Time // the month's peak was reset then, see site_peak_reset.go
 	resetPeak      float64   // the highest quarter hour since then in W, what the battery's limit takes
 	resetPeakSaved float64   // resetPeak as stored
+	resetDays      metrics.PeakDays // the days since the reset, read and written by the site loop only
 
 	shaving  bool // hysteresis state: below the reserve
 	covering bool // covering a peak right now, for the event log

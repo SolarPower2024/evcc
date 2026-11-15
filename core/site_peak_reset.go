@@ -67,19 +67,14 @@ func (site *Site) ResetMonthPeak() error {
 	return nil
 }
 
-// peakAfterReset takes the days of the month's peak, from the quarter hours since
-// the reset if there was one this month, the days before it empty
-func (site *Site) peakAfterReset(c *metrics.Collector, energy []*float64) []*float64 {
+// gridPeakEnergy is the collector's DailyPeakEnergy, from the quarter hours since the
+// reset if there was one this month (the days before it empty): one query per slot,
+// never both. Called from the site loop only (the cache is not locked).
+func (site *Site) gridPeakEnergy(c *metrics.Collector) ([]*float64, error) {
 	at := site.peakResetAt()
 	if at.IsZero() || at.Local().Format("2006-01") != site.peak().clock.Now().Local().Format("2006-01") {
-		return energy
+		return c.DailyPeakEnergy()
 	}
 
-	days, err := c.DailyPeakEnergySince(at)
-	if err != nil {
-		site.log.ERROR.Printf("grid peak since reset: %v", err)
-		return energy
-	}
-
-	return days
+	return c.DailyPeakEnergySince(at, &site.peak().resetDays)
 }

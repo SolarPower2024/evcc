@@ -1318,7 +1318,7 @@ feed-in routes the admin password like evcc's own deletion routes (`api/db`).
 
 - **Reset the month's peak** (`POST /api/peakreset`, `ResetMonthPeak` in `core/site_peak_reset.go`):
   the quarter hours of the running month up to now no longer count. evcc's grid peak limit
-  (the days of the month's peak, `peakAfterReset` through the hook in `site_gridpeak.go`)
+  (the days of the month's peak, `gridPeakEnergy` through the hook in `site_gridpeak.go`)
   and the battery's limit fall back, so the limits are the one set in *Externe Begrenzung →
   Netzbezugsspitze* again. The battery's limit takes the highest quarter hour since the reset
   (`resetPeak`, raised when a window completes, stored as `peakResetPeak`). The peak statistics
@@ -1406,8 +1406,8 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site_battery.go` | `lmGateBatteryMode` in `updateBatteryMode` right after evcc decided the mode, before its §14a check (optimizer automatic mode; returns the mode unchanged without it) |
 | `core/site_circuits.go` | `circuitLoads()` instead of `loadpointsAsCircuitDevices()` (adds the battery) |
 | `core/site_load_predictor.go` | `homeProfileCustom` call in `homeProfile` |
-| `core/site_gridpeak.go` | `updateGridPeak` reads the collector through `gridPeakCollector` and takes the days after a reset of the month's peak from `peakAfterReset` (`core/site_peak_reset.go`) |
-| `core/metrics/stats.go` | `dailyPeakEnergy` takes a start (`since`) next to the slot: the quarter hours before a reset of the month's peak do not count; zero = the whole month as evcc (`DailyPeakEnergySince` in `peak_reset_custom.go`, contract test `TestDailyPeakEnergySince`; follows evcc's `dailyPeakEnergy`, see `watch.json`) |
+| `core/site_gridpeak.go` | `updateGridPeak` reads the collector through `gridPeakCollector` and gets the days of the month's peak from `gridPeakEnergy` (`core/site_peak_reset.go`: evcc's `DailyPeakEnergy`, or the quarter hours since a reset of the month's peak, one query per slot from the cache of the site, never both) |
+| `core/metrics/stats.go` | `dailyPeakEnergy` takes a start (`since`) next to the slot: the quarter hours before a reset of the month's peak do not count; zero = the whole month as evcc (`DailyPeakEnergySince` in `peak_reset_custom.go` with a cache of the caller, contract tests `TestDailyPeakEnergySince`, `TestDailyPeakEnergySinceCache`; follows evcc's `dailyPeakEnergy`, see `watch.json`) |
 | `assets/js/components/Config/HemsModal.vue` | `experimental` and `peakLimitAvailable` also on the static tab: the battery card links there |
 | `core/site_optimizer.go`, `site_optimizer_request.go`, `site_optimizer_result.go` | `optimizerGridTariff` for the grid price and `applyLmOptimizerInputs` where the request is assembled (`site_optimizer_request.go`), `lmOptimizerResult` after the solve (`site_optimizer.go`), `lmForecastLowest` for the forecast (`site_optimizer_result.go`) |
 | `core/site/api.go` | embeds `CustomAPI` |

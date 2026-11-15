@@ -94,7 +94,8 @@ func TestResetMonthPeak(t *testing.T) {
 	assert.InDelta(t, 3.0, *after[len(after)-1], 1e-9, "12 kW over a quarter hour")
 
 	// the quarter hours before the reset are left out in the days that are published
-	days := site.peakAfterReset(col, after)
+	days, err := site.gridPeakEnergy(col)
+	require.NoError(t, err)
 	require.Len(t, days, len(after))
 	for _, d := range days {
 		assert.Nil(t, d)
@@ -146,5 +147,28 @@ func TestResetMonthPeakLastMonth(t *testing.T) {
 
 	energy, err := col.DailyPeakEnergy()
 	require.NoError(t, err)
-	assert.Equal(t, energy, site.peakAfterReset(col, energy))
+	got, err := site.gridPeakEnergy(col)
+	require.NoError(t, err)
+	assert.Equal(t, energy, got)
+}
+
+// TestGridPeakEnergyOneQuery: with a reset there is one query per slot, from the
+// cache of the site, and evcc's own query does not run besides it
+func TestGridPeakEnergyOneQuery(t *testing.T) {
+	site, col, _ := resetSite(t)
+	require.NoError(t, site.ResetMonthPeak())
+
+	first, err := site.gridPeakEnergy(col)
+	require.NoError(t, err)
+
+	// the table is gone: only a cache can answer, evcc's DailyPeakEnergy would fail too
+	require.NoError(t, db.Instance.Migrator().DropTable("meters"))
+	again, err := site.gridPeakEnergy(col)
+	require.NoError(t, err)
+	assert.Equal(t, first, again)
+
+	// without a reset it is evcc's
+	site.peak().resetAt = time.Time{}
+	_, err = site.gridPeakEnergy(col)
+	assert.NoError(t, err, "evcc's cache of the slot")
 }
