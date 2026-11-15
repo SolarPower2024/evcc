@@ -551,8 +551,19 @@ func logFileDownloadHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	w.Header().Set("Cache-Control", "no-store")
 
-	// the api compresses for clients that accept it (evcc router middleware, the client unpacks that layer
-	// and keeps the file as it lies). Its ReadFrom would leave the Content-Length of the plain file standing,
-	// so copy through a plain writer.
-	_, _ = io.Copy(struct{ io.Writer }{w}, rc)
+	// delivered as it lies: noCompressLogFiles keeps evcc's api compression away, so Content-Length is true
+	_, _ = io.Copy(w, rc)
+}
+
+// noCompressLogFiles keeps the log file downloads out of the api compression: the
+// .log.gz must reach the disk as it lies, and not every browser unpacks a
+// transport layer around a .gz file (Firefox does not, the file would be packed twice).
+// It takes the Accept-Encoding of the request and has to run before handlers.CompressHandler.
+func noCompressLogFiles(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/logfile/files/") {
+			r.Header.Del("Accept-Encoding")
+		}
+		next.ServeHTTP(w, r)
+	})
 }

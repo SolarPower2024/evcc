@@ -193,6 +193,7 @@ func (s *HTTPd) RegisterSiteHandlers(site site.API) {
 	// api
 	api := router.PathPrefix("/api").Subrouter()
 	api.Use(jsonHandler)
+	api.Use(noCompressLogFiles) // custom: before the compression, see server/http_custom.go
 	api.Use(handlers.CompressHandler)
 	api.Use(handlers.CORS(
 		handlers.AllowedHeaders([]string{"Content-Type"}),

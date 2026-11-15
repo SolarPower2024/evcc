@@ -19,7 +19,6 @@ import (
 	"github.com/evcc-io/evcc/core/site"
 	"github.com/evcc-io/evcc/util/auth"
 	"github.com/evcc-io/evcc/util/logstash"
-	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -445,56 +444,59 @@ func TestLmEnabledRouteGone(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-// TestLogFileDownload: today's file as text with the buffered lines, a day before as the .log.gz bytes
-// unchanged and without Content-Encoding, every other name is a 404
-// TestLogFileDownloadCompressed: behind the api compression, as in evcc, the client gets the same bytes after
-// the transport layer, and a client without gzip gets the file itself
-func TestLogFileDownloadCompressed(t *testing.T) {
+// TestLogFileDownloadNotCompressed pins the hook in RegisterSiteHandlers, in evcc's real route
+// table: even for a client that accepts gzip, the log files come without Content-Encoding, with
+// the Content-Length of the file and its bytes. Other api routes stay compressed.
+func TestLogFileDownloadNotCompressed(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "logs")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 
-	name := "evcc-" + time.Now().AddDate(0, 0, -1).Format("2006-01-02") + ".log.gz"
 	var packed bytes.Buffer
 	zw := gzip.NewWriter(&packed)
 	_, _ = zw.Write([]byte(strings.Repeat("a log line\n", 500)))
 	require.NoError(t, zw.Close())
-	require.NoError(t, os.WriteFile(filepath.Join(dir, name), packed.Bytes(), 0o644))
 
-	t.Cleanup(func() { _, _ = logstash.SetFile(logstash.DefaultFileConfig) })
-	_, err := logstash.SetFile(logstash.FileConfig{Level: "info", Days: 7, Dir: dir})
+	yesterday := "evcc-" + time.Now().AddDate(0, 0, -1).Format("2006-01-02") + ".log.gz"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, yesterday), packed.Bytes(), 0o644))
+
+	t.Cleanup(func() { _, _ = logstash.SetFile(logstash.DefaultFileConfig); customAuth.Store(nil) })
+	_, err := logstash.SetFile(logstash.FileConfig{Enabled: true, Level: "info", Days: 7, Dir: dir})
 	require.NoError(t, err)
 
-	r := mux.NewRouter()
-	r.Use(handlers.CompressHandler)
-	r.Methods(http.MethodGet).Path("/logfile/files/{name}").HandlerFunc(logFileDownloadHandler)
+	site := core.NewSite()
+	setCustomAuth(fakeAuth{mode: auth.Disabled})
 
-	get := func(encoding string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodGet, "/logfile/files/"+name, nil)
-		if encoding != "" {
-			req.Header.Set("Accept-Encoding", encoding)
-		}
+	httpd := NewHTTPd("127.0.0.1:0", nil, Customization{})
+	httpd.RegisterSiteHandlers(site)
+
+	get := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Accept-Encoding", "gzip, deflate")
 		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
+		httpd.Server.Handler.ServeHTTP(w, req)
 		return w
 	}
 
-	w := get("")
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Empty(t, w.Header().Get("Content-Encoding"))
-	assert.Equal(t, packed.Bytes(), w.Body.Bytes())
-	assert.Equal(t, strconv.Itoa(packed.Len()), w.Header().Get("Content-Length"))
+	today := "evcc-" + time.Now().Format("2006-01-02") + ".log"
+	for _, name := range []string{yesterday, today} {
+		w := get("/api/logfile/files/" + name)
+		require.Equal(t, http.StatusOK, w.Code, name)
+		assert.Empty(t, w.Header().Get("Content-Encoding"), name)
+		assert.Equal(t, strconv.Itoa(w.Body.Len()), w.Header().Get("Content-Length"), name)
 
-	w = get("gzip")
+		onDisk, err := os.ReadFile(filepath.Join(dir, name))
+		require.NoError(t, err)
+		assert.Equal(t, onDisk, w.Body.Bytes(), name)
+	}
+
+	// counter check: another api route is still compressed
+	w := get("/api/logfile")
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "gzip", w.Header().Get("Content-Encoding"), "evcc compression, undone by the client")
-	assert.Empty(t, w.Header().Get("Content-Length"), "the plain file length would be wrong")
-	zr, err := gzip.NewReader(w.Body)
-	require.NoError(t, err)
-	got, err := io.ReadAll(zr)
-	require.NoError(t, err)
-	assert.Equal(t, packed.Bytes(), got)
+	assert.Equal(t, "gzip", w.Header().Get("Content-Encoding"))
 }
 
+// TestLogFileDownload: today's file as text with the buffered lines, a day before as the .log.gz bytes
+// unchanged and without Content-Encoding, every other name is a 404
 func TestLogFileDownload(t *testing.T) {
 	r := mux.NewRouter()
 	for _, rt := range customSiteRoutes(core.NewSite()) {

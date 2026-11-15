@@ -1195,9 +1195,11 @@ info while the file gets debug.
   cleanly; the days before as `application/gzip` (`.log.gz`), not unpacked. Only
   names of the file pattern, no path part, and only a regular file in the folder
   (no symlink), everything else is a 404. Like the other log file routes it needs
-  a login (`customConfigRoutes`). evcc's api compression applies to it as to every
-  route: a client that accepts gzip gets a transport layer on top, which it
-  removes again, the saved file is the `.log.gz` of the folder
+  a login (`customConfigRoutes`). Without any Content-Encoding, also for a client that
+  accepts gzip (Firefox does not unpack a transport layer around a `.gz`, the file
+  would be packed twice): the hook `api.Use(noCompressLogFiles)` in
+  `RegisterSiteHandlers` removes the request's Accept-Encoding for these paths
+  before evcc's compression, Content-Length is the file's size
 
 ```
 GET  /api/logfile   {enabled, level, days, dir, files, size, list: [{name, day, size, gz}], error}
@@ -1436,7 +1438,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `templates/definition/charger/homeassistant-switch.yaml` | `ratedpower` parameter |
 | `api/globalconfig/types.go`, `tariff/tariffs.go`, `cmd/setup.go`, `server/http_config_device_handler.go` | `feedInEeg` tariff: ref field, `Used`/`IsConfigured`, one `configureTariff` call, cleared on delete |
 | `server/http_config_helper.go` | `customTestResults` in `testInstance`: the config page shows the switch of each stage of a heater in stages (`server/http_config_custom.go`) |
-| `server/http.go` | `addCustomSiteRoutes`: a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes and the feed-in routes of the debug area (`server/http_custom_db.go`; `GET`/`DELETE /api/db/metrics/feedin?from&to`, preview and set to 0, admin password like evcc's deletion routes; `TestFeedInRoutes`), a colliding route is left out and logged |
+| `server/http.go` | `addCustomSiteRoutes`: `api.Use(noCompressLogFiles)` before `handlers.CompressHandler` keeps the log file downloads uncompressed (`TestLogFileDownloadNotCompressed`); a route colliding with an evcc route is left out and logged; `setCustomAuth(auth)` in `RegisterSystemHandler` hands the authentication to the fork's configuration routes (see [Rules](#rules)); `addCustomDbRoutes(routes)` in the `api/db` block adds the EEG price routes and the feed-in routes of the debug area (`server/http_custom_db.go`; `GET`/`DELETE /api/db/metrics/feedin?from&to`, preview and set to 0, admin password like evcc's deletion routes; `TestFeedInRoutes`), a colliding route is left out and logged |
 | `assets/js/views/App.vue` | mounts `LoadManagement/GlobalModals.vue` |
 | `assets/js/views/Battery.vue` | mounts the battery cards and the profile selection; `gridChargeVisible` passes evcc's own condition through `priceCardVisible` (`utils/gridChargeMode.ts`): the price card is hidden for grid charging by soc only; the soc card has a `v-if` (`socCardShown`) and, like one-time charging, needs a battery that offers the charge mode (`chargeSupported`) and one-time charging a card of its own (`BatteryGridChargeOnceCard`) for price only; contract test: `utils/gridChargeMode.test.ts` and `TestForkHooksInPlace` |
 | `assets/js/views/Log.vue` | mounts `LogFile/LogFileButton.vue` next to the search field (`d-flex gap-2` on its column; beside the download button it did not fit on a phone); below `sm` the update and the search column get a row each (`col-12 col-sm-6`), so neither the update label nor the search is cut |
