@@ -749,6 +749,27 @@
     "lmdebug": {
       "confirm": "Wirklich ausführen?",
       "description": "Korrekturen für Fehlmessungen und Tests.",
+      "devTransfer": {
+        "applied": "Aus der Testversion übernommen: {date} – {items}",
+        "description": "Daten zwischen evcc custom und dieser Testversion austauschen.",
+        "devices": "Geräte (ersetzt die Geräte von evcc custom)",
+        "devicesName": "Geräte",
+        "energy": "Energie-Statistik",
+        "notFound": "Datenbank von evcc custom nicht gefunden.",
+        "notTaken": "Daten von evcc custom noch nicht übernommen.",
+        "onlyOne": "Nur Geräte oder nur Einstellungen: Verweise zwischen beiden können fehlen.",
+        "peak": "Peak-Werte",
+        "restart_exit": "Danach beendet sich die Testversion. Der Watchdog des Add-ons oder du startest sie neu.",
+        "restart_supervisor": "Danach startet die Testversion von selbst neu.",
+        "return": "Daten an evcc custom zurückgeben",
+        "returnPreview": "Testzeit {from} – {to}: {sessions} Ladevorgänge, {slots} Viertelstunden, Peak-Werte {months} Monate. Vorher wird eine Sicherung angelegt.",
+        "sessions": "Ladevorgänge",
+        "settings": "Einstellungen (ersetzt die Einstellungen von evcc custom)",
+        "settingsName": "Einstellungen",
+        "takeover": "Daten von evcc custom übernehmen",
+        "takeoverPreview": "Datenbank von evcc custom (zuletzt geändert {date}). Die Daten der Testversion werden ersetzt, danach startet sie neu.",
+        "title": "Testversion"
+      },
       "done": "Erledigt.",
       "events": {
         "action": "Leeren",

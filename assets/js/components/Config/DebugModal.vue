@@ -144,6 +144,8 @@
 				</div>
 			</form>
 		</div>
+
+		<DebugDevTransfer ref="devTransfer" />
 	</GenericModal>
 </template>
 
@@ -151,6 +153,7 @@
 import { defineComponent } from "vue";
 import GenericModal from "../Helper/GenericModal.vue";
 import PasswordInput from "../Auth/PasswordInput.vue";
+import DebugDevTransfer from "./DebugDevTransfer.vue";
 import formatter from "@/mixins/formatter";
 import store from "@/store";
 import api from "@/api";
@@ -193,7 +196,7 @@ const dayStart = (day: string, plus = 0) => {
 // as the backup dialog does (api/db).
 export default defineComponent({
 	name: "DebugModal",
-	components: { GenericModal, PasswordInput },
+	components: { GenericModal, PasswordInput, DebugDevTransfer },
 	mixins: [formatter],
 	data() {
 		return {
@@ -260,6 +263,9 @@ export default defineComponent({
 			this.reset();
 			this.done = "";
 			this.loadGuardCount();
+			(
+				this.$refs["devTransfer"] as InstanceType<typeof DebugDevTransfer> | undefined
+			)?.load();
 		},
 		reset() {
 			this.confirming = "";

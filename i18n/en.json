@@ -749,6 +749,27 @@
     "lmdebug": {
       "confirm": "Really do this?",
       "description": "Corrections for faulty readings and tests.",
+      "devTransfer": {
+        "applied": "Taken over from the test version: {date} – {items}",
+        "description": "Exchange data between evcc custom and this test version.",
+        "devices": "Devices (replace those of evcc custom)",
+        "devicesName": "Devices",
+        "energy": "Energy statistics",
+        "notFound": "Database of evcc custom not found.",
+        "notTaken": "Data of evcc custom not taken over yet.",
+        "onlyOne": "Only devices or only settings: references between them may be missing.",
+        "peak": "Peak values",
+        "restart_exit": "Then the test version ends. The watchdog of the add-on or you start it again.",
+        "restart_supervisor": "Then the test version restarts by itself.",
+        "return": "Return data to evcc custom",
+        "returnPreview": "Test period {from} – {to}: {sessions} charging sessions, {slots} quarter hours, peak values {months} months. A backup is made first.",
+        "sessions": "Charging sessions",
+        "settings": "Settings (replace those of evcc custom)",
+        "settingsName": "Settings",
+        "takeover": "Take over data from evcc custom",
+        "takeoverPreview": "Database of evcc custom (last changed {date}). The data of the test version is replaced, then it restarts.",
+        "title": "Test version"
+      },
       "done": "Done.",
       "events": {
         "action": "Clear",
