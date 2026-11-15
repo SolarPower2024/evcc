@@ -327,7 +327,8 @@ export default defineComponent({
 
 			const confirmed = this.hasPreview;
 			const { method, url } = feedInRequest(name, confirmed);
-			const res = await api[method](url, config);
+			// one call for all methods: post takes a body before the config
+			const res = await api.request({ method, url, ...config });
 			const answer = feedInAnswer(res.status);
 			if (answer === "password") {
 				this.passwordError = this.$t("loginModal.invalid");
