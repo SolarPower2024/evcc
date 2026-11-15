@@ -141,10 +141,14 @@ type sessionKey struct {
 	created   int64
 }
 
-// slotTimes returns the number of distinct slots from since in schema
+// slotSince is the start of the quarter hour since lies in: the slot running
+// at that time is recorded in part by both sides, so it counts
+func slotSince(since time.Time) int64 { return since.Truncate(slot).Unix() }
+
+// slotCount returns the number of distinct slots from since on in schema
 func slotCount(ctx context.Context, q queryer, schema string, since time.Time) (int, error) {
 	var n int
-	err := q.QueryRowContext(ctx, "SELECT COUNT(DISTINCT ts) FROM "+tableOf(schema, "meters")+" WHERE ts >= ?", since.Unix()).Scan(&n)
+	err := q.QueryRowContext(ctx, "SELECT COUNT(DISTINCT ts) FROM "+tableOf(schema, "meters")+" WHERE ts >= ?", slotSince(since)).Scan(&n)
 	return n, err
 }
 

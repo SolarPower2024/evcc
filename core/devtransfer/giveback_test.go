@@ -234,3 +234,23 @@ func TestGiveBackReadings(t *testing.T) {
 	assert.InDelta(t, 50, meterReading(t, f.live, "pv"), 1e-9, "the test version recorded later")
 	assert.InDelta(t, 100, meterReading(t, f.live, "grid"), 1e-9, "the real one recorded later")
 }
+
+// TestGiveBackSinceInSlot: since is the creation of the last session, in the
+// middle of a quarter hour: the slot it lies in still comes over
+func TestGiveBackSinceInSlot(t *testing.T) {
+	f := newFixture(t)
+	require.NoError(t, writeSince(t0.Add(7*time.Minute)))
+
+	addSlot(t, f.dev, "grid", "grid", t0.Add(-slot), 1) // before
+	addSlot(t, f.dev, "grid", "grid", t0, 5)
+	exec(t, f.dev, "INSERT INTO tariffs (ts, grid) VALUES (?, 0.9)", t0.Unix())
+
+	sum, err := GetSummary(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, sum.Slots)
+
+	res, err := GiveBack(context.Background(), Items{Energy: true})
+	require.NoError(t, err)
+	assert.Equal(t, Counts{Slots: 1, Prices: 1}, res)
+	assert.Equal(t, 1, count(t, f.live, "SELECT COUNT(*) FROM meters WHERE ts = ? AND energy = 5", t0.Unix()))
+}

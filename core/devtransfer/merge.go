@@ -208,7 +208,7 @@ func mergeSlots(ctx context.Context, conn *sql.Conn, since time.Time) (int, erro
 			return_energy_meter = COALESCE((SELECT s.return_energy_meter FROM src.entities s WHERE s."group" = main.entities."group" AND s.name = main.entities.name), return_energy_meter)
 		WHERE (SELECT MAX(m.ts) FROM src.entities s JOIN src.meters m ON m.meter = s.id
 				WHERE s."group" = main.entities."group" AND s.name = main.entities.name AND m.ts >= ?)
-			> COALESCE((SELECT MAX(x.ts) FROM main.meters x WHERE x.meter = main.entities.id), 0)`, since.Unix()); err != nil {
+			> COALESCE((SELECT MAX(x.ts) FROM main.meters x WHERE x.meter = main.entities.id), 0)`, slotSince(since)); err != nil {
 		return 0, err
 	}
 
@@ -233,7 +233,7 @@ func mergeSlots(ctx context.Context, conn *sql.Conn, since time.Time) (int, erro
 		SELECT d.id, %s FROM src.meters s
 		JOIN src.entities se ON se.id = s.meter
 		JOIN main.entities d ON d."group" = se."group" AND d.name = se.name
-		WHERE s.ts >= ? AND NOT EXISTS (SELECT 1 FROM main.meters x WHERE x.meter = d.id AND x.ts = s.ts)`, mcols, prefixed), since.Unix())
+		WHERE s.ts >= ? AND NOT EXISTS (SELECT 1 FROM main.meters x WHERE x.meter = d.id AND x.ts = s.ts)`, mcols, prefixed), slotSince(since))
 	if err != nil {
 		return 0, err
 	}
@@ -252,7 +252,7 @@ func mergePrices(ctx context.Context, conn *sql.Conn, since time.Time) (int, err
 		}
 
 		res, err := conn.ExecContext(ctx, fmt.Sprintf(`INSERT INTO main.%[1]s (%[2]s) SELECT %[2]s FROM src.%[1]s s
-			WHERE s.ts >= ? AND NOT EXISTS (SELECT 1 FROM main.%[1]s d WHERE d.ts = s.ts)`, table, cols), since.Unix())
+			WHERE s.ts >= ? AND NOT EXISTS (SELECT 1 FROM main.%[1]s d WHERE d.ts = s.ts)`, table, cols), slotSince(since))
 		if err != nil {
 			return n, err
 		}
