@@ -26,6 +26,8 @@ var (
 	ErrNotFound = errors.New("database of evcc custom not found")
 	// ErrNotTaken is returned for giving back before the data was taken over
 	ErrNotTaken = errors.New("data of evcc custom not taken over yet")
+	// ErrRestored is returned if the take over failed after the data was replaced: the restart is due all the same
+	ErrRestored = errors.New("data taken over, but the database did not close cleanly")
 	// ErrLocked is returned if the real database is in use
 	ErrLocked = errors.New("database of evcc custom is locked")
 )

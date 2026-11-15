@@ -23,6 +23,12 @@ var Exit = func() {
 	}
 }
 
+// restore and closeDB are replaced in tests
+var (
+	restore = db.Restore
+	closeDB = db.Close
+)
+
 // Restart ways
 const (
 	RestartSupervisor = "supervisor"
@@ -93,7 +99,8 @@ func GetTakeoverInfo() (TakeoverInfo, error) {
 // with what this instance recorded since the real one stopped recording. The
 // copy goes through sqlite's backup, so it holds what a crash left in the log.
 // backup makes the local backup of the own database first. The database is closed
-// at the end, the caller flushes its answer and calls Restart.
+// at the end, the caller flushes its answer and calls Restart. An error that
+// wraps ErrRestored comes after the data was replaced: restart then as well.
 func Takeover(ctx context.Context, backup func(context.Context) error) error {
 	path, err := LivePath()
 	if err != nil {
@@ -131,16 +138,29 @@ func Takeover(ctx context.Context, backup func(context.Context) error) error {
 		return fmt.Errorf("merge: %w", err)
 	}
 
-	if err := db.Restore(ctx, tmp.Name()); err != nil {
-		return fmt.Errorf("restore: %w", err)
-	}
-
+	// the since file first: a restore that ran must never be without it. A failing
+	// restore leaves the state as it was.
+	old, hadSince := Since()
 	if err := writeSince(since); err != nil {
 		return err
 	}
 
-	// checkpoint the log into the file before the shutdown hooks run
-	return db.Close()
+	if err := restore(ctx, tmp.Name()); err != nil {
+		if hadSince {
+			_ = writeSince(old)
+		} else {
+			_ = os.Remove(sinceFile())
+		}
+		return fmt.Errorf("restore: %w", err)
+	}
+
+	// checkpoint the log into the file before the shutdown hooks run; the data is
+	// replaced already, so the caller restarts anyway
+	if err := closeDB(); err != nil {
+		return fmt.Errorf("%w: %v", ErrRestored, err)
+	}
+
+	return nil
 }
 
 // recorded returns the end of the recording of the database file

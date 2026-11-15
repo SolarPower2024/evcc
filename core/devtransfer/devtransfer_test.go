@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -354,4 +355,35 @@ func TestOutdated(t *testing.T) {
 	out, err = Outdated(context.Background())
 	require.NoError(t, err)
 	assert.False(t, out, "the give back is newer than the recording")
+}
+
+// TestTakeoverFailures: a failing restore leaves no since file behind, a failure
+// after it keeps the file and reports ErrRestored
+func TestTakeoverFailures(t *testing.T) {
+	f := newFixture(t)
+
+	oldRestore, oldClose := restore, closeDB
+	t.Cleanup(func() { restore, closeDB = oldRestore, oldClose })
+
+	restore = func(context.Context, string) error { return errors.New("restore failed") }
+	err := Takeover(context.Background(), nil)
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrRestored)
+	assert.NoFileExists(t, f.devPath+".since", "nothing was replaced")
+
+	// an earlier since stays as it was
+	require.NoError(t, writeSince(t0.Add(-time.Hour)))
+	require.Error(t, Takeover(context.Background(), nil))
+	since, ok := Since()
+	require.True(t, ok)
+	assert.Equal(t, t0.Add(-time.Hour).UnixNano(), since.UnixNano())
+
+	// the restore ran, the close failed
+	restore = func(context.Context, string) error { return nil }
+	closeDB = func() error { return errors.New("close failed") }
+	err = Takeover(context.Background(), nil)
+	assert.ErrorIs(t, err, ErrRestored)
+	since, ok = Since()
+	require.True(t, ok)
+	assert.Equal(t, t0.Unix(), since.Unix(), "the since file belongs to the restored data")
 }

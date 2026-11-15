@@ -12,6 +12,7 @@ import (
 
 	"github.com/evcc-io/evcc/core/devtransfer"
 	"github.com/evcc-io/evcc/db"
+	"github.com/evcc-io/evcc/util"
 )
 
 // devTransferRoutes are the routes of the exchange below api/db; the status is in
@@ -145,9 +146,13 @@ func devTransferTakeoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// after the restore the restart is due even if a later step failed
 	if err := devtransfer.Takeover(r.Context(), createLocalDatabaseBackup); err != nil {
-		jsonError(w, devTransferStatus(err), err)
-		return
+		if !errors.Is(err, devtransfer.ErrRestored) {
+			jsonError(w, devTransferStatus(err), err)
+			return
+		}
+		util.NewLogger("devtransfer").WARN.Printf("take over: %v", err)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
