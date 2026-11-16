@@ -53,7 +53,7 @@ func TestPlanRoom(t *testing.T) {
 		setPlanHome(site, 500)
 		site.updatePlanPower()
 
-		room, reason := site.planRoom(time.Time{})
+		room, reason := site.planRoom(time.Time{}, 3)
 		assert.Zero(t, room)
 		assert.Empty(t, reason)
 	})
@@ -64,7 +64,7 @@ func TestPlanRoom(t *testing.T) {
 		setPlanHome(site, repeat(500, 48)...)
 		site.updatePlanPower()
 
-		room, reason := site.planRoom(clk.Now().Add(6 * time.Hour))
+		room, reason := site.planRoom(clk.Now().Add(6*time.Hour), 3)
 		assert.InDelta(t, 6500, room, 1e-6)
 		assert.Equal(t, "peak", reason)
 	})
@@ -74,7 +74,7 @@ func TestPlanRoom(t *testing.T) {
 		setPeakLimit(site, 7000)
 		site.updatePlanPower()
 
-		room, reason := site.planRoom(time.Time{})
+		room, reason := site.planRoom(time.Time{}, 3)
 		assert.Equal(t, 7000.0, room)
 		assert.Equal(t, "peak", reason)
 	})
@@ -86,11 +86,11 @@ func TestPlanRoom(t *testing.T) {
 		site.updatePlanPower()
 
 		clk.Add(2*time.Hour + time.Minute)
-		room, _ := site.planRoom(time.Time{})
+		room, _ := site.planRoom(time.Time{}, 3)
 		assert.Equal(t, 7000.0, room)
 
 		clk.Add(-2 * time.Minute)
-		room, _ = site.planRoom(time.Time{})
+		room, _ = site.planRoom(time.Time{}, 3)
 		assert.InDelta(t, 6500, room, 1e-6, "forecast of 2 hours still counts")
 	})
 
@@ -101,24 +101,24 @@ func TestPlanRoom(t *testing.T) {
 		setPlanHome(site, append(repeat(2000, 16), repeat(500, 32)...)...)
 		site.updatePlanPower()
 
-		room, _ := site.planRoom(clk.Now().Add(4 * time.Hour))
+		room, _ := site.planRoom(clk.Now().Add(4*time.Hour), 3)
 		assert.InDelta(t, 5000, room, 1e-6, "only the high hours")
 
-		room, _ = site.planRoom(clk.Now().Add(8 * time.Hour))
+		room, _ = site.planRoom(clk.Now().Add(8*time.Hour), 3)
 		assert.InDelta(t, 5750, room, 1e-6, "mean of 4 h at 2000 and 4 h at 500")
 
 		// no plan time: the next 12 hours, 4 h at 2000 and 8 h at 500
-		room, _ = site.planRoom(time.Time{})
+		room, _ = site.planRoom(time.Time{}, 3)
 		assert.InDelta(t, 7000-(4*2000+8*500)/12.0, room, 1e-6)
 
 		// plan time passed: the same
-		room, _ = site.planRoom(clk.Now().Add(-time.Hour))
+		room, _ = site.planRoom(clk.Now().Add(-time.Hour), 3)
 		assert.InDelta(t, 7000-(4*2000+8*500)/12.0, room, 1e-6)
 
 		// the window starts now: the passed hour at 2000 W does not count
 		setPlanHome(site, append(repeat(2000, 4), repeat(500, 44)...)...)
 		clk.Add(time.Hour)
-		room, _ = site.planRoom(clk.Now().Add(2 * time.Hour))
+		room, _ = site.planRoom(clk.Now().Add(2*time.Hour), 3)
 		assert.InDelta(t, 6500, room, 1e-6)
 	})
 
@@ -128,7 +128,7 @@ func TestPlanRoom(t *testing.T) {
 		setPlanHome(site, repeat(9000, 48)...)
 		site.updatePlanPower()
 
-		room, reason := site.planRoom(time.Time{})
+		room, reason := site.planRoom(time.Time{}, 3)
 		assert.Equal(t, 1.0, room, "positive: 0 would mean no limit")
 		assert.Equal(t, "peak", reason)
 	})
@@ -138,13 +138,13 @@ func TestPlanRoom(t *testing.T) {
 		setPeakLimit(site, 7000)
 		setPlanHome(site, repeat(500, 48)...)
 		site.updatePlanPower()
-		before, _ := site.planRoom(time.Time{})
+		before, _ := site.planRoom(time.Time{}, 3)
 
 		site.peak().reserve = 80
 		site.peak().chargePower = 3000
 		site.peak().shaving = true
 		site.updatePlanPower()
-		after, _ := site.planRoom(time.Time{})
+		after, _ := site.planRoom(time.Time{}, 3)
 
 		assert.Equal(t, before, after)
 	})
@@ -168,8 +168,18 @@ func TestPlanRoomMainCircuit(t *testing.T) {
 		site, _ := planSite(t)
 		site.updatePlanPower()
 
-		room, reason := site.planRoom(time.Time{})
+		room, reason := site.planRoom(time.Time{}, 3)
 		assert.InDelta(t, 13800, room, 1e-6)
+		assert.Equal(t, "circuit", reason)
+	})
+
+	t.Run("current limit on 1 phase", func(t *testing.T) {
+		rootCircuit(t, 25, 0)
+		site, _ := planSite(t)
+		site.updatePlanPower()
+
+		room, reason := site.planRoom(time.Time{}, 1)
+		assert.InDelta(t, 5750, room, 1e-6)
 		assert.Equal(t, "circuit", reason)
 	})
 
@@ -179,7 +189,7 @@ func TestPlanRoomMainCircuit(t *testing.T) {
 		setPeakLimit(site, 7000)
 		site.updatePlanPower()
 
-		room, reason := site.planRoom(time.Time{})
+		room, reason := site.planRoom(time.Time{}, 3)
 		assert.Equal(t, 7000.0, room)
 		assert.Equal(t, "peak", reason)
 	})
@@ -191,7 +201,7 @@ func TestPlanRoomMainCircuit(t *testing.T) {
 		setPlanHome(site, repeat(500, 48)...)
 		site.updatePlanPower()
 
-		room, reason := site.planRoom(time.Time{})
+		room, reason := site.planRoom(time.Time{}, 3)
 		assert.InDelta(t, 5500, room, 1e-6)
 		assert.Equal(t, "circuit", reason)
 	})
@@ -213,7 +223,7 @@ func TestPlanPowerParallel(t *testing.T) {
 	}()
 
 	for range 500 {
-		site.planRoom(time.Time{})
+		site.planRoom(time.Time{}, 3)
 	}
 	<-done
 }

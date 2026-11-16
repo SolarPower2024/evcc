@@ -13,6 +13,7 @@ import (
 
 	"github.com/benbjohnson/clock"
 	"github.com/evcc-io/evcc/core/circuit"
+	"github.com/evcc-io/evcc/util/grid"
 	optimizer "github.com/evcc-io/optimizer/client"
 )
 
@@ -37,10 +38,11 @@ type planPowerState struct {
 	mu    sync.Mutex
 	clock clock.Clock // for tests, nil = real time
 
-	limit     float64        // peak limit in W, 0 = none
-	rootPower float64        // limit of the main circuit in W (current on 3 phases), 0 = none
-	home      []planHomeSlot // home forecast of the last optimizer request
-	homeAt    time.Time      // time of that request
+	limit       float64        // peak limit in W, 0 = none
+	rootPower   float64        // power limit of the main circuit in W, 0 = none
+	rootCurrent float64        // current limit of the main circuit in A, 0 = none
+	home        []planHomeSlot // home forecast of the last optimizer request
+	homeAt      time.Time      // time of that request
 }
 
 // planPower returns the state of the charge planner's inputs
@@ -63,14 +65,14 @@ func (site *Site) updatePlanPower() {
 	limit := p.limit
 	p.mu.Unlock()
 
-	var root float64
+	var power, current float64
 	if c := circuit.Root(); c != nil {
-		root = circuitLimit(c, 3)
+		power, current = c.GetMaxPower(), c.GetMaxCurrent()
 	}
 
 	s := site.planPower()
 	s.mu.Lock()
-	s.limit, s.rootPower = limit, root
+	s.limit, s.rootPower, s.rootCurrent = limit, power, current
 	s.mu.Unlock()
 }
 
@@ -141,16 +143,23 @@ func (s *planPowerState) homeMean(until time.Time) (float64, bool) {
 	return wh / span, true
 }
 
-// planRoom returns what the main circuit leaves a loadpoint for a plan ending at
-// until and why: the lower of the peak limit and the main circuit's limit, less
+// planRoom returns what the main circuit leaves a loadpoint charging on phases for
+// a plan ending at until and why: the lower of the peak limit and the main
+// circuit's limit (a current counted on the loadpoint's phases), less
 // the home draw expected until then (none without a fresh forecast), 0 without
 // a limit. The reason is the peak limit if that is the lower one, else the circuit.
-func (site *Site) planRoom(until time.Time) (float64, string) {
+func (site *Site) planRoom(until time.Time, phases int) (float64, string) {
 	s := site.planPower()
 
 	s.mu.Lock()
-	limit, root := s.limit, s.rootPower
+	limit, root, current := s.limit, s.rootPower, s.rootCurrent
 	s.mu.Unlock()
+
+	if current > 0 && phases > 0 && grid.Voltage > 0 {
+		if p := grid.CurrentToPower(current, phases); root <= 0 || p < root {
+			root = p
+		}
+	}
 
 	room, reason := root, planReasonCircuit
 	if limit > 0 && (room <= 0 || limit <= room) {

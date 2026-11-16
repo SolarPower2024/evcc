@@ -1438,7 +1438,7 @@ time. The plan power is the lowest of
   the one peak shaving holds, shown as `peakShavingLimit`, not evcc's
   `gridPeakTarget`, which drops to 0 while another loadpoint charges in fast
   mode, a plan would jump with every mode change) and the main circuit's own
-  limit, less the home draw expected until the plan time.
+  limit (a current on the loadpoint's phases), less the expected home draw.
 
 The home draw is the mean of the home forecast of the last optimizer request
 (`TimeSeries.Gt` over `Dt`: home profile, heating demand, load of vehicles the
@@ -1459,7 +1459,10 @@ lock), so the planner, the plan preview, the optimizer's fixed load, the
 preconditioning and the deadline check count alike. `EffectiveMaxPower` stays
 as it is: control, the optimizer's `CMax` and the site read it too. evcc's
 planner knows one power, not one per slot: a night low and a day high home draw
-is a mean over the window.
+is a mean over the window. Known gaps: evcc's choice of the next plan of a
+vehicle (`nextActivePlan`, under the loadpoint's lock) still counts with the
+maximum power, it only orders plans; several loadpoints under one limit each get
+the whole room.
 
 Files: `core/site_planpower.go` (cache of the site per cycle: peak limit, main
 circuit, home forecast; `updatePlanPower` in `updateCustom`,

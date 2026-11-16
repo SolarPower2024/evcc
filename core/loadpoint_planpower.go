@@ -35,7 +35,7 @@ func (lp *Loadpoint) PlanPower(maxPower float64) (float64, string) {
 		}
 	}
 
-	if room, why := site.planRoom(lp.EffectivePlanTime()); room > 0 && room < power {
+	if room, why := site.planRoom(lp.EffectivePlanTime(), phases); room > 0 && room < power {
 		power, reason = room, why
 	}
 
