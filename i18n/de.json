@@ -2500,6 +2500,11 @@
     "titleUpdate": "Administrator Passwort ändern",
     "updatePassword": "Passwort ändern"
   },
+  "planPower": {
+    "circuit": "(Lastmanagement)",
+    "peak": "(Peak-Grenze)",
+    "title": "Der Plan rechnet mit der Leistung, die unter der Grenze bleibt, abzüglich des erwarteten Hausverbrauchs."
+  },
   "session": {
     "addOdometer": "Wert eintragen",
     "addedRange": "Geladene Reichweite",

@@ -55,6 +55,8 @@ var forkHooks = []struct {
 	{"core/loadpoint_effective.go", "Loadpoint.effectiveMaxCurrent", []string{"effectiveMaxCurrentFor", "currents1pPhases"}},
 	{"core/loadpoint_effective.go", "Loadpoint.EffectiveMinPower", []string{"effectiveMinCurrentFor"}},
 	{"core/loadpoint_plan.go", "Loadpoint.GetPlanRequiredDuration", []string{"PlanPower"}},
+	{"server/http_loadpoint_handler.go", "planHandler", []string{"planPowerOf", "planWithReason"}},
+	{"server/http_loadpoint_handler.go", "staticPlanPreviewHandler", []string{"planPowerOf", "planPreviewWithReason"}},
 	{"core/loadpoint_effective.go", "Loadpoint.effectiveMaxPower", []string{"effectiveMaxCurrentFor"}},
 	{"core/loadpoint/config.go", "DynamicConfig.Apply", []string{"applyPhaseSwitch"}},
 	{"core/circuit/circuit.go", "Circuit.Update", []string{"overPowerLog"}},
@@ -109,7 +111,9 @@ var forkUiHooks = []struct {
 	{"assets/js/components/Energy/GridStats.vue", []string{"feedInEegStats(this.feedInEeg"}},
 	{"assets/js/utils/version.ts", []string{"version.replace(/^v/, \"\")"}},
 	{"assets/js/components/AboutModal.vue", []string{"<!-- custom: the fork's tags carry a v", "{{ getShortVersion(installed) }}"}},
-	{"assets/js/types/evcc.ts", []string{"extends LmState", "extends LmConfigLoadpoint", `export type * from "./evcc-lm"`}},
+	{"assets/js/types/evcc.ts", []string{"extends LmState", "extends LmConfigLoadpoint", `export type * from "./evcc-lm"`, "powerReason?: string; // custom"}},
+	{"assets/js/components/ChargingPlans/Preview.vue", []string{"<PlanPowerHint", ":reason=\"powerReason\"", "PlanPowerHint, // custom", "powerReason: String, // custom"}},
+	{"assets/js/components/ChargingPlans/PlansSettings.vue", []string{":power-reason=\"plan.powerReason\""}},
 }
 
 // referenced returns the names a function's body refers to

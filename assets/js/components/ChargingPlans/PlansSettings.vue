@@ -53,7 +53,8 @@
 				<span v-else>{{ nextPlanTitle }}</span>
 			</div>
 		</h5>
-		<ChargingPlanPreview v-bind="chargingPlanPreviewProps" />
+		<!-- custom: :power-reason, the limit of the plan power, see core/lm/README.md (charge planner power) -->
+		<ChargingPlanPreview v-bind="chargingPlanPreviewProps" :power-reason="plan.powerReason" />
 		<ChargingPlanWarnings v-bind="chargingPlanWarningsProps" />
 	</div>
 </template>

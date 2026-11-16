@@ -1469,6 +1469,15 @@ never the site's lock from the loadpoint. Tests `TestPlanRoom*`, `TestPlanPower`
 `TestGetPlanRequiredDurationPlanPower` (hook), `TestPlanOverrunKeepsTheLimit`,
 `TestPlanPowerParallel`.
 
+Plan preview (*Ladeplan*, `ChargingPlans/Preview.vue`): "6 h 8 min @ 6.5 kW" and, only
+when limited, behind it "(Peak-Grenze)" / "(Lastmanagement)" (en "(peak limit)" /
+"(load management)", with an explanation as title, texts `planPower.*`,
+`PlanPowerHint.vue`). The routes `GET /api/loadpoints/<id>/plan` and
+`…/plan/static/preview/<type>/<value>/<time>` return `power` with the plan power
+and `powerReason` (`peak`, `circuit`; missing if nothing limits, and on the
+optimizer's own plan), `server/http_loadpoint_planpower.go`. No setting.
+UI steps: `testtools/steps_planpower.mjs`.
+
 ---
 
 ## Rules
@@ -1533,6 +1542,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`, evcc's rule that a charging loadpoint keeps its minimum on a full circuit asks `keepsMin` (with the priorities on top, what a higher priority waits for is still shed); three `lp.lmm().Peek*` probes; `pvEnablePhases` (the phases a disabled charger starts on) decides on `enablePhaseCurrents`, `pvMaxCurrent` then takes the limits of those phases; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` (in front of the disable branch, behind the always-charge/battery return) keeps a heater in stages on its running stages until the disable delay has passed, the phase timers take `phaseScaleDelay` (scaling down: `phaseScaleDelay1p`, the disable delay when 1p is not sustainable and evcc disables instead), `batterySupported` projects a pending 1p switch with `projectPhaseSwitch1p`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor); `NewLoadpointFromConfig` leaves out evcc's warning "poll mode may deplete your battery" (marked `// custom: warned in Prepare`, checked as a text mark in `forkUiHooks`, `TestLoadConfigDoesNotWarnPollMode`), `Prepare` calls `warnPollMode` in place of that warning (a vehicle from Home Assistant is polled from Home Assistant only: the warning stays only if a vehicle of the site is not one; none: silent; `TestWarnPollMode`, `TestWarnPollModeHomeAssistantTypes`, `TestWarnPollModeBehindWrapper`); `syncCharger` leaves out evcc's warning "current mismatch" in the branch that reads the current back from the charger when `isStagesCharger()` (a heater in stages reports its own current on purpose; the current is still adopted and published; contract test `TestSyncChargerStagesNoMismatchWarning`, other chargers keep the warning) |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split per phase count (as in evcc PR 32505), min/max power use it |
 | `core/loadpoint_plan.go` | `GetPlanRequiredDuration` takes the plan power: `maxPower, _ = lp.PlanPower(maxPower)` in front of its lock (`core/loadpoint_planpower.go`, [section 23](#23-charge-planner-power); contract test `TestGetPlanRequiredDurationPlanPower`, `TestForkHooksInPlace`) |
+| `server/http_loadpoint_handler.go` | `planHandler` and `staticPlanPreviewHandler`: `planPowerOf(lp, lp.EffectiveMaxPower())` gives the power and the reason, the answer goes through `planWithReason`/`planPreviewWithReason`, which embed evcc's response and add `powerReason` (`peak`, `circuit`, missing if nothing limits; not on the optimizer's plan); evcc's types and `loadpoint.API` stay (`server/http_loadpoint_planpower.go`; contract tests `TestPlanRoutesPlanPower`, `TestPlanRouteOptimizerHasNoReason`) |
 | `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
 | `charger/switchsocket.go` | `RatedPower` config field |
@@ -1554,11 +1564,12 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `assets/js/components/Config/DeviceTags.vue` | value `stages` shown as "ein · ein · aus" |
 | `assets/js/components/Config/TariffCard.vue`, `TariffModal.vue` | EEG counter in the EEG card, price templates for `feedInEeg`, planner price hint; `fixed-netz` after `fixed` in the generic list, `defaultPriceTemplate` and `priceTemplatesFor` (`utils/lmGridTariff.ts`): grid offers `fixed-netz` next to `fixed` and a new grid tariff starts with it, other types never offer it (contract test `TestGridFeeTemplateChoice`); `ref="lmBase"`, `provide` `lmGridFee` and `mounted` hand the entered grid fee to the zone form and summary, which show e.g. "10.2 ct − 20 % = 8.16 ct" |
 | `assets/js/components/Config/PropertyField.vue` | `GridFeeZonesField` (`GridFeeZonesField.vue`) for the param `gridfeeZones` of the template `fixed-netz`, before evcc's zones field (contract test `TestGridFeeZonesHook`) |
+| `assets/js/components/ChargingPlans/Preview.vue`, `PlansSettings.vue` | `PlanPowerHint` (`PlanPowerHint.vue`, "(Peak-Grenze)"/"(Lastmanagement)" behind the power of the plan preview, only with a reason), `PlansSettings` hands `plan.powerReason` on (contract tests `PlanPowerHint.test.ts`, `TestForkHooksInPlace`) |
 | `assets/js/components/Energyflow/Energyflow.vue` | "(Netzladen)" label (`batteryChargeLabelKey` in `utils/lmEnergyflow.ts`) |
 | `assets/js/views/Energy.vue`, `assets/js/components/Energy/GridStats.vue` | EEG split of the grid revenue tiles, meters without the EEG counters, the EEG import as a series and legend entry of the grid chart (`gridChartSeries`, `importEegLegends`; chart and legend of the export as upstream); the logic (`feedInEegStats`, `importEegSeries`, `importEegLegends`, `loadFeedInSplit`) is in `feedInEeg.ts`, the files only call it |
 | `assets/js/components/Energy/GroupChart.vue` | `entryColors`: a series with a color of its own (`HistorySeries.color`, the EEG import) keeps it in a group without color picker, the other series are graded as before among themselves (`ownSeriesColors` in `feedInEeg.ts`); contract test `TestForkHooksInPlace` and `feedInEeg.test.ts` |
 | `assets/js/utils/version.ts`, `assets/js/components/AboutModal.vue` | `getShortVersion` drops a leading `v` before it sets one: the fork's tags (`v0.317.1-lm2`) carry it and the more menu and the about dialog showed `vv0.317.1-lm2`; the dialog shows the version as text, the evcc release page of the fork's tag does not exist (nightly keeps its commit link) |
-| `assets/js/types/evcc.ts` | `State`/`ConfigLoadpoint` extend the types in `evcc-lm.ts`; `feedInEeg` tariff type |
+| `assets/js/types/evcc.ts` | `State`/`ConfigLoadpoint` extend the types in `evcc-lm.ts`; `feedInEeg` tariff type; `PlanWrapper.powerReason` |
 | `i18n/de.json`, `i18n/en.json` | added texts only |
 
 ## Own files
@@ -1579,7 +1590,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | log file | `util/logstash/file_custom.go`, `util/logstash/file_list_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | split grid tariff | `templates/definition/tariff/fixed-netz.yaml`, `tariff/fixed_netz_test.go`, `assets/js/utils/lmGridTariff.ts`, `assets/js/components/Config/GridFeeZonesField.vue`, `GridFeeZoneForm.vue`, `GridFeeZoneSummary.vue` |
-| charge planner | `core/site_planpower.go`, `core/loadpoint_planpower.go` |
+| charge planner | `core/site_planpower.go`, `core/loadpoint_planpower.go`, `server/http_loadpoint_planpower.go`, `assets/js/components/ChargingPlans/PlanPowerHint.vue` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | test version | `core/devtransfer/`, `server/http_custom_devtransfer.go`, `assets/js/utils/debugDevTransfer.ts`, `assets/js/components/Config/DebugDevTransfer.vue` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |

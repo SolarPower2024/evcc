@@ -34,7 +34,7 @@ type PlanPreviewResponse struct {
 // planHandler returns the current plan
 func planHandler(lp loadpoint.API) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		maxPower := lp.EffectiveMaxPower()
+		maxPower, reason := planPowerOf(lp, lp.EffectiveMaxPower()) // custom: plan power and its limit, see server/http_loadpoint_planpower.go
 		planTime := lp.EffectivePlanTime()
 		id := lp.EffectivePlanId()
 
@@ -55,7 +55,7 @@ func planHandler(lp loadpoint.API) http.HandlerFunc {
 			Optimizer: optimizer,
 		}
 
-		jsonWrite(w, res)
+		jsonWrite(w, planWithReason(res, reason)) // custom: see server/http_loadpoint_planpower.go
 	}
 }
 
@@ -92,7 +92,7 @@ func staticPlanPreviewHandler(lp loadpoint.API) http.HandlerFunc {
 			return
 		}
 
-		maxPower := lp.EffectiveMaxPower()
+		maxPower, reason := planPowerOf(lp, lp.EffectiveMaxPower()) // custom: plan power and its limit, see server/http_loadpoint_planpower.go
 		requiredDuration := lp.GetPlanRequiredDuration(goal, maxPower)
 		strategy := lp.EffectivePlanStrategy()
 
@@ -105,7 +105,7 @@ func staticPlanPreviewHandler(lp loadpoint.API) http.HandlerFunc {
 			Power:    maxPower,
 		}
 
-		jsonWrite(w, res)
+		jsonWrite(w, planPreviewWithReason(res, reason)) // custom: see server/http_loadpoint_planpower.go
 	}
 }
 

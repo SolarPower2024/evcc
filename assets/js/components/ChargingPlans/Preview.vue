@@ -12,6 +12,9 @@
 					<div v-if="fmtPower" class="extraValue text-nowrap ms-sm-1">
 						{{ fmtPower }}
 					</div>
+					<PlanPowerHint
+						:reason="powerReason"
+					/><!-- custom: the limit of the plan power -->
 				</div>
 			</div>
 			<div v-if="hasTariff" class="text-end" data-testid="tariff-value">
@@ -55,11 +58,16 @@ import formatter from "@/mixins/formatter";
 import minuteTicker from "@/mixins/minuteTicker";
 import TariffChart from "../Tariff/TariffChart.vue";
 import OptimizerAuto from "../MaterialIcon/OptimizerAuto.vue";
+import PlanPowerHint from "./PlanPowerHint.vue"; // custom
 import { SMART_COST_TYPE, type CURRENCY, type Rate, type Slot } from "@/types/evcc";
 
 export default defineComponent({
 	name: "ChargingPlanPreview",
-	components: { TariffChart, OptimizerAuto },
+	components: {
+		TariffChart,
+		OptimizerAuto,
+		PlanPowerHint, // custom: the limit of the plan power
+	},
 	mixins: [formatter, minuteTicker],
 	props: {
 		duration: Number,
@@ -67,6 +75,7 @@ export default defineComponent({
 		rates: Array as PropType<Rate[]>,
 		plan: Array as PropType<Rate[]>,
 		optimizer: Boolean,
+		powerReason: String, // custom: what limits the plan power
 		smartCostType: String as PropType<SMART_COST_TYPE>,
 		targetTime: [Date, null],
 		currency: String as PropType<CURRENCY>,
