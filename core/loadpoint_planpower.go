@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // Custom extension: the power the charge planner plans with, see site_planpower.go.
 // The planner takes its duration from GetPlanRequiredDuration, which gets the
 // loadpoint's maximum power. PlanPower lowers it to what the circuits and the peak
@@ -13,7 +15,8 @@ package core
 //   - every limit of the loadpoint's circuit and its parents below the main
 //     circuit, a current counted on the phases the loadpoint charges on,
 //   - what the main circuit leaves: the lower of the peak limit and its own limit,
-//     less the home draw expected until the plan time.
+//     less the home draw expected in the next twelve hours (the same for the
+//     preview of any plan time and the saved plan).
 //
 // It never goes below the minimum power: load management regulates anyway. Without
 // a site (tests), limits or circuits maxPower is returned unchanged.
@@ -35,7 +38,7 @@ func (lp *Loadpoint) PlanPower(maxPower float64) (float64, string) {
 		}
 	}
 
-	if room, why := site.planRoom(lp.EffectivePlanTime(), phases); room > 0 && room < power {
+	if room, why := site.planRoom(time.Time{}, phases); room > 0 && room < power {
 		power, reason = room, why
 	}
 

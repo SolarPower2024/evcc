@@ -1442,8 +1442,9 @@ time. The plan power is the lowest of
 
 The home draw is the mean of the home forecast of the last optimizer request
 (`TimeSeries.Gt` over `Dt`: home profile, heating demand, load of vehicles the
-optimizer cannot model; not the vehicles it plans) from now to the plan time,
-the next 12 hours without a plan time or past it. The request counts for two
+optimizer cannot model; not the vehicles it plans) over the next 12 hours, for
+every plan time alike, so the preview of a new time shows what the saved plan
+will count. The request counts for two
 hours; without one, or without an optimizer, there is no deduction and the plan
 power is the limit. The home battery is not counted: it stays for peaks, and
 while a plan charges evcc holds it. It never goes below the minimum power
