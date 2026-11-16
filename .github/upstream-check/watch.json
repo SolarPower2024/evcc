@@ -218,6 +218,12 @@
       "paths": ["core/loadpoint.go"]
     },
     {
+      "name": "Planleistung des Ladeplaners: Peak-Grenze, Kreise, Hausverbrauch (konzepte/2026-11-16-planer-leistungsgrenze.md)",
+      "files": ["core/loadpoint_planpower.go", "core/site_planpower.go", "server/http_loadpoint_planpower.go", "assets/js/components/ChargingPlans/PlanPowerHint.vue"],
+      "keywords": ["PlanPower", "planPower", "EffectiveMaxPower", "powerReason"],
+      "paths": ["core/loadpoint_plan.go", "core/loadpoint_effective.go", "server/http_loadpoint_handler.go", "core/planner/"]
+    },
+    {
       "name": "Grundlagen, auf denen der Fork aufbaut",
       "files": ["core/loadpoint_lm.go"],
       "prs": [30367, 33463]

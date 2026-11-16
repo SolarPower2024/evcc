@@ -2500,6 +2500,11 @@
     "titleUpdate": "Update Administrator Password",
     "updatePassword": "Update password"
   },
+  "planPower": {
+    "circuit": "(load management)",
+    "peak": "(peak limit)",
+    "title": "The plan uses the power left below the limit, minus the expected home consumption."
+  },
   "session": {
     "addOdometer": "Add value",
     "addedRange": "Added range",

@@ -1327,6 +1327,7 @@ export interface PlanWrapper {
   plan: Rate[] | null;
   power: number;
   optimizer?: boolean;
+  powerReason?: string; // custom: what limits the plan power, "peak" or "circuit"
 }
 
 export interface PlanResponse {
