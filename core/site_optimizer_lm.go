@@ -87,6 +87,7 @@ func (site *Site) optimizerGridTariff() api.Tariff {
 // applyLmOptimizerInputs adds the fork's settings to the optimizer request
 func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batteries []optimizerBattery) {
 	site.applySnowCover(req)
+	site.setPlanHomeForecast(*req, site.planPower().now()) // the home draw the charge planner expects, see site_planpower.go
 
 	lmActive := len(config.Circuits().Devices()) > 0
 	peakOn, limit, reserve := site.peakShavingConfigured()
@@ -162,17 +163,23 @@ func (site *Site) applyLmOptimizerInputs(req *optimizer.OptimizationInput, batte
 func circuitPower(c api.Circuit, phases int) float64 {
 	var res float64
 	for ; c != nil; c = c.GetParent() {
-		p := c.GetMaxPower()
-		if i := c.GetMaxCurrent(); i > 0 && phases > 0 && grid.Voltage > 0 {
-			if pi := grid.CurrentToPower(i, phases); p <= 0 || pi < p {
-				p = pi
-			}
-		}
-		if p > 0 && (res == 0 || p < res) {
+		if p := circuitLimit(c, phases); p > 0 && (res == 0 || p < res) {
 			res = p
 		}
 	}
 	return res
+}
+
+// circuitLimit returns the limit of one circuit, its power or its current on the
+// given phases, whichever is lower, 0 without any
+func circuitLimit(c api.Circuit, phases int) float64 {
+	p := c.GetMaxPower()
+	if i := c.GetMaxCurrent(); i > 0 && phases > 0 && grid.Voltage > 0 {
+		if pi := grid.CurrentToPower(i, phases); p <= 0 || pi < p {
+			p = pi
+		}
+	}
+	return p
 }
 
 // applyLmBatteryInputs sets the home battery's minimum soc and grid charge goals,

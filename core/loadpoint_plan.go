@@ -86,6 +86,7 @@ func (lp *Loadpoint) GetPlanRemainingEnergy() float64 {
 
 // GetPlanRequiredDuration is the estimated total charging duration
 func (lp *Loadpoint) GetPlanRequiredDuration(goal, maxPower float64) time.Duration {
+	maxPower, _ = lp.PlanPower(maxPower) // custom: plan power, see core/loadpoint_planpower.go
 	lp.RLock()
 	defer lp.RUnlock()
 	return lp.getPlanRequiredDuration(goal, maxPower)

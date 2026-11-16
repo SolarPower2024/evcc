@@ -32,6 +32,7 @@ Part 1 describes the features, part 2 how the fork is kept maintainable.
 20. [Split grid tariff](#20-split-grid-tariff)
 21. [Debug](#21-debug)
 22. [Test version: data of evcc custom](#22-test-version-data-of-evcc-custom)
+23. [Charge planner power](#23-charge-planner-power)
 
 **Part 2: maintenance**
 
@@ -1422,6 +1423,52 @@ the line of the last give back.
 
 UI steps: `testtools/steps_devtransfer.mjs` (two evcc one after the other in WSL, "live" without and "dev" with the variable).
 
+## 23. Charge planner power
+
+evcc's charge planner ("until 07:00 to 80 %") divides the missing energy by the
+loadpoint's maximum power: wall box, phases, vehicle and the static limit of its
+own circuit. What the main circuit leaves is not in it, so a plan with a peak
+limit of 7 kW still counted with 11 kW, started too late and ended after the
+time. The plan power is the lowest of
+- the usual maximum power,
+- every power and current limit of the loadpoint's circuit and its parents below
+  the main circuit, no deduction (a current on the phases the loadpoint charges
+  on, as `circuitPower`),
+- the room of the main circuit: the lower of the peak limit (`site.peak().limit`,
+  the one peak shaving holds, shown as `peakShavingLimit`, not evcc's
+  `gridPeakTarget`, which drops to 0 while another loadpoint charges in fast
+  mode, a plan would jump with every mode change) and the main circuit's own
+  limit, less the home draw expected until the plan time.
+
+The home draw is the mean of the home forecast of the last optimizer request
+(`TimeSeries.Gt` over `Dt`: home profile, heating demand, load of vehicles the
+optimizer cannot model; not the vehicles it plans) from now to the plan time,
+the next 12 hours without a plan time or past it. The request counts for two
+hours; without one, or without an optimizer, there is no deduction and the plan
+power is the limit. The home battery is not counted: it stays for peaks, and
+while a plan charges evcc holds it. It never goes below the minimum power
+(`EffectiveMinPower`): load management regulates anyway. If the time does not
+suffice with the plan power the limit stays: the plan charges at once and evcc's
+warning "plan overrun" shows; "fast" is the way for urgent cases. Without a
+limit and without circuits the plan power is the maximum power, nothing changes;
+the same where the room is above the wall box (20 A at the main circuit are
+13.8 kW).
+
+`Loadpoint.GetPlanRequiredDuration` takes the plan power (one hook, before its
+lock), so the planner, the plan preview, the optimizer's fixed load, the
+preconditioning and the deadline check count alike. `EffectiveMaxPower` stays
+as it is: control, the optimizer's `CMax` and the site read it too. evcc's
+planner knows one power, not one per slot: a night low and a day high home draw
+is a mean over the window.
+
+Files: `core/site_planpower.go` (cache of the site per cycle: peak limit, main
+circuit, home forecast; `updatePlanPower` in `updateCustom`,
+`setPlanHomeForecast` in `applyLmOptimizerInputs`, `planRoom`),
+`core/loadpoint_planpower.go` (`PlanPower`). Only the cache's own mutex is taken,
+never the site's lock from the loadpoint. Tests `TestPlanRoom*`, `TestPlanPower`,
+`TestGetPlanRequiredDurationPlanPower` (hook), `TestPlanOverrunKeepsTheLimit`,
+`TestPlanPowerParallel`.
+
 ---
 
 ## Rules
@@ -1485,6 +1532,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | `core/site/api.go` | embeds `CustomAPI` |
 | `core/loadpoint.go` | `loadpointCustom` field; `setLimit` checks against `lp.lmCircuit()` and calls `done`, evcc's rule that a charging loadpoint keeps its minimum on a full circuit asks `keepsMin` (with the priorities on top, what a higher priority waits for is still shed); three `lp.lmm().Peek*` probes; `pvEnablePhases` (the phases a disabled charger starts on) decides on `enablePhaseCurrents`, `pvMaxCurrent` then takes the limits of those phases; 1p currents: restore and publish calls, phase scaling (`pvScalePhases`, `pvMaxCurrent`, `fastChargingPhases`, `boostPower`) asks `effectiveMinCurrentFor`/`effectiveMaxCurrentFor` (the 1p check in `pvScalePhases` through `min1pCurrentOr`: evcc's `minCurrent` without 1p values), `scalePhases` drops to `minCurrentScaleUp` before scaling up (3p min if above the 1p min), `pvMaxCurrent` projects a pending 1p switch with `projectPhaseSwitch1p` (wraps evcc's `projectPhaseSwitch`), `holdStage` (in front of the disable branch, behind the always-charge/battery return) keeps a heater in stages on its running stages until the disable delay has passed, the phase timers take `phaseScaleDelay` (scaling down: `phaseScaleDelay1p`, the disable delay when 1p is not sustainable and evcc disables instead), `batterySupported` projects a pending 1p switch with `projectPhaseSwitch1p`; `publishStages` after `publishPhaseSwitch`; `publishChargePower` instead of publishing `chargePower`, `meteredPower` for the energy collector and the charge rater (heater in stages without a power sensor); `NewLoadpointFromConfig` leaves out evcc's warning "poll mode may deplete your battery" (marked `// custom: warned in Prepare`, checked as a text mark in `forkUiHooks`, `TestLoadConfigDoesNotWarnPollMode`), `Prepare` calls `warnPollMode` in place of that warning (a vehicle from Home Assistant is polled from Home Assistant only: the warning stays only if a vehicle of the site is not one; none: silent; `TestWarnPollMode`, `TestWarnPollModeHomeAssistantTypes`, `TestWarnPollModeBehindWrapper`); `syncCharger` leaves out evcc's warning "current mismatch" in the branch that reads the current back from the charger when `isStagesCharger()` (a heater in stages reports its own current on purpose; the current is still adopted and published; contract test `TestSyncChargerStagesNoMismatchWarning`, other chargers keep the warning) |
 | `core/loadpoint_effective.go` | `effectiveMinCurrent`/`effectiveMaxCurrent` split per phase count (as in evcc PR 32505), min/max power use it |
+| `core/loadpoint_plan.go` | `GetPlanRequiredDuration` takes the plan power: `maxPower, _ = lp.PlanPower(maxPower)` in front of its lock (`core/loadpoint_planpower.go`, [section 23](#23-charge-planner-power); contract test `TestGetPlanRequiredDurationPlanPower`, `TestForkHooksInPlace`) |
 | `core/loadpoint/config.go`, `server/http_config_loadpoint_handler.go` | `PhaseSwitchConfig` in the dynamic config, applied after min/max current, read back for the ui |
 | `core/circuit/circuit.go` | over power logged via `overPowerLog()` (info, no ui notification) |
 | `charger/switchsocket.go` | `RatedPower` config field |
@@ -1531,6 +1579,7 @@ Every change in an evcc file. Check these when merging a new evcc version.
 | log file | `util/logstash/file_custom.go`, `util/logstash/file_list_custom.go`, `core/site_logfile.go`, `assets/js/components/LogFile/` |
 | snow on pv | `core/site_snow.go`, `core/site_snow_auto.go`, `core/testdata/open-meteo-snow-tirol.json` (recorded answer, added with `git add -f` as `*.json` is ignored), `assets/js/components/Forecast/SnowCoverSwitch.vue` |
 | split grid tariff | `templates/definition/tariff/fixed-netz.yaml`, `tariff/fixed_netz_test.go`, `assets/js/utils/lmGridTariff.ts`, `assets/js/components/Config/GridFeeZonesField.vue`, `GridFeeZoneForm.vue`, `GridFeeZoneSummary.vue` |
+| charge planner | `core/site_planpower.go`, `core/loadpoint_planpower.go` |
 | optimizer | `core/site_optimizer_lm.go`, `core/site_optimizer_gate.go`, `core/site_optimizer_reserve_pass.go`, `core/site_optimizer_soc_pass.go`, `core/site_lm_export_forecast.go`, `tariff/homeassistant_forecast.go`, `templates/definition/tariff/homeassistant-forecast.yaml` |
 | test version | `core/devtransfer/`, `server/http_custom_devtransfer.go`, `assets/js/utils/debugDevTransfer.ts`, `assets/js/components/Config/DebugDevTransfer.vue` |
 | api, keys | `core/site/api_custom.go`, `server/http_custom.go`, `core/keys/site_custom.go` |

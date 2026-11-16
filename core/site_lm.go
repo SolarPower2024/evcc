@@ -101,6 +101,7 @@ type siteCustom struct {
 	lm          lmState
 	peak        peakState
 	snow        snowState           // snow on pv, see site_snow.go
+	planPower   planPowerState      // limits and home draw for the charge planner, see site_planpower.go
 	export      exportForecastState // planned grid export as forecast in Home Assistant, see site_lm_export_forecast.go
 	peakCircuit peakCircuitState    // monthly peak from the main circuit meter, see site_peak_circuit.go
 }
@@ -131,6 +132,7 @@ func (site *Site) updateCustom(state siteState) {
 	site.dropOrphanCircuits()
 	site.updatePeakCircuit() // before peak shaving, which takes the reading
 	site.updatePeakShaving(state)
+	site.updatePlanPower() // after peak shaving, which holds the limit
 	site.updateFeedInEeg()
 	site.updateImportEeg()
 	site.updateBatteryIdent()
