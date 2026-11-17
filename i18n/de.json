@@ -200,6 +200,7 @@
       "off": "Inaktiv",
       "optimizer": "Automatik: Der Optimizer plant das Laden. Unter den Start-Ladestand fällt der Akku nicht, bis zum Stopp-Ladestand lädt er zur günstigsten Zeit.",
       "range": "Laden startet bei {start} oder darunter und stoppt bei {stop}.",
+      "reserve": "Der Stopp liegt über der Lastspitzen-Reserve ({reserve}). Was darüber geladen wird, verbraucht das Haus wieder, es bleiben nur Ladeverluste. Stopp auf höchstens {reserve} setzen.",
       "waiting": "Wartet auf den Startladestand"
     },
     "gridChargeOnce": {

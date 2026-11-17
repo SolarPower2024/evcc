@@ -3,6 +3,7 @@ import {
   gridChargeMode,
   gridChargeModeOptions,
   onceCardVisible,
+  socStopAboveReserve,
   priceCardVisible,
   socCardVisible,
 } from "./gridChargeMode";
@@ -69,5 +70,13 @@ describe("cards on the battery page", () => {
     expect(onceCardVisible("soc")).toBe(false);
     expect(onceCardVisible("both")).toBe(false);
     expect(onceCardVisible(undefined)).toBe(false);
+  });
+  test("note while the soc stop lies above the peak shaving reserve", () => {
+    expect(socStopAboveReserve(true, true, 10, 30)).toBe(true);
+    expect(socStopAboveReserve(true, true, 30, 30)).toBe(false);
+    expect(socStopAboveReserve(true, true, 30, 25)).toBe(false);
+    expect(socStopAboveReserve(false, true, 10, 30)).toBe(false);
+    expect(socStopAboveReserve(true, false, 10, 30)).toBe(false);
+    expect(socStopAboveReserve(true, true, 0, 30)).toBe(false);
   });
 });

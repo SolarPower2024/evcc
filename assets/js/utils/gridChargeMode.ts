@@ -41,3 +41,15 @@ export function socCardVisible(raw?: string | null, socEnabled = false): boolean
 export function onceCardVisible(raw?: string | null): boolean {
   return gridChargeMode(raw) === "price";
 }
+
+// With peak shaving on, soc-based grid charging serves to refill the reserve. A
+// stop above the reserve charges energy the house draws down to the reserve
+// again, losses only: the soc card shows a note.
+export function socStopAboveReserve(
+  socEnabled: boolean,
+  peakShaving: boolean,
+  reserve: number,
+  stop: number
+): boolean {
+  return socEnabled && peakShaving && reserve > 0 && stop > reserve;
+}
