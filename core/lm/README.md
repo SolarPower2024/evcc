@@ -372,6 +372,9 @@ soc, independent of evcc's price limit. Charging starts at or below the start
 soc and runs until the stop soc, through evcc's battery mode path, so a Home
 Assistant battery runs its `modeCharge` script; the battery's `maxsoc` still
 applies. Survives a restart halfway.
+With peak shaving on, a stop above its reserve shows a note in the card: the
+house draws the part above the reserve down again, so it only adds charging
+losses (`socStopAboveReserve` in `assets/js/utils/gridChargeMode.ts`).
 
 *Einmalig laden* (battery page): charges once up to a soc and switches itself
 off, right away or by a time at the cheapest slots before it (evcc's planner on

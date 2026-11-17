@@ -200,6 +200,7 @@
       "off": "Inactive",
       "optimizer": "Automatic: the optimizer plans charging. The battery stays above the start soc and charges to the stop soc at the cheapest time.",
       "range": "Charging starts at {start} or below and stops at {stop}.",
+      "reserve": "The stop is above the peak shaving reserve ({reserve}). The house uses up whatever is charged above it again, leaving only charging losses. Set the stop to {reserve} or lower.",
       "waiting": "Waiting for the start state of charge"
     },
     "gridChargeOnce": {

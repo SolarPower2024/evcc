@@ -43,6 +43,13 @@
 				</template>
 			</i18n-t>
 		</div>
+		<p
+			v-if="stopAboveReserve"
+			class="alert alert-warning mt-3 mb-0 py-2 small"
+			data-testid="battery-soc-grid-charge-reserve"
+		>
+			{{ $t("battery.socGridCharge.reserve", { reserve: fmtSoc(peakReserve) }) }}
+		</p>
 		<!-- custom: one-time grid charging, see core/site_lm_once.go -->
 		<!-- one note for the card: the soc note below covers the one-time charging -->
 		<BatteryGridChargeOnce :optimizer-note="false" />
@@ -71,6 +78,7 @@ import api from "@/api";
 import store from "@/store";
 import { socSteps } from "@/utils/socSteps";
 import { optimizerAutomaticOn } from "@/utils/optimizerAutomatic";
+import { socStopAboveReserve } from "@/utils/gridChargeMode";
 import Card from "../Helper/Card.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
 import BatteryGridChargeOnce from "./BatteryGridChargeOnce.vue";
@@ -98,6 +106,18 @@ export default defineComponent({
 		// the optimizer plans the charging in automatic mode, see core/site_optimizer_gate.go
 		optimizerAutomatic(): boolean {
 			return optimizerAutomaticOn(store.state?.optimizerAutomatic);
+		},
+		peakReserve(): number {
+			return store.state?.peakShavingReserve ?? 0;
+		},
+		// a stop above the peak shaving reserve charges for the house, see utils/gridChargeMode.ts
+		stopAboveReserve(): boolean {
+			return socStopAboveReserve(
+				this.enabled,
+				!!store.state?.peakShaving,
+				this.peakReserve,
+				this.selectedStop
+			);
 		},
 		subtitle(): string {
 			const key = this.active ? "active" : this.enabled ? "waiting" : "off";
