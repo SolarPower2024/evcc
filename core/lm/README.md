@@ -1369,9 +1369,10 @@ feed-in routes the admin password like evcc's own deletion routes (`api/db`).
   `energy` is the charge, `return_energy` the discharge; loadpoints: sum of the group, home
   excludes them); remainders below 1e-9 are 0, with several grid meters in a slot the first takes
   the value, the others 0. A slot without a home consumption row has no balance and stays as
-  stored, the preview counts these slots. Only `return_energy` of the grid changes, no slot is created; the EEG
+  stored, only capped at its production plus discharge when it has a PV row (a counter jump after a
+  sensor change, first grid row first), the preview counts these slots. Only `return_energy` of the grid changes, no slot is created; the EEG
   counter stays (unlike the deletion), the revenue, EEG split and flow follow. Cannot be undone,
-  download a backup first. Tests `TestRecalcFeedIn`, `TestRecalcFeedInWithoutHome`, `TestBalanceFeedIn`, `TestRecalcFeedInNotToday`, `TestFeedInRecalcRoutes`.
+  download a backup first. Tests `TestRecalcFeedIn`, `TestRecalcFeedInWithoutHome`, `TestRecalcFeedInWithoutHomeCapped`, `TestBalanceFeedIn`, `TestRecalcFeedInNotToday`, `TestFeedInRecalcRoutes`.
 - **Clear event list** (`DELETE /api/lmevents`): empties the event log of the peak shaving dialog
   and what is stored (`TestClearLmEvents`).
 - **Lift shed locks** (`POST /api/lmguardrelease`, count: `GET /api/lmguardcount`, off without a
