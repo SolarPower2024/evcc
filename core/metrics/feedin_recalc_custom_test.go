@@ -189,3 +189,49 @@ func TestRecalcFeedInWithoutHome(t *testing.T) {
 	require.NoError(t, db.Instance.Raw(`SELECT return_energy FROM meters WHERE meter = ? AND ts = ?`, grid.Id, ts(11).Unix()).Scan(&kept).Error)
 	assert.InDelta(t, 1, kept, 1e-9)
 }
+
+// TestRecalcFeedInWithoutHomeCapped: a counter jump in a slot without home is capped
+// at production and discharge; without a PV row the slot stays as stored
+func TestRecalcFeedInWithoutHomeCapped(t *testing.T) {
+	require.NoError(t, db.NewInstance("sqlite", ":memory:"))
+	require.NoError(t, SetupSchema())
+	require.NoError(t, db.Instance.AutoMigrate(new(tariffValue), new(eegPrice)))
+
+	grid, err := createEntity(Grid, Grid, Grid)
+	require.NoError(t, err)
+	grid2, err := createEntity(Grid, "grid2", "grid2")
+	require.NoError(t, err)
+	pv, err := createEntity(PV, "pv", "pv")
+	require.NoError(t, err)
+	bat, err := createEntity(Battery, "bat", "bat")
+	require.NoError(t, err)
+
+	ts := func(h int) time.Time { return time.Date(2026, 9, 10, h, 0, 0, 0, time.UTC) }
+
+	// jump of 20000 kWh, pv 0.1 + discharge 0.3 -> 0.4 on the first grid row, 0 on the second
+	require.NoError(t, persist(grid, ts(18), 0, 20000, nil, false))
+	require.NoError(t, persist(grid2, ts(18), 0, 5, nil, false))
+	require.NoError(t, persist(pv, ts(18), 0.1, 0, nil, false))
+	require.NoError(t, persist(bat, ts(18), 0, 0.3, nil, false))
+	// no pv row: stays
+	require.NoError(t, persist(grid, ts(19), 0, 2, nil, false))
+
+	from, to := ts(0), ts(0).AddDate(0, 0, 1)
+
+	sum, err := FeedInRecalcSummary(from, to)
+	require.NoError(t, err)
+	assert.Equal(t, 2, sum.Skipped)
+	assert.InDelta(t, 0.4+2, sum.NewEnergy, 1e-9)
+
+	rows, err := RecalcFeedIn(from, to)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, rows)
+
+	value := func(m int, h int) (v float64) {
+		require.NoError(t, db.Instance.Raw(`SELECT return_energy FROM meters WHERE meter = ? AND ts = ?`, m, ts(h).Unix()).Scan(&v).Error)
+		return v
+	}
+	assert.InDelta(t, 0.4, value(grid.Id, 18), 1e-9)
+	assert.InDelta(t, 0, value(grid2.Id, 18), 1e-9)
+	assert.InDelta(t, 2, value(grid.Id, 19), 1e-9)
+}

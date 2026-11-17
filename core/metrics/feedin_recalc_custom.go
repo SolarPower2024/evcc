@@ -42,7 +42,8 @@ type feedInChange struct {
 
 // FeedInRecalc is the feed-in and its revenue before and after a recalculation.
 // Skipped counts the slots without a home consumption row: their balance would
-// count all production as feed-in, so they stay as stored.
+// count all production as feed-in, so they stay as stored, only capped at the
+// slot's production and discharge when it has a PV row.
 type FeedInRecalc struct {
 	OldEnergy, NewEnergy   float64 // kWh
 	OldRevenue, NewRevenue float64 // currency
@@ -57,17 +58,29 @@ func feedInRecalcPlan(from, to time.Time) (changes []feedInChange, res FeedInRec
 		return
 	}
 
-	// slots with a stored home consumption
-	var homeTs []int64
-	if err = db.Instance.Raw(`
-		SELECT DISTINCT m.ts FROM meters m JOIN entities e ON e.id = m.meter AND e."group" = ?
-		WHERE m.ts >= ? AND m.ts < ?`,
-		Home, from.Unix(), to.Unix()).Scan(&homeTs).Error; err != nil {
+	// slots with a stored row of a group
+	slotsWith := func(group string) (map[int64]bool, error) {
+		var tss []int64
+		if err := db.Instance.Raw(`
+			SELECT DISTINCT m.ts FROM meters m JOIN entities e ON e.id = m.meter AND e."group" = ?
+			WHERE m.ts >= ? AND m.ts < ?`,
+			group, from.Unix(), to.Unix()).Scan(&tss).Error; err != nil {
+			return nil, err
+		}
+		res := make(map[int64]bool, len(tss))
+		for _, ts := range tss {
+			res[ts] = true
+		}
+		return res, nil
+	}
+
+	hasHome, err := slotsWith(Home)
+	if err != nil {
 		return
 	}
-	hasHome := make(map[int64]bool, len(homeTs))
-	for _, ts := range homeTs {
-		hasHome[ts] = true
+	hasPV, err := slotsWith(PV)
+	if err != nil {
+		return
 	}
 
 	// loadpoints add up to one sink
@@ -139,19 +152,33 @@ func feedInRecalcPlan(from, to time.Time) (changes []feedInChange, res FeedInRec
 	}
 
 	seen := make(map[int64]bool)
+	capLeft := make(map[int64]float64) // production left for the grid rows of a slot without home
 	for _, row := range rows {
 		s := slotBy[row.Ts]
 		res.OldEnergy += row.Value
 		res.OldRevenue += revenue(s, row.Value)
 
 		if !hasHome[row.Ts] {
-			// no balance without the home consumption: the slot stays
+			// no balance without the home consumption: the slot stays, only capped at
+			// production and discharge (e.g. a counter jump after a sensor change)
 			if !seen[row.Ts] {
 				seen[row.Ts] = true
 				res.Skipped++
+				capLeft[row.Ts] = s.PV + s.BatOut
 			}
-			res.NewEnergy += row.Value
-			res.NewRevenue += revenue(s, row.Value)
+			target := row.Value
+			if hasPV[row.Ts] {
+				target = max(0, min(row.Value, capLeft[row.Ts]))
+				capLeft[row.Ts] -= target
+				if target < feedInEpsilon {
+					target = 0
+				}
+			}
+			res.NewEnergy += target
+			res.NewRevenue += revenue(s, target)
+			if row.Value-target > feedInEpsilon {
+				changes = append(changes, feedInChange{row.Ts, row.Meter, target})
+			}
 			continue
 		}
 
