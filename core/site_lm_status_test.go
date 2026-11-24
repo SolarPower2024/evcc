@@ -76,7 +76,7 @@ func TestLmStatusOptimizer(t *testing.T) {
 
 	t.Run("stage battery", func(t *testing.T) {
 		enableAutomatic(t)
-		sc.suggest(api.BatteryHold.String())
+		sc.suggest(api.BatteryHoldDischarge.String())
 		settings.SetString(keys.OptimizerAutomatic, OptimizerAutomaticBattery)
 
 		res := lmStatusOf(t, site)
@@ -86,7 +86,7 @@ func TestLmStatusOptimizer(t *testing.T) {
 
 	t.Run("stage full", func(t *testing.T) {
 		enableAutomatic(t)
-		sc.suggest(api.BatteryHold.String())
+		sc.suggest(api.BatteryHoldDischarge.String())
 
 		res := lmStatusOf(t, site)
 		assert.True(t, find(res, true).Optimizer)
@@ -131,7 +131,7 @@ func TestLmStatusBatteryOptimizerCharge(t *testing.T) {
 	assert.NotEqual(t, lmStateRunning, st.State)
 
 	// the fork's own flag does not make the optimizer's hold a charge
-	sc.suggest(api.BatteryHold.String())
+	sc.suggest(api.BatteryHoldDischarge.String())
 	sc.cycle(50, 3000, 0)
 	assert.NotEqual(t, lmStateRunning, sc.site.lmBatteryStatus(now, false).State)
 }

@@ -352,16 +352,16 @@ func TestPeakReserveKeepsExternalMode(t *testing.T) {
 	sc.site.lms().socChargeEnabled = false
 
 	// below the reserve, hold (e.g. from discharge control) gives way to normal
-	sc.site.SetBatteryMode(api.BatteryHold)
+	sc.site.SetBatteryMode(api.BatteryHoldDischarge)
 	sc.cycle(25, 3000, 0)
 	assert.Equal(t, api.BatteryNormal, sc.mode())
 
 	// an external mode wins
 	sc.site.Lock()
-	sc.site.batteryModeExternal = api.BatteryHold
+	sc.site.batteryModeExternal = api.BatteryHoldDischarge
 	sc.site.Unlock()
 	sc.cycle(25, 3000, 0)
-	assert.Equal(t, api.BatteryHold, sc.mode())
+	assert.Equal(t, api.BatteryHoldDischarge, sc.mode())
 }
 
 // TestPeakReserveKeepsEvHold: below the reserve upstream's hold for a fast
@@ -382,9 +382,9 @@ func TestPeakReserveKeepsEvHold(t *testing.T) {
 	// discharge control on: the fast charging vehicle holds the battery
 	sc.site.batteryDischargeControl = true
 	sc.cycle(15, 3000, 0)
-	assert.Equal(t, api.BatteryHold, sc.mode())
+	assert.Equal(t, api.BatteryHoldDischarge, sc.mode())
 	sc.cycle(15, 3000, 0)
-	assert.Equal(t, api.BatteryHold, sc.mode(), "the hold stays while fast charging")
+	assert.Equal(t, api.BatteryHoldDischarge, sc.mode(), "the hold stays while fast charging")
 
 	// fast charging ends: back to normal for the reserve
 	lp.mode = api.ModePV
@@ -394,7 +394,7 @@ func TestPeakReserveKeepsEvHold(t *testing.T) {
 	// a pause of the vehicle releases the hold as well
 	lp.mode = api.ModeNow
 	sc.cycle(15, 3000, 0)
-	assert.Equal(t, api.BatteryHold, sc.mode())
+	assert.Equal(t, api.BatteryHoldDischarge, sc.mode())
 	lp.status = api.StatusB
 	sc.cycle(15, 3000, 0)
 	assert.Equal(t, api.BatteryNormal, sc.mode())
@@ -412,7 +412,7 @@ func TestPeakReserveKeepsEvHoldGridDischarge(t *testing.T) {
 	assert.Equal(t, api.BatteryNormal, sc.mode())
 
 	sc.site.updateBatteryModePeakAware(false, true, sc.rate)
-	assert.Equal(t, api.BatteryHold, sc.mode())
+	assert.Equal(t, api.BatteryHoldDischarge, sc.mode())
 }
 
 // TestPeakReserveEvHoldNotAutomatic: with the optimizer in automatic mode the
@@ -426,7 +426,7 @@ func TestPeakReserveEvHoldNotAutomatic(t *testing.T) {
 	enableAutomatic(t)
 	require.True(t, sc.site.Automatic())
 
-	sc.site.SetBatteryMode(api.BatteryHold)
+	sc.site.SetBatteryMode(api.BatteryHoldDischarge)
 	sc.cycle(15, 3000, 0)
 	assert.Equal(t, api.BatteryNormal, sc.mode())
 	assert.False(t, sc.site.upstreamHoldsBattery(true, sc.rate))
@@ -630,8 +630,8 @@ func TestPeakReserveClearsExternalTimer(t *testing.T) {
 
 	// the next external mode starts its watchdog, which hands it back once it lapsed.
 	// Without the cleared timer no watchdog starts and the mode would stay
-	require.NoError(t, site.SetBatteryModeExternal(api.BatteryHold))
-	require.Equal(t, api.BatteryHold, site.GetBatteryModeExternal())
+	require.NoError(t, site.SetBatteryModeExternal(api.BatteryHoldDischarge))
+	require.Equal(t, api.BatteryHoldDischarge, site.GetBatteryModeExternal())
 	site.Lock()
 	site.batteryModeExternalTimer = time.Now().Add(-2 * time.Minute)
 	site.Unlock()

@@ -47,7 +47,7 @@ func (sc *scenario) applied() []api.BatteryMode {
 // the mode and the fork's grid charge flag are.
 func TestLmGateInertWithoutAutomatic(t *testing.T) {
 	site := &Site{log: util.NewLogger("test")}
-	for _, m := range []api.BatteryMode{api.BatteryUnknown, api.BatteryNormal, api.BatteryHold, api.BatteryCharge} {
+	for _, m := range []api.BatteryMode{api.BatteryUnknown, api.BatteryNormal, api.BatteryHoldDischarge, api.BatteryCharge} {
 		for _, gridCharge := range []bool{false, true} {
 			assert.Equal(t, m, site.lmGateBatteryMode(m, gridCharge), "%s, grid charge %v", m, gridCharge)
 		}
@@ -65,9 +65,9 @@ func TestLmGateExternalModeFirst(t *testing.T) {
 
 	require.True(t, site.optimizerInControl())
 
-	site.batteryModeExternal = api.BatteryHold
+	site.batteryModeExternal = api.BatteryHoldDischarge
 	assert.False(t, site.optimizerInControl())
-	for _, m := range []api.BatteryMode{api.BatteryUnknown, api.BatteryNormal, api.BatteryHold, api.BatteryCharge} {
+	for _, m := range []api.BatteryMode{api.BatteryUnknown, api.BatteryNormal, api.BatteryHoldDischarge, api.BatteryCharge} {
 		assert.Equal(t, m, site.lmGateBatteryMode(m, true), m.String())
 	}
 }
@@ -105,7 +105,7 @@ func TestLmGateOptimizerChargeRefused(t *testing.T) {
 		sc.cycle(50, 9000, 0)
 
 		assert.Equal(t, api.BatteryNormal, sc.mode(), "the battery covers the peak")
-		assert.NotContains(t, sc.applied(), api.BatteryHold)
+		assert.NotContains(t, sc.applied(), api.BatteryHoldDischarge)
 		assert.Equal(t, 0.0, val(sc.charge), "no setpoint")
 		charge, _ := sc.site.omniWant()
 		assert.False(t, charge)
@@ -117,8 +117,8 @@ func TestLmGateOptimizerChargeRefused(t *testing.T) {
 
 		sc.cycle(50, 3000, 0) // 7000 + 6250 > 12000
 
-		assert.Equal(t, api.BatteryHold, sc.mode())
-		assert.Equal(t, []api.BatteryMode{api.BatteryHold}, sc.applied())
+		assert.Equal(t, api.BatteryHoldDischarge, sc.mode())
+		assert.Equal(t, []api.BatteryMode{api.BatteryHoldDischarge}, sc.applied())
 	})
 
 	t.Run("circuit full, setpoint", func(t *testing.T) {
@@ -128,7 +128,7 @@ func TestLmGateOptimizerChargeRefused(t *testing.T) {
 
 		sc.cycle(50, 3000, 0)
 
-		assert.Equal(t, api.BatteryHold, sc.mode())
+		assert.Equal(t, api.BatteryHoldDischarge, sc.mode())
 		assert.Less(t, val(sc.charge), 500.0, "less than the minimum worth charging with")
 	})
 
@@ -138,12 +138,12 @@ func TestLmGateOptimizerChargeRefused(t *testing.T) {
 		sc.withCircuit(12000, wallbox, 5) // the battery outranks the wallbox
 
 		sc.cycle(50, 3000, 0)
-		require.Equal(t, api.BatteryHold, sc.mode())
+		require.Equal(t, api.BatteryHoldDischarge, sc.mode())
 		assert.Equal(t, 5750.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 7000, 7000))
 
 		// the next plan is told grid charging is blocked and holds: the wallbox still gives way
 		require.True(t, sc.site.lmGridChargeBlocked())
-		sc.suggest(api.BatteryHold.String())
+		sc.suggest(api.BatteryHoldDischarge.String())
 		sc.cycle(50, 3000, 0)
 		assert.Equal(t, 5750.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 7000, 7000))
 		wallbox.power = 5750
@@ -155,7 +155,7 @@ func TestLmGateOptimizerChargeRefused(t *testing.T) {
 		assert.Equal(t, api.BatteryCharge, sc.mode())
 
 		// a hold without a hold-off running releases as before
-		sc.suggest(api.BatteryHold.String())
+		sc.suggest(api.BatteryHoldDischarge.String())
 		sc.cycle(50, 3000, 0)
 		assert.Equal(t, 7000.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 5750, 7000))
 	})
@@ -175,11 +175,11 @@ func TestLmGateOptimizerChargeRefused(t *testing.T) {
 // Hold gives way to normal only while a peak has to be covered. The peak setpoint
 // then covers the peak and not more, it is not the free value.
 func TestLmGateOptimizerHold(t *testing.T) {
-	sc := gateScenario(t, api.BatteryHold.String())
+	sc := gateScenario(t, api.BatteryHoldDischarge.String())
 	sc.withDynamicCharge()
 
 	assert.False(t, sc.cycle(50, 3000, 0), "no peak")
-	assert.Equal(t, api.BatteryHold, sc.mode())
+	assert.Equal(t, api.BatteryHoldDischarge, sc.mode())
 	assert.Equal(t, 0.0, val(sc.peak), "only a peak is covered")
 	assert.True(t, sc.site.optimizerHolds())
 
@@ -194,24 +194,24 @@ func TestLmGateOptimizerHold(t *testing.T) {
 
 	sc.clearHoldOffs()
 	assert.False(t, sc.cycle(50, 3000, 0), "peak over")
-	assert.Equal(t, api.BatteryHold, sc.mode())
+	assert.Equal(t, api.BatteryHoldDischarge, sc.mode())
 
-	assert.Equal(t, []api.BatteryMode{api.BatteryHold, api.BatteryNormal, api.BatteryHold}, sc.applied())
+	assert.Equal(t, []api.BatteryMode{api.BatteryHoldDischarge, api.BatteryNormal, api.BatteryHoldDischarge}, sc.applied())
 }
 
 // Hold without peak shaving: the gate has no peak to give way to.
 func TestLmGateOptimizerHoldWithoutPeakShaving(t *testing.T) {
-	site := automaticSite(t, api.BatteryHold.String())
+	site := automaticSite(t, api.BatteryHoldDischarge.String())
 
-	assert.Equal(t, api.BatteryHold, site.lmGateBatteryMode(api.BatteryHold, false))
+	assert.Equal(t, api.BatteryHoldDischarge, site.lmGateBatteryMode(api.BatteryHoldDischarge, false))
 
 	setPeakShaving(site, 7000, 30)
 	s := site.peak()
 	s.demand, s.window.Allowed = 6000, 7000
-	assert.Equal(t, api.BatteryHold, site.lmGateBatteryMode(api.BatteryHold, false), "no peak")
+	assert.Equal(t, api.BatteryHoldDischarge, site.lmGateBatteryMode(api.BatteryHoldDischarge, false), "no peak")
 
 	s.demand = 9000
-	assert.Equal(t, api.BatteryNormal, site.lmGateBatteryMode(api.BatteryHold, false), "covering a peak")
+	assert.Equal(t, api.BatteryNormal, site.lmGateBatteryMode(api.BatteryHoldDischarge, false), "covering a peak")
 }
 
 // holdOptimizer keeps the optimizer from running for the duration of the test:
@@ -256,7 +256,7 @@ func TestLmGateReleaseGridCharge(t *testing.T) {
 	sc.cycle(50, 3000, 0)
 	require.Equal(t, 2000.0, val(sc.charge))
 
-	sc.suggest(api.BatteryHold.String())
+	sc.suggest(api.BatteryHoldDischarge.String())
 	sc.cycle(50, 3000, 0)
 	assert.Equal(t, 0.0, val(sc.charge))
 }
@@ -265,7 +265,7 @@ func TestLmGateReleaseGridCharge(t *testing.T) {
 // nor reserves circuit power: the soc switch would start at 20 %, but the
 // optimizer holds.
 func TestLmGateNoOwnGridCharge(t *testing.T) {
-	sc := gateScenario(t, api.BatteryHold.String())
+	sc := gateScenario(t, api.BatteryHoldDischarge.String())
 	wallbox := &scenarioLoad{title: "wallbox", prio: 1, power: 7000}
 	sc.withCircuit(12000, wallbox, 5) // the battery outranks the wallbox
 	sc.withDynamicCharge()
@@ -274,7 +274,7 @@ func TestLmGateNoOwnGridCharge(t *testing.T) {
 	assert.False(t, sc.cycle(20, 3000, 0), "start soc reached")
 	assert.True(t, sc.site.batterySocChargeActive(), "the hysteresis keeps tracking")
 	assert.False(t, sc.site.batteryGridChargeRequested(api.Rate{}))
-	assert.Equal(t, api.BatteryHold, sc.mode())
+	assert.Equal(t, api.BatteryHoldDischarge, sc.mode())
 
 	// the wallbox keeps its power: nothing is reserved for the battery
 	assert.Equal(t, 7000.0, sc.site.lmm().ValidatePower(wallbox, sc.circuit, 7000, 7000))
@@ -295,9 +295,9 @@ func TestLmGateOptimizerStale(t *testing.T) {
 	assert.Equal(t, []api.BatteryMode{api.BatteryCharge}, sc.applied())
 
 	// the optimizer is back: it decides
-	sc.suggest(api.BatteryHold.String())
+	sc.suggest(api.BatteryHoldDischarge.String())
 	assert.False(t, sc.cycle(50, 3000, 0))
-	assert.Equal(t, api.BatteryHold, sc.mode())
+	assert.Equal(t, api.BatteryHoldDischarge, sc.mode())
 }
 
 // After a restart there is no optimizer result until the first solve: the soc
@@ -337,8 +337,8 @@ func TestLmGateHemsDimmed(t *testing.T) {
 
 	sc.cycle(50, 3000, 0)
 
-	assert.Equal(t, api.BatteryHold, sc.mode())
-	assert.Equal(t, []api.BatteryMode{api.BatteryHold}, sc.applied())
+	assert.Equal(t, api.BatteryHoldDischarge, sc.mode())
+	assert.Equal(t, []api.BatteryMode{api.BatteryHoldDischarge}, sc.applied())
 }
 
 // With peak shaving running (below the reserve) the optimizer's charge request
@@ -366,7 +366,7 @@ func TestLmGatePeakShavingActive(t *testing.T) {
 	})
 
 	t.Run("hold", func(t *testing.T) {
-		sc := gateScenario(t, api.BatteryHold.String())
+		sc := gateScenario(t, api.BatteryHoldDischarge.String())
 		sc.withDynamicCharge()
 
 		sc.cycle(25, 8000, 0)
@@ -427,7 +427,7 @@ func TestLmGateOptimizerChargingCircuit(t *testing.T) {
 // Without meter values the demand is unknown: the optimizer's hold gives way, the
 // battery covers.
 func TestLmGatePeakNeedsBatteryMetersStale(t *testing.T) {
-	sc := gateScenario(t, api.BatteryHold.String())
+	sc := gateScenario(t, api.BatteryHoldDischarge.String())
 	sc.cycle(50, 3000, 0)
 	require.False(t, sc.site.peakNeedsBattery())
 

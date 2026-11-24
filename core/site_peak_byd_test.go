@@ -167,7 +167,7 @@ func TestBydLimitWithoutPeakShaving(t *testing.T) {
 	assert.Equal(t, []string{"set_value " + haProtLimit + " 5000"}, ha.take())
 
 	// in any battery mode
-	for _, m := range []api.BatteryMode{api.BatteryHold, api.BatteryCharge} {
+	for _, m := range []api.BatteryMode{api.BatteryHoldDischarge, api.BatteryCharge} {
 		sc.site.SetBatteryMode(m)
 		ha.set(haProtLimit, "0")
 		sc.site.applyOmni()
@@ -290,7 +290,7 @@ func TestBydOptimizerHold(t *testing.T) {
 	keepSettings(t)
 	holdOptimizer(t, sc.site)
 	enableAutomatic(t)
-	sc.suggest(api.BatteryHold.String())
+	sc.suggest(api.BatteryHoldDischarge.String())
 	ha.set(haProtSoc, "30")
 
 	sc.cycle(50, 3000, 0)
@@ -352,7 +352,7 @@ func TestBydNeverWritesRequest(t *testing.T) {
 	sc, ha := newByd(t)
 	sc.site.lms().socChargeEnabled = false
 
-	for _, m := range []api.BatteryMode{api.BatteryNormal, api.BatteryHold, api.BatteryCharge} {
+	for _, m := range []api.BatteryMode{api.BatteryNormal, api.BatteryHoldDischarge, api.BatteryCharge} {
 		sc.site.SetBatteryMode(m)
 		sc.cycle(25, 8000, 0)
 		sc.cycle(80, 1000, 0)

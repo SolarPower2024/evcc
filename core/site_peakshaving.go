@@ -965,7 +965,7 @@ func (site *Site) upstreamHoldsBattery(gridDischarge bool, rate api.Rate) bool {
 	}
 
 	// grid charging takes the path to upstream before this is asked
-	return site.fromTo(site.requiredBatteryMode(false, gridDischarge, rate), api.BatteryHold)
+	return site.fromTo(site.requiredBatteryMode(false, gridDischarge, rate), api.BatteryHoldDischarge)
 }
 
 //

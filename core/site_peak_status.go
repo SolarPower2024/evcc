@@ -326,7 +326,7 @@ func (site *Site) peakStatusWith(mode api.BatteryMode) peakStatus {
 		}
 	}
 
-	held := mode == api.BatteryHold || mode == api.BatteryHoldCharge
+	held := mode == api.BatteryHoldDischarge || mode == api.BatteryHoldCharge
 	st.Held = held
 
 	// the discharge is limited below the reserve and while the optimizer's hold gives
@@ -411,7 +411,7 @@ func (site *Site) trackModeMismatch(by string, mode api.BatteryMode) {
 
 	switch {
 	case by == "" || site.omniTypeLocked():
-	case mode == api.BatteryHold || mode == api.BatteryHoldCharge:
+	case mode == api.BatteryHoldDischarge || mode == api.BatteryHoldCharge:
 		// held, or shaving: the integration covers a peak while it holds
 		mismatch = by != bydStatusHold && by != bydStatusShaving
 	case mode == api.BatteryCharge:

@@ -40,7 +40,7 @@ func (site *Site) optimizerHolds() bool {
 		return false
 	}
 	mode, _ := site.batterySuggestionMode()
-	return mode == api.BatteryHold || mode == api.BatteryHoldCharge
+	return mode == api.BatteryHoldDischarge || mode == api.BatteryHoldCharge
 }
 
 // peakNeedsBattery reports whether the demand exceeds what may be drawn from
@@ -118,10 +118,10 @@ func (site *Site) lmGateBatteryMode(mode api.BatteryMode, gridCharge bool) api.B
 				return change(api.BatteryNormal)
 			}
 			site.log.DEBUG.Println("battery mode: optimizer charge refused by load management or peak shaving, holding")
-			return change(api.BatteryHold)
+			return change(api.BatteryHoldDischarge)
 		}
 
-	case api.BatteryHold, api.BatteryHoldCharge:
+	case api.BatteryHoldDischarge, api.BatteryHoldCharge:
 		site.releaseGridChargeUnlessShed()
 		if site.peakNeedsBattery() {
 			site.log.DEBUG.Println("battery mode: optimizer hold, covering a peak")

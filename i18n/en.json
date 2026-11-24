@@ -109,7 +109,7 @@
       "mode": {
         "charge": "grid charging",
         "discharge": "discharge",
-        "hold": "hold",
+        "holddischarge": "hold",
         "holdcharge": "hold",
         "normal": "normal",
         "unknown": "unknown"

@@ -172,7 +172,7 @@ describe("miniValues", () => {
 
 describe("notes", () => {
   test("mode, connection, discharge", () => {
-    const n = notes({ ...base, batteryMode: "hold", limited: true, setpoint: 0 }, tEn, kw);
+    const n = notes({ ...base, batteryMode: "holddischarge", limited: true, setpoint: 0 }, tEn, kw);
     expect(n.map((x) => x.text)).toEqual([
       "Mode: hold",
       "Storage connected",
@@ -199,7 +199,7 @@ describe("notes", () => {
 
   test("a hold of another kind says nothing on the discharge", () => {
     const n = notes(
-      { ...base, state: "hold", batteryMode: "hold", held: true, limited: false },
+      { ...base, state: "hold", batteryMode: "holddischarge", held: true, limited: false },
       tEn,
       kw
     );
@@ -222,7 +222,7 @@ describe("notes", () => {
   });
 
   test("every mode has a name", () => {
-    for (const mode of ["normal", "hold", "holdcharge", "charge", "discharge"]) {
+    for (const mode of ["normal", "holddischarge", "holdcharge", "charge", "discharge"]) {
       expect(notes({ ...base, batteryMode: mode }, tEn, kw)[0].text).not.toContain("?");
     }
   });
@@ -307,7 +307,7 @@ describe("events", () => {
         "Unter 25 %: spart jetzt für Spitzen",
       ],
       [ev("reserveAbove", 26, 25), "Above 25 %: battery free", "Über 25 %: Batterie frei"],
-      [ev("batteryMode", 0, 0, "hold"), "evcc: mode hold", "evcc: Modus Halten"],
+      [ev("batteryMode", 0, 0, "holddischarge"), "evcc: mode hold", "evcc: Modus Halten"],
       [ev("peakSwitch", 1), "Peak shaving on", "Peak Shaving an"],
       [ev("peakSwitch", 0), "Peak shaving off", "Peak Shaving aus"],
       [ev("meter", 1), "Meter outage · battery free", "Messausfall · Batterie frei"],

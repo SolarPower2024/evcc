@@ -29,7 +29,7 @@ type scenarioBattery struct {
 func (b *scenarioBattery) CurrentPower() (float64, error) { return 0, nil }
 
 func (b *scenarioBattery) BatteryModes() []api.BatteryMode {
-	return []api.BatteryMode{api.BatteryNormal, api.BatteryHold, api.BatteryCharge, api.BatteryDischarge}
+	return []api.BatteryMode{api.BatteryNormal, api.BatteryHoldDischarge, api.BatteryCharge, api.BatteryDischarge}
 }
 
 func (b *scenarioBattery) SetBatteryMode(m api.BatteryMode) error {

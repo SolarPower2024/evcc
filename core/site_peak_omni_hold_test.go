@@ -19,7 +19,7 @@ func omniHold(t *testing.T) (*scenario, *fakeHA) {
 	sc, ha := newOmni(t)
 	holdOptimizer(t, sc.site)
 	enableAutomatic(t)
-	sc.suggest(api.BatteryHold.String())
+	sc.suggest(api.BatteryHoldDischarge.String())
 
 	return sc, ha
 }
@@ -160,7 +160,7 @@ func TestOmniHoldWithoutPeakShaving(t *testing.T) {
 // Without automatic mode a hold suggestion changes nothing.
 func TestOmniHoldInertWithoutAutomatic(t *testing.T) {
 	sc, ha := newOmni(t)
-	sc.suggest(api.BatteryHold.String())
+	sc.suggest(api.BatteryHoldDischarge.String())
 
 	sc.cycle(50, 3000, 0)
 	assert.Equal(t, "30", ha.get(haProtSoc))

@@ -56,7 +56,7 @@ var statusCases = []struct {
 	}},
 	{"holdShaving", peakStateHoldShaving, func(sc *scenario, ha *fakeHA) {
 		sc.cycle(25, 8000, 0)
-		sc.site.batteryMode = api.BatteryHold
+		sc.site.batteryMode = api.BatteryHoldDischarge
 	}},
 	{"gridDischarge", peakStateGridDischarge, func(sc *scenario, ha *fakeHA) {
 		sc.cycle(50, 3000, 0)
@@ -64,7 +64,7 @@ var statusCases = []struct {
 	}},
 	{"hold", peakStateHold, func(sc *scenario, ha *fakeHA) {
 		sc.cycle(50, 3000, 0)
-		sc.site.batteryMode = api.BatteryHold
+		sc.site.batteryMode = api.BatteryHoldDischarge
 	}},
 	{"shaving", peakStateShaving, func(sc *scenario, ha *fakeHA) {
 		sc.cycle(25, 8000, 0)
@@ -163,7 +163,7 @@ func TestPeakStatusOrder(t *testing.T) {
 	sc.site.publishPeakStatus()
 	sc.site.batteryMode = api.BatteryCharge
 	assert.Equal(t, peakStateGridCharge, sc.site.peakStatusNow().State)
-	sc.site.batteryMode = api.BatteryHold
+	sc.site.batteryMode = api.BatteryHoldDischarge
 	assert.Equal(t, peakStateHoldShaving, sc.site.peakStatusNow().State)
 }
 
@@ -257,7 +257,7 @@ func TestPeakStatusBydSensor(t *testing.T) {
 		clk := mockClock(sc)
 
 		sc.cycle(50, 3000, 0)
-		sc.site.batteryMode = api.BatteryHold
+		sc.site.batteryMode = api.BatteryHoldDischarge
 
 		// the integration still says free
 		sc.site.publishPeakStatus()
@@ -333,7 +333,7 @@ func TestPeakStatusEvents(t *testing.T) {
 	}
 
 	// the battery mode
-	site.batteryMode = api.BatteryHold
+	site.batteryMode = api.BatteryHoldDischarge
 	settle()
 	assert.Equal(t, 1, eventTypes(site)[lm.EventBatteryMode])
 
@@ -377,7 +377,7 @@ func TestPeakStatusEventsDebounced(t *testing.T) {
 	site.publishPeakStatus()
 
 	// the mode flips and flips back after 20 s, the meter after 30 s
-	site.batteryMode = api.BatteryHold
+	site.batteryMode = api.BatteryHoldDischarge
 	s.metersLost = true
 	site.publishPeakStatus()
 	clk.Add(20 * time.Second)
@@ -393,7 +393,7 @@ func TestPeakStatusEventsDebounced(t *testing.T) {
 
 	// stays: logged with the time of the change
 	changed := clk.Now()
-	site.batteryMode = api.BatteryHold
+	site.batteryMode = api.BatteryHoldDischarge
 	site.publishPeakStatus()
 	clk.Add(30 * time.Second)
 	site.publishPeakStatus()
@@ -495,7 +495,7 @@ func TestPeakStatusHoldReason(t *testing.T) {
 
 	// above the reserve, held for another reason (vehicle, api)
 	sc.cycle(50, 3000, 0)
-	site.batteryMode = api.BatteryHold
+	site.batteryMode = api.BatteryHoldDischarge
 	st := site.peakStatusNow()
 	assert.Equal(t, peakStateHold, st.State)
 	assert.True(t, st.Held)
@@ -503,7 +503,7 @@ func TestPeakStatusHoldReason(t *testing.T) {
 
 	// below the reserve the reserve limits
 	sc.cycle(25, 3000, 0)
-	site.batteryMode = api.BatteryHold
+	site.batteryMode = api.BatteryHoldDischarge
 	assert.True(t, site.peakStatusNow().Limited)
 
 	site.batteryMode = api.BatteryDischarge

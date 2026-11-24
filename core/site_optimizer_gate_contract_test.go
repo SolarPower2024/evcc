@@ -44,7 +44,7 @@ func TestBatterySuggestionModeContract(t *testing.T) {
 	t.Run("actions", func(t *testing.T) {
 		site := suggestionContractSite("bat")
 
-		for _, m := range []api.BatteryMode{api.BatteryNormal, api.BatteryHold, api.BatteryCharge, api.BatteryHoldCharge, api.BatteryDischarge} {
+		for _, m := range []api.BatteryMode{api.BatteryNormal, api.BatteryHoldDischarge, api.BatteryCharge, api.BatteryHoldCharge, api.BatteryDischarge} {
 			site.setSuggestions(map[string]types.Suggestion{batteryKey("bat"): {Action: m.String()}})
 
 			mode, ok := site.batterySuggestionMode()

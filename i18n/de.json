@@ -109,7 +109,7 @@
       "mode": {
         "charge": "Netzladen",
         "discharge": "Entladen",
-        "hold": "Halten",
+        "holddischarge": "Halten",
         "holdcharge": "Halten",
         "normal": "normal",
         "unknown": "unbekannt"
