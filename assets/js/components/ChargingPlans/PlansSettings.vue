@@ -133,6 +133,7 @@ export default defineComponent({
 			plan: {} as PlanWrapper,
 			activeTab: "time",
 			nextPlanId: 0,
+			planRequest: 0,
 			updatePlanPreviewDebounced: null as any as () => void,
 			updateActivePlanDebounced: null as any as () => void,
 		};
@@ -168,6 +169,9 @@ export default defineComponent({
 		},
 	},
 	watch: {
+		socBasedPlanning() {
+			this.updatePlanDebounced();
+		},
 		effectivePlanTime(newValue: string) {
 			if (null !== newValue) {
 				this.updatePlanDebounced();
@@ -229,8 +233,10 @@ export default defineComponent({
 			}
 		},
 		async updateActivePlan(): Promise<void> {
+			const request = ++this.planRequest;
 			try {
 				const res = await this.apiFetchPlan(`loadpoints/${this.id}/plan`);
+				if (request !== this.planRequest) return;
 				this.plan = res?.data ?? ({} as PlanWrapper);
 				this.nextPlanId = this.plan.planId;
 			} catch (e) {
@@ -275,6 +281,7 @@ export default defineComponent({
 			// only show preview if no plan is active
 			if (!this.noActivePlan) return;
 
+			const request = ++this.planRequest;
 			try {
 				let planRes: PlanResponse | undefined = undefined;
 				if (this.staticPlanPreview) {
@@ -294,6 +301,7 @@ export default defineComponent({
 						});
 					}
 				}
+				if (request !== this.planRequest) return;
 				this.plan = planRes?.data ?? ({} as PlanWrapper);
 			} catch (e) {
 				console.error(e);

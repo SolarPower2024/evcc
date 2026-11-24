@@ -37,13 +37,6 @@ type route struct {
 	HandlerFunc http.HandlerFunc
 }
 
-func (r route) Methods() []string {
-	if r.Method == http.MethodGet {
-		return []string{r.Method}
-	}
-	return []string{r.Method, http.MethodOptions}
-}
-
 // HTTPd wraps an http.Server and adds the root router
 type HTTPd struct {
 	*http.Server
@@ -75,6 +68,15 @@ func NewHTTPd(addr string, hub *SocketHub, custom Customization) *HTTPd {
 			next.ServeHTTP(w, r)
 		})
 	})
+
+	// reject browser requests from foreign origins
+	cop := http.NewCrossOriginProtection()
+	cop.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := cop.Check(r)
+		log.WARN.Printf("%s %s: %v (origin: %q, host: %q)", r.Method, r.URL.Path, err, r.Header.Get("Origin"), r.Host)
+		http.Error(w, err.Error(), http.StatusForbidden)
+	}))
+	router.Use(cop.Handler)
 
 	// websocket
 	router.HandleFunc("/ws", socketHandler(hub))
@@ -195,9 +197,6 @@ func (s *HTTPd) RegisterSiteHandlers(site site.API) {
 	api.Use(jsonHandler)
 	api.Use(noCompressLogFiles) // custom: before the compression, see server/http_custom.go
 	api.Use(handlers.CompressHandler)
-	api.Use(handlers.CORS(
-		handlers.AllowedHeaders([]string{"Content-Type"}),
-	))
 
 	// site api
 	smartCostLimit := func(lp loadpoint.API, limit *float64) error {
@@ -231,8 +230,6 @@ func (s *HTTPd) RegisterSiteHandlers(site site.API) {
 		"smartfeedindelete":               {"DELETE", "/smartfeedinprioritylimit", updateSmartCostLimit(site, smartFeedInPriorityLimit)},
 		"tariff":                          {"GET", "/tariff/{tariff:[a-z0-9]+}", tariffHandler(site)},
 		"sessions":                        {"GET", "/sessions", sessionHandler},
-		"updatesession":                   {"PUT", "/session/{id:[0-9]+}", updateSessionHandler},
-		"deletesession":                   {"DELETE", "/session/{id:[0-9]+}", deleteSessionHandler},
 		"gridsessions":                    {"GET", "/gridsessions", gridSessionsHandler},
 		"energyhistory":                   {"GET", "/history/energy", energyHistoryHandler},
 		"energyflow":                      {"GET", "/history/flow", energyFlowHandler},
@@ -241,13 +238,15 @@ func (s *HTTPd) RegisterSiteHandlers(site site.API) {
 		"telemetry2":                      {"POST", "/settings/telemetry/{value:[01truefalse]+}", boolHandler(telemetry.Enable, telemetry.Enabled)},
 		"devicecolors":                    {"PUT", "/devicecolors", updateDeviceColor(site)},
 
-		"optimizerchargingstrategy": {"POST", "/optimizerchargingstrategy/{value:[a-z_]+}", stringHandler(site.SetOptimizerChargingStrategy, site.GetOptimizerChargingStrategy)},
+		"optimizerchargingstrategy":  {"POST", "/optimizerchargingstrategy/{value:[a-z_]+}", stringHandler(site.SetOptimizerChargingStrategy, site.GetOptimizerChargingStrategy)},
+		"optimizerriskprofile":       {"POST", "/optimizerriskprofile", optimizerRiskProfileHandler(site)},
+		"optimizerriskprofiledelete": {"DELETE", "/optimizerriskprofile", optimizerRiskProfileHandler(site)},
 	}
 
 	addCustomSiteRoutes(routes, site) // custom: see server/http_custom.go
 
 	for _, r := range routes {
-		api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)
+		api.Methods(r.Method).Path(r.Pattern).Handler(r.HandlerFunc)
 	}
 
 	// vehicle api
@@ -265,7 +264,7 @@ func (s *HTTPd) RegisterSiteHandlers(site site.API) {
 	}
 
 	for _, r := range vehicles {
-		api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)
+		api.Methods(r.Method).Path(r.Pattern).Handler(r.HandlerFunc)
 	}
 
 	// loadpoint api
@@ -305,7 +304,7 @@ func (s *HTTPd) RegisterSiteHandlers(site site.API) {
 		}
 
 		for _, r := range routes {
-			api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)
+			api.Methods(r.Method).Path(r.Pattern).Handler(r.HandlerFunc)
 		}
 	}
 }
@@ -320,9 +319,6 @@ func (s *HTTPd) RegisterSystemHandler(site *core.Site, pub publisher, cache *uti
 	api := router.PathPrefix("/api").Subrouter()
 	api.Use(jsonHandler)
 	api.Use(handlers.CompressHandler)
-	api.Use(handlers.CORS(
-		handlers.AllowedHeaders([]string{"Content-Type"}),
-	))
 
 	if site == nil {
 		// If site is nil, create a new empty site. Settings will be loaded during this process and
@@ -343,8 +339,12 @@ func (s *HTTPd) RegisterSystemHandler(site *core.Site, pub publisher, cache *uti
 		}
 
 		for _, r := range routes {
-			api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)
+			api.Methods(r.Method).Path(r.Pattern).Handler(r.HandlerFunc)
 		}
+
+		ensureAuth := EnsureAuthHandler(auth)
+		api.Methods("PUT").Path("/session/{id:[0-9]+}").Handler(ensureAuth(http.HandlerFunc(updateSessionHandler)))
+		api.Methods("DELETE").Path("/session/{id:[0-9]+}").Handler(ensureAuth(http.HandlerFunc(deleteSessionHandler)))
 	}
 
 	{
@@ -359,7 +359,7 @@ func (s *HTTPd) RegisterSystemHandler(site *core.Site, pub publisher, cache *uti
 		}
 
 		for _, r := range routes {
-			api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)
+			api.Methods(r.Method).Path(r.Pattern).Handler(r.HandlerFunc)
 		}
 
 		// API key endpoints require an authenticated session.
@@ -433,7 +433,7 @@ func (s *HTTPd) RegisterSystemHandler(site *core.Site, pub publisher, cache *uti
 		routes["updateocppforwarder"] = route{Method: "POST", Pattern: "/ocppforwarder", HandlerFunc: updateOcppForwarderHandler}
 
 		for _, r := range routes {
-			api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)
+			api.Methods(r.Method).Path(r.Pattern).Handler(r.HandlerFunc)
 		}
 
 		// services
@@ -446,7 +446,7 @@ func (s *HTTPd) RegisterSystemHandler(site *core.Site, pub publisher, cache *uti
 			"updatecountry":        {"PUT", "/country", updateCountryHandler(site)},
 			"updategridconnection": {"PUT", "/gridconnection", updateGridConnectionHandler(site)},
 		} {
-			api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)
+			api.Methods(r.Method).Path(r.Pattern).Handler(r.HandlerFunc)
 		}
 
 		// tariffs
@@ -455,7 +455,7 @@ func (s *HTTPd) RegisterSystemHandler(site *core.Site, pub publisher, cache *uti
 			"updatetariff":   {"PUT", "/tariff", updateTariffHandler},
 			"updatecurrency": {"PUT", "/currency", updateCurrencyHandler(pub)},
 		} {
-			api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)
+			api.Methods(r.Method).Path(r.Pattern).Handler(r.HandlerFunc)
 		}
 
 		// loadpoints
@@ -466,7 +466,7 @@ func (s *HTTPd) RegisterSystemHandler(site *core.Site, pub publisher, cache *uti
 			"deleteloadpoint": {"DELETE", "/loadpoints/{id:[0-9.]+}", deleteLoadpointHandler(site)},
 			"newloadpoint":    {"POST", "/loadpoints", newLoadpointHandler()},
 		} {
-			api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)
+			api.Methods(r.Method).Path(r.Pattern).Handler(r.HandlerFunc)
 		}
 	}
 
@@ -486,7 +486,7 @@ func (s *HTTPd) RegisterSystemHandler(site *core.Site, pub publisher, cache *uti
 		}
 
 		for _, r := range routes {
-			api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)
+			api.Methods(r.Method).Path(r.Pattern).Handler(r.HandlerFunc)
 		}
 	}
 
@@ -504,7 +504,7 @@ func (s *HTTPd) RegisterSystemHandler(site *core.Site, pub publisher, cache *uti
 		addCustomDbRoutes(routes) // custom: see server/http_custom_db.go
 
 		for _, r := range routes {
-			api.Methods(r.Methods()...).Path(r.Pattern).Handler(r.HandlerFunc)
+			api.Methods(r.Method).Path(r.Pattern).Handler(r.HandlerFunc)
 		}
 	}
 }

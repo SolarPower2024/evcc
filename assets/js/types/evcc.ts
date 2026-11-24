@@ -376,6 +376,8 @@ export interface State extends LmState {
   optimizerChargingStrategy?: string;
   /** Available battery optimizer charging strategies. */
   optimizerChargingStrategies?: string[];
+  /** Forecast uncertainty the optimizer hedges against. Null plans on the forecasts as they are. */
+  optimizerRiskProfile?: RiskProfile | null;
   /** Built-in MCP server is enabled. */
   mcp?: boolean;
   /** Instance runs in demo mode. */
@@ -638,13 +640,13 @@ export interface Loadpoint {
   chargePower: number;
   /** Estimated remaining charging time in seconds. */
   chargeRemainingDuration?: number;
-  /** Estimated remaining energy in kWh. */
+  /** Estimated remaining energy in Wh. */
   chargeRemainingEnergy?: number;
   /** Total energy imported by the charge meter in kWh. */
   chargeTotalImport?: number;
   /** Charging voltage per phase in V. */
   chargeVoltages?: number[];
-  /** Energy charged in the current charging session in kWh. */
+  /** Energy charged in the current charging session in Wh. */
   chargedEnergy: number;
   /** The connected vehicle is not identified automatically by its status. */
   chargerFeatureAutodetectDisabled: boolean;
@@ -782,13 +784,13 @@ export interface Loadpoint {
   pvAction: PV_ACTION;
   /** Remaining time until the pending charge start or stop action executes, in seconds. */
   pvRemaining: number;
-  /** Energy used in the last 24 hours in kWh. */
-  last24hEnergy?: number;
-  /** Energy used in the last 7 days in kWh. */
-  last7dEnergy?: number;
+  /** Energy stats of the last 24 hours. */
+  last24h?: PeriodStats;
+  /** Energy stats of the last 7 days. */
+  last7d?: PeriodStats;
   /** Average CO₂ emissions of the current charging session in g/kWh. */
   sessionCo2PerKWh: number | null;
-  /** Energy charged in the current charging session in kWh. */
+  /** Energy charged in the current charging session in Wh. */
   sessionEnergy: number;
   /** Total cost of the current charging session in the configured currency. */
   sessionPrice: number | null;
@@ -820,7 +822,7 @@ export interface Loadpoint {
   suggestion?: LoadpointSuggestion | null;
   /** Loadpoint title for UI display. */
   title: string;
-  /** Energy used since midnight in kWh. */
+  /** Energy used since midnight in Wh. */
   todayEnergy?: number;
   /** Climater of the connected vehicle is active. */
   vehicleClimaterActive: boolean | null;
@@ -844,6 +846,20 @@ export interface Loadpoint {
   batteryBoostLimit: number;
   /** Display-only UI settings. */
   ui?: LoadpointUi;
+}
+
+/** Energy stats of a loadpoint over a period, attributed per 15-minute slot like the energy page. */
+export interface PeriodStats {
+  /** Energy used in Wh. */
+  energy: number;
+  /** Energy from solar in Wh. */
+  pvEnergy: number;
+  /** Energy from the home battery in Wh. */
+  batteryEnergy: number;
+  /** Average energy price per kWh in the configured currency. */
+  pricePerKWh: number | null;
+  /** Total cost in the configured currency. */
+  price: number | null;
 }
 
 export interface UiLoadpoint extends Loadpoint {
@@ -950,7 +966,7 @@ export enum ALWAYS_CHARGE {
 export enum BATTERY_MODE {
   UNKNOWN = "unknown",
   NORMAL = "normal",
-  HOLD = "hold",
+  HOLDDISCHARGE = "holddischarge",
   CHARGE = "charge",
   HOLDCHARGE = "holdcharge",
   DISCHARGE = "discharge",
@@ -1000,8 +1016,11 @@ export type SessionInfoKey =
   | "price"
   | "emission"
   | "co2"
-  | "last24hEnergy"
-  | "last7dEnergy";
+  | `${SessionInfoPeriod}${SessionInfoPeriodValue}`;
+
+export type SessionInfoPeriod = "last24h" | "last7d";
+
+export type SessionInfoPeriodValue = "Energy" | "Solar" | "AvgPrice" | "Price";
 
 /** Sponsorship status. */
 export interface SponsorStatus {
@@ -1259,7 +1278,7 @@ export interface Battery {
 /** Battery optimizer suggestion for a home battery. */
 export interface BatterySuggestion {
   /** Suggested operation mode. */
-  action: "normal" | "hold" | "charge" | "holdcharge" | "discharge";
+  action: "normal" | "holddischarge" | "charge" | "holdcharge" | "discharge";
   /** Recommended charge power in W. */
   charge?: number;
   /** Recommended discharge power in W. */
@@ -1354,6 +1373,16 @@ export interface StaticEnergyPlan {
   time: Date;
 }
 
+/** Forecast uncertainty the optimizer hedges against. */
+export interface RiskProfile {
+  /** Share of the solar forecast a slot may fall short of, between 0 and 1. */
+  solar: number;
+  /** Share of the demand forecast a slot may exceed, between 0 and 1. */
+  demand: number;
+  /** 15min slots per day that deviate adversely, above 0 up to 96. */
+  budget: number;
+}
+
 /** Charging plan strategy. */
 export interface PlanStrategy {
   /** Force continuous charging without gaps. */
@@ -1412,6 +1441,8 @@ export interface Rate {
   end: Date;
   /** Price per kWh in the configured currency or emissions in g/kWh. */
   value: number;
+  /** Predicted value that may still be replaced by an actual one. */
+  estimate?: boolean;
 }
 
 export interface Slot {
@@ -1426,8 +1457,8 @@ export interface Slot {
   selectable?: boolean | null;
 }
 
-/** A forecast time slot as [start, end, value] array. Start and end are unix seconds. Value unit depends on the forecast type. */
-export type ForecastSlot = [number, number, number];
+/** A forecast time slot as [start, end, value] array. Start and end are unix seconds. Value unit depends on the forecast type. A trailing 1 marks an estimate. */
+export type ForecastSlot = [number, number, number] | [number, number, number, 1];
 
 /** A forecast value at a point in time as [ts, val] array. ts is unix seconds, val is power in W. */
 export type TimeseriesEntry = [number, number];
@@ -1482,6 +1513,7 @@ export interface UiForecastSlot {
   start: number;
   end: number;
   value: number;
+  estimate?: boolean;
 }
 
 export interface UiSolarDetails extends Omit<SolarDetails, "timeseries"> {
@@ -1512,6 +1544,7 @@ export interface SelectOption<T> {
   value: T;
   count?: number;
   disabled?: boolean;
+  group?: string;
 }
 
 export type DeviceType =
@@ -1648,11 +1681,12 @@ export interface BatteryDetail {
   title: string; // Display title
   name: string; // Internal name/identifier
   capacity: number; // Battery capacity (kWh)
+  planGoals?: { time: string; soc: number }[]; // Vehicle plan goals within the horizon (%), not capped at the limit
 }
 
 // Single profile summarized into the household demand time series
 export interface DemandDetail {
-  type: "home" | "heating" | "unmodelled"; // Origin of the profile
+  type: "home" | "heating" | "unmodelled" | "precondition"; // Origin of the profile
   title?: string; // Loadpoint title, unset for the base load
   values: number[]; // Energy per slot (Wh)
 }
