@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/evcc-io/evcc/core/keys"
+	"github.com/evcc-io/evcc/db/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -261,6 +262,8 @@ func TestGiveBackSourceBusy(t *testing.T) {
 	f := newFixture(t)
 	taken(t, f)
 	addSession(t, f.dev, "lp1", t0.Add(time.Hour), 9)
+	// evcc writes settings at the start (metrics fill version): stored before the lock, as in a running instance
+	require.NoError(t, settings.Persist())
 
 	d, err := openFile(f.devPath)
 	require.NoError(t, err)

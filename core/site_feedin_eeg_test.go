@@ -104,6 +104,7 @@ func TestFeedInEegChangedCounterDropsReading(t *testing.T) {
 	read(5001.7)
 
 	e := energy()
-	require.Len(t, e, 3)
-	require.InDelta(t, 0.7, e[2], 1e-9, "no jump between the counters")
+	require.Len(t, e, 4)
+	require.InDelta(t, 0.85, e[2], 1e-9, "the dropped slot is filled by evcc from its neighbors")
+	require.InDelta(t, 0.7, e[3], 1e-9, "no jump between the counters")
 }

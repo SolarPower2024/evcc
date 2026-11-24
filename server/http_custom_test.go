@@ -171,7 +171,7 @@ func TestCustomRoutesMatch(t *testing.T) {
 
 	r := mux.NewRouter()
 	for _, rt := range routes {
-		r.Methods(rt.Methods()...).Path(rt.Pattern).Handler(rt.HandlerFunc)
+		r.Methods(rt.Method).Path(rt.Pattern).Handler(rt.HandlerFunc)
 	}
 
 	for name, rt := range routes {
@@ -218,7 +218,7 @@ func TestPeakMarstekRoutes(t *testing.T) {
 
 	r := mux.NewRouter()
 	for _, rt := range customSiteRoutes(site) {
-		r.Methods(rt.Methods()...).Path(rt.Pattern).Handler(rt.HandlerFunc)
+		r.Methods(rt.Method).Path(rt.Pattern).Handler(rt.HandlerFunc)
 	}
 
 	do := func(method, path string) int {
@@ -276,7 +276,7 @@ func must[T any](v T, err error) T {
 func TestLogFileRoutes(t *testing.T) {
 	r := mux.NewRouter()
 	for _, rt := range customSiteRoutes(core.NewSite()) {
-		r.Methods(rt.Methods()...).Path(rt.Pattern).Handler(rt.HandlerFunc)
+		r.Methods(rt.Method).Path(rt.Pattern).Handler(rt.HandlerFunc)
 	}
 
 	do := func(method, body string) *httptest.ResponseRecorder {
@@ -418,7 +418,7 @@ func TestPeakEventsRoute(t *testing.T) {
 
 	rt := customSiteRoutes(site)["peakshavingevents"]
 	r := mux.NewRouter()
-	r.Methods(rt.Methods()...).Path(rt.Pattern).Handler(rt.HandlerFunc)
+	r.Methods(rt.Method).Path(rt.Pattern).Handler(rt.HandlerFunc)
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/peakshaving/events", nil))
@@ -436,7 +436,7 @@ func TestLmEnabledRouteGone(t *testing.T) {
 
 	r := mux.NewRouter()
 	for _, rt := range customSiteRoutes(site) {
-		r.Methods(rt.Methods()...).Path(rt.Pattern).Handler(rt.HandlerFunc)
+		r.Methods(rt.Method).Path(rt.Pattern).Handler(rt.HandlerFunc)
 	}
 
 	req := httptest.NewRequest("POST", "/lmenabled/false", nil)
@@ -501,7 +501,7 @@ func TestLogFileDownloadNotCompressed(t *testing.T) {
 func TestLogFileDownload(t *testing.T) {
 	r := mux.NewRouter()
 	for _, rt := range customSiteRoutes(core.NewSite()) {
-		r.Methods(rt.Methods()...).Path(rt.Pattern).Handler(rt.HandlerFunc)
+		r.Methods(rt.Method).Path(rt.Pattern).Handler(rt.HandlerFunc)
 	}
 
 	dir := filepath.Join(t.TempDir(), "logs")
